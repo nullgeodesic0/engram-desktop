@@ -238,29 +238,31 @@ export function plateStats(
   encoded: number
   consolidated: number
   decaying: number
-  capstonePrereqsMet: number
-  capstonePrereqsTotal: number
+  thresholdsMet: number
+  thresholdsTotal: number
 } {
   let total = 0
   let encoded = 0
   let consolidated = 0
   let decaying = 0
-  let capstonePrereqsMet = 0
-  let capstonePrereqsTotal = 0
+  // Threshold concepts (the dashed halos on the plate) rather than capstone
+  // prereqs: the capstone requires every node, so its met/total was always
+  // identical to encoded/total — a duplicate tile.
+  let thresholdsMet = 0
+  let thresholdsTotal = 0
   for (const id of graph.order) {
     const node = graph.nodes[id]
     if (!node) continue
-    if (node.capstone) {
-      const reqs = node.edges.requires ?? []
-      capstonePrereqsTotal = reqs.length
-      capstonePrereqsMet = reqs.filter((r) => graph.nodes[r] && graph.nodes[r].state !== 'new').length
-      continue
-    }
+    if (node.capstone) continue
     total++
     if (node.state !== 'new') encoded++
     if (node.state === 'review') consolidated++
+    if (node.threshold) {
+      thresholdsTotal++
+      if (node.state === 'review') thresholdsMet++
+    }
     const r = retrievability?.get(id)
     if (r != null && r < 0.7 && node.state !== 'new') decaying++
   }
-  return { total, encoded, consolidated, decaying, capstonePrereqsMet, capstonePrereqsTotal }
+  return { total, encoded, consolidated, decaying, thresholdsMet, thresholdsTotal }
 }

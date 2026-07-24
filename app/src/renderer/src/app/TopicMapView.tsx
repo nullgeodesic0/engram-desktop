@@ -245,7 +245,12 @@ export function TopicMapView({
                     tone="warm"
                   />
                   <StatBlock compact label="Decaying" value={String(stats.decaying)} tone={stats.decaying > 0 ? 'violet' : 'neutral'} />
-                  <StatBlock compact label="Capstone" value={`${stats.capstonePrereqsMet}/${stats.capstonePrereqsTotal}`} tone="neutral" />
+                  <StatBlock
+                    compact
+                    label="Thresholds"
+                    value={`${stats.thresholdsMet}/${stats.thresholdsTotal}`}
+                    tone={stats.thresholdsTotal > 0 && stats.thresholdsMet === stats.thresholdsTotal ? 'warm' : 'neutral'}
+                  />
                 </div>
               </div>
             )}

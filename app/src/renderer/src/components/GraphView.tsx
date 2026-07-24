@@ -457,7 +457,9 @@ export function GraphView({ graph, selected, onSelect, onOpen, query, retrievabi
             if (node.capstone) {
               const outerR = r + 4
               const circumference = 2 * Math.PI * outerR
-              const fraction = stats.capstonePrereqsTotal > 0 ? stats.capstonePrereqsMet / stats.capstonePrereqsTotal : 1
+              // The capstone requires every node, so encoded/total IS its prereq
+              // progress — plateStats no longer tracks it separately.
+              const fraction = stats.total > 0 ? stats.encoded / stats.total : 1
               return (
                 <g
                   key={id}
