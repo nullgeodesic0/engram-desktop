@@ -28,6 +28,7 @@ import { TicketCard } from '../components/ritual/TicketCard'
 import { InkWell } from '../components/ritual/InkWell'
 import { FlowChain } from '../components/ritual/FlowChain'
 import { trailingRecalled } from '../../../shared/gradeResult'
+import { invalidateSearchIndex } from '../shared/searchIndex'
 
 type Phase = 'loading' | 'empty' | 'ready' | 'in-session' | 'done' | 'closed-unexpectedly'
 
@@ -146,6 +147,9 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
             emitPulse('recalled')
             const result = parseGradeResult(event.content)
             if (result) {
+              // A receipt just landed — the node's state (and the palette's
+              // stale-cached view of it) has changed.
+              invalidateSearchIndex()
               setLastGrade(result)
               setSessionGrades((prev) => [...prev, result])
             }

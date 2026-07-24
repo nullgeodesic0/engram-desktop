@@ -722,6 +722,9 @@ export function LearnSessionView({
           setGradingPending(false)
           const results = parseGradeResults(event.content)
           if (results.length > 0) {
+            // A receipt just landed — the node's state (and the palette's
+            // stale-cached view of it) has changed.
+            invalidateSearchIndex()
             // One soft tone per receipt batch when at least one memory held —
             // never per-item (a six-card batch shouldn't chime six times).
             if (results.some((r) => r.grade === 'recalled')) warmTone()

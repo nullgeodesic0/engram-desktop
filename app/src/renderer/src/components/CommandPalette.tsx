@@ -91,10 +91,11 @@ export function CommandPalette({ open, onClose, navCommands, onGoTopic, onGoNode
     buildSearchIndex(deps)
       .then(setFullIndex)
       .catch((err) => {
-        // Degrade to nav + topics rather than leaving the palette stuck —
-        // fastTopics already covers the Topics section either way.
+        // Degrade to nav + topics rather than leaving the palette stuck — keep
+        // fullIndex null (not []) so `fullIndex ?? fastTopics` still falls
+        // back to the topics-only list instead of an empty combined index.
         console.error('[CommandPalette] failed to build search index', err)
-        setFullIndex([])
+        setFullIndex(null)
       })
   }, [open])
 
