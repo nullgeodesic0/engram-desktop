@@ -81,7 +81,7 @@ The tool surface comes from `app/src/main/session/permissionConfig.ts`:
   `bypassPermissions` (confirmed by direct repro — `rm -rf` was denied with bypass
   active), which is what keeps a "scoped allowlist" intent alive despite the
   blunter `--permission-mode` flag.
-- `--allowedTools` names the eight MCP bridge tools individually (see below),
+- `--allowedTools` names the nine MCP bridge tools individually (see below),
   namespaced `mcp__engram-ui-bridge__<tool>`.
 - `--permission-mode bypassPermissions` is required for `--input-format
   stream-json` to run any tool at all — without it every Bash call is denied with
