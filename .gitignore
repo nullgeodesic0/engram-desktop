@@ -2,6 +2,13 @@ node_modules/
 out/
 dist/
 build/
+# Generated icon/DMG masters are committed so packaging doesn't depend on
+# regenerating them (see app/scripts/make-icon.mjs) — un-ignore just those.
+!app/build/
+!app/build/icon.svg
+!app/build/icon.png
+!app/build/icon.icns
+!app/build/dmg-background.png
 *.log
 .DS_Store
 .remember/
