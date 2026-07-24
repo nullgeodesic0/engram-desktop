@@ -1,5 +1,6 @@
 import { app } from 'electron'
 import { join } from 'node:path'
+import { existsSync } from 'node:fs'
 import { readFile, writeFile, mkdir, stat } from 'node:fs/promises'
 import { sessionHistoryFor } from './sessionIndex'
 import { transcriptPath, readTranscript } from './transcriptReader'
@@ -78,9 +79,18 @@ function looksLikeRateCall(input: Record<string, unknown>): boolean {
   return command.includes(' rate ') && command.includes('--rating')
 }
 
+// Local calendar date, zero-padded — never `toISOString().slice(0, 10)`, which
+// silently reports UTC and misdates evening-Pacific sittings by a day (see
+// CalibrationScatter.tsx's same convention). `Date` parses the transcript
+// entry's ISO timestamp fine; only the *formatting* step needs to stay local.
+function localDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 function dateOf(entry: Record<string, unknown>): string {
   const ts = typeof entry.timestamp === 'string' ? entry.timestamp : ''
-  return ts.slice(0, 10) || new Date().toISOString().slice(0, 10)
+  const parsed = ts ? new Date(ts) : null
+  return parsed && !Number.isNaN(parsed.getTime()) ? localDate(parsed) : localDate(new Date())
 }
 
 function contentBlocks(entry: Record<string, unknown> | null): Record<string, unknown>[] {
@@ -163,8 +173,12 @@ export async function nodeProvenance(topic: string, nodeIds: string[]): Promise<
   const cache = await readCache()
   let cacheDirty = false
 
-  const learnSittings = await sessionHistoryFor(topic)
-  const reviewSittings = await sessionHistoryFor('review')
+  // sessionHistoryFor returns newest-first (see sessionIndex.ts) — reversed
+  // here so jobs (and the events they produce) are walked oldest-first, which
+  // is what lets the firstEncoded aggregation below just take the first
+  // encode/pretest event it sees per node rather than re-deriving order itself.
+  const learnSittings = [...(await sessionHistoryFor(topic))].reverse()
+  const reviewSittings = [...(await sessionHistoryFor('review'))].reverse()
 
   // A resumed session reappears in the index once per resume but shares one
   // transcript file — dedupe by sessionId so its events aren't counted twice.
@@ -205,6 +219,16 @@ export async function nodeProvenance(topic: string, nodeIds: string[]): Promise<
     allEvents.push(...events)
   }
 
+  // Prune rows for transcripts that no longer exist (topic/session deleted,
+  // or `~/.claude/projects` cleared) — otherwise the cache only ever grows.
+  // A cheap sync existsSync pass, not another stat() round-trip per path.
+  for (const path of Object.keys(cache)) {
+    if (!existsSync(path)) {
+      delete cache[path]
+      cacheDirty = true
+    }
+  }
+
   if (cacheDirty) await writeCache(cache)
 
   const result: Record<string, NodeProvenance> = {}
@@ -216,13 +240,20 @@ export async function nodeProvenance(topic: string, nodeIds: string[]): Promise<
     const event: ProvenanceEvent = { sessionId: e.sessionId, date: e.date, anchor: e.anchor, kind: e.kind, grade: e.grade }
     if (e.kind === 'review') {
       prov.reviews.push(event)
-    } else if (!prov.firstEncoded || event.date < prov.firstEncoded.date) {
+    } else if (!prov.firstEncoded) {
+      // `allEvents` is walked oldest-sitting-first (see the `.reverse()` above),
+      // so the first encode/pretest event seen per node is already the earliest
+      // — no date comparison needed. `date` itself is only day-granularity, so
+      // comparing it couldn't break same-day ties correctly anyway; processing
+      // order is the real tie-break.
       prov.firstEncoded = event
     }
   }
 
   for (const prov of Object.values(result)) {
-    prov.reviews.sort((a, b) => a.date.localeCompare(b.date) || a.anchor - b.anchor)
+    // Newest first — a review's date is day-granular, so ties break on anchor
+    // descending (later tool_result in the same/latest transcript sorts first).
+    prov.reviews.sort((a, b) => b.date.localeCompare(a.date) || b.anchor - a.anchor)
   }
 
   return result
