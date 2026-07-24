@@ -68,6 +68,18 @@ export interface TopicGraph {
   nodes: Record<string, EngramNode>
 }
 
+/** LaTeX overrides for a single Topic Map node, set by the advisory
+ * `annotate_node` bridge tool — see main/session/mapAnnotations.ts. Both
+ * fields optional individually, but the bridge tool requires at least one. */
+export interface MapAnnotation {
+  latexLabel?: string
+  latexClaim?: string
+}
+
+/** One topic's node annotations, keyed by node id — the shape returned by
+ * window.engram.mapAnnotations(topic). */
+export type MapAnnotations = Record<string, MapAnnotation>
+
 export interface DueItem {
   topic: string
   id: string

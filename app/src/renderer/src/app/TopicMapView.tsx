@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import type { TopicSummary, TopicGraph } from '../../../shared/types'
+import { useEffect, useMemo, useState } from 'react'
+import type { TopicSummary, TopicGraph, MapAnnotations } from '../../../shared/types'
 import { RetentionCurve } from '../components/RetentionCurve'
 import { GraphView, EDGE_STYLE } from '../components/GraphView'
 import { cellBodyPath, plateStats } from '../components/graph2d/plate'
@@ -7,7 +7,8 @@ import { humanizeNodeId } from '../../../shared/humanizeId'
 import { SkeletonBar } from '../components/Skeleton'
 import { StatBlock } from '../components/ui/StatBlock'
 import { Button } from '../components/ui/Button'
-import { useFocusTrap } from '../components/useFocusTrap'
+import { Modal } from '../components/ui/Modal'
+import { MathRenderer } from '../components/MathRenderer'
 import { friendlyErrorText } from '../shared/friendlyError'
 
 function stateLabel(state: string): string {
@@ -51,6 +52,10 @@ export function TopicMapView({
   const [selectedNode, setSelectedNode] = useState<string | null>(null)
   const [openNode, setOpenNode] = useState<string | null>(null)
   const [query, setQuery] = useState('')
+  // Tutor-authored LaTeX overrides for the selected topic's nodes (see
+  // mapAnnotations.ts) — keyed by node id, refreshed on topic switch and on
+  // every live annotate_node bridge:ui event for this topic.
+  const [annotations, setAnnotations] = useState<MapAnnotations>({})
 
   useEffect(() => {
     window.engram.topics().then((ts) => {
@@ -77,6 +82,7 @@ export function TopicMapView({
     setSelectedNode(null)
     setOpenNode(null)
     setRetrievability(null)
+    setAnnotations({})
     window.engram
       .topicGraph(selectedTopic)
       .then((g) => setGraph(g as TopicGraph))
@@ -88,6 +94,29 @@ export function TopicMapView({
         setRetrievability(map)
       })
       .catch(() => setRetrievability(null)) // topic with no decay-relevant history yet — GraphView treats this as full brightness
+    window.engram
+      .mapAnnotations(selectedTopic)
+      .then(setAnnotations)
+      .catch(() => setAnnotations({}))
+  }, [selectedTopic])
+
+  // Live annotate_node bridge:ui events (fired by a running Learn session)
+  // refresh this topic's annotations in place — payload is untrusted model
+  // output relayed straight from the bridge worker, so every field is
+  // typeof-checked before use (same discipline as LearnSessionView's onBridgeUi
+  // switch), and events for a topic other than the one currently open are ignored.
+  useEffect(() => {
+    const off = window.engram.onBridgeUi((req) => {
+      if (req.tool !== 'annotate_node') return
+      if (typeof req.payload !== 'object' || req.payload === null) return
+      const topic = (req.payload as Record<string, unknown>).topic
+      if (typeof topic !== 'string' || topic !== selectedTopic) return
+      window.engram
+        .mapAnnotations(topic)
+        .then(setAnnotations)
+        .catch(() => {})
+    })
+    return off
   }, [selectedTopic])
 
   // Only fires once the freshly-loaded graph actually matches the deep-linked
@@ -117,17 +146,6 @@ export function TopicMapView({
   const node = graph && selectedNode ? graph.nodes[selectedNode] : null
   const opened = graph && openNode ? graph.nodes[openNode] : null
   const stats = useMemo(() => (graph ? plateStats(graph, retrievability) : null), [graph, retrievability])
-  const modalRef = useRef<HTMLDivElement>(null)
-  useFocusTrap(modalRef, Boolean(opened && openNode))
-
-  useEffect(() => {
-    if (!openNode) return
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpenNode(null)
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [openNode])
 
   return (
     <div className="p-8 flex flex-col gap-4 h-full min-h-0">
@@ -176,6 +194,7 @@ export function TopicMapView({
               onOpen={setOpenNode}
               query={query}
               retrievability={retrievability}
+              annotations={annotations}
             />
 
             {/* Floating search — mirrors Obsidian's graph-view search field. */}
@@ -336,7 +355,10 @@ export function TopicMapView({
                 )}
               </div>
 
-              <p className="text-sm text-[var(--color-text-primary)] leading-snug">{node.claim}</p>
+              <MathRenderer
+                className="text-sm text-[var(--color-text-primary)] leading-snug"
+                text={annotations[selectedNode!]?.latexClaim ?? node.claim}
+              />
 
               <div className="flex items-center justify-between panel-raised px-2.5 py-1.5">
                 <RetentionCurve stabilityDays={node.fsrs.s} width={100} height={22} />
@@ -347,7 +369,7 @@ export function TopicMapView({
 
               <div className="text-xs text-[var(--color-text-dim)]">
                 <div className="label-data uppercase tracking-wide text-[10px] text-[var(--color-text-faint)] mb-1">Probe</div>
-                {node.probe}
+                <MathRenderer text={node.probe} />
               </div>
 
               {node.rubric.length > 0 && (
@@ -355,7 +377,9 @@ export function TopicMapView({
                   <div className="label-data uppercase tracking-wide text-[10px] text-[var(--color-text-faint)] mb-1">Rubric</div>
                   <ul className="list-disc list-inside flex flex-col gap-0.5">
                     {node.rubric.map((r, i) => (
-                      <li key={i}>{r}</li>
+                      <li key={i}>
+                        <MathRenderer className="inline" text={r} />
+                      </li>
                     ))}
                   </ul>
                 </div>
@@ -404,16 +428,9 @@ export function TopicMapView({
         </div>
       )}
 
-      {opened && openNode && (
-        <div
-          className="fixed inset-0 z-30 flex items-center justify-center p-10 bg-black/60 backdrop-blur-sm"
-          onClick={() => setOpenNode(null)}
-        >
-          <div
-            ref={modalRef}
-            className="panel bg-[var(--color-surface)] w-full max-w-2xl max-h-full overflow-y-auto p-7 flex flex-col gap-4"
-            onClick={(e) => e.stopPropagation()}
-          >
+      <Modal open={Boolean(opened && openNode)} onClose={() => setOpenNode(null)} wide>
+        {opened && openNode && (
+          <div className="flex flex-col gap-4">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-xs label-data text-[var(--color-text-faint)] uppercase tracking-wide">
@@ -454,7 +471,10 @@ export function TopicMapView({
               )}
             </div>
 
-            <p className="text-base text-[var(--color-text-primary)] leading-relaxed">{opened.claim}</p>
+            <MathRenderer
+              className="text-base text-[var(--color-text-primary)] leading-relaxed"
+              text={annotations[openNode]?.latexClaim ?? opened.claim}
+            />
 
             <div className="flex items-center justify-between panel-raised px-3 py-2">
               <div className="flex items-center gap-2">
@@ -472,7 +492,7 @@ export function TopicMapView({
               <div className="label-data uppercase tracking-wide text-[10px] text-[var(--color-text-faint)] mb-1.5">
                 Probe
               </div>
-              {opened.probe}
+              <MathRenderer text={opened.probe} />
             </div>
 
             {opened.rubric.length > 0 && (
@@ -482,7 +502,9 @@ export function TopicMapView({
                 </div>
                 <ul className="list-disc list-inside flex flex-col gap-1">
                   {opened.rubric.map((r, i) => (
-                    <li key={i}>{r}</li>
+                    <li key={i}>
+                      <MathRenderer className="inline" text={r} />
+                    </li>
                   ))}
                 </ul>
               </div>
@@ -495,7 +517,9 @@ export function TopicMapView({
                 </div>
                 <ol className="list-decimal list-inside flex flex-col gap-1">
                   {opened.why_chain.map((w, i) => (
-                    <li key={i}>{w}</li>
+                    <li key={i}>
+                      <MathRenderer className="inline" text={w} />
+                    </li>
                   ))}
                 </ol>
               </div>
@@ -506,7 +530,7 @@ export function TopicMapView({
                 <div className="label-data uppercase tracking-wide text-[10px] text-[var(--color-text-faint)] mb-1.5">
                   Transfer probe
                 </div>
-                {opened.transfer_probe}
+                <MathRenderer text={opened.transfer_probe} />
               </div>
             )}
 
@@ -548,8 +572,8 @@ export function TopicMapView({
               </Button>
             )}
           </div>
-        </div>
-      )}
+        )}
+      </Modal>
     </div>
   )
 }

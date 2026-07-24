@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { TopicGraph, EngramNode } from '../../../shared/types'
+import type { TopicGraph, EngramNode, MapAnnotations } from '../../../shared/types'
 import { humanizeNodeId } from '../../../shared/humanizeId'
 import { EDGE_STYLE, type SimEdge } from './graph3d/types'
 import { buildEdges, computeForwardAdjacency, computeFrontierIds, computeHubNodeIds, seeded } from './graph3d/layout'
@@ -8,6 +8,15 @@ import { settlePlate, cellBodyPath, dendriteStubs, territoryGroups, hullPath, pl
 // Kept re-exported so TopicMapView's modal edge-kind labels can still import
 // EDGE_STYLE from this module.
 export { EDGE_STYLE }
+
+/** SVG `<text>` can't host KaTeX (no DOM to render into), so a node's
+ * annotate_node latex_label — meant for MathRenderer elsewhere — is shown
+ * here as plain text with the `$`/`$$` math delimiters stripped rather than
+ * rendered. Leaves the LaTeX source itself untouched, just legible without
+ * literal dollar signs cluttering the plate. */
+export function stripMathDelimiters(text: string): string {
+  return text.replace(/\$\$?/g, '')
+}
 
 const STATE_COLOR: Record<EngramNode['state'], string> = {
   new: 'var(--color-ink-cool-dim)',
@@ -77,9 +86,14 @@ interface GraphViewProps {
   onOpen: (id: string) => void
   query: string
   retrievability: Map<string, number> | null
+  /** Tutor-authored LaTeX overrides (see mapAnnotations.ts) — when a node has
+   * a latex_label, it replaces the plain humanizeNodeId label (delimiters
+   * stripped; see stripMathDelimiters above). Optional: undefined behaves
+   * exactly as before annotate_node existed. */
+  annotations?: MapAnnotations | null
 }
 
-export function GraphView({ graph, selected, onSelect, onOpen, query, retrievability }: GraphViewProps) {
+export function GraphView({ graph, selected, onSelect, onOpen, query, retrievability, annotations }: GraphViewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState<{ w: number; h: number } | null>(null)
   const [view, setView] = useState({ x: 0, y: 0, zoom: 1 })
@@ -557,6 +571,8 @@ export function GraphView({ graph, selected, onSelect, onOpen, query, retrievabi
             if (!node || !pos) return null
             const show = view.zoom >= 1.1 || topRadiusIds.has(id) || (relevantIds?.has(id) ?? false)
             if (!show) return null
+            const latexLabel = annotations?.[id]?.latexLabel
+            const label = latexLabel ? stripMathDelimiters(latexLabel) : humanizeNodeId(id)
             return (
               <g key={id} transform={`translate(${pos.x} ${pos.y})`} opacity={nodeOpacity(id)} pointerEvents="none">
                 <text
@@ -566,7 +582,7 @@ export function GraphView({ graph, selected, onSelect, onOpen, query, retrievabi
                   fill={id === selected ? 'var(--color-text-primary)' : 'var(--color-text-dim)'}
                   fontFamily="var(--font-body)"
                 >
-                  {humanizeNodeId(id)}
+                  {label}
                 </text>
               </g>
             )

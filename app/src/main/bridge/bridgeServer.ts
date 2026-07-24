@@ -2,6 +2,7 @@ import { createServer, type Server } from 'node:http'
 import { randomUUID } from 'node:crypto'
 import type { BrowserWindow } from 'electron'
 import type { BridgeAskRequest, BridgeAskResponse, BridgeBeatRequest, BridgeUiRequest } from '../../shared/bridgeProtocol'
+import { sanitizeAnnotatePayload, setNodeAnnotation } from '../session/mapAnnotations'
 
 /**
  * Hosts the loopback HTTP relay the MCP bridge worker (see mcpBridgeWorker.ts,
@@ -75,6 +76,16 @@ export class BridgeServer {
     if (uiMatch) {
       const sessionId = decodeURIComponent(uiMatch[1])
       const payload = JSON.parse(body) as Omit<BridgeUiRequest, 'sessionId'>
+      // annotate_node is the one bridge:ui tool that persists (see mapAnnotations.ts) —
+      // everything else here is purely ephemeral UI signal forwarded to the renderer.
+      // Shape-guarded before it ever touches disk; a malformed/oversized/wrong-charset
+      // payload is silently dropped (fire-and-forget, advisory contract: never throw).
+      if (payload.tool === 'annotate_node' && payload.payload && typeof payload.payload === 'object') {
+        const sanitized = sanitizeAnnotatePayload(payload.payload as Record<string, unknown>)
+        if (sanitized) {
+          void setNodeAnnotation(sanitized.topic, sanitized.node, sanitized.patch).catch(() => {})
+        }
+      }
       this.window?.webContents.send('bridge:ui', { ...payload, sessionId } as BridgeUiRequest)
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ ok: true }))

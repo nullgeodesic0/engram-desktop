@@ -8,6 +8,7 @@ import {
 } from '../engramCli/readOnly'
 import { getTopicsCached } from '../engramCli/topicsCache'
 import { readReceiptsHistory } from '../engramCli/receiptsHistory'
+import { getMapAnnotations } from '../session/mapAnnotations'
 
 export function registerReadHandlers(): void {
   ipcMain.handle('engram:topics', () => getTopicsCached())
@@ -31,6 +32,7 @@ export function registerReadHandlers(): void {
   ipcMain.handle('engram:topicGraph', (_e, topic: string) => readTopicGraph(topic))
   ipcMain.handle('engram:artifactList', () => engramArtifactList())
   ipcMain.handle('engram:receiptsHistory', () => readReceiptsHistory())
+  ipcMain.handle('mapAnnotations:get', (_e, topicId: string) => getMapAnnotations(topicId))
 
   // The narrow direct-mutation exception (settings only): visuals/focus/model --set/commit.
   ipcMain.handle('engram:visuals', (_e, mode: 'eager' | 'threshold' | 'off' | 'status') =>
