@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import type { EngramStats, ReceiptsHistory, ReceiptItem } from '../../../shared/types'
+import { useEffect, useMemo, useState } from 'react'
+import type { EngramStats, ReceiptsHistory, ReceiptItem, TopicGraph } from '../../../shared/types'
 import { CoachSessionPanel } from '../components/CoachSessionPanel'
 import { SkeletonBar, SkeletonGrid } from '../components/Skeleton'
 import { StreakCalendar } from '../components/StreakCalendar'
@@ -7,11 +7,13 @@ import { RetentionTrend } from '../components/RetentionTrend'
 import { RetentionCurve } from '../components/charts/RetentionCurve'
 import { ActivityStrip } from '../components/charts/ActivityStrip'
 import { CalibrationScatter } from '../components/charts/CalibrationScatter'
+import { WeekDigest } from '../components/WeekDigest'
 import { humanizeNodeId } from '../../../shared/humanizeId'
 import { StatBlock } from '../components/ui/StatBlock'
 import { DendriteDivider } from '../components/ui/DendriteDivider'
 import { Button } from '../components/ui/Button'
 import { allPicks } from '../shared/calibrationStore'
+import { computeWeekDigest } from '../shared/weekDigest'
 import { friendlyErrorText } from '../shared/friendlyError'
 
 function gradeColor(grade: string | null): string {
@@ -60,6 +62,7 @@ export function DashboardView({ onNewTopic }: DashboardViewProps = {}) {
   const [history, setHistory] = useState<ReceiptsHistory | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [detail, setDetail] = useState<{ label: string; items: ReceiptItem[] } | null>(null)
+  const [graphs, setGraphs] = useState<Record<string, TopicGraph> | null>(null)
 
   useEffect(() => {
     window.engram
@@ -68,6 +71,40 @@ export function DashboardView({ onNewTopic }: DashboardViewProps = {}) {
       .catch((e: Error) => setError(e.message))
     window.engram.receiptsHistory().then(setHistory)
   }, [])
+
+  // Topic graphs, fetched once stats names the topics — only used for the
+  // weekly digest's threshold-flag lookup (WeekDigest reads `graphs`, not
+  // this effect's inputs directly), so it's fine for this to resolve after
+  // the first paint.
+  useEffect(() => {
+    if (!stats) return
+    let cancelled = false
+    Promise.all(
+      stats.topics.map(async (t) => {
+        try {
+          const g = (await window.engram.topicGraph(t.topic)) as TopicGraph
+          return [t.topic, g] as const
+        } catch {
+          return null
+        }
+      }),
+    ).then((entries) => {
+      if (cancelled) return
+      const map: Record<string, TopicGraph> = {}
+      for (const entry of entries) {
+        if (entry) map[entry[0]] = entry[1]
+      }
+      setGraphs(map)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [stats])
+
+  const weekDigest = useMemo(() => {
+    if (!history || !graphs) return null
+    return computeWeekDigest({ days: history.days, weeks: history.weeks, picks: allPicks(), graphs })
+  }, [history, graphs])
 
   if (error) {
     const fe = friendlyErrorText(error)
@@ -218,6 +255,10 @@ export function DashboardView({ onNewTopic }: DashboardViewProps = {}) {
             {grader.stamp}
           </span>
         </div>
+      </Section>
+
+      <Section title="This week">
+        <WeekDigest digest={weekDigest} />
       </Section>
 
       <Section title="Retention">
