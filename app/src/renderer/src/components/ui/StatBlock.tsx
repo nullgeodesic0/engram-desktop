@@ -10,18 +10,26 @@ export function StatBlock({
   value,
   tone = 'neutral',
   caption,
+  compact = false,
 }: {
   label: string
   value: string
   tone?: 'warm' | 'cool' | 'violet' | 'neutral'
   caption?: string
+  /** Tight variant for narrow tiles (e.g. the topic map's territory readout)
+   * where the full-size label/value overflow. */
+  compact?: boolean
 }) {
   return (
-    <div className="panel p-3">
-      <div className="text-[length:var(--text-caption)] text-[var(--color-text-dim)] label-data uppercase tracking-wider">
+    <div className={`panel ${compact ? 'p-2 min-w-0' : 'p-3'}`}>
+      <div
+        className={`text-[var(--color-text-dim)] label-data uppercase truncate ${
+          compact ? 'text-[9px] tracking-wide' : 'text-[length:var(--text-caption)] tracking-wider'
+        }`}
+      >
         {label}
       </div>
-      <div className={`label-data text-lg mt-0.5 ${TONE[tone]}`}>{value}</div>
+      <div className={`label-data mt-0.5 ${compact ? 'text-sm' : 'text-lg'} ${TONE[tone]}`}>{value}</div>
       {caption && <div className="fig-caption mt-1">{caption}</div>}
     </div>
   )
