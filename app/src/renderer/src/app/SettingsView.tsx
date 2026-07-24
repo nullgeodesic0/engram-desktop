@@ -1,11 +1,73 @@
 import { useEffect, useState } from 'react'
-import type { BackupInfo, DescribeArchiveResult, LearnerModel, NotifierSettings } from '../../../shared/types'
+import type {
+  BackupInfo,
+  DescribeArchiveResult,
+  LearnerModel,
+  NotifierSettings,
+  UpdateCheckResult,
+} from '../../../shared/types'
 import { AchievementsPanel } from '../components/AchievementsPanel'
 import { SegmentedControl } from '../components/ui/SegmentedControl'
 import { Button } from '../components/ui/Button'
 import { Modal } from '../components/ui/Modal'
 import { DendriteDivider } from '../components/ui/DendriteDivider'
+import { CopyButton } from '../components/ui/CopyButton'
 import { soundOn, setSoundOn } from '../shared/soundscape'
+
+// Mirrors docs/development.md's "Packaged install flow" exactly — keep the two
+// in sync if the packaging steps ever change.
+const UPDATE_COMMANDS = [
+  'git pull',
+  'npm run dist:mac',
+  'cp -R "app/dist/mac-arm64/Engram Desktop.app" /Applications/',
+]
+
+function formatBuildDate(iso: string): string {
+  if (!iso || iso === 'unknown') return 'unknown'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  return d.toLocaleDateString(undefined, { dateStyle: 'medium' })
+}
+
+/** The three quiet states from updateCheck.ts — current/behind/unknown — each
+ * rendered in Atlas voice, never as an error. `behind` is the only one with
+ * anything actionable, so it's the only one with a disclosure. */
+function UpdateStatusLine({ update }: { update: UpdateCheckResult }) {
+  if (update.state === 'current') {
+    return (
+      <div className="text-sm text-[var(--color-text-dim)]">
+        Up to date — build {update.buildCommit} ({formatBuildDate(update.buildDate)})
+      </div>
+    )
+  }
+
+  if (update.state === 'behind') {
+    return (
+      <div className="flex flex-col gap-2">
+        <div className="text-sm text-[var(--color-ink-warm)]">
+          Newer build available — repo at {update.remoteCommit ?? '?'} ({formatBuildDate(update.remoteDate ?? '')})
+        </div>
+        <details className="fig-caption">
+          <summary className="cursor-pointer">how to update</summary>
+          <div className="mt-2 flex flex-col gap-1.5 not-italic">
+            {UPDATE_COMMANDS.map((cmd) => (
+              <div key={cmd} className="group flex items-center gap-2 label-data text-[10px]">
+                <code className="flex-1 truncate">{cmd}</code>
+                <CopyButton text={cmd} alwaysVisible />
+              </div>
+            ))}
+          </div>
+        </details>
+      </div>
+    )
+  }
+
+  return (
+    <div className="fig-caption">
+      couldn’t check — {update.reason ?? 'unknown reason'}, last checked {formatWhen(update.checkedAt)}
+    </div>
+  )
+}
 
 /** One-line "when was this last done" — used for the last-backup line. */
 function formatWhen(iso: string): string {
@@ -233,6 +295,8 @@ export function SettingsView() {
   const [backingUp, setBackingUp] = useState(false)
   const [backupResult, setBackupResult] = useState<string | null>(null)
   const [restoreOpen, setRestoreOpen] = useState(false)
+  const [update, setUpdate] = useState<UpdateCheckResult | null>(null)
+  const [updateChecking, setUpdateChecking] = useState(false)
 
   function refresh() {
     window.engram.model().then(setModel)
@@ -240,6 +304,7 @@ export function SettingsView() {
     window.engram.getNotifierSettings().then(setNotifier)
     window.engram.getLoginItemSettings().then((s) => setLaunchAtLoginState(s.openAtLogin))
     window.engram.getBackupInfo().then(setBackupInfo)
+    window.engram.getCachedUpdateCheck().then(setUpdate)
   }
 
   useEffect(refresh, [])
@@ -332,6 +397,15 @@ export function SettingsView() {
       setExportResult(result.canceled ? null : `Saved to ${result.path}`)
     } finally {
       setExporting(false)
+    }
+  }
+
+  async function recheckUpdate() {
+    setUpdateChecking(true)
+    try {
+      setUpdate(await window.engram.checkForUpdate())
+    } finally {
+      setUpdateChecking(false)
     }
   }
 
@@ -628,6 +702,21 @@ export function SettingsView() {
             ? `Last backup: ${formatWhen(backupInfo.lastBackupAt)}`
             : 'No backups yet.'}
         </div>
+      </div>
+
+      <div className="panel px-5 py-5 flex flex-col gap-3">
+        <div>
+          <div className="text-sm text-[var(--color-text-primary)]">Software</div>
+          <div className="text-xs text-[var(--color-text-faint)] mt-0.5">
+            Compares this build against the repo’s <span className="label-data">main</span> branch via your own
+            authenticated <span className="label-data">gh</span> CLI — nothing is sent anywhere, no embedded token.
+          </div>
+        </div>
+        <DendriteDivider />
+        {update ? <UpdateStatusLine update={update} /> : <div className="fig-caption">not checked yet this launch</div>}
+        <Button variant="ghost" onClick={recheckUpdate} disabled={updateChecking} className="self-start">
+          {updateChecking ? 'Checking…' : 'Check for updates'}
+        </Button>
       </div>
 
       <div className="panel px-5 py-5 flex flex-col gap-3">

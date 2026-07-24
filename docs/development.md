@@ -28,10 +28,23 @@ All commands run from `app/`.
 
 ## Packaged install flow
 
-1. `npm run dist:mac` — produces the `.app` under `app/dist/mac*/`.
-2. Quit any running copy of Engram Desktop first. **Quitting mid-session kills the live `claude -p` child process** — but nothing is lost: sessions are driven by the engram plugin's own append-only transcript and receipt files on disk, so a killed session simply resumes from the last completed beat the next time you open that topic.
-3. Copy the new `.app` into `/Applications`, replacing the old one.
-4. Relaunch.
+To pick up a newer build (the in-app update check under Settings surfaces exactly these three commands):
+
+```bash
+git pull
+```
+
+```bash
+npm run dist:mac
+```
+
+produces the `.app` under `app/dist/mac*/`. Quit any running copy of Engram Desktop first — **quitting mid-session kills the live `claude -p` child process**, but nothing is lost: sessions are driven by the engram plugin's own append-only transcript and receipt files on disk, so a killed session simply resumes from the last completed beat the next time you open that topic. Then:
+
+```bash
+cp -R "app/dist/mac-arm64/Engram Desktop.app" /Applications/
+```
+
+replacing the old one, and relaunch.
 
 ## Repo layout
 
