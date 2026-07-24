@@ -67,19 +67,31 @@ function cellBodyPath(id, r, wobbleScale = 0.38) {
 
 /** Short dendrite stubs reaching from the body rim toward given directions —
  * identical algorithm to dendriteStubs in plate.ts, ported for absolute
- * (pos-relative) coordinates instead of the plate's simulation space. */
-function dendriteStubs(id, pos, neighborDirs, r, reachScale = 1) {
+ * (pos-relative) coordinates instead of the plate's simulation space.
+ *
+ * `overlap`: cellBodyPath's wobble means the blob's actual edge at a given
+ * angle can sit noticeably inside the nominal radius `r` (wobble factor
+ * dips as low as ~0.81, less after quadratic smoothing but still real) —
+ * starting the stub exactly at `r` can land outside the drawn fill at that
+ * angle, leaving a visible gap between soma and dendrite. `overlap` pulls
+ * only the stub's *start* point inward along the same radial direction, by
+ * more than the wobble could ever dip, so the start is always covered by
+ * the body fill (drawn on top) and the stub reads as growing out of the
+ * soma. The outer sweep (mid/end) is computed from the unmoved nominal rim
+ * point, so the visible reach of the stub is unchanged. */
+function dendriteStubs(id, pos, neighborDirs, r, reachScale = 1, overlap = 0) {
   return neighborDirs.map((dir, i) => {
     const len = Math.hypot(dir.x, dir.y) || 1
     const ux = dir.x / len
     const uy = dir.y / len
-    const start = { x: pos.x + ux * r, y: pos.y + uy * r }
+    const rim = { x: pos.x + ux * r, y: pos.y + uy * r }
+    const start = { x: rim.x - ux * overlap, y: rim.y - uy * overlap }
     const reach = r * (0.8 + seeded(id, 20 + i) * 0.7) * reachScale
     const kink = (seeded(id, 40 + i) - 0.5) * r * 0.6
-    const midX = start.x + ux * reach * 0.55 - uy * kink
-    const midY = start.y + uy * reach * 0.55 + ux * kink
-    const endX = start.x + ux * reach
-    const endY = start.y + uy * reach
+    const midX = rim.x + ux * reach * 0.55 - uy * kink
+    const midY = rim.y + uy * reach * 0.55 + ux * kink
+    const endX = rim.x + ux * reach
+    const endY = rim.y + uy * reach
     return `M ${start.x.toFixed(2)} ${start.y.toFixed(2)} Q ${midX.toFixed(2)} ${midY.toFixed(2)} ${endX.toFixed(2)} ${endY.toFixed(2)}`
   })
 }
@@ -151,7 +163,7 @@ function buildIconSvg() {
   // Reach kept short (0.55x the plate default) so stubs stay well inside the
   // squircle field at every downscaled size — the silhouette must read at
   // 16px, which means nothing may clip the icon's rounded-square bounds.
-  const stubs = dendriteStubs(bestSeed, { x: CENTER, y: CENTER }, dirs, bodyR, 0.55)
+  const stubs = dendriteStubs(bestSeed, { x: CENTER, y: CENTER }, dirs, bodyR, 0.55, bodyR * 0.3)
 
   return `<svg width="${SIZE}" height="${SIZE}" viewBox="0 0 ${SIZE} ${SIZE}" xmlns="http://www.w3.org/2000/svg">
   <defs>
@@ -209,7 +221,7 @@ function buildDmgSvg() {
     { x: -0.2, y: 1 },
     { x: 1, y: -0.6 },
   ]
-  const stubs = dendriteStubs(bestSeed, { x: iconCx, y: iconCy }, dirs, bodyR)
+  const stubs = dendriteStubs(bestSeed, { x: iconCx, y: iconCy }, dirs, bodyR, 1, bodyR * 0.3)
 
   // Faint constellation: scattered dim dendrite lines across the field,
   // deterministic per index so re-running this script reproduces the file
