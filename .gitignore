@@ -7,3 +7,4 @@ build/
 .remember/
 spike/
 *.tsbuildinfo
+.superpowers/
