@@ -50,6 +50,11 @@ export function ActivityStrip({ data }: { data: DayActivity[] }) {
               width={Math.max(1, tickW - 0.6)}
               height={h}
               fill={d.count > 0 ? 'var(--color-ink-warm)' : 'var(--color-hairline)'}
+              className="tick-fade-in"
+              // Stagger capped at 250ms across every tick, plus --dur-fast's
+              // own 120ms — 370ms total, under the 400ms ceiling regardless
+              // of how many days are in `data`.
+              style={{ ['--tick-delay' as string]: `${(i / Math.max(1, n - 1)) * 250}ms` }}
             />
           )
         })}

@@ -109,16 +109,18 @@ export function CalibrationScatter({ data }: { data: CalibrationScatterData }) {
         <text x={(PAD_L + WIDTH - PAD_R) / 2} y={HEIGHT - 2} textAnchor="middle" style={{ fontSize: 9, fill: 'var(--color-text-faint)' }}>
           felt confidence, low → high
         </text>
-        {points.map((p) => (
-          <circle
-            key={p.key}
-            cx={p.x}
-            cy={p.y}
-            r={2.6}
-            fill={p.recalled ? 'var(--color-ink-warm)' : 'var(--color-ink-violet)'}
-            fillOpacity={0.8}
-          />
-        ))}
+        <g className="scatter-fade-in">
+          {points.map((p) => (
+            <circle
+              key={p.key}
+              cx={p.x}
+              cy={p.y}
+              r={2.6}
+              fill={p.recalled ? 'var(--color-ink-warm)' : 'var(--color-ink-violet)'}
+              fillOpacity={0.8}
+            />
+          ))}
+        </g>
       </svg>
       <div className="fig-caption">
         Fig. — confidence at pick time against graded outcome.{' '}

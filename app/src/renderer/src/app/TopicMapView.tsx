@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { TopicSummary, TopicGraph, MapAnnotations } from '../../../shared/types'
 import { RetentionCurve } from '../components/RetentionCurve'
 import { GraphView, EDGE_STYLE } from '../components/GraphView'
@@ -56,6 +56,13 @@ export function TopicMapView({
   // mapAnnotations.ts) — keyed by node id, refreshed on topic switch and on
   // every live annotate_node bridge:ui event for this topic.
   const [annotations, setAnnotations] = useState<MapAnnotations>({})
+  // Node id whose claim block should ink-in warm right now — set by the live
+  // annotate_node listener below, cleared a beat after the CSS animation
+  // finishes. A timeout (not onAnimationEnd) is what clears it, since the
+  // claim block for the flashed node might not even be mounted (neither the
+  // drawer nor the full-node modal open on it) when the update lands.
+  const [inkFlashNode, setInkFlashNode] = useState<string | null>(null)
+  const inkFlashTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     window.engram.topics().then((ts) => {
@@ -109,15 +116,32 @@ export function TopicMapView({
     const off = window.engram.onBridgeUi((req) => {
       if (req.tool !== 'annotate_node') return
       if (typeof req.payload !== 'object' || req.payload === null) return
-      const topic = (req.payload as Record<string, unknown>).topic
+      const payload = req.payload as Record<string, unknown>
+      const topic = payload.topic
       if (typeof topic !== 'string' || topic !== selectedTopic) return
       window.engram
         .mapAnnotations(topic)
-        .then(setAnnotations)
+        .then((next) => {
+          setAnnotations(next)
+          // Ink-in only the node this update actually touched — every other
+          // node's claim block stays put even though `annotations` as a
+          // whole just changed.
+          const node = payload.node
+          if (typeof node !== 'string') return
+          setInkFlashNode(node)
+          if (inkFlashTimer.current) clearTimeout(inkFlashTimer.current)
+          inkFlashTimer.current = setTimeout(() => setInkFlashNode(null), 500)
+        })
         .catch(() => {})
     })
     return off
   }, [selectedTopic])
+
+  useEffect(() => {
+    return () => {
+      if (inkFlashTimer.current) clearTimeout(inkFlashTimer.current)
+    }
+  }, [])
 
   // Only fires once the freshly-loaded graph actually matches the deep-linked
   // topic — setting openNode any earlier would just get wiped by the effect above.
@@ -355,10 +379,12 @@ export function TopicMapView({
                 )}
               </div>
 
-              <MathRenderer
-                className="text-sm text-[var(--color-text-primary)] leading-snug"
-                text={annotations[selectedNode!]?.latexClaim ?? node.claim}
-              />
+              <div className={inkFlashNode === selectedNode ? 'annotation-ink-in' : undefined}>
+                <MathRenderer
+                  className="text-sm text-[var(--color-text-primary)] leading-snug"
+                  text={annotations[selectedNode!]?.latexClaim ?? node.claim}
+                />
+              </div>
 
               <div className="flex items-center justify-between panel-raised px-2.5 py-1.5">
                 <RetentionCurve stabilityDays={node.fsrs.s} width={100} height={22} />
@@ -471,10 +497,12 @@ export function TopicMapView({
               )}
             </div>
 
-            <MathRenderer
-              className="text-base text-[var(--color-text-primary)] leading-relaxed"
-              text={annotations[openNode]?.latexClaim ?? opened.claim}
-            />
+            <div className={inkFlashNode === openNode ? 'annotation-ink-in' : undefined}>
+              <MathRenderer
+                className="text-base text-[var(--color-text-primary)] leading-relaxed"
+                text={annotations[openNode]?.latexClaim ?? opened.claim}
+              />
+            </div>
 
             <div className="flex items-center justify-between panel-raised px-3 py-2">
               <div className="flex items-center gap-2">

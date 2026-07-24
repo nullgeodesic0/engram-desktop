@@ -128,6 +128,76 @@
   animation: shimmer-sweep 1.6s ease-in-out infinite;
 }
 
+/* Fitting-animation set — every entrance/emphasis below fires once per real
+ * trigger (a palette open, a drawer mount, a chart's first paint, a due-count
+ * increase, a live annotation), never as an ambient loop. Reduced-motion is
+ * covered for all of these by the global kill-switch above (animation
+ * durations forced to ~0), except RetentionCurve's path draw-in, which is
+ * JS-driven and carries its own matchMedia guard (see the component). */
+
+@keyframes palette-in {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.palette-enter {
+  animation: palette-in var(--dur-fast) var(--ease-out-soft);
+}
+
+@keyframes drawer-content-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.drawer-enter {
+  animation: drawer-content-in var(--dur-base) var(--ease-out-soft);
+}
+
+/* ActivityStrip ticks — each bar gets its own `--tick-delay` (set inline per
+ * rect); the stagger is capped so delay + duration never exceeds 400ms total. */
+@keyframes tick-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.tick-fade-in {
+  animation: tick-fade-in var(--dur-fast) var(--ease-out-soft) both;
+  animation-delay: var(--tick-delay, 0ms);
+}
+
+@keyframes scatter-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.scatter-fade-in {
+  animation: scatter-fade-in var(--dur-base) var(--ease-out-soft);
+}
+
+/* Home due chip — single pulse fired only on a real count increase (see
+ * HomeView's prev-count tracking), never on decrease or first load. */
+@keyframes pulse-once {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.16); }
+  100% { transform: scale(1); }
+}
+
+.pulse-once {
+  animation: pulse-once var(--dur-base) var(--ease-out-soft);
+}
+
+/* TopicMapView annotation ink-in — a brief warm-ink wash on the claim block
+ * that just got a live annotate_node update, for that node only. */
+@keyframes annotation-ink-in {
+  0% { background-color: color-mix(in srgb, var(--color-ink-warm) 20%, transparent); }
+  100% { background-color: transparent; }
+}
+
+.annotation-ink-in {
+  animation: annotation-ink-in calc(var(--dur-base) * 2) var(--ease-out-soft);
+  border-radius: 6px;
+}
+
 /* Interaction vocabulary — one set of rules for every hover/press micro-interaction
  * in the app, built on the two motion tokens declared in @theme above:
  *   - Rows/cards (interactive .panel surfaces, list rows): background-color +

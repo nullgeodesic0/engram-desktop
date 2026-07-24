@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef } from 'react'
 import type { WeekRetention } from '../../../../shared/types'
 
 const WIDTH = 600
@@ -18,6 +19,33 @@ function toneOf(rate: number): string {
  * the polyline instead of interpolating through them, so a gap in practice
  * reads as a real gap in the line, never a smoothed-over dip. */
 export function RetentionCurve({ data }: { data: WeekRetention[] }) {
+  // Draw the line in once on mount, imperatively (no React state) so this
+  // never re-fires on a later re-render with the same data — StrictMode's
+  // dev double-mount just re-measures on the fresh mount, it doesn't replay
+  // mid-mount. Skipped entirely under reduced motion: the path renders at its
+  // final, fully-drawn state with no dasharray manipulation at all. Declared
+  // before the empty-data early return below to keep hook order fixed.
+  const pathRefs = useRef<(SVGPathElement | null)[]>([])
+  useLayoutEffect(() => {
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const paths = pathRefs.current.filter((el): el is SVGPathElement => el !== null)
+    if (reduced) return
+    paths.forEach((el) => {
+      const len = el.getTotalLength()
+      el.style.transition = 'none'
+      el.style.strokeDasharray = `${len}`
+      el.style.strokeDashoffset = `${len}`
+    })
+    const raf = requestAnimationFrame(() => {
+      paths.forEach((el) => {
+        el.style.transition = `stroke-dashoffset calc(var(--dur-base) * 2) var(--ease-out-soft)`
+        el.style.strokeDashoffset = '0'
+      })
+    })
+    return () => cancelAnimationFrame(raf)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const active = data.filter((w) => w.total > 0)
   if (active.length === 0) {
     return <div className="fig-caption">Fig. — not enough reviews yet to chart a retention trend</div>
@@ -80,6 +108,9 @@ export function RetentionCurve({ data }: { data: WeekRetention[] }) {
         {segments.map((seg, si) => (
           <path
             key={si}
+            ref={(el) => {
+              pathRefs.current[si] = el
+            }}
             d={seg.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ')}
             fill="none"
             stroke="var(--color-ink-cool)"
