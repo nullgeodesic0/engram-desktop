@@ -9,7 +9,7 @@ export function ContextGauge({ usedTokens, contextWindow }: { usedTokens: number
   const color = pct < 0.5 ? 'var(--color-ink-cool)' : pct < 0.8 ? 'var(--color-ink-warm)' : 'var(--color-ink-danger)'
   const offset = CIRCUMFERENCE * (1 - pct)
 
-  const explainer = 'session depth — how much of the model\'s working memory this conversation has used'
+  const explainer = 'session depth — how much of the model’s working memory this conversation has used'
 
   return (
     <div
