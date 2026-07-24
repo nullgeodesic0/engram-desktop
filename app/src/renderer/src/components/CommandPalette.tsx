@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useFocusTrap } from './useFocusTrap'
-import { buildSearchIndex, searchEntries, type SearchEntry } from '../shared/searchIndex'
+import { buildSearchIndex, fetchTopicEntries, searchEntries, type SearchEntry } from '../shared/searchIndex'
 import { InkNode } from './ui/InkNode'
 
 interface Command {
@@ -31,10 +31,13 @@ const GROUP_BY_KIND: Record<'node' | 'receipt' | 'artifact', Command['group']> =
  * these three kinds — see how `buildSearchIndex` constructs them. */
 function entryToCommand(e: SearchEntry, onGoNode: (topicId: string, nodeId: string) => void): Command {
   const group = GROUP_BY_KIND[e.kind as 'node' | 'receipt' | 'artifact']
+  // Node subtitle is "topic title — claim" (claim folded in purely so it's
+  // searchable); only show the topic title as the row's hint.
+  const hint = e.kind === 'node' ? e.subtitle?.split(' — ')[0] : e.subtitle
   return {
     id: `${e.kind}:${e.topic}:${e.node ?? e.artifactPath}`,
     label: e.title,
-    hint: e.subtitle,
+    hint,
     group,
     glyphId: e.node,
     action:
@@ -44,16 +47,30 @@ function entryToCommand(e: SearchEntry, onGoNode: (topicId: string, nodeId: stri
   }
 }
 
+function topicEntryToCommand(e: SearchEntry, onGoTopic: (topicId: string) => void): Command {
+  return {
+    id: `topic:${e.topic}`,
+    label: `Continue: ${e.title}`,
+    hint: 'Learn',
+    group: 'Topics',
+    glyphId: e.topic,
+    action: () => e.topic && onGoTopic(e.topic),
+  }
+}
+
 /** ⌘K — jump to any view, in-progress topic, specific node, past receipt, or
- * artifact by typing, building on the ⌘1–⌘6 shortcuts already in App.tsx. The
- * search index (nodes/receipts/artifacts, built from every topic's graph) is
- * fetched once and cached at module scope by `buildSearchIndex` — App.tsx
- * invalidates it whenever topics are refreshed, so reopening the palette
- * afterwards rebuilds. Topics themselves are re-derived from the index each
- * open rather than fetched separately. */
+ * artifact by typing, building on the ⌘1–⌘6 shortcuts already in App.tsx.
+ * Loads in two phases so the palette doesn't sit blank while the heavy part
+ * builds: the topic list resolves immediately from `topics()` (`fastTopics`),
+ * while the full index — every topic's graph, plus receipts and artifacts —
+ * builds in the background and is cached at module scope by `buildSearchIndex`
+ * (see `invalidateSearchIndex`, called from `refreshTopics` in
+ * LearnSessionView wherever a topic/node actually changes). Until the full
+ * index resolves, `fastTopics` is all `combinedIndex` has to offer. */
 export function CommandPalette({ open, onClose, navCommands, onGoTopic, onGoNode }: CommandPaletteProps) {
   const [query, setQuery] = useState('')
-  const [index, setIndex] = useState<SearchEntry[]>([])
+  const [fastTopics, setFastTopics] = useState<SearchEntry[]>([])
+  const [fullIndex, setFullIndex] = useState<SearchEntry[] | null>(null)
   const [activeIdx, setActiveIdx] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -63,12 +80,22 @@ export function CommandPalette({ open, onClose, navCommands, onGoTopic, onGoNode
     if (!open) return
     setQuery('')
     setActiveIdx(0)
-    buildSearchIndex({
+    setFullIndex(null)
+    const deps = {
       topics: window.engram.topics,
       topicGraph: window.engram.topicGraph,
       receiptsHistory: window.engram.receiptsHistory,
       artifactList: window.engram.artifactList,
-    }).then(setIndex)
+    }
+    fetchTopicEntries(deps).then(setFastTopics)
+    buildSearchIndex(deps)
+      .then(setFullIndex)
+      .catch((err) => {
+        // Degrade to nav + topics rather than leaving the palette stuck —
+        // fastTopics already covers the Topics section either way.
+        console.error('[CommandPalette] failed to build search index', err)
+        setFullIndex([])
+      })
   }, [open])
 
   useEffect(() => {
@@ -82,31 +109,25 @@ export function CommandPalette({ open, onClose, navCommands, onGoTopic, onGoNode
 
   if (!open) return null
 
-  const topicCommands: Command[] = index
-    .filter((e) => e.kind === 'topic' && e.topic)
-    .map((t) => ({
-      id: `topic:${t.topic}`,
-      label: `Continue: ${t.title}`,
-      hint: 'Learn',
-      group: 'Topics',
-      glyphId: t.topic,
-      action: () => onGoTopic(t.topic as string),
-    }))
-
+  const combinedIndex = fullIndex ?? fastTopics
   const q = query.trim().toLowerCase()
+
+  // Topics rank/cap through the same searchEntries pass as everything else
+  // once there's a query; with no query it's the plain browse list, as before.
+  const ranked = q.length >= 1 ? searchEntries(combinedIndex, q) : []
+  const topicCommands: Command[] = (
+    q.length >= 1 ? ranked.filter((e) => e.kind === 'topic') : combinedIndex.filter((e) => e.kind === 'topic')
+  ).map((e) => topicEntryToCommand(e, onGoTopic))
 
   // Node/receipt/artifact search only kicks in with a real query — showing
   // every result across every topic by default would drown out the nav/topic
   // commands the palette opens to.
   const searchCommands: Command[] =
-    q.length < 2
-      ? []
-      : searchEntries(index, q)
-          .filter((e) => e.kind === 'node' || e.kind === 'receipt' || e.kind === 'artifact')
-          .map((e) => entryToCommand(e, onGoNode))
+    q.length < 2 ? [] : ranked.filter((e) => e.kind !== 'topic').map((e) => entryToCommand(e, onGoNode))
 
-  const all = [...navCommands, ...topicCommands, ...searchCommands]
-  const filtered = q ? all.filter((c) => c.label.toLowerCase().includes(q) || searchCommands.includes(c)) : all
+  const filtered = q
+    ? [...navCommands.filter((c) => c.label.toLowerCase().includes(q)), ...topicCommands, ...searchCommands]
+    : [...navCommands, ...topicCommands, ...searchCommands]
 
   function run(cmd: Command) {
     cmd.action()

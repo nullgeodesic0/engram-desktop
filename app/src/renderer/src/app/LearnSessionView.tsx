@@ -18,6 +18,7 @@ import { parseTranscriptToMessages, type ChatMessage } from '../../../shared/cha
 import { extractLastUsageFromTranscript } from '../../../shared/sessionUsage'
 import { latestBeatLabel } from '../../../shared/beatLabelParser'
 import { extractBannerFromTranscript, extractLastWalkFromTranscript } from '../../../shared/bannerFromTranscript'
+import { invalidateSearchIndex } from '../shared/searchIndex'
 import { humanizeNodeId } from '../../../shared/humanizeId'
 import { emitPulse, setAmbientLevel } from '../../../shared/neuralFieldBus'
 import { recordConfidence } from '../shared/calibrationStore'
@@ -389,6 +390,11 @@ export function LearnSessionView({
   }
 
   function refreshTopics() {
+    // The palette's search index caches topics/nodes/receipts/artifacts at
+    // module scope — this is the one place a topic's node states (and thus
+    // what the palette should show) actually change, so invalidate here
+    // rather than on every view switch.
+    invalidateSearchIndex()
     window.engram.topics().then((list) => {
       setTopics(list)
       Promise.all(list.map((t) => window.engram.lastSessionFor('learn', t.topic).then((id) => [t.topic, id] as const))).then(

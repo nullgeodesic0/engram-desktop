@@ -9,7 +9,6 @@ import { SettingsView } from './app/SettingsView'
 import { CommandPalette } from './components/CommandPalette'
 import { UpdateBanner } from './components/UpdateBanner'
 import { TitleBar } from './components/TitleBar'
-import { invalidateSearchIndex } from './shared/searchIndex'
 
 type View = 'home' | 'topics' | 'dashboard' | 'artifacts' | 'review' | 'learn' | 'settings'
 
@@ -89,12 +88,6 @@ export default function App() {
     if (view === 'learn' || view === 'review' || view === 'dashboard') {
       setVisited((v) => (v[view] ? v : { ...v, [view]: true }))
     }
-  }, [view])
-  // Every view that reads topics (Home/TopicMap/Learn) refetches on its own
-  // mount effect when `view` switches to it, so a view change is the signal
-  // that the palette's cached search index may now be stale.
-  useEffect(() => {
-    invalidateSearchIndex()
   }, [view])
   // Live-session activity reported by the chat views — drives the sidebar
   // ink-dots ("a session is alive in there" / pulsing while the model responds).
