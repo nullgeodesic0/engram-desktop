@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { EngramStats, TopicSummary, TopicGraph } from '../../../shared/types'
 import { SkeletonBar, SkeletonGrid } from '../components/Skeleton'
 import { emitPulse } from '../../../shared/neuralFieldBus'
@@ -13,6 +13,7 @@ import { StatBlock } from '../components/ui/StatBlock'
 import { Button } from '../components/ui/Button'
 
 const LAST_SEEN_STREAK_KEY = 'engram-desktop:last-seen-streak-days'
+const LAST_SEEN_DUE_KEY = 'engram-desktop:last-seen-due-now'
 const FLASHBACK_MIN_DAYS_AGO = 3
 
 interface Flashback {
@@ -55,6 +56,14 @@ export function HomeView({ onGoReview, onGoCoach, onGoTopic, onNewTopic }: HomeV
   const [flashback, setFlashback] = useState<Flashback | null>(null)
   const [toastQueue, setToastQueue] = useState<AchievementDef[]>([])
   const [forecast, setForecast] = useState<number[] | null>(null)
+  const [duePulse, setDuePulse] = useState(false)
+  // Previous due_now, tracked in a ref for this mount — but seeded from
+  // localStorage rather than starting at 0/null, since Home (unlike the
+  // KeepMounted views) fully unmounts on every tab switch (see App.tsx) and
+  // remounts fresh when you come back. Without that seed, every single visit
+  // would look like "first load" and the increase check below could never
+  // fire. Same convention as LAST_SEEN_STREAK_KEY just above.
+  const prevDueRef = useRef<number | null>(null)
 
   useEffect(() => {
     window.engram.stats().then(async (s) => {
@@ -64,6 +73,15 @@ export function HomeView({ onGoReview, onGoCoach, onGoTopic, onNewTopic }: HomeV
       const lastSeen = Number(localStorage.getItem(LAST_SEEN_STREAK_KEY) ?? '0')
       if (s.streak_days > lastSeen) emitPulse('streak')
       localStorage.setItem(LAST_SEEN_STREAK_KEY, String(s.streak_days))
+
+      // Due-now chip: single pulse only on a real increase since last seen —
+      // never on a decrease (clearing reviews) and never on the very first
+      // load ever (no stored value yet defaults to the current count, so
+      // there's nothing to compare against).
+      const lastSeenDue = Number(localStorage.getItem(LAST_SEEN_DUE_KEY) ?? String(s.due_now))
+      prevDueRef.current = lastSeenDue
+      if (s.due_now > lastSeenDue) setDuePulse(true)
+      localStorage.setItem(LAST_SEEN_DUE_KEY, String(s.due_now))
 
       // Achievements — evaluated here (Home already fetches stats on every visit,
       // the natural landing screen) against the persisted unlocked set; anything
@@ -155,6 +173,8 @@ export function HomeView({ onGoReview, onGoCoach, onGoTopic, onNewTopic }: HomeV
                 value={String(stats.due_now)}
                 tone="cool"
                 caption="Fig. 2 — items awaiting free recall"
+                pulse={duePulse}
+                onPulseEnd={() => setDuePulse(false)}
               />
             </div>
             {forecast ? (

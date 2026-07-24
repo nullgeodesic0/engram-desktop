@@ -151,7 +151,7 @@ export function CommandPalette({ open, onClose, navCommands, onGoTopic, onGoNode
     <div className="fixed inset-0 bg-black/60 flex items-start justify-center pt-32 z-50 p-8" onClick={onClose}>
       <div
         ref={containerRef}
-        className="panel-raised w-full max-w-lg overflow-hidden"
+        className="panel-raised w-full max-w-lg overflow-hidden palette-enter"
         onClick={(e) => e.stopPropagation()}
       >
         <input

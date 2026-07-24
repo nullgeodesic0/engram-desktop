@@ -11,6 +11,8 @@ export function StatBlock({
   tone = 'neutral',
   caption,
   compact = false,
+  pulse = false,
+  onPulseEnd,
 }: {
   label: string
   value: string
@@ -19,6 +21,11 @@ export function StatBlock({
   /** Tight variant for narrow tiles (e.g. the topic map's territory readout)
    * where the full-size label/value overflow. */
   compact?: boolean
+  /** One-shot emphasis on the value (e.g. Home's due-now chip ticking up) —
+   * caller owns the trigger condition and clears it via `onPulseEnd`, fired
+   * on the CSS animation's `animationend`. */
+  pulse?: boolean
+  onPulseEnd?: () => void
 }) {
   return (
     <div className={`panel ${compact ? 'p-2 min-w-0' : 'p-3'}`}>
@@ -29,7 +36,12 @@ export function StatBlock({
       >
         {label}
       </div>
-      <div className={`label-data mt-0.5 ${compact ? 'text-sm' : 'text-lg'} ${TONE[tone]}`}>{value}</div>
+      <div
+        className={`label-data mt-0.5 ${compact ? 'text-sm' : 'text-lg'} ${TONE[tone]} ${pulse ? 'pulse-once' : ''}`}
+        onAnimationEnd={pulse ? onPulseEnd : undefined}
+      >
+        {value}
+      </div>
       {caption && <div className="fig-caption mt-1">{caption}</div>}
     </div>
   )

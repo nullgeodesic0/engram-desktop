@@ -144,7 +144,10 @@ export function SessionHistoryDrawer({
 
   return (
     <Modal open={open} onClose={onClose} title="Session history" wide>
-      <div className="flex gap-4 h-[65vh]">
+      {/* Modal itself has no entrance (see ui/Modal.tsx) — this fade-rise is the
+       * drawer's own, and fires once per open since Modal unmounts the whole
+       * subtree when `open` is false. */}
+      <div className="flex gap-4 h-[65vh] drawer-enter">
         <div className="w-48 shrink-0 flex flex-col border-r border-[var(--color-hairline)] pr-3 overflow-y-auto">
           {entries === null && <div className="fig-caption px-1 py-2">reading past sittings…</div>}
           {entries !== null && entries.length === 0 && (
