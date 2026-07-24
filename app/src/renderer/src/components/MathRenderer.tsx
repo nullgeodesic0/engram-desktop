@@ -65,6 +65,32 @@ function renderMath(tex: string, displayMode: boolean): string {
   }
 }
 
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+/** Pure-string counterpart to the component below — same tokenize/KaTeX pipeline
+ * (genuinely re-running `katex.renderToString`, not a stringified DOM snapshot),
+ * but returns raw HTML instead of JSX. Used by the lab-notebook PDF export
+ * (renderer/src/shared/sittingToMarkdown.ts's `sittingToPrintHtml`), which builds
+ * a standalone print document outside React's render tree — reusing this instead
+ * of duplicating the tokenizer keeps the two renderers from drifting apart. */
+export function renderMathHtml(text: string): string {
+  return tokenize(text)
+    .map((tok) => {
+      if (tok.type !== 'text') return renderMath(tok.content, tok.type === 'display-math')
+      return tok.content
+        .split(/(\*\*[^*]+\*\*)/g)
+        .map((part) =>
+          part.startsWith('**') && part.endsWith('**')
+            ? `<strong>${escapeHtml(part.slice(2, -2))}</strong>`
+            : escapeHtml(part),
+        )
+        .join('')
+    })
+    .join('')
+}
+
 /** Renders assistant prose with $...$/$$...$$ math via KaTeX and minimal **bold**.
  * `katex.renderToString` is synchronous and non-trivial per equation, so the
  * rendered nodes (not just the tokenize pass) are memoized on `text` — without

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import type { SessionIndexEntry } from '../../../shared/types'
+import type { ExportSittingFormat, ExportSittingResult, SessionIndexEntry } from '../../../shared/types'
 import type { ChatMessage } from '../../../shared/chatMessages'
 import { parseGradeResult, parseGradeResults, type GradeResult } from '../../../shared/gradeResult'
+import { sittingToMarkdown, sittingToPrintHtml, type SittingMeta } from '../shared/sittingToMarkdown'
 import { Modal } from './ui/Modal'
 import { ChatMessageView } from './ChatMessageView'
 import { GradeResultCard } from './GradeResultCard'
@@ -13,7 +14,7 @@ interface TranscriptLine {
   }
 }
 
-interface GradeBatch {
+export interface GradeBatch {
   id: string
   /** Same convention as LearnSessionView's `marks` — the message-array length
    * at the moment the receipt/rate tool_result landed, so the card slots in
@@ -35,7 +36,7 @@ interface GradeBatch {
  * (Review's `rate`) parsers on every tool_result — both parsers already
  * validate shape strictly (a `rating` in a known enum, a string `node`), so
  * this doesn't require re-deriving which Bash command produced it. */
-function buildHistoryTimeline(
+export function buildHistoryTimeline(
   rawLines: unknown[],
 ): { messages: ChatMessage[]; grades: GradeBatch[]; messageSourceIndex: number[] } {
   const lines = rawLines as TranscriptLine[]
@@ -95,6 +96,31 @@ function buildHistoryTimeline(
   return { messages, grades, messageSourceIndex }
 }
 
+/** The lab-notebook export's single entry point — shared by the drawer's own
+ * per-sitting Export buttons below AND LearnSessionView/ReviewSessionView's
+ * "export the open sitting" header actions, so every export surface goes
+ * through the exact same rebuild-timeline → assemble-document → hand-to-main
+ * path rather than each call site re-deriving its own shape. Always rebuilds
+ * from a fresh `getTranscript` read (never a caller's own in-memory message
+ * state) — for a still-running sitting this means the export reflects
+ * whatever's landed on disk so far, same as replaying that sitting in this
+ * drawer would show; nothing from `sessionId`'s live ephemera (beat trail,
+ * jobs rail, …) is or could be included, matching this module's read-only
+ * contract. */
+export async function exportSittingTranscript(
+  sessionId: string,
+  format: ExportSittingFormat,
+  meta: SittingMeta,
+): Promise<ExportSittingResult> {
+  const lines = await window.engram.getTranscript(sessionId)
+  const { messages, grades } = buildHistoryTimeline(lines)
+  const content =
+    format === 'md'
+      ? { markdown: sittingToMarkdown(messages, grades, meta) }
+      : { printHtml: sittingToPrintHtml(messages, grades, meta) }
+  return window.engram.exportSitting({ format, title: meta.title, ...content })
+}
+
 function formatWhen(iso: string): string {
   const d = new Date(iso)
   return (
@@ -114,6 +140,7 @@ function formatWhen(iso: string): string {
  * transcript itself. */
 export function SessionHistoryDrawer({
   historyKey,
+  title,
   open,
   onClose,
   initialSessionId,
@@ -122,6 +149,10 @@ export function SessionHistoryDrawer({
   /** A topic id for Learn history, or the literal string 'review' for Review
    * history — mirrors how `sessionHistoryFor`'s key space works server-side. */
   historyKey: string
+  /** Display title for exported documents (a topic's real title for Learn,
+   * "Review" for the review queue) — `historyKey` itself is a raw topic id,
+   * not fit for a document header. Falls back to `historyKey` if omitted. */
+  title?: string
   open: boolean
   onClose: () => void
   /** Opens directly on this sitting instead of "most recent" — provenance
@@ -143,6 +174,8 @@ export function SessionHistoryDrawer({
     messageSourceIndex: number[]
   } | null>(null)
   const [loadingTranscript, setLoadingTranscript] = useState(false)
+  const [exportStatus, setExportStatus] = useState<{ text: string; failed: boolean } | null>(null)
+  const [exporting, setExporting] = useState<ExportSittingFormat | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   // Guards the anchor scroll/highlight to a single attempt per drawer open —
   // without it, StrictMode's double-invoked effects (or a second `timeline`
@@ -184,10 +217,27 @@ export function SessionHistoryDrawer({
     setSelectedId(id)
     setLoadingTranscript(true)
     setTimeline(null)
+    setExportStatus(null)
     window.engram.getTranscript(id).then((lines) => {
       setTimeline(buildHistoryTimeline(lines))
       setLoadingTranscript(false)
     })
+  }
+
+  async function handleExport(format: ExportSittingFormat) {
+    if (!selectedEntry) return
+    setExporting(format)
+    setExportStatus(null)
+    try {
+      const result = await exportSittingTranscript(selectedEntry.sessionId, format, {
+        title: title ?? historyKey,
+        startedAt: selectedEntry.startedAt,
+      })
+      if (result.ok) setExportStatus({ text: `Saved to ${result.path}`, failed: false })
+      else if (result.reason !== 'canceled') setExportStatus({ text: `Export failed: ${result.reason}`, failed: true })
+    } finally {
+      setExporting(null)
+    }
   }
 
   // One-shot anchor scroll + highlight, once the anchored sitting's timeline
@@ -257,8 +307,32 @@ export function SessionHistoryDrawer({
 
         <div className="flex-1 min-w-0 flex flex-col gap-3">
           {selectedEntry && (
-            <div className="shrink-0 panel border-[var(--color-ink-cool-dim)] px-4 py-2 text-xs text-[var(--color-ink-cool)]">
-              read-only · sitting of {formatWhen(selectedEntry.startedAt)}
+            <div className="shrink-0 panel border-[var(--color-ink-cool-dim)] px-4 py-2 flex items-center justify-between gap-3">
+              <span className="text-xs text-[var(--color-ink-cool)]">read-only · sitting of {formatWhen(selectedEntry.startedAt)}</span>
+              <div className="flex items-center gap-3 shrink-0">
+                {exportStatus && (
+                  <span
+                    className={`text-xs truncate max-w-[16rem] ${exportStatus.failed ? 'text-[var(--color-ink-danger)]' : 'text-[var(--color-text-faint)]'}`}
+                    title={exportStatus.text}
+                  >
+                    {exportStatus.text}
+                  </span>
+                )}
+                <button
+                  onClick={() => handleExport('md')}
+                  disabled={exporting !== null}
+                  className="focus-ring no-press text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] disabled:opacity-50"
+                >
+                  {exporting === 'md' ? 'Exporting…' : 'Export .md'}
+                </button>
+                <button
+                  onClick={() => handleExport('pdf')}
+                  disabled={exporting !== null}
+                  className="focus-ring no-press text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] disabled:opacity-50"
+                >
+                  {exporting === 'pdf' ? 'Exporting…' : 'Export .pdf'}
+                </button>
+              </div>
             </div>
           )}
           <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-5 pr-1">

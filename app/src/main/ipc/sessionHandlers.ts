@@ -6,6 +6,8 @@ import type { SessionEvent } from '../../shared/sessionEvents'
 import { recordSession, lastSessionFor, sessionHistoryFor } from '../session/sessionIndex'
 import { getTopicSettings, setTopicSettings, type TopicSettings } from '../session/topicSettings'
 import { readTranscript } from '../session/transcriptReader'
+import { exportSitting } from '../session/exportSitting'
+import type { ExportSittingRequest, ExportSittingResult } from '../../shared/types'
 
 type SessionKind = 'learn' | 'review' | 'coach'
 
@@ -101,4 +103,11 @@ export function registerSessionHandlers(win: BrowserWindow): void {
   ipcMain.handle('bridge:answer', (_e, requestId: string, response: BridgeAskResponse) => {
     bridgeServer.answer(requestId, response)
   })
+
+  // Lab-notebook export (see session/exportSitting.ts) — always targets
+  // `activeWindow` rather than a captured window, same rationale as
+  // `rebindWindow` above: the tray can recreate the window mid-lifetime.
+  ipcMain.handle('session:export', (_e, req: ExportSittingRequest): Promise<ExportSittingResult> =>
+    exportSitting(activeWindow, req),
+  )
 }

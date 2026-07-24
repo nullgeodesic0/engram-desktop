@@ -288,3 +288,21 @@ export interface NodeProvenance {
   firstEncoded: ProvenanceEvent | null
   reviews: ProvenanceEvent[]
 }
+
+export type ExportSittingFormat = 'md' | 'pdf'
+
+/** IPC `exportSitting`'s request — the renderer owns all the shaping (it
+ * already has the drawer's timeline-building and the print-HTML pipeline, see
+ * shared/sittingToMarkdown.ts) and hands main a finished document to write;
+ * main never re-derives content from a transcript itself. Exactly one of
+ * `markdown`/`printHtml` is populated, matching `format` — see
+ * main/session/exportSitting.ts. */
+export interface ExportSittingRequest {
+  format: ExportSittingFormat
+  /** Seeds the save dialog's suggested filename only. */
+  title: string
+  markdown?: string
+  printHtml?: string
+}
+
+export type ExportSittingResult = { ok: true; path: string } | { ok: false; reason: string }

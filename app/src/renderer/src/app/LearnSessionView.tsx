@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import type { SessionEvent } from '../../../shared/sessionEvents'
 import type { BridgeAskRequest } from '../../../shared/bridgeProtocol'
-import type { TopicSummary, ArtifactEntry, TopicGraph } from '../../../shared/types'
+import type { TopicSummary, ArtifactEntry, TopicGraph, ExportSittingFormat } from '../../../shared/types'
 import { AskDialog } from '../components/AskDialog'
 import { RateLimitBanner } from '../components/RateLimitBanner'
 import { isBlockingRateLimitStatus } from '../../../shared/rateLimit'
@@ -22,7 +22,7 @@ import { invalidateSearchIndex } from '../shared/searchIndex'
 import { humanizeNodeId } from '../../../shared/humanizeId'
 import { emitPulse, setAmbientLevel } from '../../../shared/neuralFieldBus'
 import { recordConfidence } from '../shared/calibrationStore'
-import { SessionHistoryDrawer } from '../components/SessionHistoryDrawer'
+import { SessionHistoryDrawer, exportSittingTranscript } from '../components/SessionHistoryDrawer'
 import { parseGradeResults, type GradeResult } from '../../../shared/gradeResult'
 import { MarkView, GradingShimmer, type RitualMark } from '../components/ritual/Marks'
 import { ActionChips, type SuggestedAction } from '../components/ritual/ActionChips'
@@ -276,6 +276,8 @@ export function LearnSessionView({
   const [sessionGrades, setSessionGrades] = useState<GradeResult[]>([])
   const [streakDays, setStreakDays] = useState<number | null>(null)
   const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false)
+  const [exportingFormat, setExportingFormat] = useState<ExportSittingFormat | null>(null)
+  const [exportStatus, setExportStatus] = useState<{ text: string; failed: boolean } | null>(null)
   const [marks, setMarks] = useState<RitualMark[]>([])
   const [gradingPending, setGradingPending] = useState(false)
   const [walkNumber, setWalkNumber] = useState<number | null>(null)
@@ -1057,6 +1059,27 @@ export function LearnSessionView({
     setBusy(false)
   }
 
+  // Exports the OPEN sitting via the same path SessionHistoryDrawer's own
+  // per-sitting Export buttons use (see exportSittingTranscript) — it rebuilds
+  // from a fresh `getTranscript` read rather than this view's own live
+  // `messages`/`sessionGrades` state, so what a mid-session export contains is
+  // exactly whatever's landed on disk so far (same as replaying this sitting
+  // in the history drawer would show right now).
+  async function exportCurrentSitting(format: ExportSittingFormat) {
+    if (!sessionId || !activeTopic) return
+    setExportingFormat(format)
+    setExportStatus(null)
+    try {
+      const history = await window.engram.sessionHistoryFor('learn', activeTopic.topic)
+      const startedAt = history.find((e) => e.sessionId === sessionId)?.startedAt ?? new Date().toISOString()
+      const result = await exportSittingTranscript(sessionId, format, { title: activeTopic.title, startedAt })
+      if (result.ok) setExportStatus({ text: `Saved to ${result.path}`, failed: false })
+      else if (result.reason !== 'canceled') setExportStatus({ text: `Export failed: ${result.reason}`, failed: true })
+    } finally {
+      setExportingFormat(null)
+    }
+  }
+
   const rateLimitBlocking = rateLimit !== null && isBlockingRateLimitStatus(rateLimit.status)
   const lastUserMessageId = useMemo(() => [...messages].reverse().find((m) => m.role === 'user')?.id ?? null, [messages])
   const latestTicket = useMemo(() => extractTicketFromMessages(messages), [messages])
@@ -1103,6 +1126,34 @@ export function LearnSessionView({
             {started && momentumOn && sessionGrades.length > 0 && <InkWell results={sessionGrades} />}
             {started && contextUsage && (
               <ContextGauge usedTokens={contextUsage.usedTokens} contextWindow={contextUsage.contextWindow} />
+            )}
+            {started && activeTopic && exportStatus && (
+              <span
+                className={`text-xs truncate max-w-[12rem] ${exportStatus.failed ? 'text-[var(--color-ink-danger)]' : 'text-[var(--color-text-faint)]'}`}
+                title={exportStatus.text}
+              >
+                {exportStatus.text}
+              </span>
+            )}
+            {started && activeTopic && sessionId && (
+              <button
+                onClick={() => exportCurrentSitting('md')}
+                disabled={exportingFormat !== null}
+                title="Export this sitting as a Markdown file"
+                className="focus-ring text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] disabled:opacity-50"
+              >
+                {exportingFormat === 'md' ? 'Exporting…' : 'Export .md'}
+              </button>
+            )}
+            {started && activeTopic && sessionId && (
+              <button
+                onClick={() => exportCurrentSitting('pdf')}
+                disabled={exportingFormat !== null}
+                title="Export this sitting as a PDF"
+                className="focus-ring text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] disabled:opacity-50"
+              >
+                {exportingFormat === 'pdf' ? 'Exporting…' : 'Export .pdf'}
+              </button>
             )}
             {started && activeTopic && (
               <button
@@ -1319,6 +1370,7 @@ export function LearnSessionView({
       {activeTopic && (
         <SessionHistoryDrawer
           historyKey={activeTopic.topic}
+          title={activeTopic.title}
           open={historyDrawerOpen}
           onClose={() => setHistoryDrawerOpen(false)}
         />

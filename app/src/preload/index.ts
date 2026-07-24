@@ -16,6 +16,8 @@ import type {
   NextNodeResult,
   MapAnnotations,
   NodeProvenance,
+  ExportSittingRequest,
+  ExportSittingResult,
 } from '../shared/types'
 import type { SessionEvent } from '../shared/sessionEvents'
 import type { BridgeAskRequest, BridgeAskResponse, BridgeBeatRequest, BridgeUiRequest } from '../shared/bridgeProtocol'
@@ -78,6 +80,7 @@ const engramApi = {
   sessionHistoryFor: (kind: 'learn' | 'review' | 'coach', topicId?: string): Promise<SessionIndexEntry[]> =>
     ipcRenderer.invoke('session:historyFor', kind, topicId),
   getTranscript: (sessionId: string): Promise<unknown[]> => ipcRenderer.invoke('session:transcript', sessionId),
+  exportSitting: (req: ExportSittingRequest): Promise<ExportSittingResult> => ipcRenderer.invoke('session:export', req),
 
   getTopicSettings: (topicId: string): Promise<TopicSettings> => ipcRenderer.invoke('topicSettings:get', topicId),
   setTopicSettings: (topicId: string, settings: TopicSettings): Promise<void> =>
