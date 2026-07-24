@@ -8,6 +8,12 @@ import { registerSessionHandlers, rebindWindow } from './ipc/sessionHandlers'
 import { resolveEngramPlugin } from './session/pluginResolver'
 import { resolveClaudeBinary } from './session/claudeResolver'
 import { engramLearningHome } from './engramCli/readOnly'
+import {
+  registerExplorableSchemePrivileges,
+  installExplorableProtocolHandler,
+  registerExplorableRoot,
+  resolveExplorablePath,
+} from './explorableProtocol'
 import { bridgeServer } from './bridge/bridgeServer'
 import { getNotifierSettings, setNotifierSettings } from './session/notifierState'
 import { getUnlockedAchievements, recordUnlocked } from './session/achievementsStore'
@@ -23,6 +29,10 @@ const execFileAsync = promisify(execFile)
 // it — the About panel, the menu bar's first item, dev-mode window chrome —
 // not just once whenReady's menu installation runs.
 app.setName('Engram Desktop')
+
+// Must run before app is ready (Electron enforces this) — see explorableProtocol.ts
+// for why explorables get a dedicated scheme instead of file://.
+registerExplorableSchemePrivileges()
 
 // Without this, a second launch (e.g. an impatient double-click while the first
 // launch is still loading — startup does a `claude --version` exec plus other
@@ -172,6 +182,7 @@ app.whenReady().then(() => {
   ipcMain.handle('engram:environmentCheck', () => checkEnvironment())
 
   registerReadHandlers()
+  installExplorableProtocolHandler()
 
   // Explorable artifacts are self-contained HTML files the artifact-smith wrote to
   // arbitrary filesystem paths (not confined to ~/.claude/learning). Opening one in
@@ -198,6 +209,23 @@ app.whenReady().then(() => {
       win.close()
     }
   })
+
+  // In-app viewer's counterpart to the above: resolves+validates a raw artifact
+  // path (which, unlike engramArtifactList's output, may still be relative when
+  // it comes straight from a topic graph's node.artifact field — see
+  // resolveExplorablePath) and, on success, allow-lists its directory for the
+  // explorable:// protocol handler before handing the renderer a URL to point
+  // an iframe at. Never touches Node/fs from the renderer side — the renderer
+  // only ever receives an explorable:// URL string, never a raw path back.
+  ipcMain.handle(
+    'engram:openExplorable',
+    async (_e, rawPath: string): Promise<{ url: string; absolutePath: string } | { error: string }> => {
+      const resolved = await resolveExplorablePath(rawPath)
+      if (!resolved) return { error: `Explorable file not found: ${rawPath}` }
+      registerExplorableRoot(resolved)
+      return { url: `explorable://local${resolved}`, absolutePath: resolved }
+    },
+  )
 
   // File attachment support (mid-chat context, or a topic's "initial context" files —
   // see topicSettings.ts). We don't read/encode bytes ourselves: the model already has

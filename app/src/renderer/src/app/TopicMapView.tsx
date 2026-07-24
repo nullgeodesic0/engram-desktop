@@ -10,6 +10,7 @@ import { Button } from '../components/ui/Button'
 import { Modal } from '../components/ui/Modal'
 import { MathRenderer } from '../components/MathRenderer'
 import { SessionHistoryDrawer } from '../components/SessionHistoryDrawer'
+import { ExplorableViewer } from '../components/ExplorableViewer'
 import { friendlyErrorText } from '../shared/friendlyError'
 
 function stateLabel(state: string): string {
@@ -119,6 +120,11 @@ export function TopicMapView({
   const [error, setError] = useState<string | null>(null)
   const [selectedNode, setSelectedNode] = useState<string | null>(null)
   const [openNode, setOpenNode] = useState<string | null>(null)
+  // Node whose explorable is currently open in the in-app viewer — separate
+  // from selectedNode/openNode so the drawer, the full-node modal, and the
+  // viewer can each be open independently (e.g. viewer opened from the
+  // drawer, drawer stays open behind it).
+  const [explorableNode, setExplorableNode] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   // Tutor-authored LaTeX overrides for the selected topic's nodes (see
   // mapAnnotations.ts) — keyed by node id, refreshed on topic switch and on
@@ -474,6 +480,15 @@ export function TopicMapView({
                 )}
               </div>
 
+              {node.artifact && (
+                <button
+                  onClick={() => setExplorableNode(selectedNode)}
+                  className="focus-ring self-start px-3 py-1.5 rounded-lg text-xs bg-[var(--color-surface-3)] text-[var(--color-ink-violet)] hover:bg-[var(--color-surface-2)]"
+                >
+                  Open explorable ↗
+                </button>
+              )}
+
               <div className={inkFlashNode === selectedNode ? 'annotation-ink-in' : undefined}>
                 <MathRenderer
                   className="text-sm text-[var(--color-text-primary)] leading-snug"
@@ -700,7 +715,7 @@ export function TopicMapView({
 
             {opened.artifact && (
               <button
-                onClick={() => window.engram.openArtifact(opened.artifact!)}
+                onClick={() => setExplorableNode(openNode)}
                 className="focus-ring self-start mt-1 px-4 py-2 rounded-lg text-sm bg-[var(--color-surface-3)] text-[var(--color-ink-violet)] hover:bg-[var(--color-surface-2)]"
               >
                 Open explorable ↗
@@ -715,6 +730,18 @@ export function TopicMapView({
           </div>
         )}
       </Modal>
+
+      {explorableNode && graph?.nodes[explorableNode]?.artifact && (
+        <ExplorableViewer
+          path={graph.nodes[explorableNode].artifact!}
+          nodeId={explorableNode}
+          onClose={() => setExplorableNode(null)}
+          onJumpToNode={(nodeId) => {
+            setExplorableNode(null)
+            setSelectedNode(nodeId)
+          }}
+        />
+      )}
 
       <SessionHistoryDrawer
         historyKey={historyDrawer?.historyKey ?? ''}

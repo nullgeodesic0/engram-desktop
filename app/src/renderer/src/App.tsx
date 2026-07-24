@@ -334,7 +334,7 @@ export default function App() {
           {view === 'artifacts' && (
             <div key="artifacts" className="view-transition h-full">
               <Suspense fallback={<div className="h-full p-6"><SkeletonGrid /></div>}>
-                <ArtifactGalleryView onGoLearn={() => setView('learn')} />
+                <ArtifactGalleryView onGoLearn={() => setView('learn')} onOpenNode={goToNode} />
               </Suspense>
             </div>
           )}
