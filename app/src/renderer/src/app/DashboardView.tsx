@@ -4,6 +4,9 @@ import { CoachSessionPanel } from '../components/CoachSessionPanel'
 import { SkeletonBar, SkeletonGrid } from '../components/Skeleton'
 import { StreakCalendar } from '../components/StreakCalendar'
 import { RetentionTrend } from '../components/RetentionTrend'
+import { RetentionCurve } from '../components/charts/RetentionCurve'
+import { ActivityStrip } from '../components/charts/ActivityStrip'
+import { CalibrationScatter } from '../components/charts/CalibrationScatter'
 import { humanizeNodeId } from '../../../shared/humanizeId'
 import { StatBlock } from '../components/ui/StatBlock'
 import { DendriteDivider } from '../components/ui/DendriteDivider'
@@ -208,6 +211,19 @@ export function DashboardView() {
             />
           ))}
         </div>
+        {history === null ? (
+          <div className="panel px-4 py-4 flex flex-col gap-4 mt-1">
+            <SkeletonBar width="45%" height={12} />
+            <SkeletonBar height={90} />
+            <SkeletonBar width="40%" height={12} />
+            <SkeletonBar height={50} />
+          </div>
+        ) : (
+          <div className="panel px-4 py-4 flex flex-col gap-5 mt-1">
+            <RetentionCurve data={history.weeks} />
+            <ActivityStrip data={history.days} />
+          </div>
+        )}
       </Section>
 
       <Section title="Momentum">
@@ -236,10 +252,11 @@ export function DashboardView() {
           // 0-1 = "felt shaky". Picks with no index (persisted before this field
           // existed) can't be classified and are skipped.
           const itemsByDay = new Map(history?.days.map((d) => [d.date, d.items]) ?? [])
+          const picks = allPicks()
           let overconfident = 0
           let underconfident = 0
           let calibrated = 0
-          for (const pick of allPicks()) {
+          for (const pick of picks) {
             if (pick.index === undefined) continue
             // Receipts are keyed by the engine's LOCAL calendar date (engram.py's
             // `date.today()`, written verbatim into the JSONL) — toISOString() (UTC)
@@ -268,6 +285,9 @@ export function DashboardView() {
                 <StatBlock label="Calibrated" value={String(calibrated)} tone="neutral" />
               </div>
               <div className="fig-caption">Fig. — how your felt-sense tracks the assessor</div>
+              <div className="panel px-4 py-4 mt-1">
+                <CalibrationScatter data={{ picks, days: history?.days ?? [] }} />
+              </div>
             </>
           )
         })()}
