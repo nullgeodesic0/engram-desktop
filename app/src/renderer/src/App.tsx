@@ -1,14 +1,24 @@
-import { useEffect, useState, type ReactElement } from 'react'
+import { useEffect, useState, Suspense, lazy, type ReactElement } from 'react'
 import { HomeView } from './app/HomeView'
-import { TopicMapView } from './app/TopicMapView'
 import { DashboardView } from './app/DashboardView'
-import { ArtifactGalleryView } from './app/ArtifactGalleryView'
 import { ReviewSessionView } from './app/ReviewSessionView'
 import { LearnSessionView } from './app/LearnSessionView'
 import { SettingsView } from './app/SettingsView'
 import { CommandPalette } from './components/CommandPalette'
 import { UpdateBanner } from './components/UpdateBanner'
 import { TitleBar } from './components/TitleBar'
+import { SkeletonBar, SkeletonGrid } from './components/Skeleton'
+
+// Code-split: both views unmount on tab switch already (they're not inside
+// KeepMounted — see the comment on `main` below), so there's no "resolve once,
+// stay mounted" state to worry about, just a plain lazy import per visit. The
+// map additionally drags in nothing heavy itself, but keeping it split alongside
+// Artifacts keeps the initial bundle limited to the views a fresh session
+// actually needs (Home first, then whichever tab is clicked).
+const TopicMapView = lazy(() => import('./app/TopicMapView').then((m) => ({ default: m.TopicMapView })))
+const ArtifactGalleryView = lazy(() =>
+  import('./app/ArtifactGalleryView').then((m) => ({ default: m.ArtifactGalleryView })),
+)
 
 type View = 'home' | 'topics' | 'dashboard' | 'artifacts' | 'review' | 'learn' | 'settings'
 
@@ -300,14 +310,16 @@ export default function App() {
           )}
           {view === 'topics' && (
             <div key="topics" className="view-transition h-full">
-              <TopicMapView
-                deepLinkNode={deepLinkNode}
-                onDeepLinkConsumed={() => setDeepLinkNode(null)}
-                onGoTopic={goToTopic}
-                onNewTopic={() => setView('learn')}
-                spotlightNode={pendingSpotlight}
-                onSpotlightConsumed={() => setPendingSpotlight(null)}
-              />
+              <Suspense fallback={<div className="h-full p-6"><SkeletonBar height={220} /></div>}>
+                <TopicMapView
+                  deepLinkNode={deepLinkNode}
+                  onDeepLinkConsumed={() => setDeepLinkNode(null)}
+                  onGoTopic={goToTopic}
+                  onNewTopic={() => setView('learn')}
+                  spotlightNode={pendingSpotlight}
+                  onSpotlightConsumed={() => setPendingSpotlight(null)}
+                />
+              </Suspense>
             </div>
           )}
           {(visited.dashboard || view === 'dashboard') && (
@@ -317,7 +329,9 @@ export default function App() {
           )}
           {view === 'artifacts' && (
             <div key="artifacts" className="view-transition h-full">
-              <ArtifactGalleryView />
+              <Suspense fallback={<div className="h-full p-6"><SkeletonGrid /></div>}>
+                <ArtifactGalleryView />
+              </Suspense>
             </div>
           )}
           {view === 'settings' && (
