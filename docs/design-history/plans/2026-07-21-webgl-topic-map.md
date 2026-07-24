@@ -1974,7 +1974,7 @@ npm run dist:mac
 osascript -e 'quit app "Engram Desktop"' 2>/dev/null; sleep 1
 pkill -f "Engram Desktop" 2>/dev/null; sleep 1
 rm -rf "/Applications/Engram Desktop.app"
-cp -R "/app/dist/mac-arm64/Engram Desktop.app" /Applications/
+cp -R "app/dist/mac-arm64/Engram Desktop.app" /Applications/
 open -a "Engram Desktop"
 sleep 2
 ps aux | grep "[E]ngram Desktop.app/Contents/MacOS/Engram Desktop"
