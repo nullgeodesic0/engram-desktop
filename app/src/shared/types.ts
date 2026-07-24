@@ -265,3 +265,26 @@ export interface DecayResult {
   due_now: number
   nodes: DecayNodeEntry[]
 }
+
+/** One graded moment recovered from a Claude Code session transcript — the
+ * transcript's own line order is the only ordering authority (see
+ * main/session/sessionScan.ts), never re-derived from FSRS state. `anchor` is
+ * the 0-based index (in the array `session:transcript` returns) of the
+ * tool_result entry the grade was parsed from — enough for the UI to jump
+ * straight to that point in a transcript replay. */
+export interface ProvenanceEvent {
+  sessionId: string
+  /** YYYY-MM-DD, taken from the transcript entry's own timestamp — not the
+   * session's startedAt, since a resumed session can span multiple days. */
+  date: string
+  anchor: number
+  kind: 'encode' | 'pretest' | 'review'
+  grade: string | null
+}
+
+/** One node's provenance within a topic — window.engram.nodeProvenance(topic)
+ * returns `Record<nodeId, NodeProvenance>` for every node in that topic's graph. */
+export interface NodeProvenance {
+  firstEncoded: ProvenanceEvent | null
+  reviews: ProvenanceEvent[]
+}

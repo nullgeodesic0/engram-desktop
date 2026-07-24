@@ -9,6 +9,8 @@ import {
 import { getTopicsCached } from '../engramCli/topicsCache'
 import { readReceiptsHistory } from '../engramCli/receiptsHistory'
 import { getMapAnnotations } from '../session/mapAnnotations'
+import { nodeProvenance } from '../session/sessionScan'
+import type { TopicGraph, NodeProvenance } from '../../shared/types'
 
 export function registerReadHandlers(): void {
   ipcMain.handle('engram:topics', () => getTopicsCached())
@@ -33,6 +35,14 @@ export function registerReadHandlers(): void {
   ipcMain.handle('engram:artifactList', () => engramArtifactList())
   ipcMain.handle('engram:receiptsHistory', () => readReceiptsHistory())
   ipcMain.handle('mapAnnotations:get', (_e, topicId: string) => getMapAnnotations(topicId))
+
+  // Node ids come from the topic's own graph (same file readTopicGraph already
+  // reads) — the scanner needs that set to attribute review-kind events, which
+  // aren't topic-scoped in the session index (see sessionScan.ts).
+  ipcMain.handle('engram:nodeProvenance', async (_e, topic: string): Promise<Record<string, NodeProvenance>> => {
+    const graph = (await readTopicGraph(topic)) as TopicGraph
+    return nodeProvenance(topic, Object.keys(graph.nodes))
+  })
 
   // The narrow direct-mutation exception (settings only): visuals/focus/model --set/commit.
   ipcMain.handle('engram:visuals', (_e, mode: 'eager' | 'threshold' | 'off' | 'status') =>

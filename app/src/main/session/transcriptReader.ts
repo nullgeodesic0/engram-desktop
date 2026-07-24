@@ -10,7 +10,7 @@ import { join } from 'node:path'
  * a real recorded session id byte-for-byte). Used only to replay chat history
  * into the UI on resume — never written to, and irrelevant to Engram's own state.
  */
-function transcriptPath(sessionId: string): string {
+export function transcriptPath(sessionId: string): string {
   const flattenedCwd = homedir().replace(/\//g, '-')
   return join(homedir(), '.claude', 'projects', flattenedCwd, `${sessionId}.jsonl`)
 }
