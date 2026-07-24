@@ -170,6 +170,16 @@ export function SessionHistoryDrawer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, historyKey, initialSessionId])
 
+  // Re-arms the one-shot anchor scroll when the drawer stays open but the
+  // caller points it at a different anchor within the same sitting (e.g.
+  // clicking another review row for the same session) — without this key,
+  // anchorAppliedRef would still be `true` from the previous anchor and the
+  // new scroll/highlight would silently never fire.
+  useEffect(() => {
+    anchorAppliedRef.current = false
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [`${initialSessionId}:${anchorIndex}`])
+
   function selectEntry(id: string) {
     setSelectedId(id)
     setLoadingTranscript(true)
