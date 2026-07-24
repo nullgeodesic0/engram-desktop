@@ -18,6 +18,10 @@ import type {
   NodeProvenance,
   ExportSittingRequest,
   ExportSittingResult,
+  BackupNowResult,
+  DescribeArchiveResult,
+  RestoreArchiveResult,
+  BackupInfo,
 } from '../shared/types'
 import type { SessionEvent } from '../shared/sessionEvents'
 import type { BridgeAskRequest, BridgeAskResponse, BridgeBeatRequest, BridgeUiRequest } from '../shared/bridgeProtocol'
@@ -81,6 +85,14 @@ const engramApi = {
     ipcRenderer.invoke('session:historyFor', kind, topicId),
   getTranscript: (sessionId: string): Promise<unknown[]> => ipcRenderer.invoke('session:transcript', sessionId),
   exportSitting: (req: ExportSittingRequest): Promise<ExportSittingResult> => ipcRenderer.invoke('session:export', req),
+
+  backupNow: (destDir?: string): Promise<BackupNowResult> => ipcRenderer.invoke('backup:now', destDir),
+  describeArchive: (archivePath: string): Promise<DescribeArchiveResult> =>
+    ipcRenderer.invoke('backup:describe', archivePath),
+  restoreFromArchive: (archivePath: string, confirmation: string): Promise<RestoreArchiveResult> =>
+    ipcRenderer.invoke('backup:restore', archivePath, confirmation),
+  pickBackupArchive: (): Promise<string | null> => ipcRenderer.invoke('backup:pickArchive'),
+  getBackupInfo: (): Promise<BackupInfo> => ipcRenderer.invoke('backup:info'),
 
   getTopicSettings: (topicId: string): Promise<TopicSettings> => ipcRenderer.invoke('topicSettings:get', topicId),
   setTopicSettings: (topicId: string, settings: TopicSettings): Promise<void> =>
