@@ -14,7 +14,8 @@ export function JobsRail({ jobs, onOpenArtifact }: { jobs: Job[]; onOpenArtifact
         <div key={job.id} className="panel px-3 py-2 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-xs text-[var(--color-text-primary)]">
             <span
-              aria-hidden="true"
+              role="img"
+              aria-label={job.status}
               className={
                 job.status === 'running'
                   ? 'text-[var(--color-ink-violet)] animate-pulse'
