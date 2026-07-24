@@ -12,6 +12,7 @@ interface NotifierState extends NotifierSettings {
 const DEFAULTS: NotifierState = {
   remindersEnabled: true,
   cadenceMinutes: 30,
+  dockBadgeEnabled: true,
   lastNotifiedAt: null,
   lastSignature: null,
 }
@@ -34,15 +35,15 @@ async function write(state: NotifierState): Promise<void> {
 }
 
 export async function getNotifierSettings(): Promise<NotifierSettings> {
-  const { remindersEnabled, cadenceMinutes } = await read()
-  return { remindersEnabled, cadenceMinutes }
+  const { remindersEnabled, cadenceMinutes, dockBadgeEnabled } = await read()
+  return { remindersEnabled, cadenceMinutes, dockBadgeEnabled }
 }
 
 export async function setNotifierSettings(patch: Partial<NotifierSettings>): Promise<NotifierSettings> {
   const state = await read()
   const next = { ...state, ...patch }
   await write(next)
-  return { remindersEnabled: next.remindersEnabled, cadenceMinutes: next.cadenceMinutes }
+  return { remindersEnabled: next.remindersEnabled, cadenceMinutes: next.cadenceMinutes, dockBadgeEnabled: next.dockBadgeEnabled }
 }
 
 export async function getNotifiedSignature(): Promise<{ lastNotifiedAt: string | null; lastSignature: string | null }> {

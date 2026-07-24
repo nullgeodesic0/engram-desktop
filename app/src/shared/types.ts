@@ -182,6 +182,7 @@ export interface RateLimitInfo {
 export interface NotifierSettings {
   remindersEnabled: boolean
   cadenceMinutes: number
+  dockBadgeEnabled: boolean
 }
 
 export interface EnvironmentCheckResult {

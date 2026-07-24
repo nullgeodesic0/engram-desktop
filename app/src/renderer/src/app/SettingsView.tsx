@@ -102,6 +102,11 @@ export function SettingsView() {
     setNotifier(next)
   }
 
+  async function toggleDockBadge(v: string) {
+    const next = await window.engram.setNotifierSettings({ dockBadgeEnabled: v === 'on' })
+    setNotifier(next)
+  }
+
   async function toggleLaunchAtLogin(v: string) {
     const result = await window.engram.setLoginItemSettings(v === 'on')
     setLaunchAtLoginState(result.openAtLogin)
@@ -394,6 +399,16 @@ export function SettingsView() {
                 ]}
               />
             )}
+            <ToggleRow
+              label="Dock badge"
+              hint="Shows the number of reviews due on the app icon"
+              current={notifier.dockBadgeEnabled ? 'on' : 'off'}
+              onPick={toggleDockBadge}
+              options={[
+                { value: 'off', label: 'Off' },
+                { value: 'on', label: 'On' },
+              ]}
+            />
           </>
         )}
         <div className="flex items-center gap-3">
