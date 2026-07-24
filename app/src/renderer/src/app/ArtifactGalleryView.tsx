@@ -51,7 +51,7 @@ export function ArtifactGalleryView() {
       {artifacts?.length === 0 && !error && (
         <div className="flex flex-col gap-1">
           <div className="text-sm text-[var(--color-text-dim)]">
-            No explorables registered yet — they're built during /learn sessions on threshold nodes.
+            No explorables registered yet — they’re built during /learn sessions on threshold nodes.
           </div>
           <div className="fig-caption">Fig. — no explorables built yet; threshold concepts earn them.</div>
         </div>

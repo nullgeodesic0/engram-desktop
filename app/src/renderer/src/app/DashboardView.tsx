@@ -67,7 +67,7 @@ export function DashboardView() {
     return (
       <div className="p-8">
         <div className="panel border-[var(--color-ink-danger-dim)] px-4 py-3 text-sm text-[var(--color-ink-danger)]">
-          <div>Couldn't read Engram state: {fe.headline}</div>
+          <div>Couldn’t read Engram state: {fe.headline}</div>
           {fe.detail && (
             <details className="mt-1 text-xs text-[var(--color-text-faint)]">
               <summary className="cursor-pointer">raw error</summary>

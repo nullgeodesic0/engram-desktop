@@ -101,7 +101,7 @@ export function CalibrationScatter({ data }: { data: CalibrationScatterData }) {
             y={HEIGHT - PAD_B + 14}
             textAnchor="middle"
             className="label-data"
-            style={{ fontSize: 9, fontVariantNumeric: 'tabular-nums', fill: 'var(--color-text-dim)' }}
+            style={{ fontSize: 9, fill: 'var(--color-text-dim)' }}
           >
             {i}
           </text>

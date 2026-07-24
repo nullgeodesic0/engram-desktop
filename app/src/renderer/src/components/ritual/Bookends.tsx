@@ -79,7 +79,7 @@ export const SessionCeremony = memo(function SessionCeremony({
       )}
       {commitment && (
         <div className="border-t border-[var(--color-hairline)] pt-2.5 font-[var(--font-serif)] italic text-xs text-[var(--color-text-dim)]">
-          "{commitment}" <span className="not-italic label-data text-[10px] text-[var(--color-text-faint)]">— signed</span>
+          “{commitment}” <span className="not-italic label-data text-[10px] text-[var(--color-text-faint)]">— signed</span>
         </div>
       )}
     </div>

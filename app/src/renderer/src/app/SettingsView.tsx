@@ -195,7 +195,7 @@ export function SettingsView() {
 
       {sessionActive && (
         <div className="panel border-[var(--color-ink-warm-dim)] px-4 py-3 text-sm text-[var(--color-ink-warm)]">
-          A learning session is currently active — changes here still apply immediately (engram.py's own lockfile
+          A learning session is currently active — changes here still apply immediately (engram.py’s own lockfile
           serializes them safely), this is just a heads-up in case you see the two update at slightly different times.
         </div>
       )}
@@ -274,7 +274,7 @@ export function SettingsView() {
         {model.settings.commitment && !editingCommitment ? (
           <>
             <div className="text-sm text-[var(--color-text-dim)]">
-              "{model.settings.commitment.action}" — {model.settings.commitment.cue}
+              “{model.settings.commitment.action}” — {model.settings.commitment.cue}
               <div className="text-xs text-[var(--color-text-faint)] mt-1">set {model.settings.commitment.set}</div>
             </div>
             <div className="flex gap-2">
@@ -304,13 +304,13 @@ export function SettingsView() {
               <input
                 value={cueInput}
                 onChange={(e) => setCueInput(e.target.value)}
-                placeholder='Cue — e.g. "when I open the terminal in the morning"'
+                placeholder="Cue — e.g. “when I open the terminal in the morning”"
                 className="focus-ring panel px-3 py-2 text-sm bg-[var(--color-surface-2)] text-[var(--color-text-primary)]"
               />
               <input
                 value={actionInput}
                 onChange={(e) => setActionInput(e.target.value)}
-                placeholder='Action — e.g. "I clear one review"'
+                placeholder="Action — e.g. “I clear one review”"
                 className="focus-ring panel px-3 py-2 text-sm bg-[var(--color-surface-2)] text-[var(--color-text-primary)]"
               />
               <div className="flex gap-2">
@@ -351,7 +351,7 @@ export function SettingsView() {
             onKeyDown={(e) => {
               if (e.key === 'Enter') addInterest()
             }}
-            placeholder='Add an interest — e.g. "sailing"'
+            placeholder="Add an interest — e.g. “sailing”"
             className="focus-ring panel px-3 py-2 text-sm bg-[var(--color-surface-2)] text-[var(--color-text-primary)] flex-1 max-w-xs"
           />
           <Button variant="ghost" onClick={addInterest} disabled={!interestInput.trim()}>
@@ -423,7 +423,7 @@ export function SettingsView() {
         <div>
           <div className="text-sm text-[var(--color-text-primary)]">Data</div>
           <div className="text-xs text-[var(--color-text-faint)] mt-0.5">
-            Every topic, receipt, and artifact lives under your Engram plugin's own storage — this copies the whole
+            Every topic, receipt, and artifact lives under your Engram plugin’s own storage — this copies the whole
             thing to a folder you choose, as a plain snapshot in time.
           </div>
         </div>

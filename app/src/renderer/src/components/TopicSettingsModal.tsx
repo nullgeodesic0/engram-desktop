@@ -56,7 +56,7 @@ export function TopicSettingsModal({ topicId, topicTitle, onClose }: TopicSettin
         <div className="flex flex-col gap-2">
           <label className="text-sm text-[var(--color-text-primary)]">Extra instructions for this topic</label>
           <p className="text-xs text-[var(--color-text-faint)]">
-            Appended to the tutor's system prompt every time you learn or review this topic. Example: "{EXAMPLE}"
+            Appended to the tutor’s system prompt every time you learn or review this topic. Example: “{EXAMPLE}”
           </p>
           <textarea
             value={value}

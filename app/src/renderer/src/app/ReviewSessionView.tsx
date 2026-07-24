@@ -344,7 +344,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
           cap ~12), shown before any grading pressure, not after. */}
       {phase === 'ready' && totalDue > 24 && (
         <div className="shrink-0 panel border-[var(--color-ink-warm-dim)] px-4 py-3 text-sm text-[var(--color-ink-warm)]">
-          {totalDue} reviews have piled up — nothing is owed, and that's not a debt to clear in one sitting. A normal
+          {totalDue} reviews have piled up — nothing is owed, and that’s not a debt to clear in one sitting. A normal
           session still only covers a capped set (most-overdue first); the rest just stays due, no guilt attached.
         </div>
       )}

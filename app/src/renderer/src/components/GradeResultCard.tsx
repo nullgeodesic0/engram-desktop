@@ -139,7 +139,7 @@ export function GradeResultCard({
         <div className={`panel px-4 py-3 flex items-center gap-3 card-face ${stage === 'flipping' ? 'flip-away' : ''}`}>
           <InkNode id={result.node} variant="filled" size={16} />
           <div className="flex flex-col gap-0.5 min-w-0">
-            <span className="fig-caption">the assessor's verdict</span>
+            <span className="fig-caption">the assessor’s verdict</span>
             <span className="text-sm text-[var(--color-text-dim)] truncate">{humanizeNodeId(result.node)}</span>
           </div>
         </div>
@@ -182,7 +182,7 @@ export function GradeResultCard({
         <span className="text-xs text-[var(--color-text-dim)]">{nextReviewText(result.intervalDays)}</span>
       )}
       {confidenceLabel != null && (
-        <div className="fig-caption">felt "{confidenceLabel}" → {result.grade}</div>
+        <div className="fig-caption">felt “{confidenceLabel}” → {result.grade}</div>
       )}
     </div>
   )

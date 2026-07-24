@@ -169,6 +169,7 @@
   .label-data {
     font-family: var(--font-data);
     letter-spacing: 0.02em;
+    font-variant-numeric: tabular-nums;
   }
   .focus-ring {
     outline: none;
@@ -213,6 +214,14 @@
   .transcript-measure > *:not(:nth-last-child(-n + 6)) {
     content-visibility: auto;
     contain-intrinsic-size: auto 120px;
+  }
+
+  /* Trim KaTeX's default 1em top/bottom display-math margin down toward the
+   * transcript's gap-5 (1.25rem) rhythm — scoped to the transcript so the map
+   * drawer's math (rendered outside .transcript-measure) keeps KaTeX's
+   * defaults untouched. */
+  .transcript-measure .katex-display {
+    margin: 0.75em 0;
   }
 
   /* The tutor's voice — assistant prose reads in serif, like a set page. */

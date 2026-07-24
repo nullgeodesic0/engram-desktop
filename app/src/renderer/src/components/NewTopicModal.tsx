@@ -34,7 +34,7 @@ export function NewTopicModal({ onClose, onStart }: NewTopicModalProps) {
 
         <p className="text-xs text-[var(--color-text-faint)]">
           Building the concept map takes a minute or two — the one slow step, then everything after is conversational.
-          What do you want to be able to do with this, and by when (if there's a deadline)?
+          What do you want to be able to do with this, and by when (if there’s a deadline)?
         </p>
 
         <textarea
@@ -42,7 +42,7 @@ export function NewTopicModal({ onClose, onStart }: NewTopicModalProps) {
           onChange={(e) => setGoal(e.target.value)}
           rows={4}
           autoFocus
-          placeholder='e.g. "Understand special relativity well enough to derive time dilation from the postulates, for a qual exam in 6 weeks"'
+          placeholder="e.g. “Understand special relativity well enough to derive time dilation from the postulates, for a qual exam in 6 weeks”"
           className="focus-ring panel px-3 py-2 text-sm bg-[var(--color-surface-2)] text-[var(--color-text-primary)] resize-none"
         />
 
@@ -57,7 +57,7 @@ export function NewTopicModal({ onClose, onStart }: NewTopicModalProps) {
             value={instructions}
             onChange={(e) => setInstructions(e.target.value)}
             rows={2}
-            placeholder='e.g. "Use LaTeX for all equations; ground examples in rowing"'
+            placeholder="e.g. “Use LaTeX for all equations; ground examples in rowing”"
             className="focus-ring panel px-3 py-2 text-sm bg-[var(--color-surface-2)] text-[var(--color-text-primary)] resize-none"
           />
         </div>
