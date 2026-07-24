@@ -1,0 +1,189 @@
+import { useEffect, useRef, useState } from 'react'
+import type { GradeResult } from '../../../shared/gradeResult'
+import { humanizeNodeId } from '../../../shared/humanizeId'
+import { InkNode } from './ui/InkNode'
+import { warmTone } from '../shared/soundscape'
+
+const GRADE_STYLE: Record<GradeResult['grade'], { label: string; color: string; bg: string }> = {
+  recalled: { label: 'Recalled', color: 'var(--color-ink-warm)', bg: 'var(--color-ink-warm-dim)' },
+  partial: { label: 'Partial', color: 'var(--color-ink-cool)', bg: 'var(--color-ink-cool-dim)' },
+  lapsed: { label: 'Lapsed', color: 'var(--color-ink-danger)', bg: 'var(--color-ink-danger-dim)' },
+}
+
+function nextReviewText(intervalDays: number | null): string {
+  if (intervalDays === null) return ''
+  if (intervalDays <= 0) return 'due again now'
+  if (intervalDays === 1) return 'back in 1 day'
+  return `back in ${Math.round(intervalDays)} days`
+}
+
+const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+/** One-shot ink-burst — dendrite sparks radiating from the grade badge on a
+ * recalled grade. Pure celebration of an honest event; lapses get calm
+ * absolution styling and never any effect (dialogue-grammar's oath). */
+function InkBurst() {
+  return (
+    <svg
+      width="44"
+      height="44"
+      viewBox="0 0 44 44"
+      aria-hidden="true"
+      className="ink-burst absolute -top-3 -right-3 pointer-events-none"
+    >
+      {Array.from({ length: 7 }, (_, i) => {
+        const angle = (i / 7) * Math.PI * 2 - Math.PI / 2
+        const x1 = 22 + Math.cos(angle) * 8
+        const y1 = 22 + Math.sin(angle) * 8
+        const x2 = 22 + Math.cos(angle) * (15 + (i % 3) * 3)
+        const y2 = 22 + Math.sin(angle) * (15 + (i % 3) * 3)
+        return (
+          <line
+            key={i}
+            x1={x1}
+            y1={y1}
+            x2={x2}
+            y2={y2}
+            stroke="var(--color-ink-warm)"
+            strokeWidth="1.4"
+            strokeLinecap="round"
+          />
+        )
+      })}
+    </svg>
+  )
+}
+
+/** Tween the displayed stability from before → after so the number is seen
+ * EARNED rather than simply stated. Skipped under prefers-reduced-motion. */
+function useCountUp(from: number, to: number, durationMs = 700): number {
+  const [value, setValue] = useState(reducedMotion() ? to : from)
+  useEffect(() => {
+    if (reducedMotion() || from === to) {
+      setValue(to)
+      return
+    }
+    let raf = 0
+    const t0 = performance.now()
+    const step = (now: number) => {
+      const t = Math.min(1, (now - t0) / durationMs)
+      const eased = 1 - (1 - t) ** 3
+      setValue(from + (to - from) * eased)
+      if (t < 1) raf = requestAnimationFrame(step)
+    }
+    raf = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(raf)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [from, to])
+  return value
+}
+
+/** A small result card for one graded node — grade badge, a stability bar
+ * animating from `sBefore` to `sAfter` (FSRS "s" is memory durability in
+ * days; a wider bar after grading means the memory got sturdier), and a
+ * plain-language next-review line. All three numbers are the engine's own
+ * answer (see shared/gradeResult.ts), never recomputed here. */
+export function GradeResultCard({
+  result,
+  confidenceLabel,
+  reveal = false,
+}: {
+  result: GradeResult
+  /** The felt-confidence label picked just before this grade landed (see
+   * shared/calibrationStore.ts) — null/undefined skips the mirror line
+   * entirely, which is also how Learn's ceremony rows opt out of it. */
+  confidenceLabel?: string | null
+  /** "The turn": mount face-down, hold a beat, flip to reveal the verdict —
+   * the anticipation is the point. Default false keeps the instant render
+   * (Learn ceremony rows, replayed contexts). Reduced-motion reveals instantly. */
+  reveal?: boolean
+}) {
+  const style = GRADE_STYLE[result.grade]
+  const before = result.sBefore ?? 0
+  const after = result.sAfter ?? before
+  // Scaled against whichever of the two is larger so the bar always fits —
+  // purely a display heuristic, the underlying numbers are exact.
+  const scale = Math.max(before, after, 1)
+  const beforePct = Math.min(100, (before / scale) * 100)
+  const afterPct = Math.min(100, (after / scale) * 100)
+
+  const [stage, setStage] = useState<'facedown' | 'flipping' | 'revealed'>(
+    reveal && !reducedMotion() ? 'facedown' : 'revealed',
+  )
+  useEffect(() => {
+    if (stage === 'facedown') {
+      const t = setTimeout(() => setStage('flipping'), 500)
+      return () => clearTimeout(t)
+    }
+    if (stage === 'flipping') {
+      const t = setTimeout(() => setStage('revealed'), 400)
+      return () => clearTimeout(t)
+    }
+  }, [stage])
+
+  const revealed = stage === 'revealed'
+  const displayAfter = useCountUp(before, revealed ? after : before)
+  // Celebration fires once per card instance (recalled only), post-reveal.
+  const burstFired = useRef(false)
+  const showBurst = revealed && result.grade === 'recalled' && !burstFired.current && !reducedMotion()
+  useEffect(() => {
+    if (!revealed) return
+    burstFired.current = true
+    if (result.grade === 'recalled') warmTone()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [revealed])
+
+  if (stage === 'facedown' || stage === 'flipping') {
+    return (
+      <div className="card-flip-scene max-w-sm">
+        <div className={`panel px-4 py-3 flex items-center gap-3 card-face ${stage === 'flipping' ? 'flip-away' : ''}`}>
+          <InkNode id={result.node} variant="filled" size={16} />
+          <div className="flex flex-col gap-0.5 min-w-0">
+            <span className="fig-caption">the assessor's verdict</span>
+            <span className="text-sm text-[var(--color-text-dim)] truncate">{humanizeNodeId(result.node)}</span>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className={`panel px-4 py-3 flex flex-col gap-2 max-w-sm ${reveal && !reducedMotion() ? 'flip-in' : ''}`}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm text-[var(--color-text-primary)]">{humanizeNodeId(result.node)}</span>
+        <span className="relative shrink-0">
+          {showBurst && <InkBurst />}
+          <span
+            className={`label-data text-[10px] px-2 py-0.5 rounded-full inline-block ${result.grade === 'partial' ? 'badge-pulse' : ''}`}
+            style={{ color: style.color, background: style.bg }}
+          >
+            {style.label}
+          </span>
+        </span>
+      </div>
+      {result.sBefore !== null && (
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1 h-1.5 rounded-full bg-[var(--color-surface-2)] overflow-hidden">
+            <div
+              className="absolute inset-y-0 left-0 rounded-full bg-[var(--color-ink-cool-dim)] transition-all duration-500"
+              style={{ width: `${beforePct}%` }}
+            />
+            <div
+              className="absolute inset-y-0 left-0 rounded-full transition-all duration-700"
+              style={{ width: `${afterPct}%`, background: style.color }}
+            />
+          </div>
+          <span className="label-data text-[10px] text-[var(--color-text-faint)] shrink-0">
+            {before.toFixed(1)}d → {displayAfter.toFixed(1)}d
+          </span>
+        </div>
+      )}
+      {result.intervalDays !== null && (
+        <span className="text-xs text-[var(--color-text-dim)]">{nextReviewText(result.intervalDays)}</span>
+      )}
+      {confidenceLabel != null && (
+        <div className="fig-caption">felt "{confidenceLabel}" → {result.grade}</div>
+      )}
+    </div>
+  )
+}
