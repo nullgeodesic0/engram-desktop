@@ -3,9 +3,16 @@ import type { ArtifactEntry } from '../../../shared/types'
 import { humanizeNodeId } from '../../../shared/humanizeId'
 import { SkeletonCard } from '../components/Skeleton'
 import { InkNode } from '../components/ui/InkNode'
+import { Button } from '../components/ui/Button'
 import { friendlyErrorText } from '../shared/friendlyError'
 
-export function ArtifactGalleryView() {
+interface ArtifactGalleryViewProps {
+  /** Routes the empty state's one action to Learn — explorables are only ever
+   * built during a live session, so that's the one thing to do about "none yet". */
+  onGoLearn?: () => void
+}
+
+export function ArtifactGalleryView({ onGoLearn }: ArtifactGalleryViewProps = {}) {
   const [artifacts, setArtifacts] = useState<ArtifactEntry[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -49,11 +56,12 @@ export function ArtifactGalleryView() {
       )}
 
       {artifacts?.length === 0 && !error && (
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col items-start gap-2">
+          <div className="fig-caption">Fig. — no explorables built yet; threshold concepts earn them.</div>
           <div className="text-sm text-[var(--color-text-dim)]">
             No explorables registered yet — they’re built during /learn sessions on threshold nodes.
           </div>
-          <div className="fig-caption">Fig. — no explorables built yet; threshold concepts earn them.</div>
+          {onGoLearn && <Button variant="ghost" onClick={onGoLearn}>Continue learning</Button>}
         </div>
       )}
 

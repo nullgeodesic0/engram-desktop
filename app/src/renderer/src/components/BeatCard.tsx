@@ -1,8 +1,9 @@
-import { memo, useState } from 'react'
+import { memo } from 'react'
 import type { ProseBeat } from '../../../shared/beatEvents'
 import { MathRenderer } from './MathRenderer'
 import { splitAroundTicket } from '../shared/ticketParser'
 import { TicketCard } from './ritual/TicketCard'
+import { CopyButton } from './ui/CopyButton'
 
 const BEAT_STYLE: Record<ProseBeat, { label: string; icon: string; accent: string }> = {
   open_gap: { label: 'The gap', icon: '◆', accent: 'var(--color-ink-cool)' },
@@ -11,23 +12,6 @@ const BEAT_STYLE: Record<ProseBeat, { label: string; icon: string; accent: strin
   resolve: { label: 'Resolve', icon: '●', accent: 'var(--color-ink-warm)' },
   self_explain: { label: 'Self-explain', icon: '»', accent: 'var(--color-ink-cool)' },
   connect: { label: 'Connect', icon: '↝', accent: 'var(--color-ink-hot)' },
-}
-
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false)
-  return (
-    <button
-      onClick={() => {
-        navigator.clipboard.writeText(text)
-        setCopied(true)
-        setTimeout(() => setCopied(false), 1200)
-      }}
-      title="Copy"
-      className="focus-ring no-press opacity-0 group-hover:opacity-100 transition-opacity duration-[var(--dur-fast)] shrink-0 text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] text-xs"
-    >
-      {copied ? '✓' : '⧉'}
-    </button>
-  )
 }
 
 export const BeatCard = memo(function BeatCard({ beat, text }: { beat: ProseBeat; text: string }) {
