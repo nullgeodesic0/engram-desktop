@@ -7,6 +7,7 @@ import { recordSession, lastSessionFor, sessionHistoryFor } from '../session/ses
 import { getTopicSettings, setTopicSettings, type TopicSettings } from '../session/topicSettings'
 import { readTranscript } from '../session/transcriptReader'
 import { exportSitting } from '../session/exportSitting'
+import { backupNow, describeArchive, restoreFromArchive, pickBackupArchivePath, getBackupInfo } from '../session/backup'
 import type { ExportSittingRequest, ExportSittingResult } from '../../shared/types'
 
 type SessionKind = 'learn' | 'review' | 'coach'
@@ -110,4 +111,16 @@ export function registerSessionHandlers(win: BrowserWindow): void {
   ipcMain.handle('session:export', (_e, req: ExportSittingRequest): Promise<ExportSittingResult> =>
     exportSitting(activeWindow, req),
   )
+
+  // Backup & restore (see session/backup.ts) — the one destructive-capable
+  // flow in the app. `backup:restore` passes `sessions.size > 0` as the
+  // active-session check: the exact same source of truth `session:anyActive`
+  // reports above, not a re-derived one.
+  ipcMain.handle('backup:now', (_e, destDir?: string) => backupNow(destDir))
+  ipcMain.handle('backup:describe', (_e, archivePath: string) => describeArchive(archivePath))
+  ipcMain.handle('backup:restore', (_e, archivePath: string, confirmation: string) =>
+    restoreFromArchive(archivePath, confirmation, () => sessions.size > 0),
+  )
+  ipcMain.handle('backup:pickArchive', () => pickBackupArchivePath())
+  ipcMain.handle('backup:info', () => getBackupInfo())
 }

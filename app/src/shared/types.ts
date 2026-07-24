@@ -306,3 +306,22 @@ export interface ExportSittingRequest {
 }
 
 export type ExportSittingResult = { ok: true; path: string } | { ok: false; reason: string }
+
+// ---- Backup & restore (see main/session/backup.ts) ----
+
+export type BackupNowResult = { ok: true; path: string; bytes: number } | { ok: false; reason: string }
+
+export type DescribeArchiveResult =
+  | { ok: true; topics: number; receipts: number; archivedAt: string }
+  | { ok: false; reason: string }
+
+export type RestoreArchiveResult = { ok: true; safetyPath: string } | { ok: false; reason: string }
+
+/** Remembered backup destination + last-run info, persisted in this app's
+ * userData as backup-state.json — surfaced in Settings as the "last backed
+ * up" line. */
+export interface BackupInfo {
+  lastDestDir: string | null
+  lastBackupAt: string | null
+  lastBackupPath: string | null
+}
