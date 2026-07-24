@@ -166,7 +166,10 @@ app.whenReady().then(() => {
   app.setAboutPanelOptions({
     applicationName: 'Engram Desktop',
     applicationVersion: app.getVersion(),
-    credits: 'First-principles learning, verified by free recall.',
+    credits:
+      'First-principles learning, verified by free recall.\n' +
+      'Built on the engram learning plugin (nagisanzenin).\n' +
+      `© ${new Date().getFullYear()} Tyler Hadsell.`,
   })
   // Menu clicks route through focusOrCreateWindow (not raw sendNav) so a click
   // while the app is tray-only-with-no-window recreates the window first and
