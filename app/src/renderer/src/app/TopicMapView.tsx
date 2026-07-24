@@ -745,6 +745,11 @@ export function TopicMapView({
 
       <SessionHistoryDrawer
         historyKey={historyDrawer?.historyKey ?? ''}
+        title={
+          historyDrawer?.historyKey === 'review'
+            ? 'Review'
+            : topics.find((t) => t.topic === historyDrawer?.historyKey)?.title
+        }
         open={historyDrawer !== null}
         onClose={() => setHistoryDrawer(null)}
         initialSessionId={historyDrawer?.sessionId}
