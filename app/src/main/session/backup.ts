@@ -2,8 +2,9 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { existsSync } from 'node:fs'
 import { mkdir, rm, rename, cp, copyFile, mkdtemp, stat, readFile, writeFile } from 'node:fs/promises'
-import { join, dirname, basename, relative, isAbsolute } from 'node:path'
+import { join, dirname, basename, relative, isAbsolute, resolve } from 'node:path'
 import { tmpdir, homedir } from 'node:os'
+import { randomBytes } from 'node:crypto'
 import { app, dialog } from 'electron'
 import { engramLearningHome } from '../engramCli/readOnly'
 import type { BackupInfo, BackupNowResult, DescribeArchiveResult, RestoreArchiveResult } from '../../shared/types'
@@ -32,6 +33,10 @@ function localStamp(now: Date): string {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`
 }
 
+function randomSuffix(): string {
+  return randomBytes(4).toString('hex')
+}
+
 // ---------------------------------------------------------------------------
 // Pure filesystem + tar mechanics — no Electron dependency below this line
 // (aside from the type imports above). This is what a throwaway script can
@@ -44,8 +49,10 @@ function localStamp(now: Date): string {
  * Builds and writes the tar.gz archive at `destDir`. Skips the learning dir
  * entirely if it doesn't exist and skips any of the five userData JSON files
  * that are absent, rather than failing the whole backup over one missing
- * file. Archive name is `engram-backup-<yyyy-mm-dd-hhmm>.tar.gz` in LOCAL
- * time (matches how a human will actually read a folder of these).
+ * file. Archive name defaults to `engram-backup-<yyyy-mm-dd-hhmm>.tar.gz` in
+ * LOCAL time (matches how a human will actually read a folder of these);
+ * `fileName` overrides that default — used by createSafetySnapshotArchive
+ * below to produce a name that can never collide with a normal backup.
  */
 export async function createBackupArchive(opts: {
   /** The user's home dir — used to make the learning-dir tar entry read as
@@ -56,6 +63,7 @@ export async function createBackupArchive(opts: {
   userDataDir: string
   destDir: string
   now?: Date
+  fileName?: string
 }): Promise<{ path: string; bytes: number }> {
   const { home, learningHome, userDataDir, destDir } = opts
   const now = opts.now ?? new Date()
@@ -87,30 +95,103 @@ export async function createBackupArchive(opts: {
   }
 
   await mkdir(destDir, { recursive: true })
-  const destPath = join(destDir, `engram-backup-${localStamp(now)}.tar.gz`)
+  const destPath = join(destDir, opts.fileName ?? `engram-backup-${localStamp(now)}.tar.gz`)
   await execFileAsync('tar', ['-czf', destPath, ...args])
   const { size } = await stat(destPath)
   return { path: destPath, bytes: size }
 }
 
 /**
+ * Pre-restore safety snapshot of the CURRENT state, saved beside the archive
+ * about to be restored from. Deliberately a DISTINCT naming scheme
+ * (`engram-safety-<stamp>-<random>.tar.gz`, never `engram-backup-...`) plus a
+ * random suffix, so it can't collide with a normal backup by name alone —
+ * and as a hard backstop, the resolved destination path is checked against
+ * the resolved archive path before anything is written: if they'd ever
+ * coincide, this refuses outright rather than letting `tar -czf` silently
+ * truncate the very archive being restored from (I-1). Pure — no Electron
+ * dependency — so the round-trip test can force the collision path
+ * deterministically via `fileName`.
+ */
+export async function createSafetySnapshotArchive(opts: {
+  home: string
+  learningHome: string
+  userDataDir: string
+  /** The archive about to be restored from — the snapshot must never land here. */
+  archivePath: string
+  now?: Date
+  /** Overrides the generated filename. Production never sets this (the
+   * random suffix makes a real collision astronomically unlikely); the
+   * round-trip test uses it to deterministically force the collision so the
+   * refusal path itself gets exercised. */
+  fileName?: string
+}): Promise<BackupNowResult> {
+  const { home, learningHome, userDataDir, archivePath } = opts
+  const now = opts.now ?? new Date()
+  const destDir = dirname(archivePath)
+  const fileName = opts.fileName ?? `engram-safety-${localStamp(now)}-${randomSuffix()}.tar.gz`
+  const destPath = join(destDir, fileName)
+
+  if (resolve(destPath) === resolve(archivePath)) {
+    return {
+      ok: false,
+      reason: `Refusing to write the safety snapshot to the same path as the archive being restored (${destPath}). Nothing was changed.`,
+    }
+  }
+
+  try {
+    const { path, bytes } = await createBackupArchive({ home, learningHome, userDataDir, destDir, now, fileName })
+    return { ok: true, path, bytes }
+  } catch (err) {
+    return { ok: false, reason: err instanceof Error ? err.message : String(err) }
+  }
+}
+
+/** Runs `tar -tzf` and returns the raw entry list — shared by describeArchive
+ * (summary counts) and restoreArchiveInto (pre-extraction validation) so
+ * there's exactly one place that knows how to list an archive. */
+async function listArchiveEntries(archivePath: string): Promise<string[]> {
+  const { stdout } = await execFileAsync('tar', ['-tzf', archivePath], { maxBuffer: 32 * 1024 * 1024 })
+  return stdout.split('\n').filter(Boolean)
+}
+
+/** Rejects an archive containing a path-traversal or absolute-path entry
+ * (leading `/`, or any `..` path segment) — checked BEFORE extraction, not
+ * after (I-3). A well-formed backup from createBackupArchive above can never
+ * produce such an entry; this guards against a hand-crafted or corrupted
+ * archive being fed to restore. */
+function validateEntryNames(entries: string[]): void {
+  for (const entry of entries) {
+    if (entry.startsWith('/') || entry.split('/').includes('..')) {
+      throw new Error(`Archive contains an unsafe path entry ("${entry}") — refusing to restore.`)
+    }
+  }
+}
+
+/**
  * Lists an archive's contents (`tar -tzf`, never extracts) and validates it
- * actually looks like an Engram backup before anything downstream trusts it.
- * `archivedAt` prefers the timestamp encoded in the filename (the same local
- * stamp createBackupArchive wrote) and falls back to the file's own mtime for
- * an archive that was renamed or made by hand.
+ * actually looks like a safe Engram backup before anything downstream trusts
+ * it — both the entry-name safety check (I-3) and the `.claude/learning/`
+ * content check. `archivedAt` prefers the timestamp encoded in the filename
+ * (the same local stamp createBackupArchive wrote) and falls back to the
+ * file's own mtime for an archive that was renamed or made by hand.
  */
 export async function describeArchive(archivePath: string): Promise<DescribeArchiveResult> {
   if (!existsSync(archivePath)) return { ok: false, reason: 'Archive not found.' }
 
-  let stdout: string
+  let entries: string[]
   try {
-    ;({ stdout } = await execFileAsync('tar', ['-tzf', archivePath], { maxBuffer: 32 * 1024 * 1024 }))
+    entries = await listArchiveEntries(archivePath)
   } catch (err) {
     return { ok: false, reason: `Could not read archive: ${err instanceof Error ? err.message : String(err)}` }
   }
 
-  const entries = stdout.split('\n').filter(Boolean)
+  try {
+    validateEntryNames(entries)
+  } catch (err) {
+    return { ok: false, reason: err instanceof Error ? err.message : String(err) }
+  }
+
   if (!entries.some((e) => e.includes(LEARNING_ENTRY_PREFIX))) {
     return { ok: false, reason: 'This does not look like an Engram backup — no learning data found inside.' }
   }
@@ -130,71 +211,115 @@ export async function describeArchive(archivePath: string): Promise<DescribeArch
   return { ok: true, topics, receipts, archivedAt }
 }
 
-/** Moves a directory, falling back to copy+remove across filesystem
- * boundaries (`rename()` fails with EXDEV when src/dest are on different
- * devices — the OS temp dir isn't guaranteed to share a volume with the
- * destination). */
-async function moveDir(src: string, dest: string): Promise<void> {
-  try {
-    await rename(src, dest)
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== 'EXDEV') throw err
-    await cp(src, dest, { recursive: true })
-    await rm(src, { recursive: true, force: true })
-  }
-}
-
 /**
- * Extracts an archive to a temp staging dir, verifies it actually contains a
- * learning dir, then swaps it into place: the current learning dir is
- * renamed aside, the staged one moved in, and the aside copy deleted only
- * after that swap succeeds — so a failure partway through leaves the live
- * dir exactly where it started rather than deleted with nothing to replace
- * it. userData JSON files are copied over individually (no directory-level
- * swap needed for five flat files). Pure filesystem operation — no Electron
- * dependency, which is what lets the round-trip test exercise it directly
- * against fabricated temp dirs instead of the app's real ones.
+ * Extracts an archive to a temp staging dir, validates entry names (I-3),
+ * verifies it actually contains a learning dir, then swaps it into place.
+ *
+ * The staged learning dir is first copied onto the SAME volume as
+ * `learningHome` (a `.incoming-*` sibling under its own parent dir) — so the
+ * actual live swap is a guaranteed-atomic `rename()`, never a cross-device
+ * copy that could leave `learningHome` half-populated mid-swap (I-2). The
+ * current learning dir (if any) is renamed aside first; the aside copy is
+ * deleted only after the swap into place succeeds. If anything fails after
+ * the aside-rename, rollback clears whatever (if anything) landed at
+ * `learningHome` and renames the aside copy back — so the live dir is never
+ * left removed with nothing valid in its place. If rollback itself fails,
+ * the thrown error names the aside dir explicitly so nothing is silently
+ * lost. userData JSON files are copied over individually (no directory-level
+ * swap needed for five flat files).
+ *
+ * Pure filesystem operation — no Electron dependency, which is what lets the
+ * round-trip test exercise it directly against fabricated temp dirs instead
+ * of the app's real ones.
  */
 export async function restoreArchiveInto(opts: {
   archivePath: string
   learningHome: string
   userDataDir: string
+  /** Test-only fault injection: if provided, it's called right after the
+   * live learning dir has been renamed aside (if it existed) and right
+   * before the staged replacement is moved into place — throwing there
+   * exercises the rollback path deterministically, without needing real
+   * filesystem-permission trickery. Production callers (restoreFromArchive
+   * below, and ipc/sessionHandlers.ts) never pass this. */
+  __beforeFinalMove?: () => Promise<void> | void
 }): Promise<void> {
   const { archivePath, learningHome, userDataDir } = opts
-  const stagingDir = await mkdtemp(join(tmpdir(), 'engram-restore-'))
-  try {
-    await execFileAsync('tar', ['-xzf', archivePath, '-C', stagingDir])
 
-    const stagedLearning = join(stagingDir, '.claude', 'learning')
+  const entries = await listArchiveEntries(archivePath)
+  validateEntryNames(entries)
+
+  const tmpStagingDir = await mkdtemp(join(tmpdir(), 'engram-restore-'))
+  const unique = `${Date.now()}-${randomSuffix()}`
+  const onVolumeStaging = `${learningHome}.incoming-${unique}`
+  const asideDir = `${learningHome}.restore-aside-${unique}`
+  let renamedAside = false
+
+  try {
+    await execFileAsync('tar', ['-xzf', archivePath, '-C', tmpStagingDir])
+
+    const stagedLearning = join(tmpStagingDir, '.claude', 'learning')
     if (!existsSync(stagedLearning)) {
       throw new Error('Archive did not contain a .claude/learning directory — refusing to restore.')
     }
 
-    const asideDir = `${learningHome}.restore-aside-${Date.now()}`
+    await mkdir(dirname(learningHome), { recursive: true })
+    // Same-volume staging (see doc comment above) — this cp is temp-dir to
+    // sibling-of-learningHome and may itself cross devices, but nothing live
+    // has been touched yet at this point, so a failure here is a clean no-op.
+    await cp(stagedLearning, onVolumeStaging, { recursive: true })
+
     const hadExisting = existsSync(learningHome)
-    if (hadExisting) await rename(learningHome, asideDir)
-    try {
-      await mkdir(dirname(learningHome), { recursive: true })
-      await moveDir(stagedLearning, learningHome)
-    } catch (err) {
-      // Roll back — put the original learning dir back exactly where it was.
-      // The live dir is never removed before its replacement is confirmed in place.
-      if (hadExisting) await rename(asideDir, learningHome).catch(() => {})
-      throw err
+    if (hadExisting) {
+      await rename(learningHome, asideDir)
+      renamedAside = true
     }
-    if (hadExisting) await rm(asideDir, { recursive: true, force: true })
+
+    if (opts.__beforeFinalMove) await opts.__beforeFinalMove()
+
+    // Guaranteed same volume (onVolumeStaging is a sibling of learningHome) —
+    // this rename is atomic, never a partial cross-device copy.
+    await rename(onVolumeStaging, learningHome)
+
+    if (renamedAside) {
+      await rm(asideDir, { recursive: true, force: true })
+      renamedAside = false
+    }
 
     await mkdir(userDataDir, { recursive: true })
     for (const name of USERDATA_BACKUP_FILES) {
-      const stagedFile = join(stagingDir, name)
+      const stagedFile = join(tmpStagingDir, name)
       if (existsSync(stagedFile)) {
         await copyFile(stagedFile, join(userDataDir, name))
       }
     }
+  } catch (err) {
+    if (renamedAside) {
+      // learningHome is missing or (in principle) partially written — clear
+      // it before restoring the original, so the two copies never coexist
+      // under the same path.
+      await rm(learningHome, { recursive: true, force: true }).catch(() => {})
+      try {
+        await rename(asideDir, learningHome)
+      } catch (rollbackErr) {
+        throw new Error(
+          `Restore failed AND automatic rollback failed — your original learning dir was NOT restored to its ` +
+            `usual location; it is preserved at ${asideDir}. ` +
+            `Original error: ${err instanceof Error ? err.message : String(err)}. ` +
+            `Rollback error: ${rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr)}.`,
+        )
+      }
+    }
+    throw err
   } finally {
-    await rm(stagingDir, { recursive: true, force: true }).catch(() => {
+    await rm(tmpStagingDir, { recursive: true, force: true }).catch(() => {
       // Best-effort cleanup — a leftover temp dir is harmless.
     })
+    if (existsSync(onVolumeStaging)) {
+      await rm(onVolumeStaging, { recursive: true, force: true }).catch(() => {
+        // Best-effort cleanup — only reachable if the final rename never ran.
+      })
+    }
   }
 }
 
@@ -223,7 +348,10 @@ async function writeBackupState(state: BackupInfo): Promise<void> {
   await writeFile(backupStatePath(), JSON.stringify(state, null, 2), 'utf-8')
 }
 
-/** Last-backup info for the Settings panel's "last backed up" line. */
+/** Last-backup info for the Settings panel's "last backed up" line. Only
+ * user-initiated backups (backupNow below) update this — a restore's safety
+ * snapshot does not, since it isn't the thing the user thinks of as "my last
+ * backup" (see createSafetySnapshotArchive, which never touches this file). */
 export async function getBackupInfo(): Promise<BackupInfo> {
   return readBackupState()
 }
@@ -286,9 +414,9 @@ export async function pickBackupArchivePath(): Promise<string | null> {
  *      truth `session:anyActive` reports, passed in rather than duplicated
  *      or re-derived here.
  *   3. A pre-restore safety snapshot of the CURRENT state is always taken
- *      before any extraction (via backupNow, saved beside the archive being
- *      restored from), and its path is always returned — even on failure —
- *      so the user always has a hand-recovery path.
+ *      before any extraction (via createSafetySnapshotArchive — distinctly
+ *      named, collision-checked, see I-1), and its path is always returned
+ *      — even on failure — so the user always has a hand-recovery path.
  */
 export async function restoreFromArchive(
   archivePath: string,
@@ -305,8 +433,19 @@ export async function restoreFromArchive(
   const described = await describeArchive(archivePath)
   if (!described.ok) return described
 
+  let home: string
+  let learningHome: string
+  let userDataDir: string
+  try {
+    home = homedir()
+    learningHome = await engramLearningHome()
+    userDataDir = app.getPath('userData')
+  } catch (err) {
+    return { ok: false, reason: err instanceof Error ? err.message : String(err) }
+  }
+
   // Safety snapshot of the CURRENT state, always, before touching anything.
-  const safety = await backupNow(dirname(archivePath))
+  const safety = await createSafetySnapshotArchive({ home, learningHome, userDataDir, archivePath })
   if (!safety.ok) {
     return {
       ok: false,
@@ -315,8 +454,6 @@ export async function restoreFromArchive(
   }
 
   try {
-    const learningHome = await engramLearningHome()
-    const userDataDir = app.getPath('userData')
     await restoreArchiveInto({ archivePath, learningHome, userDataDir })
     return { ok: true, safetyPath: safety.path }
   } catch (err) {
