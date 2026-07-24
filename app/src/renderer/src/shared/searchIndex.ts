@@ -24,11 +24,21 @@ export interface SearchIndexDeps {
 
 // Module-level cache: the palette can reopen many times in a session without
 // re-walking every topic graph each time. `invalidateSearchIndex` is the
-// escape hatch for whoever refreshes topics (see App.tsx).
+// escape hatch for whoever refreshes topics — see `refreshTopics` in
+// LearnSessionView.tsx, the one place topic/node state actually changes.
 let cached: Promise<SearchEntry[]> | null = null
 
 export function invalidateSearchIndex(): void {
   cached = null
+}
+
+/** Fast path: just the topic list, mapped to entries. Independent of the
+ * cached full index (which also walks every topic's graph, plus receipts and
+ * artifacts) so callers can show topics immediately instead of waiting on the
+ * heavier fetch — see CommandPalette's two-phase load. */
+export async function fetchTopicEntries(deps: Pick<SearchIndexDeps, 'topics'>): Promise<SearchEntry[]> {
+  const topics = await deps.topics()
+  return topics.map((t) => ({ kind: 'topic' as const, title: t.title, subtitle: t.goal, topic: t.topic }))
 }
 
 export function buildSearchIndex(deps: SearchIndexDeps): Promise<SearchEntry[]> {
@@ -63,7 +73,12 @@ async function build(deps: SearchIndexDeps): Promise<SearchEntry[]> {
     for (const id of g.order) {
       const node = g.nodes[id]
       if (!node) continue
-      entries.push({ kind: 'node', title: humanizeNodeId(id), subtitle: g.title, topic: g.topic, node: id })
+      // Subtitle leads with the topic title (what's actually displayed as the
+      // row's hint) and trails with the claim text so scoreField — which only
+      // ever looks at title/node/subtitle — can still match on claim content,
+      // matching the old palette's node search.
+      const subtitle = node.claim ? `${g.title} — ${node.claim}` : g.title
+      entries.push({ kind: 'node', title: humanizeNodeId(id), subtitle, topic: g.topic, node: id })
     }
   }
 
