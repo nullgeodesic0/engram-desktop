@@ -7,7 +7,13 @@ import { tmpdir, homedir } from 'node:os'
 import { randomBytes } from 'node:crypto'
 import { app, dialog } from 'electron'
 import { engramLearningHome } from '../engramCli/readOnly'
-import type { BackupInfo, BackupNowResult, DescribeArchiveResult, RestoreArchiveResult } from '../../shared/types'
+import type {
+  BackupInfo,
+  BackupNowResult,
+  DescribeArchiveResult,
+  RestoreArchiveResult,
+  SafetySnapshotResult,
+} from '../../shared/types'
 
 const execFileAsync = promisify(execFile)
 
@@ -35,6 +41,15 @@ function localStamp(now: Date): string {
 
 function randomSuffix(): string {
   return randomBytes(4).toString('hex')
+}
+
+/** True if there is anything at all to back up — a missing learning dir AND
+ * zero present userData files means a genuinely empty machine (e.g. before
+ * its first-ever restore), which createSafetySnapshotArchive treats as a
+ * special case rather than an error. */
+function hasAnythingToBackUp(learningHome: string, userDataDir: string): boolean {
+  if (existsSync(learningHome)) return true
+  return USERDATA_BACKUP_FILES.some((name) => existsSync(join(userDataDir, name)))
 }
 
 // ---------------------------------------------------------------------------
@@ -109,9 +124,19 @@ export async function createBackupArchive(opts: {
  * and as a hard backstop, the resolved destination path is checked against
  * the resolved archive path before anything is written: if they'd ever
  * coincide, this refuses outright rather than letting `tar -czf` silently
- * truncate the very archive being restored from (I-1). Pure — no Electron
- * dependency — so the round-trip test can force the collision path
- * deterministically via `fileName`.
+ * truncate the very archive being restored from (I-1).
+ *
+ * Special case: on a genuinely empty machine (no learning dir AND none of
+ * the five userData files present — the state right before a machine's
+ * first-ever restore, e.g. migrating to a new install), there is nothing a
+ * snapshot could protect. The always-snapshot-first rule holds vacuously
+ * rather than failing closed and blocking that restore outright: this
+ * returns `{ ok: true, path: null, bytes: 0 }` without writing anything, and
+ * the caller (restoreFromArchive) proceeds. Any single file or the learning
+ * dir existing still makes the snapshot mandatory as before.
+ *
+ * Pure — no Electron dependency — so the round-trip test can force both the
+ * collision path and the empty-machine path deterministically.
  */
 export async function createSafetySnapshotArchive(opts: {
   home: string
@@ -125,8 +150,13 @@ export async function createSafetySnapshotArchive(opts: {
    * round-trip test uses it to deterministically force the collision so the
    * refusal path itself gets exercised. */
   fileName?: string
-}): Promise<BackupNowResult> {
+}): Promise<SafetySnapshotResult> {
   const { home, learningHome, userDataDir, archivePath } = opts
+
+  if (!hasAnythingToBackUp(learningHome, userDataDir)) {
+    return { ok: true, path: null, bytes: 0 }
+  }
+
   const now = opts.now ?? new Date()
   const destDir = dirname(archivePath)
   const fileName = opts.fileName ?? `engram-safety-${localStamp(now)}-${randomSuffix()}.tar.gz`
@@ -416,7 +446,11 @@ export async function pickBackupArchivePath(): Promise<string | null> {
  *   3. A pre-restore safety snapshot of the CURRENT state is always taken
  *      before any extraction (via createSafetySnapshotArchive — distinctly
  *      named, collision-checked, see I-1), and its path is always returned
- *      — even on failure — so the user always has a hand-recovery path.
+ *      — even on failure — so the user always has a hand-recovery path. The
+ *      one exception is a genuinely empty machine (nothing exists to
+ *      snapshot yet, e.g. before the first-ever restore): the snapshot step
+ *      is a documented no-op there (safetyPath comes back `null`), never a
+ *      blocker — see createSafetySnapshotArchive's doc comment.
  */
 export async function restoreFromArchive(
   archivePath: string,
@@ -457,9 +491,12 @@ export async function restoreFromArchive(
     await restoreArchiveInto({ archivePath, learningHome, userDataDir })
     return { ok: true, safetyPath: safety.path }
   } catch (err) {
+    const snapshotNote = safety.path
+      ? `the safety snapshot was saved to ${safety.path}`
+      : 'no safety snapshot was needed — nothing existed to protect before this restore'
     return {
       ok: false,
-      reason: `Restore failed after the safety snapshot was saved to ${safety.path}: ${err instanceof Error ? err.message : String(err)}`,
+      reason: `Restore failed after ${snapshotNote}: ${err instanceof Error ? err.message : String(err)}`,
     }
   }
 }

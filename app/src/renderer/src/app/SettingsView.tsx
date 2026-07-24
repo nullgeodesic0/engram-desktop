@@ -80,7 +80,7 @@ type RestoreStep =
   | { kind: 'pick' }
   | { kind: 'summary'; path: string; describe: DescribeArchiveResult }
   | { kind: 'restoring'; path: string }
-  | { kind: 'done'; safetyPath: string }
+  | { kind: 'done'; safetyPath: string | null }
   | { kind: 'failed'; reason: string }
 
 /** The restore half of the Backup section — file picker → describeArchive
@@ -184,8 +184,14 @@ function RestoreModal({ sessionActive, onClose }: { sessionActive: boolean; onCl
         {step.kind === 'done' && (
           <>
             <div className="panel border-[var(--color-ink-cool-dim)] px-3 py-2 text-xs text-[var(--color-ink-cool)]">
-              Restore complete. A safety snapshot of what was here before is saved at:
-              <div className="label-data mt-1 text-[var(--color-text-primary)] break-all">{step.safetyPath}</div>
+              {step.safetyPath ? (
+                <>
+                  Restore complete. A safety snapshot of what was here before is saved at:
+                  <div className="label-data mt-1 text-[var(--color-text-primary)] break-all">{step.safetyPath}</div>
+                </>
+              ) : (
+                <>Restore complete — no safety snapshot was needed, there was nothing here to replace.</>
+              )}
             </div>
             <div className="flex justify-end">
               <Button variant="ghost" onClick={onClose}>

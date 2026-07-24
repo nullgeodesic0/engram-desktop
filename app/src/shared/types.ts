@@ -319,7 +319,17 @@ export type DescribeArchiveResult =
   | { ok: true; topics: number; receipts: number; archivedAt: string }
   | { ok: false; reason: string }
 
-export type RestoreArchiveResult = { ok: true; safetyPath: string } | { ok: false; reason: string }
+/** Result of the pre-restore safety snapshot. `path` is `null` only for the
+ * genuinely-empty-machine case (no learning dir, no userData files at all —
+ * e.g. before a machine's first-ever restore): there's nothing a snapshot
+ * could protect, so the always-snapshot-first rule is satisfied vacuously
+ * rather than blocking the restore. */
+export type SafetySnapshotResult = { ok: true; path: string | null; bytes: number } | { ok: false; reason: string }
+
+/** `safetyPath` is `null` exactly when `SafetySnapshotResult.path` was null
+ * above — the renderer should show "no safety snapshot was needed" rather
+ * than a path in that case. */
+export type RestoreArchiveResult = { ok: true; safetyPath: string | null } | { ok: false; reason: string }
 
 /** Remembered backup destination + last-run info, persisted in this app's
  * userData as backup-state.json — surfaced in Settings as the "last backed
