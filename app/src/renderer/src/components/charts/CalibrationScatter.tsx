@@ -20,7 +20,10 @@ export interface CalibrationScatterData {
  * identical join in DashboardView's Calibration section: picks carry a JS
  * timestamp, receipts are keyed by the engine's local `date.today()`, so this
  * must use getFullYear/Month/Date — never toISOString, which would silently
- * mis-bucket evening picks for any non-UTC user. */
+ * mis-bucket evening picks for any non-UTC user. Shared rule with that same
+ * join: a matched receipt with a null grade (pending/ungraded) still counts —
+ * as not recalled — rather than being dropped, so this figure's point count
+ * and read never disagree with the StatBlocks above it. */
 export function CalibrationScatter({ data }: { data: CalibrationScatterData }) {
   const itemsByDay = new Map(data.days.map((d) => [d.date, d.items]))
 
@@ -43,7 +46,7 @@ export function CalibrationScatter({ data }: { data: CalibrationScatterData }) {
     const items = itemsByDay.get(day)
     if (!items) return
     const match = items.find((it) => it.topic === pick.topic && it.node === pick.node)
-    if (!match || match.grade == null) return
+    if (!match) return
 
     const recalled = match.grade === 'recalled'
     const feltSure = pick.index >= 2
