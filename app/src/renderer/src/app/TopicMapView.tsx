@@ -193,14 +193,15 @@ export function TopicMapView({
               <div className="panel absolute top-4 right-4 z-10 p-3 w-52 flex flex-col gap-2 bg-[var(--color-surface)]/90 backdrop-blur">
                 <div className="fig-caption">Fig. — state of the territory</div>
                 <div className="grid grid-cols-2 gap-2">
-                  <StatBlock label="Encoded" value={`${stats.encoded}/${stats.total}`} tone="cool" />
+                  <StatBlock compact label="Encoded" value={`${stats.encoded}/${stats.total}`} tone="cool" />
                   <StatBlock
+                    compact
                     label="Consolidated"
                     value={`${Math.round((stats.consolidated / Math.max(1, stats.total)) * 100)}%`}
                     tone="warm"
                   />
-                  <StatBlock label="Decaying" value={String(stats.decaying)} tone={stats.decaying > 0 ? 'violet' : 'neutral'} />
-                  <StatBlock label="Capstone" value={`${stats.capstonePrereqsMet}/${stats.capstonePrereqsTotal}`} tone="neutral" />
+                  <StatBlock compact label="Decaying" value={String(stats.decaying)} tone={stats.decaying > 0 ? 'violet' : 'neutral'} />
+                  <StatBlock compact label="Capstone" value={`${stats.capstonePrereqsMet}/${stats.capstonePrereqsTotal}`} tone="neutral" />
                 </div>
               </div>
             )}

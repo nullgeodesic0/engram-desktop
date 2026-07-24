@@ -25,6 +25,9 @@ export function installAppMenu(focusOrCreateWindow: (navigateTo?: string) => voi
         { role: 'quit' },
       ],
     },
+    // Without an Edit menu, macOS has no route for the standard clipboard
+    // accelerators — ⌘C/⌘V/⌘X/⌘A silently die in every text field.
+    { role: 'editMenu' },
     {
       label: 'Session',
       submenu: [
