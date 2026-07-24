@@ -3,8 +3,11 @@ out/
 dist/
 build/
 # Generated icon/DMG masters are committed so packaging doesn't depend on
-# regenerating them (see app/scripts/make-icon.mjs) — un-ignore just those.
+# regenerating them (see app/scripts/make-icon.mjs). The directory itself must
+# stay ignored-by-default (`app/build/*`, not `!app/build/`) or every future
+# electron-builder staging artifact in it becomes stageable.
 !app/build/
+app/build/*
 !app/build/icon.svg
 !app/build/icon.png
 !app/build/icon.icns
