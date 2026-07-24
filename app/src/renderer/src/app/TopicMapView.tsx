@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { TopicSummary, TopicGraph, MapAnnotations } from '../../../shared/types'
+import type { TopicSummary, TopicGraph, MapAnnotations, NodeProvenance, ProvenanceEvent } from '../../../shared/types'
 import { RetentionCurve } from '../components/RetentionCurve'
 import { GraphView, EDGE_STYLE } from '../components/GraphView'
 import { cellBodyPath, plateStats } from '../components/graph2d/plate'
@@ -9,12 +9,80 @@ import { StatBlock } from '../components/ui/StatBlock'
 import { Button } from '../components/ui/Button'
 import { Modal } from '../components/ui/Modal'
 import { MathRenderer } from '../components/MathRenderer'
+import { SessionHistoryDrawer } from '../components/SessionHistoryDrawer'
 import { friendlyErrorText } from '../shared/friendlyError'
 
 function stateLabel(state: string): string {
   if (state === 'new') return 'not started'
   if (state === 'learning') return 'encoding'
   return 'consolidated'
+}
+
+/** `date` is a local YYYY-MM-DD string (see ProvenanceEvent) — parsed without
+ * a `Z` suffix so `Date` reads it in local time instead of shifting it a day
+ * at UTC-negative offsets. */
+function formatProvenanceDate(date: string): string {
+  return new Date(`${date}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1)
+}
+
+/** Provenance block shown in both the node drawer and the full-node modal —
+ * "First encoded"/"Pretested" line (whichever `firstEncoded.kind` is; absent
+ * entirely if null) plus a newest-first "Reviewed N times" list. Every row is
+ * a real button that hands its own event to `onOpen`, which resolves the
+ * history key (topic id for encode/pretest, 'review' for review — see
+ * openProvenanceEvent below) and opens the anchored SessionHistoryDrawer.
+ * Renders nothing for a node with no events at all — no empty chrome. */
+function ProvenanceBlock({
+  entry,
+  onOpen,
+  compact,
+}: {
+  entry: NodeProvenance | undefined
+  onOpen: (ev: ProvenanceEvent) => void
+  compact: boolean
+}) {
+  if (!entry || (!entry.firstEncoded && entry.reviews.length === 0)) return null
+  const textSize = compact ? 'text-xs' : 'text-sm'
+  return (
+    <div className={`${textSize} text-[var(--color-text-dim)]`}>
+      <div className={`label-data uppercase tracking-wide text-[10px] text-[var(--color-text-faint)] ${compact ? 'mb-1' : 'mb-1.5'}`}>
+        Provenance
+      </div>
+      <div className="flex flex-col gap-1 items-start">
+        {entry.firstEncoded && (
+          <button
+            onClick={() => onOpen(entry.firstEncoded!)}
+            aria-label={`Open ${entry.firstEncoded.kind === 'pretest' ? 'pretest' : 'encoding'} of ${formatProvenanceDate(entry.firstEncoded.date)}`}
+            className="focus-ring text-left hover:text-[var(--color-text-primary)]"
+          >
+            {entry.firstEncoded.kind === 'pretest' ? 'Pretested' : 'First encoded'} — {formatProvenanceDate(entry.firstEncoded.date)}
+          </button>
+        )}
+        {entry.reviews.length > 0 && (
+          <div className="flex flex-col gap-1 items-start mt-0.5">
+            <div className="text-[10px] label-data text-[var(--color-text-faint)]">
+              Reviewed {entry.reviews.length} time{entry.reviews.length === 1 ? '' : 's'}
+            </div>
+            {entry.reviews.map((r, i) => (
+              <button
+                key={`${r.sessionId}-${r.anchor}-${i}`}
+                onClick={() => onOpen(r)}
+                aria-label={`Open review of ${formatProvenanceDate(r.date)}`}
+                className="focus-ring pl-2 text-left hover:text-[var(--color-text-primary)]"
+              >
+                {formatProvenanceDate(r.date)}
+                {r.grade ? ` — ${capitalize(r.grade)}` : ''}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
 }
 
 interface TopicMapViewProps {
@@ -63,6 +131,18 @@ export function TopicMapView({
   // drawer nor the full-node modal open on it) when the update lands.
   const [inkFlashNode, setInkFlashNode] = useState<string | null>(null)
   const inkFlashTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Per-node provenance for the selected topic — null means "still loading"
+  // (renders the quiet fig-caption), {} means "loaded, nothing to show" (no
+  // node has events). Reset on topic switch, alongside annotations.
+  const [provenance, setProvenance] = useState<Record<string, NodeProvenance> | null>(null)
+  // Which anchored sitting the SessionHistoryDrawer is currently showing —
+  // null closes it. historyKey follows the encode/pretest→topic,
+  // review→'review' mapping (see openProvenanceEvent).
+  const [historyDrawer, setHistoryDrawer] = useState<{ historyKey: string; sessionId: string; anchorIndex: number } | null>(null)
+
+  function openProvenanceEvent(ev: ProvenanceEvent, topicId: string) {
+    setHistoryDrawer({ historyKey: ev.kind === 'review' ? 'review' : topicId, sessionId: ev.sessionId, anchorIndex: ev.anchor })
+  }
 
   useEffect(() => {
     window.engram.topics().then((ts) => {
@@ -90,6 +170,7 @@ export function TopicMapView({
     setOpenNode(null)
     setRetrievability(null)
     setAnnotations({})
+    setProvenance(null)
     window.engram
       .topicGraph(selectedTopic)
       .then((g) => setGraph(g as TopicGraph))
@@ -105,6 +186,10 @@ export function TopicMapView({
       .mapAnnotations(selectedTopic)
       .then(setAnnotations)
       .catch(() => setAnnotations({}))
+    window.engram
+      .nodeProvenance(selectedTopic)
+      .then(setProvenance)
+      .catch(() => setProvenance({}))
   }, [selectedTopic])
 
   // Live annotate_node bridge:ui events (fired by a running Learn session)
@@ -438,6 +523,15 @@ export function TopicMapView({
                   </div>
                 </div>
               )}
+
+              {provenance === null && <div className="fig-caption">reading provenance…</div>}
+              {provenance !== null && (
+                <ProvenanceBlock
+                  entry={provenance[selectedNode!]}
+                  onOpen={(ev) => openProvenanceEvent(ev, selectedTopic!)}
+                  compact
+                />
+              )}
             </div>
           )}
         </div>
@@ -595,6 +689,15 @@ export function TopicMapView({
                 )
             )}
 
+            {provenance === null && <div className="fig-caption">reading provenance…</div>}
+            {provenance !== null && (
+              <ProvenanceBlock
+                entry={provenance[openNode]}
+                onOpen={(ev) => openProvenanceEvent(ev, selectedTopic!)}
+                compact={false}
+              />
+            )}
+
             {opened.artifact && (
               <button
                 onClick={() => window.engram.openArtifact(opened.artifact!)}
@@ -612,6 +715,14 @@ export function TopicMapView({
           </div>
         )}
       </Modal>
+
+      <SessionHistoryDrawer
+        historyKey={historyDrawer?.historyKey ?? ''}
+        open={historyDrawer !== null}
+        onClose={() => setHistoryDrawer(null)}
+        initialSessionId={historyDrawer?.sessionId}
+        anchorIndex={historyDrawer?.anchorIndex}
+      />
     </div>
   )
 }
