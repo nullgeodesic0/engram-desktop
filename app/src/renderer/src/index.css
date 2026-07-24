@@ -197,6 +197,24 @@
     margin-inline: auto;
   }
 
+  /* CSS-virtualize old transcript blocks: skip layout/paint for message
+     blocks the browser has scrolled well past, so a long session doesn't
+     keep paying render cost for every prior turn. Deliberately exempts the
+     last 6 blocks (`:not(:nth-last-child(-n+6))`) — ChatScrollRegion sticks
+     to the bottom by reading `scrollHeight` synchronously after each render
+     (see ChatScrollRegion.tsx), and a `content-visibility: auto` block that
+     hasn't been measured yet reports its `contain-intrinsic-size` estimate
+     instead of its real height. Applying it to the live edge (the streaming
+     reply, the just-sent message, anything still near the viewport) risked
+     that estimate being wrong at exactly the moment autoscroll depends on an
+     accurate scrollHeight, which would show up as a jump. Blocks 7+ back are
+     always fully out of view by the time they'd be skipped, so there's
+     nothing depending on their measured height and no visible seam. */
+  .transcript-measure > *:not(:nth-last-child(-n + 6)) {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 120px;
+  }
+
   /* The tutor's voice — assistant prose reads in serif, like a set page. */
   .voice-serif {
     font-family: var(--font-serif);

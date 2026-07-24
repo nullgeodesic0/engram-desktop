@@ -38,6 +38,16 @@ export default defineConfig({
         input: {
           index: resolve(__dirname, 'src/renderer/index.html'),
         },
+        output: {
+          // `three` (NeuralField's ambient WebGL backdrop) and `katex` (MathRenderer)
+          // are the two heaviest deps and aren't needed for first paint — split them
+          // into their own chunks so the main bundle shrinks and they can be fetched
+          // in parallel with (or after) it instead of inflating one monolithic chunk.
+          manualChunks(id) {
+            if (id.includes('node_modules/three')) return 'vendor-three'
+            if (id.includes('node_modules/katex')) return 'vendor-katex'
+          },
+        },
       },
     },
   },

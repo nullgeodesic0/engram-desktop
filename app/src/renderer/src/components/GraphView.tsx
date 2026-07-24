@@ -143,11 +143,21 @@ export function GraphView({ graph, selected, onSelect, onOpen, query, retrievabi
   // settled position and links sway like slack threads. ~30fps is plenty for
   // motion this slow; skipped entirely under prefers-reduced-motion (t stays
   // 0, which every consumer treats as "static plate").
+  //
+  // The map itself already unmounts on tab switch (it's not inside App's
+  // KeepMounted — see the comment on `main` in App.tsx), so the loop is
+  // naturally torn down there; the gap this closes is the window losing
+  // focus/visibility while the Map tab stays frontmost (backgrounded, another
+  // app focused, minimized). Same signal NeuralField uses for the same
+  // reason: document.visibilityState + window focus are the cheapest checks
+  // available (no observer setup) and already proven not to fight anything
+  // else in this view.
   const [t, setT] = useState(0)
   useEffect(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
     let raf = 0
     let last = 0
+    let running = false
     const loop = (now: number) => {
       if (now - last >= 33) {
         last = now
@@ -155,8 +165,26 @@ export function GraphView({ graph, selected, onSelect, onOpen, query, retrievabi
       }
       raf = requestAnimationFrame(loop)
     }
-    raf = requestAnimationFrame(loop)
-    return () => cancelAnimationFrame(raf)
+    function syncRunning() {
+      const shouldRun = document.visibilityState === 'visible' && document.hasFocus()
+      if (shouldRun && !running) {
+        running = true
+        raf = requestAnimationFrame(loop)
+      } else if (!shouldRun && running) {
+        running = false
+        if (raf) cancelAnimationFrame(raf)
+      }
+    }
+    document.addEventListener('visibilitychange', syncRunning)
+    window.addEventListener('blur', syncRunning)
+    window.addEventListener('focus', syncRunning)
+    syncRunning()
+    return () => {
+      cancelAnimationFrame(raf)
+      document.removeEventListener('visibilitychange', syncRunning)
+      window.removeEventListener('blur', syncRunning)
+      window.removeEventListener('focus', syncRunning)
+    }
   }, [])
 
   // Per-node drifted positions — seeded phase/rate per cell so the plate
