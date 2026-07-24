@@ -18,8 +18,7 @@ import { parseGradeResult, type GradeResult } from '../../../shared/gradeResult'
 import { GradeResultCard } from '../components/GradeResultCard'
 import { SkeletonBar } from '../components/Skeleton'
 import { SessionCeremony } from '../components/ritual/Bookends'
-import { SessionHistoryModal } from '../components/SessionHistoryModal'
-import type { SessionIndexEntry } from '../../../shared/types'
+import { SessionHistoryDrawer } from '../components/SessionHistoryDrawer'
 import { Button } from '../components/ui/Button'
 import { friendlyErrorText } from '../shared/friendlyError'
 import { recordConfidence, latestPickFor } from '../shared/calibrationStore'
@@ -62,10 +61,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
   // Captured once when a session starts — the denominator for "Item N of M".
   // `queue` itself shrinks as items get graded, so it can't serve as both.
   const [sessionTotal, setSessionTotal] = useState(0)
-  const [historyOpen, setHistoryOpen] = useState(false)
-  const [historyEntries, setHistoryEntries] = useState<SessionIndexEntry[]>([])
-  const [viewingHistoryId, setViewingHistoryId] = useState<string | null>(null)
-  const [historyMessages, setHistoryMessages] = useState<ChatMessage[]>([])
+  const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false)
   const [lastGrade, setLastGrade] = useState<GradeResult | null>(null)
   const [sessionGrades, setSessionGrades] = useState<GradeResult[]>([])
   const [streakDays, setStreakDays] = useState<number | null>(null)
@@ -270,19 +266,6 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
     window.engram.abortSession(sessionId)
   }
 
-  async function openHistory() {
-    const entries = await window.engram.sessionHistoryFor('review')
-    setHistoryEntries(entries)
-    setHistoryOpen(true)
-  }
-
-  async function selectHistoryEntry(id: string) {
-    const lines = await window.engram.getTranscript(id)
-    setHistoryMessages(parseTranscriptToMessages(lines))
-    setViewingHistoryId(id)
-    setHistoryOpen(false)
-  }
-
   const current = queue[0] ?? null
   const lastUserMessageId = useMemo(() => [...messages].reverse().find((m) => m.role === 'user')?.id ?? null, [messages])
   const latestTicket = useMemo(() => extractTicketFromMessages(messages), [messages])
@@ -301,7 +284,10 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
             <ContextGauge usedTokens={contextUsage.usedTokens} contextWindow={contextUsage.contextWindow} />
           )}
           {phase !== 'loading' && (
-            <button onClick={openHistory} className="focus-ring text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]">
+            <button
+              onClick={() => setHistoryDrawerOpen(true)}
+              className="focus-ring text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]"
+            >
               History
             </button>
           )}
@@ -388,25 +374,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
         </div>
       )}
 
-      {viewingHistoryId && (
-        <div className="flex-1 min-h-0 flex flex-col gap-4">
-          <div className="shrink-0 panel border-[var(--color-ink-cool-dim)] px-4 py-2.5 flex items-center justify-between">
-            <span className="text-xs text-[var(--color-ink-cool)]">Viewing a past session, read-only</span>
-            <button onClick={() => setViewingHistoryId(null)} className="focus-ring text-xs text-[var(--color-text-dim)] hover:text-[var(--color-text-primary)]">
-              ← Back to current
-            </button>
-          </div>
-          <ChatScrollRegion deps={[historyMessages]}>
-            <div className="transcript-measure flex flex-col gap-5">
-              {historyMessages.map((m) => (
-                <ChatMessageView key={m.id} message={m} />
-              ))}
-            </div>
-          </ChatScrollRegion>
-        </div>
-      )}
-
-      {!viewingHistoryId && (phase === 'in-session' || phase === 'done') && (
+      {(phase === 'in-session' || phase === 'done') && (
         <div className="flex-1 min-h-0 flex flex-col gap-4">
           {latestTicket && phase === 'in-session' && (
             <div className="shrink-0 max-w-sm">
@@ -512,14 +480,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
       )}
 
       {askRequest && <AskDialog request={askRequest} onAnswer={answerAsk} />}
-      {historyOpen && (
-        <SessionHistoryModal
-          entries={historyEntries}
-          currentSessionId={sessionId}
-          onSelect={selectHistoryEntry}
-          onClose={() => setHistoryOpen(false)}
-        />
-      )}
+      <SessionHistoryDrawer historyKey="review" open={historyDrawerOpen} onClose={() => setHistoryDrawerOpen(false)} />
     </div>
   )
 }

@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import type { SessionEvent } from '../../../shared/sessionEvents'
 import type { BridgeAskRequest } from '../../../shared/bridgeProtocol'
-import type { TopicSummary, SessionIndexEntry, ArtifactEntry, TopicGraph } from '../../../shared/types'
+import type { TopicSummary, ArtifactEntry, TopicGraph } from '../../../shared/types'
 import { AskDialog } from '../components/AskDialog'
 import { RateLimitBanner } from '../components/RateLimitBanner'
 import { isBlockingRateLimitStatus } from '../../../shared/rateLimit'
@@ -22,7 +22,7 @@ import { invalidateSearchIndex } from '../shared/searchIndex'
 import { humanizeNodeId } from '../../../shared/humanizeId'
 import { emitPulse, setAmbientLevel } from '../../../shared/neuralFieldBus'
 import { recordConfidence } from '../shared/calibrationStore'
-import { SessionHistoryModal } from '../components/SessionHistoryModal'
+import { SessionHistoryDrawer } from '../components/SessionHistoryDrawer'
 import { parseGradeResults, type GradeResult } from '../../../shared/gradeResult'
 import { MarkView, GradingShimmer, type RitualMark } from '../components/ritual/Marks'
 import { ActionChips, type SuggestedAction } from '../components/ritual/ActionChips'
@@ -273,10 +273,7 @@ export function LearnSessionView({
   const [nodePosition, setNodePosition] = useState<string | null>(null)
   const [sessionGrades, setSessionGrades] = useState<GradeResult[]>([])
   const [streakDays, setStreakDays] = useState<number | null>(null)
-  const [historyOpen, setHistoryOpen] = useState(false)
-  const [historyEntries, setHistoryEntries] = useState<SessionIndexEntry[]>([])
-  const [viewingHistoryId, setViewingHistoryId] = useState<string | null>(null)
-  const [historyMessages, setHistoryMessages] = useState<ChatMessage[]>([])
+  const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false)
   const [marks, setMarks] = useState<RitualMark[]>([])
   const [gradingPending, setGradingPending] = useState(false)
   const [walkNumber, setWalkNumber] = useState<number | null>(null)
@@ -961,7 +958,6 @@ export function LearnSessionView({
     setSessionId(null)
     sessionIdRef.current = null
     setActiveTopic(null)
-    setViewingHistoryId(null)
     // Deliberately not reset on tab switches — a live session keeping its ambient
     // warmth while hidden matches the sidebar-dot "session alive in the background"
     // metaphor. Only actually leaving the session (here) or starting a new one
@@ -1059,20 +1055,6 @@ export function LearnSessionView({
     setBusy(false)
   }
 
-  async function openHistory() {
-    if (!activeTopic) return
-    const entries = await window.engram.sessionHistoryFor('learn', activeTopic.topic)
-    setHistoryEntries(entries)
-    setHistoryOpen(true)
-  }
-
-  async function selectHistoryEntry(id: string) {
-    const lines = await window.engram.getTranscript(id)
-    setHistoryMessages(parseTranscriptToMessages(lines))
-    setViewingHistoryId(id)
-    setHistoryOpen(false)
-  }
-
   const rateLimitBlocking = rateLimit !== null && isBlockingRateLimitStatus(rateLimit.status)
   const lastUserMessageId = useMemo(() => [...messages].reverse().find((m) => m.role === 'user')?.id ?? null, [messages])
   const latestTicket = useMemo(() => extractTicketFromMessages(messages), [messages])
@@ -1121,7 +1103,10 @@ export function LearnSessionView({
               <ContextGauge usedTokens={contextUsage.usedTokens} contextWindow={contextUsage.contextWindow} />
             )}
             {started && activeTopic && (
-              <button onClick={openHistory} className="focus-ring text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]">
+              <button
+                onClick={() => setHistoryDrawerOpen(true)}
+                className="focus-ring text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]"
+              >
                 History
               </button>
             )}
@@ -1231,25 +1216,7 @@ export function LearnSessionView({
         </div>
       )}
 
-      {started && viewingHistoryId && (
-        <div className="flex-1 min-h-0 flex flex-col gap-4">
-          <div className="shrink-0 panel border-[var(--color-ink-cool-dim)] px-4 py-2.5 flex items-center justify-between">
-            <span className="text-xs text-[var(--color-ink-cool)]">Viewing a past session, read-only</span>
-            <button onClick={() => setViewingHistoryId(null)} className="focus-ring text-xs text-[var(--color-text-dim)] hover:text-[var(--color-text-primary)]">
-              ← Back to current
-            </button>
-          </div>
-          <ChatScrollRegion deps={[historyMessages]}>
-            <div className="transcript-measure flex flex-col gap-5">
-              {historyMessages.map((m) => (
-                <ChatMessageView key={m.id} message={m} />
-              ))}
-            </div>
-          </ChatScrollRegion>
-        </div>
-      )}
-
-      {started && !viewingHistoryId && (
+      {started && (
         <div className="flex-1 min-h-0 flex flex-col gap-4">
           {latestTicket && (
             <div className="shrink-0 max-w-sm">
@@ -1347,12 +1314,11 @@ export function LearnSessionView({
       )}
 
       {askRequest && <AskDialog request={askRequest} onAnswer={answerAsk} />}
-      {historyOpen && (
-        <SessionHistoryModal
-          entries={historyEntries}
-          currentSessionId={sessionId}
-          onSelect={selectHistoryEntry}
-          onClose={() => setHistoryOpen(false)}
+      {activeTopic && (
+        <SessionHistoryDrawer
+          historyKey={activeTopic.topic}
+          open={historyDrawerOpen}
+          onClose={() => setHistoryDrawerOpen(false)}
         />
       )}
       {settingsFor && (
