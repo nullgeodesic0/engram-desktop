@@ -82,7 +82,7 @@ The full story — session lifecycle, the eight bridge tools, transcript hydrati
 ### Run from source
 
 ```bash
-git clone git@github.com:Deltatacoman/engram-desktop.git
+git clone git@github.com:nullgeodesic0/engram-desktop.git
 ```
 
 ```bash

@@ -5,7 +5,7 @@
 
 ## Goal
 
-Give Engram Desktop its own standalone, professionally documented git repository, pushed private to GitHub (`Deltatacoman/engram-desktop`). The documentation serves two jobs: a portfolio-grade README that presents the project at a glance, and contributor-grade internals docs so a developer (or future us) can understand, run, and extend the app.
+Give Engram Desktop its own standalone, professionally documented git repository, pushed private to GitHub (`nullgeodesic0/engram-desktop`). The documentation serves two jobs: a portfolio-grade README that presents the project at a glance, and contributor-grade internals docs so a developer (or future us) can understand, run, and extend the app.
 
 ## Decisions (locked with user)
 
@@ -18,7 +18,7 @@ Give Engram Desktop its own standalone, professionally documented git repository
 
 - `git init` in `.` — the working copy becomes the repo root; no duplicate checkout.
 - Detach from the home-directory repo: `git rm -r --cached` every EngramDesktop path it tracks, add `EngramDesktop/` to the home repo's `.gitignore`, commit that in the home repo. Files on disk are untouched.
-- Default branch `main`. Create with `gh repo create Deltatacoman/engram-desktop --private --source . --push` (account already authenticated; ssh protocol).
+- Default branch `main`. Create with `gh repo create nullgeodesic0/engram-desktop --private --source . --push` (account already authenticated; ssh protocol).
 - Single initial commit after all docs and hygiene files are in place.
 
 ## Contents
@@ -58,7 +58,7 @@ All docs written in a professional, plain-English engineering register — no ma
 
 ## Hygiene gate (before first push)
 
-- Grep the entire staged tree for personal home-directory paths, `Deltatacoman` outside intended context, Anthropic/GitHub credential prefixes, `api[_-]?key`-style assignments, and other secret patterns; fix or exclude any hit.
+- Grep the entire staged tree for personal home-directory paths, `nullgeodesic0` outside intended context, Anthropic/GitHub credential prefixes, `api[_-]?key`-style assignments, and other secret patterns; fix or exclude any hit.
 - Confirm `gh repo view` reports the repo as private after creation.
 - Fresh-clone sanity: documented in `docs/development.md` (clone → `npm install` → `npm run build`), executed once as verification.
 

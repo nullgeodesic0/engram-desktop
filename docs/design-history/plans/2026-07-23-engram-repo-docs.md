@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make `.` a standalone git repo with portfolio+contributor documentation, pushed private to `Deltatacoman/engram-desktop`.
+**Goal:** Make `.` a standalone git repo with portfolio+contributor documentation, pushed private to `nullgeodesic0/engram-desktop`.
 
 **Architecture:** Detach the directory from the home-dir repo, init a fresh repo in place, write five documentation files plus README from the live source tree, then a hygiene-scanned single initial commit pushed via `gh`.
 
@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- Repo name `engram-desktop`, owner `Deltatacoman`, **private**, default branch `main`.
+- Repo name `engram-desktop`, owner `nullgeodesic0`, **private**, default branch `main`.
 - Fresh history: exactly one initial commit (plus any fix commits before push counts as normal follow-ups — but the first push must not contain home-repo history).
 - No personal absolute paths (`~/...`) and no secrets in any committed file. Exception: none.
 - `spike/` and `.remember/` are never committed.
@@ -202,7 +202,7 @@ Expected: same count as before the move (non-zero); `docs/superpowers` no longer
 ### Task 8: Hygiene scan, initial commit, create private repo, push, verify
 
 **Files:**
-- Create: git history (initial commit), GitHub repo `Deltatacoman/engram-desktop`
+- Create: git history (initial commit), GitHub repo `nullgeodesic0/engram-desktop`
 
 **Interfaces:**
 - Consumes: everything above.
@@ -231,7 +231,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 - [ ] **Step 3: Create private repo and push (ask user before this step if not already authorized — publishing action)**
 
 ```bash
-gh repo create Deltatacoman/engram-desktop --private --source . --push
+gh repo create nullgeodesic0/engram-desktop --private --source . --push
 ```
 
 Expected: repo URL printed; push succeeds.
@@ -239,7 +239,7 @@ Expected: repo URL printed; push succeeds.
 - [ ] **Step 4: Verify private + contents**
 
 ```bash
-gh repo view Deltatacoman/engram-desktop --json visibility,defaultBranchRef -q '.visibility + " " + .defaultBranchRef.name'
+gh repo view nullgeodesic0/engram-desktop --json visibility,defaultBranchRef -q '.visibility + " " + .defaultBranchRef.name'
 ```
 
 Expected: `PRIVATE main`.
@@ -248,7 +248,7 @@ Expected: `PRIVATE main`.
 
 ```bash
 cd "$(mktemp -d)"
-git clone --quiet git@github.com:Deltatacoman/engram-desktop.git
+git clone --quiet git@github.com:nullgeodesic0/engram-desktop.git
 cd engram-desktop/app && npm install --no-audit --no-fund && npm run build
 ```
 
