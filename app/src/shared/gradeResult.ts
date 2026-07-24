@@ -61,6 +61,52 @@ function toGradeResult(raw: unknown): GradeResult | null {
   }
 }
 
+/** Extracts the first balanced JSON value opening with `open` from mixed shell
+ * output. The skill sometimes chains commands in one Bash call (e.g.
+ * `receipt --file … ; echo ---clear--- ; clear-stash`), so a tool_result can be
+ * the receipt JSON followed by arbitrary text — a whole-string JSON.parse then
+ * fails on "Extra data" and the UI silently loses the entire grade batch
+ * (observed live 2026-07-24). Walks from the first `open` char tracking
+ * string/escape state and bracket depth; returns the balanced slice, or null. */
+function extractFirstJson(text: string, open: '[' | '{'): string | null {
+  const close = open === '[' ? ']' : '}'
+  const start = text.indexOf(open)
+  if (start === -1) return null
+  let depth = 0
+  let inString = false
+  let escaped = false
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i]
+    if (inString) {
+      if (escaped) escaped = false
+      else if (ch === '\\') escaped = true
+      else if (ch === '"') inString = false
+      continue
+    }
+    if (ch === '"') inString = true
+    else if (ch === open || ch === (open === '[' ? '{' : '[')) depth++
+    else if (ch === close || ch === (open === '[' ? '}' : ']')) {
+      depth--
+      if (depth === 0 && text[i] === close) return text.slice(start, i + 1)
+    }
+  }
+  return null
+}
+
+function parseLoose(text: string, open: '[' | '{'): unknown {
+  try {
+    return JSON.parse(text)
+  } catch {
+    const slice = extractFirstJson(text, open)
+    if (slice == null) return null
+    try {
+      return JSON.parse(slice)
+    } catch {
+      return null
+    }
+  }
+}
+
 /** Parses a single `rate` call's tool_result content (Review's per-item grading
  * path). Tolerant — a parse failure or unrecognized shape returns null rather
  * than throwing, so a card simply doesn't render instead of crashing the view;
@@ -68,11 +114,7 @@ function toGradeResult(raw: unknown): GradeResult | null {
 export function parseGradeResult(content: unknown): GradeResult | null {
   const text = contentToText(content)
   if (!text) return null
-  try {
-    return toGradeResult(JSON.parse(text))
-  } catch {
-    return null
-  }
+  return toGradeResult(parseLoose(text, '{'))
 }
 
 /** Parses a `receipt` call's tool_result content (Learn's batch-grading path —
@@ -82,13 +124,9 @@ export function parseGradeResult(content: unknown): GradeResult | null {
 export function parseGradeResults(content: unknown): GradeResult[] {
   const text = contentToText(content)
   if (!text) return []
-  try {
-    const parsed = JSON.parse(text)
-    if (!Array.isArray(parsed)) return []
-    return parsed.map(toGradeResult).filter((r): r is GradeResult => r !== null)
-  } catch {
-    return []
-  }
+  const parsed = parseLoose(text, '[')
+  if (!Array.isArray(parsed)) return []
+  return parsed.map(toGradeResult).filter((r): r is GradeResult => r !== null)
 }
 
 /** Trailing consecutive `recalled` count — the sitting's current "flow"
