@@ -1,5 +1,7 @@
-import { dialog, BrowserWindow } from 'electron'
-import { writeFile } from 'node:fs/promises'
+import { app, dialog, BrowserWindow } from 'electron'
+import { writeFile, unlink } from 'node:fs/promises'
+import { join } from 'node:path'
+import { randomUUID } from 'node:crypto'
 import type { ExportSittingRequest, ExportSittingResult } from '../../shared/types'
 
 /** Mirrors the filename-sanitizing a save dialog itself would reject —
@@ -47,14 +49,24 @@ export async function exportSitting(
   if (req.printHtml == null) return { ok: false, reason: 'No print document was provided.' }
 
   // Offscreen + never shown: this window exists only to run Chromium's print
-  // pipeline against a document that never needs to paint on screen. Loaded
-  // via a data: URL rather than a temp file — the document is already fully
-  // self-contained (inline CSS, pre-rendered KaTeX), so there's nothing a
-  // temp file would buy here except another thing to clean up.
+  // pipeline against a document that never needs to paint on screen.
+  //
+  // Loaded via a TEMP FILE rather than a `data:` URL — a data: URL is capped
+  // at roughly 2M characters in Chromium, and `encodeURIComponent` on
+  // KaTeX-dense HTML (this app's actual math-heavy sittings) can roughly
+  // triple the string length, so a long equation-heavy sitting could exceed
+  // the cap and fail with a cryptic ERR_INVALID_URL. A temp file has no such
+  // ceiling; it's written and deleted around the same try/finally that owns
+  // the hidden window.
+  const tempHtmlPath = join(app.getPath('temp'), `engram-sitting-export-${randomUUID()}.html`)
   let printWindow: BrowserWindow | null = null
   try {
-    printWindow = new BrowserWindow({ show: false, webPreferences: { offscreen: true } })
-    await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(req.printHtml)}`)
+    await writeFile(tempHtmlPath, req.printHtml, 'utf-8')
+    printWindow = new BrowserWindow({
+      show: false,
+      webPreferences: { offscreen: true, contextIsolation: true, nodeIntegration: false, sandbox: true },
+    })
+    await printWindow.loadFile(tempHtmlPath)
     const pdfBuffer = await printWindow.webContents.printToPDF({
       printBackground: true,
       pageSize: 'Letter',
@@ -66,5 +78,10 @@ export async function exportSitting(
     return { ok: false, reason: err instanceof Error ? err.message : String(err) }
   } finally {
     if (printWindow && !printWindow.isDestroyed()) printWindow.destroy()
+    await unlink(tempHtmlPath).catch(() => {
+      // Best-effort cleanup — a leftover temp file in the OS temp dir is
+      // harmless (cleaned by the OS eventually) and must never mask the
+      // real export result above.
+    })
   }
 }
