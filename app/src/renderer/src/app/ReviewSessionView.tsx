@@ -31,6 +31,37 @@ import { invalidateSearchIndex } from '../shared/searchIndex'
 
 type Phase = 'loading' | 'empty' | 'ready' | 'in-session' | 'done' | 'closed-unexpectedly'
 
+// due() only ever returns items already due (see readHandlers.ts's `engram:due`) — there's
+// no "next due" query on the engine side. The earliest future date lives in each topic
+// graph's own fsrs.due (same source Home's 7-day forecast reads), so an empty queue looks
+// there instead, across every topic, for the single soonest date among non-new nodes.
+async function earliestUpcomingDue(): Promise<string | null> {
+  const topics = await window.engram.topics()
+  let earliest: string | null = null
+  await Promise.all(
+    topics.map(async (t) => {
+      try {
+        const g = (await window.engram.topicGraph(t.topic)) as {
+          nodes?: Record<string, { state?: string; fsrs?: { due?: string | null } }>
+        }
+        if (!g?.nodes) return
+        for (const node of Object.values(g.nodes)) {
+          const due = node?.fsrs?.due
+          if (typeof due !== 'string' || node?.state === 'new') continue
+          if (earliest === null || due < earliest) earliest = due
+        }
+      } catch {
+        // A topic with an unreadable graph just doesn't contribute a candidate date.
+      }
+    }),
+  )
+  return earliest
+}
+
+function formatDueDate(iso: string): string {
+  return new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+}
+
 function looksLikeRateCall(input: Record<string, unknown>): boolean {
   const command = String(input.command ?? '')
   return command.includes(' rate ') && command.includes('--rating')
@@ -67,6 +98,10 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
   const [streakDays, setStreakDays] = useState<number | null>(null)
   const [chamber, setChamber] = useState(false)
   const [momentumOn, setMomentumOn] = useState(true)
+  // Only fetched/shown for the empty-queue state — the earliest date any topic's
+  // node next comes due, so "nothing due" says when to come back rather than
+  // just sitting blank.
+  const [earliestDue, setEarliestDue] = useState<string | null>(null)
 
   const pendingRateToolUseId = useRef<string | null>(null)
   const sessionIdRef = useRef<string | null>(null)
@@ -80,7 +115,10 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
   }
 
   useEffect(() => {
-    refreshQueue().then((items) => setPhase(items.length > 0 ? 'ready' : 'empty'))
+    refreshQueue().then((items) => {
+      setPhase(items.length > 0 ? 'ready' : 'empty')
+      if (items.length === 0) earliestUpcomingDue().then(setEarliestDue)
+    })
     // Uncapped, purely for the amnesty-banner heuristic below — `queue` itself
     // stays capped at 12 (the actual review cap /review would use).
     window.engram.due().then((all) => setTotalDue(all.length))
@@ -329,7 +367,9 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
         </div>
       )}
       {phase === 'empty' && (
-        <div className="panel px-4 py-3 text-sm text-[var(--color-ink-warm)]">Queue clear — nothing due right now.</div>
+        <div className="panel px-4 py-3 text-sm text-[var(--color-ink-warm)]">
+          Nothing due{earliestDue ? ` — earliest return ${formatDueDate(earliestDue)}` : ' right now.'}
+        </div>
       )}
       {phase === 'closed-unexpectedly' && (
         <div className="panel border-[var(--color-ink-danger-dim)] px-4 py-3 text-sm text-[var(--color-ink-danger)]">

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { EngramStats, TopicSummary, TopicGraph } from '../../../shared/types'
+import type { EngramStats, TopicSummary, TopicGraph, EnvironmentCheckResult } from '../../../shared/types'
 import { SkeletonBar, SkeletonGrid } from '../components/Skeleton'
 import { emitPulse } from '../../../shared/neuralFieldBus'
 import { humanizeNodeId } from '../../../shared/humanizeId'
@@ -11,6 +11,7 @@ import { DueForecast } from '../components/DueForecast'
 import { DendriteDivider } from '../components/ui/DendriteDivider'
 import { StatBlock } from '../components/ui/StatBlock'
 import { Button } from '../components/ui/Button'
+import { EnvironmentSteps } from '../components/EnvironmentSteps'
 
 const LAST_SEEN_STREAK_KEY = 'engram-desktop:last-seen-streak-days'
 const LAST_SEEN_DUE_KEY = 'engram-desktop:last-seen-due-now'
@@ -53,6 +54,11 @@ interface HomeViewProps {
 export function HomeView({ onGoReview, onGoCoach, onGoTopic, onNewTopic }: HomeViewProps) {
   const [stats, setStats] = useState<EngramStats | null>(null)
   const [topics, setTopics] = useState<TopicSummary[] | null>(null)
+  // Only consulted for the empty-topics guided card below — EnvironmentGate
+  // already blocks the app on a broken environment, but its "Continue anyway"
+  // escape hatch (or the environment breaking again later) can land you here
+  // with topics still unmapped and Claude/the plugin still not resolvable.
+  const [envCheck, setEnvCheck] = useState<EnvironmentCheckResult | null>(null)
   const [flashback, setFlashback] = useState<Flashback | null>(null)
   const [toastQueue, setToastQueue] = useState<AchievementDef[]>([])
   const [forecast, setForecast] = useState<number[] | null>(null)
@@ -96,6 +102,7 @@ export function HomeView({ onGoReview, onGoCoach, onGoTopic, onNewTopic }: HomeV
       }
     })
     window.engram.topics().then(setTopics)
+    window.engram.environmentCheck().then(setEnvCheck)
 
     // "On this day" — the most recent day with real activity that's old enough to
     // feel like a callback rather than "yesterday" (a strict exact-N-days-ago
@@ -154,6 +161,7 @@ export function HomeView({ onGoReview, onGoCoach, onGoTopic, onNewTopic }: HomeV
   }, [])
 
   const inProgress = topics?.filter((t) => t.states.new > 0 || t.states.learning > 0) ?? []
+  const envBroken = envCheck !== null && !(envCheck.claudeOk && envCheck.pluginOk)
 
   return (
     <div className="p-8 flex flex-col gap-8 w-full h-full overflow-y-auto">
@@ -225,7 +233,25 @@ export function HomeView({ onGoReview, onGoCoach, onGoTopic, onNewTopic }: HomeV
         <h2 className="text-sm font-medium text-[var(--color-text-dim)] uppercase tracking-wide">Continue learning</h2>
         <DendriteDivider className="mb-3" />
         {topics === null && <SkeletonGrid count={3} />}
-        {topics !== null && topics.length === 0 && (
+        {topics !== null && topics.length === 0 && envBroken && envCheck && (
+          <div className="flex flex-col items-start gap-3 py-10 w-full max-w-lg">
+            <div className="fig-caption">Fig. — setup needed before your first topic</div>
+            <div className="font-[var(--font-serif)] text-[length:var(--text-display)] text-[var(--color-text-primary)]">
+              Two things first.
+            </div>
+            <p className="text-sm text-[var(--color-text-dim)] max-w-md">
+              Engram Desktop scripts the Claude Code CLI directly — both of these need to be in place before a topic
+              can start.
+            </p>
+            <div className="w-full">
+              <EnvironmentSteps result={envCheck} />
+            </div>
+            <Button variant="ghost" onClick={() => window.engram.environmentCheck().then(setEnvCheck)}>
+              Check again
+            </Button>
+          </div>
+        )}
+        {topics !== null && topics.length === 0 && !envBroken && (
           <div className="flex flex-col items-start gap-3 py-10">
             <div className="fig-caption">Fig. — an unmarked atlas</div>
             <div className="font-[var(--font-serif)] text-[length:var(--text-display)] text-[var(--color-text-primary)]">Begin your atlas</div>

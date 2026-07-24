@@ -324,13 +324,13 @@ export default function App() {
           )}
           {(visited.dashboard || view === 'dashboard') && (
             <KeepMounted active={view === 'dashboard'}>
-              <DashboardView />
+              <DashboardView onNewTopic={() => setView('learn')} />
             </KeepMounted>
           )}
           {view === 'artifacts' && (
             <div key="artifacts" className="view-transition h-full">
               <Suspense fallback={<div className="h-full p-6"><SkeletonGrid /></div>}>
-                <ArtifactGalleryView />
+                <ArtifactGalleryView onGoLearn={() => setView('learn')} />
               </Suspense>
             </div>
           )}

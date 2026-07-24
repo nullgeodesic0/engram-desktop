@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import type { EnvironmentCheckResult } from '../../../shared/types'
+import { EnvironmentSteps } from './EnvironmentSteps'
 
 /** Blocks the app behind a real diagnostic screen if either dependency this whole
  * app is built on isn't resolvable — the Engram plugin, or the `claude` CLI itself
@@ -37,43 +38,7 @@ export function EnvironmentGate({ children }: { children: ReactNode }) {
           </p>
         </div>
 
-        <div className="flex flex-col gap-3">
-          <div className={`panel px-4 py-3 flex items-start gap-3 ${result.claudeOk ? '' : 'border-[var(--color-ink-danger-dim)]'}`}>
-            <span className={result.claudeOk ? 'text-[var(--color-ink-warm)]' : 'text-[var(--color-ink-danger)]'}>
-              {result.claudeOk ? '✓' : '✕'}
-            </span>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm text-[var(--color-text-primary)]">Claude Code CLI</div>
-              {result.claudeOk ? (
-                <div className="text-xs text-[var(--color-text-faint)] mt-0.5 label-data truncate">{result.claudePath}</div>
-              ) : (
-                <div className="text-xs text-[var(--color-text-dim)] mt-1">
-                  Couldn’t run <span className="label-data">claude --version</span>. Install it from{' '}
-                  <span className="label-data">claude.ai/code</span> and make sure you’re logged in, then relaunch.
-                  {result.claudeError && <div className="label-data text-[var(--color-text-faint)] mt-1 truncate">{result.claudeError}</div>}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className={`panel px-4 py-3 flex items-start gap-3 ${result.pluginOk ? '' : 'border-[var(--color-ink-danger-dim)]'}`}>
-            <span className={result.pluginOk ? 'text-[var(--color-ink-warm)]' : 'text-[var(--color-ink-danger)]'}>
-              {result.pluginOk ? '✓' : '✕'}
-            </span>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm text-[var(--color-text-primary)]">Engram plugin</div>
-              {result.pluginOk ? (
-                <div className="text-xs text-[var(--color-text-faint)] mt-0.5 label-data">v{result.pluginVersion}</div>
-              ) : (
-                <div className="text-xs text-[var(--color-text-dim)] mt-1">
-                  Not found under <span className="label-data">~/.claude/plugins/cache/engram</span>. Install the Engram
-                  plugin in Claude Code, then relaunch.
-                  {result.pluginError && <div className="label-data text-[var(--color-text-faint)] mt-1 truncate">{result.pluginError}</div>}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+        <EnvironmentSteps result={result} />
 
         <div className="flex items-center justify-between">
           <button

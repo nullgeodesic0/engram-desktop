@@ -10,6 +10,7 @@ import { CalibrationScatter } from '../components/charts/CalibrationScatter'
 import { humanizeNodeId } from '../../../shared/humanizeId'
 import { StatBlock } from '../components/ui/StatBlock'
 import { DendriteDivider } from '../components/ui/DendriteDivider'
+import { Button } from '../components/ui/Button'
 import { allPicks } from '../shared/calibrationStore'
 import { friendlyErrorText } from '../shared/friendlyError'
 
@@ -48,7 +49,13 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   )
 }
 
-export function DashboardView() {
+interface DashboardViewProps {
+  /** Routes the first-run empty state's one action to the Learn view — every
+   * stat below reads as noise (all zeros, no history) before a single topic exists. */
+  onNewTopic?: () => void
+}
+
+export function DashboardView({ onNewTopic }: DashboardViewProps = {}) {
   const [stats, setStats] = useState<EngramStats | null>(null)
   const [history, setHistory] = useState<ReceiptsHistory | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -109,6 +116,20 @@ export function DashboardView() {
         </div>
       </header>
 
+      {stats.topics.length === 0 ? (
+        <div className="flex flex-col items-start gap-3 py-10">
+          <div className="fig-caption">Fig. — nothing to coach yet</div>
+          <div className="font-[var(--font-serif)] text-[length:var(--text-display)] text-[var(--color-text-primary)]">
+            Coaching starts once you do.
+          </div>
+          <p className="text-sm text-[var(--color-text-dim)] max-w-md">
+            Loop closure, retention, calibration, and momentum all read from real sessions — they’ll fill in once your
+            first topic has some.
+          </p>
+          {onNewTopic && <Button variant="primary" onClick={onNewTopic}>Start your first topic</Button>}
+        </div>
+      ) : (
+        <>
       {history === null && (
         <div className="grid grid-cols-2 gap-4">
           {Array.from({ length: 2 }).map((_, i) => (
@@ -317,6 +338,8 @@ export function DashboardView() {
             {stats.misconceptions_open} open — surfaced during your next matching session.
           </div>
         </Section>
+      )}
+        </>
       )}
     </div>
   )
