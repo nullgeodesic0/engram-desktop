@@ -91,7 +91,7 @@ The tool surface comes from `app/src/main/session/permissionConfig.ts`:
 - `--append-system-prompt` carries `APPEND_SYSTEM_PROMPT` from
   `permissionConfig.ts`, which explains to the model that it's running headless
   under Engram Desktop, that the native `AskUserQuestion` tool doesn't exist here
-  and `ask_user_question` replaces it, and documents the other seven advisory
+  and `ask_user_question` replaces it, and documents the other eight advisory
   bridge tools. When a topic has per-topic extra instructions or context files
   (see Data locations below), `sessionHandlers.ts`'s `buildExtraInstructions()`
   appends them to this same string — never a separate prompt, so the addition is
@@ -166,7 +166,7 @@ electron-builder ships the bundle via `extraResources`, read back at runtime fro
 `process.resourcesPath` (`permissionConfig.ts`'s `resolveBridgeWorkerPath()`); in
 dev/`build`+`start` it resolves straight from the source tree instead.
 
-### The eight bridge tools
+### The nine bridge tools
 
 All registered in `mcpBridgeWorker.mjs`, namespaced `mcp__engram-ui-bridge__<name>`:
 
@@ -180,10 +180,11 @@ All registered in `mcpBridgeWorker.mjs`, namespaced `mcp__engram-ui-bridge__<nam
 | `show_figure` | Advisory: push a small markdown figure card (table, list, callout) into the transcript, set apart from prose. |
 | `suggest_action` | Advisory: offer up to 3 one-click action chips (open_explorable, show_on_map, go_review, prefill — prefill never auto-sends). |
 | `progress_note` | Advisory: a one-line session-plan status shown under the header. |
+| `annotate_node` | Advisory: LaTeX display overrides for a Topic Map node (`latex_label` for the plate caption, `latex_claim` for the drawer/modal claim) — persisted app-side in `map-annotations.json`, never engram's own graph files. |
 
 Only `ask_user_question` genuinely blocks — its handler awaits the HTTP relay's
 response before returning. Every other tool is fire-and-forget: `render_beat` posts
-inline to its own `/beat` endpoint, while the remaining six advisory tools funnel
+inline to its own `/beat` endpoint, while the remaining seven advisory tools funnel
 through a shared `fireUi()` helper that POSTs to `/ui`. Both paths immediately return
 `{ content: [{ type: 'text', text: 'ok' }] }` without waiting, and the POST itself is
 `.catch(() => {})`'d — a relay failure never blocks or breaks the dialogue. The system prompt built in `permissionConfig.ts` reiterates this:
@@ -205,16 +206,19 @@ scoped by session id:
   `ask_user_question` tool_use call genuinely block on a real human click.
 - `POST /bridge/:sessionId/beat` — forwards the body plus `sessionId` to the renderer
   as a `bridge:beat` event and replies `{ ok: true }` immediately (no blocking).
-- `POST /bridge/:sessionId/ui` — the generic fire-and-forget channel for the other six
+- `POST /bridge/:sessionId/ui` — the generic fire-and-forget channel for the other seven
   advisory tools; forwards `{ tool, payload, sessionId }` to the renderer as a
-  `bridge:ui` event and replies `{ ok: true }` immediately.
+  `bridge:ui` event and replies `{ ok: true }` immediately. `annotate_node` is the one
+  exception that also persists server-side: the handler shape-guards the payload
+  (string types, length caps, topic/node id charset) and, if it passes, writes it to
+  `map-annotations.json` before forwarding the event on.
 
 The wire shapes are the shared contract in `app/src/shared/bridgeProtocol.ts`
 (`BridgeAskRequest`, `BridgeAskResponse`, `BridgeBeatRequest`, `BridgeUiRequest`).
 
 ### Advisory-only contract and shape-guarding
 
-Everything except `ask_user_question` is explicitly advisory: none of the six
+Everything except `ask_user_question` is explicitly advisory: none of the eight
 one-way UI tools can block or fail the session, and their payloads are typed only
 as `Record<string, unknown>` at the protocol boundary. `bridgeProtocol.ts` notes
 directly on `BridgeUiRequest` that `payload` is "that tool's zod-validated input"
@@ -263,6 +267,11 @@ conveniences only:
   the plugin's files are never forked, only extended via
   `--append-system-prompt`, same principle as the MCP bridge's system-prompt
   addition.
+- `map-annotations.json` — `{ topicId -> { nodeId -> { latexLabel?, latexClaim? } } }`
+  (`app/src/main/session/mapAnnotations.ts`): LaTeX display overrides for Topic Map
+  nodes, set by the advisory `annotate_node` bridge tool. Same not-part-of-the-plugin's-
+  schema principle as `topic-settings.json` above — never written into engram's own
+  `graphs/*.json`.
 - `session-index.json` — `{ key -> SessionIndexEntry[] }`
   (`app/src/main/session/sessionIndex.ts`), an append-only history of session ids
   per key (a topic id for `learn`, or the literal kind for `review`/`coach`), used

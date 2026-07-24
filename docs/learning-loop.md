@@ -54,9 +54,9 @@ Every UI-driving tool except `ask_user_question` is one-way and
 non-blocking. In `mcpBridgeWorker.mjs`, `render_beat` posts to its own
 `/bridge/:id/beat` endpoint with the same fire-and-forget shape — an inline
 `postJson()` call that is `.catch(() => {})`'d and returns before the relay
-responds — while the remaining six advisory tools (`session_phase`,
-`beat_outcome`, `spotlight_node`, `show_figure`, `suggest_action`, and
-`progress_note`) funnel through a shared `fireUi()` helper that POSTs the
+responds — while the remaining seven advisory tools (`session_phase`,
+`beat_outcome`, `spotlight_node`, `show_figure`, `suggest_action`,
+`progress_note`, and `annotate_node`) funnel through a shared `fireUi()` helper that POSTs the
 same way to the generic `/bridge/:id/ui` endpoint. Either path returns
 immediately without awaiting the response, so a relay failure never blocks
 or breaks the dialogue. `permissionConfig.ts`'s `APPEND_SYSTEM_PROMPT` tells the model
