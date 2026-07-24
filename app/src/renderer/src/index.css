@@ -198,6 +198,21 @@
   border-radius: 6px;
 }
 
+/* SessionHistoryDrawer anchored open — a one-shot warm wash on the timeline
+ * item a ProvenanceEvent's anchor pointed to, so a deep-link into history
+ * reads as landing somewhere specific rather than teleporting silently. Same
+ * treatment as annotation-ink-in, decoupled since the two mark unrelated
+ * events. */
+@keyframes provenance-highlight {
+  0% { background-color: color-mix(in srgb, var(--color-ink-warm) 20%, transparent); }
+  100% { background-color: transparent; }
+}
+
+.provenance-highlight {
+  animation: provenance-highlight calc(var(--dur-base) * 2) var(--ease-out-soft);
+  border-radius: 6px;
+}
+
 /* Interaction vocabulary — one set of rules for every hover/press micro-interaction
  * in the app, built on the two motion tokens declared in @theme above:
  *   - Rows/cards (interactive .panel surfaces, list rows): background-color +
