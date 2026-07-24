@@ -72,7 +72,7 @@ export function RetentionCurve({ data }: { data: WeekRetention[] }) {
           y={toY(0) + 3}
           textAnchor="end"
           className="label-data"
-          style={{ fontSize: 9, fontVariantNumeric: 'tabular-nums', fill: 'var(--color-text-dim)' }}
+          style={{ fontSize: 9, fill: 'var(--color-text-dim)' }}
         >
           0%
         </text>
