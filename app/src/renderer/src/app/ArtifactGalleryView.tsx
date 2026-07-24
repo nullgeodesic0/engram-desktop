@@ -5,16 +5,22 @@ import { SkeletonCard } from '../components/Skeleton'
 import { InkNode } from '../components/ui/InkNode'
 import { Button } from '../components/ui/Button'
 import { friendlyErrorText } from '../shared/friendlyError'
+import { ExplorableViewer } from '../components/ExplorableViewer'
 
 interface ArtifactGalleryViewProps {
   /** Routes the empty state's one action to Learn — explorables are only ever
    * built during a live session, so that's the one thing to do about "none yet". */
   onGoLearn?: () => void
+  /** "Jump to node" inside the viewer routes through here — the gallery never
+   * navigates itself, App.tsx's goToNode owns switching to the Topic Map and
+   * deep-linking the node modal open. */
+  onOpenNode?: (topicId: string, nodeId: string) => void
 }
 
-export function ArtifactGalleryView({ onGoLearn }: ArtifactGalleryViewProps = {}) {
+export function ArtifactGalleryView({ onGoLearn, onOpenNode }: ArtifactGalleryViewProps = {}) {
   const [artifacts, setArtifacts] = useState<ArtifactEntry[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [viewing, setViewing] = useState<ArtifactEntry | null>(null)
 
   useEffect(() => {
     window.engram
@@ -69,7 +75,7 @@ export function ArtifactGalleryView({ onGoLearn }: ArtifactGalleryViewProps = {}
         {artifacts?.map((a) => (
           <button
             key={`${a.topic}:${a.node}`}
-            onClick={() => a.exists && window.engram.openArtifact(a.artifact)}
+            onClick={() => a.exists && setViewing(a)}
             disabled={!a.exists}
             className={`focus-ring group panel text-left px-4 py-3 flex flex-col gap-2 transition-colors duration-[var(--dur-base)] ${
               a.exists ? 'hover:bg-[var(--color-surface-2)] hover:border-[var(--color-ink-warm-dim)]' : 'opacity-40 cursor-not-allowed'
@@ -90,6 +96,15 @@ export function ArtifactGalleryView({ onGoLearn }: ArtifactGalleryViewProps = {}
           </button>
         ))}
       </div>
+
+      {viewing && (
+        <ExplorableViewer
+          path={viewing.artifact}
+          nodeId={viewing.node}
+          onClose={() => setViewing(null)}
+          onJumpToNode={onOpenNode ? (nodeId) => onOpenNode(viewing.topic, nodeId) : undefined}
+        />
+      )}
     </div>
   )
 }

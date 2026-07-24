@@ -36,6 +36,8 @@ const engramApi = {
   nodeProvenance: (topic: string): Promise<Record<string, NodeProvenance>> =>
     ipcRenderer.invoke('engram:nodeProvenance', topic),
   openArtifact: (absolutePath: string): Promise<void> => ipcRenderer.invoke('engram:openArtifact', absolutePath),
+  openExplorable: (rawPath: string): Promise<{ url: string; absolutePath: string } | { error: string }> =>
+    ipcRenderer.invoke('engram:openExplorable', rawPath),
   pickFiles: (): Promise<string[]> => ipcRenderer.invoke('dialog:pickFiles'),
   exportLearningData: (): Promise<{ canceled: boolean; path?: string }> => ipcRenderer.invoke('engram:exportData'),
   environmentCheck: (): Promise<EnvironmentCheckResult> => ipcRenderer.invoke('engram:environmentCheck'),
