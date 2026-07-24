@@ -14,9 +14,10 @@ export function CopyButton({ text, alwaysVisible = false }: { text: string; alwa
         setTimeout(() => setCopied(false), 1200)
       }}
       title="Copy"
+      aria-label={copied ? 'Copied' : 'Copy'}
       className={`focus-ring no-press ${alwaysVisible ? '' : 'opacity-0 group-hover:opacity-100'} transition-opacity duration-[var(--dur-fast)] shrink-0 text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] text-xs`}
     >
-      {copied ? '✓' : '⧉'}
+      <span aria-hidden="true">{copied ? '✓' : '⧉'}</span>
     </button>
   )
 }

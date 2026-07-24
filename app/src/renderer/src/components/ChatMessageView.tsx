@@ -41,9 +41,10 @@ export const ChatMessageView = memo(function ChatMessageView({ message, onEditRe
           <button
             onClick={() => onEditResend(message.text, message.attachments ?? [])}
             title="Edit & resend as a follow-up — the original stays in history untouched"
+            aria-label="Edit and resend"
             className="focus-ring no-press opacity-0 group-hover:opacity-100 transition-opacity duration-[var(--dur-fast)] mt-3 text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] text-xs shrink-0"
           >
-            ↺
+            <span aria-hidden="true">↺</span>
           </button>
         )}
         <div className="panel px-4 py-3 max-w-[92%] bg-[var(--color-surface-3)] flex flex-col gap-2">

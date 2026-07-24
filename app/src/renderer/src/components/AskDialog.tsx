@@ -53,7 +53,7 @@ export function AskDialog({ request, onAnswer }: AskDialogProps) {
                     onClick={() => onAnswer([opt.label])}
                     className="focus-ring panel px-3 py-3 flex flex-col items-center gap-1.5 text-center hover:bg-[var(--color-surface-3)] hover:border-[var(--color-ink-warm-dim)] transition-colors duration-[var(--dur-base)]"
                   >
-                    <span className="text-lg leading-none" style={{ color: style.color }}>
+                    <span className="text-lg leading-none" aria-hidden="true" style={{ color: style.color }}>
                       {style.icon}
                     </span>
                     <div className="text-sm text-[var(--color-text-primary)]">{opt.label}</div>

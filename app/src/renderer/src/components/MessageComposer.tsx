@@ -53,8 +53,12 @@ export function MessageComposer({
               className="label-data text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-surface-3)] text-[var(--color-text-dim)] flex items-center gap-1"
             >
               📎 {fileName(path)}
-              <button onClick={() => onRemoveAttachment(path)} className="focus-ring hover:text-[var(--color-ink-danger)]">
-                ✕
+              <button
+                onClick={() => onRemoveAttachment(path)}
+                aria-label={`Remove attachment ${fileName(path)}`}
+                className="focus-ring hover:text-[var(--color-ink-danger)]"
+              >
+                <span aria-hidden="true">✕</span>
               </button>
             </span>
           ))}
@@ -74,6 +78,7 @@ export function MessageComposer({
             }
           }}
           placeholder={placeholder}
+          aria-label={placeholder}
           rows={chamber ? 12 : markdownPreview ? 8 : 4}
           className="focus-ring panel px-4 py-3 text-sm bg-[var(--color-surface-2)] text-[var(--color-text-primary)] resize-none w-full"
         />

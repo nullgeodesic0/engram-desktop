@@ -20,7 +20,7 @@ export const BeatCard = memo(function BeatCard({ beat, text }: { beat: ProseBeat
     <div className="group panel px-5 py-4 flex flex-col gap-2 border-l-2" style={{ borderLeftColor: style.accent }}>
       <div className="flex items-center justify-between gap-2 text-xs uppercase tracking-wide" style={{ color: style.accent }}>
         <div className="flex items-center gap-2">
-          <span className="w-4 shrink-0 flex justify-center">{style.icon}</span>
+          <span className="w-4 shrink-0 flex justify-center" aria-hidden="true">{style.icon}</span>
           <span>{style.label}</span>
         </div>
         <CopyButton text={text} />

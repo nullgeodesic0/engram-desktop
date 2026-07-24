@@ -184,17 +184,19 @@ function TopicCard({
             onStartFresh()
           }}
           title="Abandon the in-progress session and start this topic over from scratch"
+          aria-label="Start topic over"
           className="focus-ring shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-[var(--color-text-faint)] hover:text-[var(--color-ink-warm)] hover:bg-[var(--color-surface-3)]"
         >
-          ↻
+          <span aria-hidden="true">↻</span>
         </button>
       )}
       <button
         onClick={onSettings}
         title="Topic settings"
+        aria-label="Topic settings"
         className="focus-ring shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-3)]"
       >
-        ⚙
+        <span aria-hidden="true">⚙</span>
       </button>
     </div>
   )
@@ -1172,7 +1174,7 @@ export function LearnSessionView({
               </details>
             )}
           </div>
-          <Button variant="ghost" onClick={() => setError(null)} className="shrink-0 px-2 py-1">
+          <Button variant="ghost" onClick={() => setError(null)} aria-label="Dismiss error" className="shrink-0 px-2 py-1">
             ×
           </Button>
         </div>
