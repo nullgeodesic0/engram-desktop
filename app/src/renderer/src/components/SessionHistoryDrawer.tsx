@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { SessionIndexEntry } from '../../../shared/types'
 import type { ChatMessage } from '../../../shared/chatMessages'
 import { parseGradeResult, parseGradeResults, type GradeResult } from '../../../shared/gradeResult'
@@ -20,6 +20,10 @@ interface GradeBatch {
    * right after the turn that produced it. */
   atIndex: number
   results: GradeResult[]
+  /** The raw transcript-line index of the tool_result entry this batch was
+   * parsed from — same convention as `ProvenanceEvent.anchor` (see
+   * shared/types.ts), so an anchor can be matched to a batch by equality. */
+  sourceIndex: number
 }
 
 /** Rebuilds both the chat transcript AND its grade-receipt cards from a raw
@@ -31,21 +35,31 @@ interface GradeBatch {
  * (Review's `rate`) parsers on every tool_result — both parsers already
  * validate shape strictly (a `rating` in a known enum, a string `node`), so
  * this doesn't require re-deriving which Bash command produced it. */
-function buildHistoryTimeline(rawLines: unknown[]): { messages: ChatMessage[]; grades: GradeBatch[] } {
+function buildHistoryTimeline(
+  rawLines: unknown[],
+): { messages: ChatMessage[]; grades: GradeBatch[]; messageSourceIndex: number[] } {
   const lines = rawLines as TranscriptLine[]
   const messages: ChatMessage[] = []
+  // Parallel to `messages` — the raw transcript-line index each message was
+  // first created from (see GradeBatch.sourceIndex for the matching grade-side
+  // field, and ProvenanceEvent.anchor in shared/types.ts for the convention
+  // both are keyed against). An assistant message that grows by merging text
+  // blocks from later lines keeps the index of the line that STARTED it.
+  const messageSourceIndex: number[] = []
   const grades: GradeBatch[] = []
   let seenFirstUser = false
   let idCounter = 0
   let gradeSeq = 0
 
-  for (const line of lines) {
+  for (let idx = 0; idx < lines.length; idx++) {
+    const line = lines[idx]
     if (line.type === 'user' && typeof line.message?.content === 'string') {
       if (!seenFirstUser) {
         seenFirstUser = true
         continue // the app's own synthetic kickoff — not a real human message
       }
       messages.push({ id: `t${idCounter++}`, role: 'user', text: line.message.content })
+      messageSourceIndex.push(idx)
       continue
     }
 
@@ -57,6 +71,7 @@ function buildHistoryTimeline(rawLines: unknown[]): { messages: ChatMessage[]; g
           last.text += block.text
         } else {
           messages.push({ id: `t${idCounter++}`, role: 'assistant', text: block.text })
+          messageSourceIndex.push(idx)
         }
       }
       continue
@@ -71,13 +86,13 @@ function buildHistoryTimeline(rawLines: unknown[]): { messages: ChatMessage[]; g
           return single ? [single] : []
         })()
         if (results.length > 0) {
-          grades.push({ id: `g${gradeSeq++}`, atIndex: messages.length, results })
+          grades.push({ id: `g${gradeSeq++}`, atIndex: messages.length, results, sourceIndex: idx })
         }
       }
     }
   }
 
-  return { messages, grades }
+  return { messages, grades, messageSourceIndex }
 }
 
 function formatWhen(iso: string): string {
@@ -101,34 +116,59 @@ export function SessionHistoryDrawer({
   historyKey,
   open,
   onClose,
+  initialSessionId,
+  anchorIndex,
 }: {
   /** A topic id for Learn history, or the literal string 'review' for Review
    * history — mirrors how `sessionHistoryFor`'s key space works server-side. */
   historyKey: string
   open: boolean
   onClose: () => void
+  /** Opens directly on this sitting instead of "most recent" — provenance
+   * deep-links pass the sessionId a ProvenanceEvent came from. Ignored (falls
+   * back to the default "most recent" behavior) if the id isn't in this
+   * history's entry list. */
+  initialSessionId?: string
+  /** The transcript-line index (ProvenanceEvent.anchor) to scroll to and
+   * warm-highlight, once, on the initial open of `initialSessionId`. Has no
+   * effect without `initialSessionId`; a miss (no timeline item at or before
+   * this index) just leaves the view at the top of the sitting. */
+  anchorIndex?: number
 }) {
   const [entries, setEntries] = useState<SessionIndexEntry[] | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [timeline, setTimeline] = useState<{ messages: ChatMessage[]; grades: GradeBatch[] } | null>(null)
+  const [timeline, setTimeline] = useState<{
+    messages: ChatMessage[]
+    grades: GradeBatch[]
+    messageSourceIndex: number[]
+  } | null>(null)
   const [loadingTranscript, setLoadingTranscript] = useState(false)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  // Guards the anchor scroll/highlight to a single attempt per drawer open —
+  // without it, StrictMode's double-invoked effects (or a second `timeline`
+  // update from re-selecting the same sitting) would re-trigger the scroll.
+  const anchorAppliedRef = useRef(false)
 
   useEffect(() => {
     if (!open) return
     setEntries(null)
     setSelectedId(null)
     setTimeline(null)
+    anchorAppliedRef.current = false
     const fetchEntries =
       historyKey === 'review' ? window.engram.sessionHistoryFor('review') : window.engram.sessionHistoryFor('learn', historyKey)
     fetchEntries.then((list) => {
       setEntries(list)
-      // Most-recent sitting selected by default — same "land on the latest"
-      // convenience as any other history browser; nothing here touches the
+      // Anchored open lands on the requested sitting; otherwise most-recent
+      // sitting is selected by default — same "land on the latest"
+      // convenience as any other history browser. Nothing here touches the
       // live session that opened the drawer.
-      if (list.length > 0) selectEntry(list[0].sessionId)
+      const target =
+        initialSessionId && list.some((e) => e.sessionId === initialSessionId) ? initialSessionId : (list[0]?.sessionId ?? null)
+      if (target) selectEntry(target)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, historyKey])
+  }, [open, historyKey, initialSessionId])
 
   function selectEntry(id: string) {
     setSelectedId(id)
@@ -139,6 +179,44 @@ export function SessionHistoryDrawer({
       setLoadingTranscript(false)
     })
   }
+
+  // One-shot anchor scroll + highlight, once the anchored sitting's timeline
+  // has painted. Every timeline item that can be jumped to carries a
+  // `data-anchor-index` (see render below); we look for an exact match to
+  // `anchorIndex` first (the common case — the anchor IS a grade card's own
+  // tool_result entry), then fall back to the nearest EARLIER item, then give
+  // up silently and leave the view at the top — anchor misses never error.
+  useEffect(() => {
+    if (!timeline || anchorAppliedRef.current) return
+    if (anchorIndex === undefined || selectedId === null || selectedId !== initialSessionId) return
+    anchorAppliedRef.current = true
+    const raf = requestAnimationFrame(() => {
+      const container = scrollRef.current
+      if (!container) return
+      let target: HTMLElement | null = null
+      let bestIndex = -Infinity
+      for (const node of container.querySelectorAll<HTMLElement>('[data-anchor-index]')) {
+        const idx = Number(node.dataset.anchorIndex)
+        if (Number.isNaN(idx)) continue
+        if (idx === anchorIndex) {
+          target = node
+          break
+        }
+        if (idx < anchorIndex && idx > bestIndex) {
+          bestIndex = idx
+          target = node
+        }
+      }
+      // The wrapper is `display:contents` (pure grouping, no box of its own)
+      // so the actual scroll/highlight target is its rendered child.
+      const el = target?.firstElementChild as HTMLElement | null
+      if (!el) return
+      el.scrollIntoView({ block: 'center' })
+      el.classList.add('provenance-highlight')
+      el.addEventListener('animationend', () => el.classList.remove('provenance-highlight'), { once: true })
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [timeline, selectedId, initialSessionId, anchorIndex])
 
   const selectedEntry = entries?.find((e) => e.sessionId === selectedId) ?? null
 
@@ -173,22 +251,33 @@ export function SessionHistoryDrawer({
               read-only · sitting of {formatWhen(selectedEntry.startedAt)}
             </div>
           )}
-          <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-5 pr-1">
+          <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-5 pr-1">
             {selectedId === null && <div className="fig-caption px-1">Select a sitting to view its transcript.</div>}
             {loadingTranscript && <div className="fig-caption px-1">reading transcript…</div>}
             {timeline && (
               <>
-                {timeline.grades.filter((g) => g.atIndex === 0).flatMap((g) => g.results).map((r, i) => (
-                  <GradeResultCard key={`g0-${i}`} result={r} />
-                ))}
+                {timeline.grades
+                  .filter((g) => g.atIndex === 0)
+                  .map((g) => (
+                    <div key={g.id} className="contents" data-anchor-index={g.sourceIndex}>
+                      {g.results.map((r, j) => (
+                        <GradeResultCard key={`${g.id}-${j}`} result={r} />
+                      ))}
+                    </div>
+                  ))}
                 {timeline.messages.map((m, i) => (
                   <div key={m.id} className="contents">
-                    <ChatMessageView message={m} />
+                    <div className="contents" data-anchor-index={timeline.messageSourceIndex[i]}>
+                      <ChatMessageView message={m} />
+                    </div>
                     {timeline.grades
                       .filter((g) => g.atIndex === i + 1)
-                      .flatMap((g) => g.results.map((r, j) => ({ key: `${g.id}-${j}`, result: r })))
-                      .map(({ key, result }) => (
-                        <GradeResultCard key={key} result={result} />
+                      .map((g) => (
+                        <div key={g.id} className="contents" data-anchor-index={g.sourceIndex}>
+                          {g.results.map((r, j) => (
+                            <GradeResultCard key={`${g.id}-${j}`} result={r} />
+                          ))}
+                        </div>
                       ))}
                   </div>
                 ))}
