@@ -342,7 +342,12 @@ export function GraphView({ graph, selected, onSelect, onOpen, query, retrievabi
   }, [selected, plate])
 
   return (
-    <div ref={containerRef} className="relative h-full w-full overflow-hidden">
+    <div
+      ref={containerRef}
+      className="relative h-full w-full overflow-hidden"
+      aria-label="Topic node map — mouse/trackpad only in this pass (click to select, drag to pan, scroll to zoom, double-click to open). Use the command palette (Cmd/Ctrl+K) to reach any node by keyboard."
+      role="img"
+    >
       <svg className="h-full w-full">
         <defs>
           <filter id="plate-blur">

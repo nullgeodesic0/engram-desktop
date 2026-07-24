@@ -192,13 +192,15 @@ export default function App() {
             </div>
           )}
         </div>
-        <nav className="flex flex-col gap-0.5 px-2">
+        <nav className="flex flex-col gap-0.5 px-2" aria-label="Primary">
           {NAV.map((n) => {
             const active = view === n.id
             return (
               <button
                 key={n.id}
                 title={collapsed ? `${n.label} (⌘${n.hint})` : undefined}
+                aria-label={n.label}
+                aria-current={active ? 'page' : undefined}
                 onClick={() => {
                   setView(n.id)
                   if (narrow) setPinnedOpen(false)
@@ -212,7 +214,7 @@ export default function App() {
                 }`}
               >
                 {active && (
-                  <span className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-0.5 rounded-full bg-[var(--color-ink-warm)]" />
+                  <span className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-0.5 rounded-full bg-[var(--color-ink-warm)]" aria-hidden="true" />
                 )}
                 <svg
                   width="16"
@@ -224,6 +226,7 @@ export default function App() {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   className="shrink-0 opacity-80 group-hover:opacity-100"
+                  aria-hidden="true"
                 >
                   {n.icon}
                 </svg>
@@ -255,9 +258,10 @@ export default function App() {
         {narrow && (
           <button
             onClick={() => setPinnedOpen((v) => !v)}
+            aria-label={pinnedOpen ? 'Collapse navigation' : 'Expand navigation'}
             className="focus-ring mt-auto mb-3 mx-2 flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-2)]"
           >
-            <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+            <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
               {pinnedOpen ? <path d="M12.5 5 7.5 10l5 5" /> : <path d="M7.5 5 12.5 10l-5 5" />}
             </svg>
             {!collapsed && (pinnedOpen ? 'Collapse' : 'Expand')}

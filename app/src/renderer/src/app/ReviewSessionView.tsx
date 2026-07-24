@@ -350,7 +350,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
               </details>
             )}
           </div>
-          <Button variant="ghost" onClick={() => setError(null)} className="shrink-0 px-2 py-1">
+          <Button variant="ghost" onClick={() => setError(null)} aria-label="Dismiss error" className="shrink-0 px-2 py-1">
             ×
           </Button>
         </div>

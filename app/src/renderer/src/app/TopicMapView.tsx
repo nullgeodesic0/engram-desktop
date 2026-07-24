@@ -227,6 +227,7 @@ export function TopicMapView({
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search nodes…"
+                aria-label="Search nodes"
                 className="focus-ring w-full panel px-3 py-1.5 text-xs text-[var(--color-text-primary)] placeholder:text-[var(--color-text-faint)] bg-[var(--color-surface)]/90 backdrop-blur"
               />
             </div>
@@ -250,8 +251,12 @@ export function TopicMapView({
             )}
 
             {/* Legend — glyph key mirroring the plate's own ink states. */}
-            <div className="absolute bottom-3 left-3 panel bg-[var(--color-surface)]/90 backdrop-blur px-3 py-2 flex flex-col gap-1.5 text-[10px] label-data text-[var(--color-text-dim)]">
-              <svg width={0} height={0} style={{ position: 'absolute' }}>
+            <div
+              role="group"
+              aria-label="Map legend"
+              className="absolute bottom-3 left-3 panel bg-[var(--color-surface)]/90 backdrop-blur px-3 py-2 flex flex-col gap-1.5 text-[10px] label-data text-[var(--color-text-dim)]"
+            >
+              <svg width={0} height={0} style={{ position: 'absolute' }} aria-hidden="true">
                 <defs>
                   <clipPath id="legend-half-clip">
                     <rect x={-10} y={0} width={20} height={10} />
@@ -259,13 +264,13 @@ export function TopicMapView({
                 </defs>
               </svg>
               <div className="flex items-center gap-2">
-                <svg width={18} height={18} viewBox="-9 -9 18 18">
+                <svg width={18} height={18} viewBox="-9 -9 18 18" aria-hidden="true">
                   <path d={cellBodyPath('legend-new', 6)} fill="none" stroke="var(--color-ink-cool-dim)" strokeWidth={1.2} />
                 </svg>
                 not started
               </div>
               <div className="flex items-center gap-2">
-                <svg width={18} height={18} viewBox="-9 -9 18 18">
+                <svg width={18} height={18} viewBox="-9 -9 18 18" aria-hidden="true">
                   <path d={cellBodyPath('legend-learning', 6)} fill="none" stroke="var(--color-ink-cool)" strokeWidth={1.2} />
                   <path
                     d={cellBodyPath('legend-learning', 6)}
@@ -277,26 +282,26 @@ export function TopicMapView({
                 encoding
               </div>
               <div className="flex items-center gap-2">
-                <svg width={18} height={18} viewBox="-9 -9 18 18">
+                <svg width={18} height={18} viewBox="-9 -9 18 18" aria-hidden="true">
                   <path d={cellBodyPath('legend-review', 6)} fill="var(--color-ink-warm)" fillOpacity={0.85} />
                 </svg>
                 consolidated
               </div>
               <div className="flex items-center gap-2">
-                <svg width={18} height={18} viewBox="-9 -9 18 18">
+                <svg width={18} height={18} viewBox="-9 -9 18 18" aria-hidden="true">
                   <path d={cellBodyPath('legend-threshold', 6)} fill="none" stroke="var(--color-ink-hot)" strokeWidth={1.2} strokeDasharray="3 2.5" />
                 </svg>
                 threshold
               </div>
               <div className="flex items-center gap-2">
-                <svg width={18} height={18} viewBox="-9 -9 18 18">
+                <svg width={18} height={18} viewBox="-9 -9 18 18" aria-hidden="true">
                   <path d={cellBodyPath('legend-frontier', 5)} fill="none" stroke="var(--color-ink-cool)" strokeWidth={1} />
                   <circle r={7.5} fill="none" stroke="var(--color-ink-warm)" strokeWidth={1} />
                 </svg>
                 learn next
               </div>
               <div className="flex items-center gap-2">
-                <svg width={18} height={18} viewBox="-9 -9 18 18">
+                <svg width={18} height={18} viewBox="-9 -9 18 18" aria-hidden="true">
                   <path d={cellBodyPath('legend-lapsed', 5)} fill="none" stroke="var(--color-ink-cool)" strokeWidth={1} />
                   {Array.from({ length: 8 }, (_, i) => {
                     const angle = (i / 8) * Math.PI * 2
@@ -307,7 +312,7 @@ export function TopicMapView({
                 lapsed
               </div>
               <div className="flex items-center gap-2">
-                <svg width={18} height={18} viewBox="-9 -9 18 18">
+                <svg width={18} height={18} viewBox="-9 -9 18 18" aria-hidden="true">
                   <circle r={8} fill="none" stroke="var(--color-ink-warm)" strokeWidth={1} />
                   <path d={cellBodyPath('legend-capstone', 5)} fill="var(--color-ink-warm)" fillOpacity={0.85} />
                 </svg>
