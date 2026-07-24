@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { EngramStats, TopicSummary, TopicGraph, EnvironmentCheckResult } from '../../../shared/types'
 import { SkeletonBar, SkeletonGrid } from '../components/Skeleton'
 import { emitPulse } from '../../../shared/neuralFieldBus'
@@ -63,14 +63,6 @@ export function HomeView({ onGoReview, onGoCoach, onGoTopic, onNewTopic }: HomeV
   const [toastQueue, setToastQueue] = useState<AchievementDef[]>([])
   const [forecast, setForecast] = useState<number[] | null>(null)
   const [duePulse, setDuePulse] = useState(false)
-  // Previous due_now, tracked in a ref for this mount — but seeded from
-  // localStorage rather than starting at 0/null, since Home (unlike the
-  // KeepMounted views) fully unmounts on every tab switch (see App.tsx) and
-  // remounts fresh when you come back. Without that seed, every single visit
-  // would look like "first load" and the increase check below could never
-  // fire. Same convention as LAST_SEEN_STREAK_KEY just above.
-  const prevDueRef = useRef<number | null>(null)
-
   useEffect(() => {
     window.engram.stats().then(async (s) => {
       setStats(s)
@@ -85,7 +77,6 @@ export function HomeView({ onGoReview, onGoCoach, onGoTopic, onNewTopic }: HomeV
       // load ever (no stored value yet defaults to the current count, so
       // there's nothing to compare against).
       const lastSeenDue = Number(localStorage.getItem(LAST_SEEN_DUE_KEY) ?? String(s.due_now))
-      prevDueRef.current = lastSeenDue
       if (s.due_now > lastSeenDue) setDuePulse(true)
       localStorage.setItem(LAST_SEEN_DUE_KEY, String(s.due_now))
 
