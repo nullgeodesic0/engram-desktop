@@ -18,7 +18,7 @@ import { bridgeServer } from './bridge/bridgeServer'
 import { getNotifierSettings, setNotifierSettings } from './session/notifierState'
 import { getUnlockedAchievements, recordUnlocked } from './session/achievementsStore'
 import { startReviewNotifier, stopReviewNotifier, checkReviewsNow } from './session/reviewNotifier'
-import { checkForUpdate } from './session/updateChecker'
+import { checkForUpdate, getCachedUpdateCheck, maybeAutoCheckForUpdate } from './session/updateCheck'
 import { restoreWindowState, trackWindowState } from './windowState'
 import { installAppMenu } from './appMenu'
 import type { EnvironmentCheckResult } from '../shared/types'
@@ -284,6 +284,7 @@ app.whenReady().then(() => {
     return { openAtLogin }
   })
   ipcMain.handle('app:checkForUpdate', () => checkForUpdate())
+  ipcMain.handle('app:getCachedUpdateCheck', () => getCachedUpdateCheck())
   ipcMain.handle('app:getVersion', () => app.getVersion())
 
   ipcMain.handle('achievements:getUnlocked', () => getUnlockedAchievements())
@@ -309,6 +310,14 @@ app.whenReady().then(() => {
   registerSessionHandlers(createWindow())
   createTray()
   startReviewNotifier(() => focusOrCreateWindow('review'))
+
+  // Once per launch, well after startup settles (30s — this is a `gh` network
+  // call, no reason to compete with the `claude --version` probe and window
+  // creation above). Skips entirely if already checked today; a user-triggered
+  // re-check from Settings is always allowed regardless of this timer.
+  setTimeout(() => {
+    void maybeAutoCheckForUpdate()
+  }, 30_000)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) rebindWindow(createWindow())

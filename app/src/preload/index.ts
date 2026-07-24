@@ -56,6 +56,7 @@ const engramApi = {
   setLoginItemSettings: (openAtLogin: boolean): Promise<{ openAtLogin: boolean }> =>
     ipcRenderer.invoke('app:setLoginItemSettings', openAtLogin),
   checkForUpdate: (): Promise<UpdateCheckResult> => ipcRenderer.invoke('app:checkForUpdate'),
+  getCachedUpdateCheck: (): Promise<UpdateCheckResult | null> => ipcRenderer.invoke('app:getCachedUpdateCheck'),
   getVersion: (): Promise<string> => ipcRenderer.invoke('app:getVersion'),
 
   getUnlockedAchievements: (): Promise<UnlockedAchievement[]> => ipcRenderer.invoke('achievements:getUnlocked'),

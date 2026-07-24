@@ -231,9 +231,13 @@ export interface ReceiptsHistory {
 }
 
 export interface UpdateCheckResult {
-  available: boolean
-  latestVersion?: string
-  downloadUrl?: string
+  state: 'current' | 'behind' | 'unknown'
+  buildCommit: string
+  buildDate: string
+  remoteCommit?: string
+  remoteDate?: string
+  checkedAt: string
+  reason?: string
 }
 
 export interface SessionIndexEntry {

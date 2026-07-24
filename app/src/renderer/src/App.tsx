@@ -5,7 +5,6 @@ import { ReviewSessionView } from './app/ReviewSessionView'
 import { LearnSessionView } from './app/LearnSessionView'
 import { SettingsView } from './app/SettingsView'
 import { CommandPalette } from './components/CommandPalette'
-import { UpdateBanner } from './components/UpdateBanner'
 import { TitleBar } from './components/TitleBar'
 import { SkeletonBar, SkeletonGrid } from './components/Skeleton'
 
@@ -279,7 +278,8 @@ export default function App() {
           flex column with an internal scrollable pane like LearnSessionView) so a
           chat-style view can anchor its header/input and scroll only the middle. */}
       <main className="flex-1 min-w-0 overflow-hidden flex flex-col">
-        <UpdateBanner />
+        {/* Update availability now lives in Settings (a quiet status line + manual
+            re-check), not a floating banner — see updateCheck.ts. */}
         {/* Stateful views (Learn/Review/Coach) mount on first visit and then stay
             mounted, hidden with display:none — leaving the tab must never destroy
             a live session's UI state. Cheap/stateless views (and the Map, whose
