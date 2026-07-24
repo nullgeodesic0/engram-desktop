@@ -233,6 +233,13 @@ export function HomeView({ onGoReview, onGoCoach, onGoTopic, onNewTopic }: HomeV
         <h2 className="text-sm font-medium text-[var(--color-text-dim)] uppercase tracking-wide">Continue learning</h2>
         <DendriteDivider className="mb-3" />
         {topics === null && <SkeletonGrid count={3} />}
+        {/* The empty-state decision itself (guided card vs. plain invitation) must wait on
+            envCheck — topics() is a cheap readdir that routinely resolves before
+            environmentCheck() finishes spawning `claude --version` (up to ~10s). Without this
+            gate, a broken environment would flash the healthy "Begin your atlas" card first,
+            and a click during that flash lands in a Learn session that's guaranteed to fail.
+            Real topic data never waits on this — only these two empty-state branches do. */}
+        {topics !== null && topics.length === 0 && envCheck === null && <SkeletonGrid count={3} />}
         {topics !== null && topics.length === 0 && envBroken && envCheck && (
           <div className="flex flex-col items-start gap-3 py-10 w-full max-w-lg">
             <div className="fig-caption">Fig. — setup needed before your first topic</div>
@@ -251,7 +258,7 @@ export function HomeView({ onGoReview, onGoCoach, onGoTopic, onNewTopic }: HomeV
             </Button>
           </div>
         )}
-        {topics !== null && topics.length === 0 && !envBroken && (
+        {topics !== null && topics.length === 0 && envCheck !== null && !envBroken && (
           <div className="flex flex-col items-start gap-3 py-10">
             <div className="fig-caption">Fig. — an unmarked atlas</div>
             <div className="font-[var(--font-serif)] text-[length:var(--text-display)] text-[var(--color-text-primary)]">Begin your atlas</div>
