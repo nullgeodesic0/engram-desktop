@@ -44,7 +44,7 @@ export function BeatStepper({ current, trail }: { current: string | null; trail?
                 active ? 'bg-[var(--color-surface-3)] text-[var(--color-ink-warm)]' : outcomeClass
               }`}
             >
-              <span className="relative inline-flex">
+              <span className="relative inline-flex w-4 shrink-0 justify-center">
                 {active && (
                   <span className="absolute inline-flex h-full w-full rounded-full bg-[var(--color-ink-warm)] opacity-40 animate-consolidate-ping" />
                 )}

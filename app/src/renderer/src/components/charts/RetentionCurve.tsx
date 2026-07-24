@@ -60,7 +60,7 @@ export function RetentionCurve({ data }: { data: WeekRetention[] }) {
               y={toY(g) + 3}
               textAnchor="end"
               className="label-data"
-              style={{ fontSize: 9, fontVariantNumeric: 'tabular-nums', fill: 'var(--color-text-dim)' }}
+              style={{ fontSize: 9, fill: 'var(--color-text-dim)' }}
             >
               {Math.round(g * 100)}%
             </text>

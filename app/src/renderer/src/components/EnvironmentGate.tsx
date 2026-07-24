@@ -48,8 +48,8 @@ export function EnvironmentGate({ children }: { children: ReactNode }) {
                 <div className="text-xs text-[var(--color-text-faint)] mt-0.5 label-data truncate">{result.claudePath}</div>
               ) : (
                 <div className="text-xs text-[var(--color-text-dim)] mt-1">
-                  Couldn't run <span className="label-data">claude --version</span>. Install it from{' '}
-                  <span className="label-data">claude.ai/code</span> and make sure you're logged in, then relaunch.
+                  Couldn’t run <span className="label-data">claude --version</span>. Install it from{' '}
+                  <span className="label-data">claude.ai/code</span> and make sure you’re logged in, then relaunch.
                   {result.claudeError && <div className="label-data text-[var(--color-text-faint)] mt-1 truncate">{result.claudeError}</div>}
                 </div>
               )}

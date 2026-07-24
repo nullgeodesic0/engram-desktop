@@ -194,7 +194,7 @@ export function HomeView({ onGoReview, onGoCoach, onGoTopic, onNewTopic }: HomeV
           className="!px-6 !py-5 w-full flex items-center justify-between text-left normal-case"
         >
           <div>
-            <div className="text-base">Clear today's reviews</div>
+            <div className="text-base">Clear today’s reviews</div>
             <div className="text-xs opacity-80 mt-1">{stats.due_now} item(s) waiting — a couple of minutes each.</div>
           </div>
           <span className="text-lg">→</span>

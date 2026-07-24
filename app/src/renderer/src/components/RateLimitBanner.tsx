@@ -18,7 +18,7 @@ export function RateLimitBanner({ status, resetsAt, onRetry }: RateLimitBannerPr
     >
       <div className={`text-sm ${blocking ? 'text-[var(--color-ink-danger)]' : 'text-[var(--color-ink-warm)]'}`}>
         {blocking ? (
-          <>Claude usage limit reached ({status}) — Engram can't start new sessions right now.</>
+          <>Claude usage limit reached ({status}) — Engram can’t start new sessions right now.</>
         ) : (
           <>Approaching your Claude usage limit ({status}) — this session can keep going, but new ones may not start soon.</>
         )}
