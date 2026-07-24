@@ -64,7 +64,6 @@ engram-desktop/
 │   ├── learning-loop.md
 │   ├── media/                    screenshots referenced from the README
 │   └── design-history/           specs and plans behind the app's evolution
-└── spike/                       early prototypes, not part of the shipped app
 ```
 
 ## Data locations (for debugging)

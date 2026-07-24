@@ -182,10 +182,11 @@ All registered in `mcpBridgeWorker.mjs`, namespaced `mcp__engram-ui-bridge__<nam
 | `progress_note` | Advisory: a one-line session-plan status shown under the header. |
 
 Only `ask_user_question` genuinely blocks — its handler awaits the HTTP relay's
-response before returning. Every other tool calls a shared `fireUi()` helper that
-POSTs and immediately returns `{ content: [{ type: 'text', text: 'ok' }] }` without
-waiting, and the POST itself is `.catch(() => {})`'d — a relay failure never blocks or
-breaks the dialogue. The system prompt built in `permissionConfig.ts` reiterates this:
+response before returning. Every other tool is fire-and-forget: `render_beat` posts
+inline to its own `/beat` endpoint, while the remaining six advisory tools funnel
+through a shared `fireUi()` helper that POSTs to `/ui`. Both paths immediately return
+`{ content: [{ type: 'text', text: 'ok' }] }` without waiting, and the POST itself is
+`.catch(() => {})`'d — a relay failure never blocks or breaks the dialogue. The system prompt built in `permissionConfig.ts` reiterates this:
 these tools are optional, "the app degrades gracefully" if the model skips them, and
 they exist to serve orientation, never to replace the dialogue itself.
 
