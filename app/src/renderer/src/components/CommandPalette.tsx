@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import type { TopicSummary, TopicGraph } from '../../../shared/types'
 import { useFocusTrap } from './useFocusTrap'
-import { humanizeNodeId } from '../../../shared/humanizeId'
+import { buildSearchIndex, searchEntries, type SearchEntry } from '../shared/searchIndex'
 import { InkNode } from './ui/InkNode'
 
 interface Command {
@@ -9,15 +8,8 @@ interface Command {
   label: string
   hint?: string
   action: () => void
-  group?: 'Topics' | 'Nodes'
+  group?: 'Topics' | 'Nodes' | 'Receipts' | 'Artifacts'
   glyphId?: string
-}
-
-interface NodeMatch {
-  topic: string
-  topicTitle: string
-  node: string
-  claim: string
 }
 
 interface CommandPaletteProps {
@@ -28,16 +20,40 @@ interface CommandPaletteProps {
   onGoNode: (topicId: string, nodeId: string) => void
 }
 
-/** ⌘K — jump to any view, in-progress topic, or specific node by typing, building
- * on the ⌘1–⌘6 shortcuts already in App.tsx. Everything is fetched lazily on open
- * rather than kept live in App.tsx state, since it's only needed while the
- * palette is actually open — including every topic's full graph, for the node
- * search below. Fine at current scale (a handful of topics, well under 100
- * nodes total); revisit with a real index if that changes. */
+const GROUP_BY_KIND: Record<'node' | 'receipt' | 'artifact', Command['group']> = {
+  node: 'Nodes',
+  receipt: 'Receipts',
+  artifact: 'Artifacts',
+}
+
+/** Node/receipt entries both land on the node in the topic map; artifacts open
+ * their file directly. `e.topic`/`e.node`/`e.artifactPath` are always set for
+ * these three kinds — see how `buildSearchIndex` constructs them. */
+function entryToCommand(e: SearchEntry, onGoNode: (topicId: string, nodeId: string) => void): Command {
+  const group = GROUP_BY_KIND[e.kind as 'node' | 'receipt' | 'artifact']
+  return {
+    id: `${e.kind}:${e.topic}:${e.node ?? e.artifactPath}`,
+    label: e.title,
+    hint: e.subtitle,
+    group,
+    glyphId: e.node,
+    action:
+      e.kind === 'artifact'
+        ? () => e.artifactPath && window.engram.openArtifact(e.artifactPath)
+        : () => e.topic && e.node && onGoNode(e.topic, e.node),
+  }
+}
+
+/** ⌘K — jump to any view, in-progress topic, specific node, past receipt, or
+ * artifact by typing, building on the ⌘1–⌘6 shortcuts already in App.tsx. The
+ * search index (nodes/receipts/artifacts, built from every topic's graph) is
+ * fetched once and cached at module scope by `buildSearchIndex` — App.tsx
+ * invalidates it whenever topics are refreshed, so reopening the palette
+ * afterwards rebuilds. Topics themselves are re-derived from the index each
+ * open rather than fetched separately. */
 export function CommandPalette({ open, onClose, navCommands, onGoTopic, onGoNode }: CommandPaletteProps) {
   const [query, setQuery] = useState('')
-  const [topics, setTopics] = useState<TopicSummary[]>([])
-  const [nodeMatches, setNodeMatches] = useState<NodeMatch[]>([])
+  const [index, setIndex] = useState<SearchEntry[]>([])
   const [activeIdx, setActiveIdx] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -47,28 +63,12 @@ export function CommandPalette({ open, onClose, navCommands, onGoTopic, onGoNode
     if (!open) return
     setQuery('')
     setActiveIdx(0)
-    window.engram.topics().then((ts) => {
-      setTopics(ts)
-      Promise.all(
-        ts.map((t) =>
-          window.engram
-            .topicGraph(t.topic)
-            .then((g) => g as TopicGraph)
-            .catch(() => null),
-        ),
-      ).then((graphs) => {
-        const matches: NodeMatch[] = []
-        for (const g of graphs) {
-          if (!g) continue
-          for (const id of g.order) {
-            const node = g.nodes[id]
-            if (!node) continue
-            matches.push({ topic: g.topic, topicTitle: g.title, node: id, claim: node.claim })
-          }
-        }
-        setNodeMatches(matches)
-      })
-    })
+    buildSearchIndex({
+      topics: window.engram.topics,
+      topicGraph: window.engram.topicGraph,
+      receiptsHistory: window.engram.receiptsHistory,
+      artifactList: window.engram.artifactList,
+    }).then(setIndex)
   }, [open])
 
   useEffect(() => {
@@ -82,38 +82,31 @@ export function CommandPalette({ open, onClose, navCommands, onGoTopic, onGoNode
 
   if (!open) return null
 
-  const topicCommands: Command[] = topics.map((t) => ({
-    id: `topic:${t.topic}`,
-    label: `Continue: ${t.title}`,
-    hint: 'Learn',
-    group: 'Topics',
-    glyphId: t.topic,
-    action: () => onGoTopic(t.topic),
-  }))
+  const topicCommands: Command[] = index
+    .filter((e) => e.kind === 'topic' && e.topic)
+    .map((t) => ({
+      id: `topic:${t.topic}`,
+      label: `Continue: ${t.title}`,
+      hint: 'Learn',
+      group: 'Topics',
+      glyphId: t.topic,
+      action: () => onGoTopic(t.topic as string),
+    }))
 
   const q = query.trim().toLowerCase()
 
-  // Node search only kicks in with a real query — showing every node across every
-  // topic by default would drown out the nav/topic commands the palette opens to.
-  const nodeCommands: Command[] =
+  // Node/receipt/artifact search only kicks in with a real query — showing
+  // every result across every topic by default would drown out the nav/topic
+  // commands the palette opens to.
+  const searchCommands: Command[] =
     q.length < 2
       ? []
-      : nodeMatches
-          .filter(
-            (m) => m.claim.toLowerCase().includes(q) || humanizeNodeId(m.node).toLowerCase().includes(q) || m.node.toLowerCase().includes(q),
-          )
-          .slice(0, 20)
-          .map((m) => ({
-            id: `node:${m.topic}:${m.node}`,
-            label: humanizeNodeId(m.node),
-            hint: m.topicTitle,
-            group: 'Nodes' as const,
-            glyphId: m.node,
-            action: () => onGoNode(m.topic, m.node),
-          }))
+      : searchEntries(index, q)
+          .filter((e) => e.kind === 'node' || e.kind === 'receipt' || e.kind === 'artifact')
+          .map((e) => entryToCommand(e, onGoNode))
 
-  const all = [...navCommands, ...topicCommands, ...nodeCommands]
-  const filtered = q ? all.filter((c) => c.label.toLowerCase().includes(q) || nodeCommands.includes(c)) : all
+  const all = [...navCommands, ...topicCommands, ...searchCommands]
+  const filtered = q ? all.filter((c) => c.label.toLowerCase().includes(q) || searchCommands.includes(c)) : all
 
   function run(cmd: Command) {
     cmd.action()
@@ -169,7 +162,7 @@ export function CommandPalette({ open, onClose, navCommands, onGoTopic, onGoNode
                 >
                   <span className="flex items-center gap-2 min-w-0 truncate">
                     {cmd.glyphId &&
-                      (cmd.group === 'Nodes' ? (
+                      (cmd.group === 'Nodes' || cmd.group === 'Receipts' || cmd.group === 'Artifacts' ? (
                         <InkNode id={cmd.glyphId} variant="outlined" color="var(--color-ink-cool)" size={12} />
                       ) : (
                         <InkNode id={cmd.glyphId} variant="filled" size={12} />
