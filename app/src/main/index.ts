@@ -236,8 +236,15 @@ app.whenReady().then(() => {
 
   // Review-reminder settings + manual trigger (see notifierState.ts / reviewNotifier.ts).
   ipcMain.handle('notifier:getSettings', () => getNotifierSettings())
-  ipcMain.handle('notifier:setSettings', (_e, patch: { remindersEnabled?: boolean; cadenceMinutes?: number }) =>
-    setNotifierSettings(patch),
+  ipcMain.handle(
+    'notifier:setSettings',
+    async (_e, patch: { remindersEnabled?: boolean; cadenceMinutes?: number; dockBadgeEnabled?: boolean }) => {
+      const next = await setNotifierSettings(patch)
+      // Clear right away rather than waiting for the next poll — a toggle the
+      // user just flipped off should stop lying to them immediately.
+      if (!next.dockBadgeEnabled) app.setBadgeCount(0)
+      return next
+    },
   )
   ipcMain.handle('notifier:checkNow', () => checkReviewsNow(() => focusOrCreateWindow('review')))
   ipcMain.handle('app:getLoginItemSettings', () => ({ openAtLogin: app.getLoginItemSettings().openAtLogin }))
