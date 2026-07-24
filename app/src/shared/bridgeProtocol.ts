@@ -28,6 +28,12 @@ export interface BridgeBeatRequest {
 }
 
 // generic fire-and-forget tutor-driven UI signal; `tool` names which MCP tool fired, `payload` is that tool's zod-validated input — renderer must still shape-guard before use
+//
+// `tool: 'annotate_node'` is the one kind the main process also persists (see
+// bridgeServer.ts + main/session/mapAnnotations.ts) before forwarding — its
+// payload shape is `{ topic: string; node: string; latex_label?: string; latex_claim?: string }`
+// (at least one of latex_label/latex_claim present), matching mapAnnotations.ts's
+// sanitizeAnnotatePayload.
 export interface BridgeUiRequest {
   sessionId: string
   tool: string

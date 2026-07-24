@@ -121,6 +121,22 @@ server.registerTool('suggest_action', {
   },
 }, async (args) => fireUi('suggest_action', args))
 
+server.registerTool('annotate_node', {
+  title: 'Annotate Node',
+  description: "Advisory, best-effort: attach LaTeX to a Topic Map node so the map renders real math instead of plain text — latex_label is a short caption for the plate's node label, latex_claim replaces the node's claim in the drawer/full-node view. Provide at least one; call again to update either later. Persists across sessions. Never blocks.",
+  inputSchema: {
+    topic: z.string(),
+    node: z.string(),
+    latex_label: z.string().optional(),
+    latex_claim: z.string().optional(),
+  },
+}, async (args) => {
+  if (args.latex_label === undefined && args.latex_claim === undefined) {
+    return { content: [{ type: 'text', text: 'error: provide latex_label and/or latex_claim' }] }
+  }
+  return fireUi('annotate_node', args)
+})
+
 server.registerTool('progress_note', {
   title: 'Progress Note',
   description: "Advisory, best-effort: a one-line session-plan status the app shows under the header (e.g. 'node 2 of 3 — one struggle beat to go'). Replaces the previous note.",
