@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { DueItem } from '../../../shared/types'
+import type { DueItem, ExportSittingFormat } from '../../../shared/types'
 import type { SessionEvent } from '../../../shared/sessionEvents'
 import type { BridgeAskRequest } from '../../../shared/bridgeProtocol'
 import { AskDialog } from '../components/AskDialog'
@@ -18,7 +18,7 @@ import { parseGradeResult, type GradeResult } from '../../../shared/gradeResult'
 import { GradeResultCard } from '../components/GradeResultCard'
 import { SkeletonBar } from '../components/Skeleton'
 import { SessionCeremony } from '../components/ritual/Bookends'
-import { SessionHistoryDrawer } from '../components/SessionHistoryDrawer'
+import { SessionHistoryDrawer, exportSittingTranscript } from '../components/SessionHistoryDrawer'
 import { Button } from '../components/ui/Button'
 import { friendlyErrorText } from '../shared/friendlyError'
 import { recordConfidence, latestPickFor } from '../shared/calibrationStore'
@@ -93,6 +93,8 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
   // `queue` itself shrinks as items get graded, so it can't serve as both.
   const [sessionTotal, setSessionTotal] = useState(0)
   const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false)
+  const [exportingFormat, setExportingFormat] = useState<ExportSittingFormat | null>(null)
+  const [exportStatus, setExportStatus] = useState<{ text: string; failed: boolean } | null>(null)
   const [lastGrade, setLastGrade] = useState<GradeResult | null>(null)
   const [sessionGrades, setSessionGrades] = useState<GradeResult[]>([])
   const [streakDays, setStreakDays] = useState<number | null>(null)
@@ -304,6 +306,23 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
     window.engram.abortSession(sessionId)
   }
 
+  // Same reused path as LearnSessionView's own export — see
+  // exportSittingTranscript's doc comment in SessionHistoryDrawer.tsx.
+  async function exportCurrentSitting(format: ExportSittingFormat) {
+    if (!sessionId) return
+    setExportingFormat(format)
+    setExportStatus(null)
+    try {
+      const history = await window.engram.sessionHistoryFor('review')
+      const startedAt = history.find((e) => e.sessionId === sessionId)?.startedAt ?? new Date().toISOString()
+      const result = await exportSittingTranscript(sessionId, format, { title: 'Review', startedAt })
+      if (result.ok) setExportStatus({ text: `Saved to ${result.path}`, failed: false })
+      else if (result.reason !== 'canceled') setExportStatus({ text: `Export failed: ${result.reason}`, failed: true })
+    } finally {
+      setExportingFormat(null)
+    }
+  }
+
   const current = queue[0] ?? null
   const lastUserMessageId = useMemo(() => [...messages].reverse().find((m) => m.role === 'user')?.id ?? null, [messages])
   const latestTicket = useMemo(() => extractTicketFromMessages(messages), [messages])
@@ -320,6 +339,34 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
           {phase === 'in-session' && momentumOn && sessionGrades.length > 0 && <InkWell results={sessionGrades} />}
           {(phase === 'in-session' || phase === 'done') && contextUsage && (
             <ContextGauge usedTokens={contextUsage.usedTokens} contextWindow={contextUsage.contextWindow} />
+          )}
+          {exportStatus && (
+            <span
+              className={`text-xs truncate max-w-[12rem] ${exportStatus.failed ? 'text-[var(--color-ink-danger)]' : 'text-[var(--color-text-faint)]'}`}
+              title={exportStatus.text}
+            >
+              {exportStatus.text}
+            </span>
+          )}
+          {sessionId && (phase === 'in-session' || phase === 'done') && (
+            <button
+              onClick={() => exportCurrentSitting('md')}
+              disabled={exportingFormat !== null}
+              title="Export this sitting as a Markdown file"
+              className="focus-ring text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] disabled:opacity-50"
+            >
+              {exportingFormat === 'md' ? 'Exporting…' : 'Export .md'}
+            </button>
+          )}
+          {sessionId && (phase === 'in-session' || phase === 'done') && (
+            <button
+              onClick={() => exportCurrentSitting('pdf')}
+              disabled={exportingFormat !== null}
+              title="Export this sitting as a PDF"
+              className="focus-ring text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] disabled:opacity-50"
+            >
+              {exportingFormat === 'pdf' ? 'Exporting…' : 'Export .pdf'}
+            </button>
           )}
           {phase !== 'loading' && (
             <button
@@ -520,7 +567,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
       )}
 
       {askRequest && <AskDialog request={askRequest} onAnswer={answerAsk} />}
-      <SessionHistoryDrawer historyKey="review" open={historyDrawerOpen} onClose={() => setHistoryDrawerOpen(false)} />
+      <SessionHistoryDrawer historyKey="review" title="Review" open={historyDrawerOpen} onClose={() => setHistoryDrawerOpen(false)} />
     </div>
   )
 }

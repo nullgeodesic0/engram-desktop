@@ -1,0 +1,155 @@
+/* Lab-notebook print stylesheet — the visual identity for a sitting's exported
+ * PDF (Artifacts & Records, Task 2). Deliberately its own look, not the app's
+ * Night Atlas dark theme: cream paper, warm dark ink, a reading measure, and
+ * ONLY generic/system fonts. That last part isn't an oversight — the app's
+ * @fontsource faces (Fraunces, Space Grotesk) ship as local woff2 files that
+ * aren't reachable from the standalone print document this stylesheet is
+ * inlined into (see sittingToMarkdown.ts's sittingToPrintHtml), so this never
+ * references them and lets the OS's own serif/mono stand in instead.
+ */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: #f5efe2;
+  color: #3a2f22;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+body {
+  max-width: 72ch;
+  margin: 0 auto;
+  padding: 48px 28px 72px;
+}
+
+.sitting-header {
+  border-bottom: 1px solid #c9bc9e;
+  padding-bottom: 16px;
+  margin-bottom: 28px;
+}
+
+.sitting-header h1 {
+  font-size: 22px;
+  font-weight: 600;
+  margin: 0 0 6px;
+  color: #2a2116;
+}
+
+.sitting-meta {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #8a7a5c;
+}
+
+.sitting-turn {
+  margin-bottom: 22px;
+}
+
+.sitting-turn-label {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #a8895a;
+  margin-bottom: 6px;
+}
+
+.sitting-turn.user {
+  border-left: 2px solid #c9bc9e;
+  padding-left: 14px;
+  color: #5c4f3c;
+  font-style: italic;
+}
+
+.sitting-body {
+  white-space: pre-wrap;
+}
+
+.sitting-ticket {
+  border: 1px solid #c9bc9e;
+  border-radius: 4px;
+  padding: 10px 14px;
+  margin: 10px 0;
+  background: #efe6d2;
+}
+
+.sitting-ticket .ticket-header {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #8a7a5c;
+  margin-bottom: 6px;
+}
+
+.sitting-ticket table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 11px;
+}
+
+.sitting-ticket td {
+  padding: 1px 4px;
+}
+
+.sitting-receipts {
+  margin: 8px 0 20px;
+}
+
+.sitting-receipts table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11.5px;
+}
+
+.sitting-receipts th,
+.sitting-receipts td {
+  text-align: left;
+  padding: 4px 8px;
+  border-bottom: 1px solid #ddd2b8;
+}
+
+.sitting-receipts th {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8a7a5c;
+}
+
+.sitting-receipts-caption {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #a8895a;
+  margin-bottom: 4px;
+}
+
+.sitting-footer {
+  margin-top: 36px;
+  padding-top: 16px;
+  border-top: 1px solid #c9bc9e;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #a8895a;
+}
+
+/* KaTeX ships its own layout classes but — per the file-header note — not its
+ * webfont in this document; this just nudges its fallback size to sit well
+ * against the page's body copy rather than KaTeX's own default. */
+.katex {
+  font-size: 1.05em;
+}
