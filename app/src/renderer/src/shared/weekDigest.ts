@@ -59,6 +59,31 @@ function pct(n: number): string {
   return `${Math.round(n * 100)}%`
 }
 
+/** "Fig. N —" caption date style — matches TopicMapView's formatProvenanceDate
+ * exactly (local, no UTC shift for a date-only string). */
+function formatCaptionDate(date: string): string {
+  return new Date(`${date}T00:00:00`).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
+}
+
+/** Earliest `fsrs.due` across every node in every fetched graph — the next
+ * date anything returns, regardless of topic. `input.graphs` is already in
+ * hand for the threshold lookup, so this costs no extra IPC. Dates are
+ * `YYYY-MM-DD` strings, which sort correctly as plain strings. */
+function earliestDue(graphs: Record<string, TopicGraph>): string | null {
+  let earliest: string | null = null
+  for (const graph of Object.values(graphs)) {
+    for (const node of Object.values(graph.nodes)) {
+      const due = node.fsrs.due
+      if (due && (earliest === null || due < earliest)) earliest = due
+    }
+  }
+  return earliest
+}
+
 /**
  * Pure derivation — no DOM, no window.engram calls — so the weekly digest's
  * numbers can be hand-checked and unit tested against a fixture straight
@@ -156,13 +181,16 @@ export function computeWeekDigest(input: WeekDigestInput): WeekDigestOutput {
       ? { thisWeek: thisWeekCalibration, lastWeek: lastWeekCalibration }
       : null
 
-  const caption = renderCaption({
-    reviews,
-    recallRate,
-    consolidated: { count: consolidatedCount, thresholds: Array.from(thresholdNames) },
-    calibrationDrift,
-    hardestNodes,
-  })
+  const caption = renderCaption(
+    {
+      reviews,
+      recallRate,
+      consolidated: { count: consolidatedCount, thresholds: Array.from(thresholdNames) },
+      calibrationDrift,
+      hardestNodes,
+    },
+    earliestDue(input.graphs),
+  )
 
   return {
     reviews,
@@ -175,10 +203,11 @@ export function computeWeekDigest(input: WeekDigestInput): WeekDigestOutput {
 }
 
 /** Atlas-voice caption — honest numbers, no guilt or celebration framing, no
- * exclamation marks. A quiet week gets one line instead of the usual three. */
-function renderCaption(d: Omit<WeekDigestOutput, 'caption'>): string {
+ * exclamation marks. A quiet week gets one line instead of the usual three,
+ * naming the earliest return date when any node anywhere has one due. */
+function renderCaption(d: Omit<WeekDigestOutput, 'caption'>, earliest: string | null): string {
   if (d.reviews.thisWeek === 0) {
-    return 'Fig. — a quiet week.'
+    return earliest ? `Fig. — a quiet week; earliest return ${formatCaptionDate(earliest)}.` : 'Fig. — a quiet week.'
   }
 
   const parts: string[] = []
