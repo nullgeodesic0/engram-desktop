@@ -15,6 +15,7 @@ import type {
   DecayResult,
   NextNodeResult,
   MapAnnotations,
+  NodeProvenance,
 } from '../shared/types'
 import type { SessionEvent } from '../shared/sessionEvents'
 import type { BridgeAskRequest, BridgeAskResponse, BridgeBeatRequest, BridgeUiRequest } from '../shared/bridgeProtocol'
@@ -32,6 +33,8 @@ const engramApi = {
   artifactList: (): Promise<ArtifactEntry[]> => ipcRenderer.invoke('engram:artifactList'),
   receiptsHistory: (): Promise<ReceiptsHistory> => ipcRenderer.invoke('engram:receiptsHistory'),
   mapAnnotations: (topicId: string): Promise<MapAnnotations> => ipcRenderer.invoke('mapAnnotations:get', topicId),
+  nodeProvenance: (topic: string): Promise<Record<string, NodeProvenance>> =>
+    ipcRenderer.invoke('engram:nodeProvenance', topic),
   openArtifact: (absolutePath: string): Promise<void> => ipcRenderer.invoke('engram:openArtifact', absolutePath),
   pickFiles: (): Promise<string[]> => ipcRenderer.invoke('dialog:pickFiles'),
   exportLearningData: (): Promise<{ canceled: boolean; path?: string }> => ipcRenderer.invoke('engram:exportData'),
