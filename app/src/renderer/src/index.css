@@ -1,0 +1,381 @@
+@import 'tailwindcss';
+@import '@fontsource/space-grotesk/500.css';
+@import '@fontsource/space-grotesk/600.css';
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/fraunces/400.css';
+@import '@fontsource/fraunces/400-italic.css';
+@import '@fontsource/fraunces/600.css';
+
+@theme {
+  /* "Night Atlas" — Cajal's sepia-ink neuron atlas inverted onto the night.
+     The void warms slightly toward sepia; text is warm ink, not cold white. */
+  --color-void: #0d0e12;
+  --color-surface: #14151c;
+  --color-surface-2: #1c1e28;
+  --color-surface-3: #262937;
+  --color-hairline: #262a36;
+
+  /* Node-state duality: cool = not yet consolidated, warm = the surviving
+     signal (an oscilloscope-phosphor amber, not a generic accent). */
+  --color-ink-cool: #5b8fa8;
+  --color-ink-cool-dim: #3a5a6b;
+  --color-ink-warm: #e8a857;
+  --color-ink-warm-dim: #8a6533;
+  --color-ink-hot: #f0c24b;
+  --color-ink-danger: #c4685a;
+  --color-ink-danger-dim: #6b3d36;
+
+  /* Third signal: synthesis/creation (artifact-smith explorables, coach insight) —
+     sits between cool and warm rather than opposing them. */
+  --color-ink-violet: #a78bda;
+  --color-ink-violet-dim: #6b5490;
+
+  /* Warm "paper ink" text ramp — Cajal sepia, inverted. */
+  --color-ink-paper: #e6dfd0;
+  --color-text-primary: #e6dfd0;
+  --color-text-dim: #8b8878;
+  --color-text-faint: #545248;
+
+  --font-display: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+  --font-serif: 'Fraunces', Georgia, serif;
+  --font-body: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-data: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+
+  /* Type scale — the app's five text roles. Use these instead of ad-hoc sizes
+     for headings/captions; body copy may still use Tailwind text-sm etc. */
+  --text-display: 1.75rem;
+  --text-heading: 1.25rem;
+  --text-body: 0.875rem;
+  --text-caption: 0.75rem;
+  --text-data: 0.8125rem;
+
+  /* Motion tokens — two durations cover every micro-interaction in the app.
+     See the interaction-vocabulary comment atop @layer components below. */
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --ease-out-soft: cubic-bezier(0.25, 0.8, 0.35, 1);
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    background: var(--color-void);
+    color: var(--color-text-primary);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection {
+    background: var(--color-ink-warm-dim);
+    color: var(--color-void);
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-surface-3) transparent;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+  /* Tactile press feedback app-wide — a single rule instead of retrofitting
+     every custom button. Skipped for anything opting into its own transform. */
+  button:not(:disabled):not(.no-press):active {
+    transform: scale(0.97);
+  }
+  button {
+    transition: transform var(--dur-fast) ease-out, background-color var(--dur-fast) ease-out, color var(--dur-fast) ease-out, border-color var(--dur-fast) ease-out, opacity var(--dur-fast) ease-out;
+  }
+}
+
+@keyframes consolidate-ping {
+  0% { transform: scale(1); opacity: 0.65; }
+  75%, 100% { transform: scale(2.4); opacity: 0; }
+}
+
+.animate-consolidate-ping {
+  animation: consolidate-ping 2.4s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+@keyframes view-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.view-transition {
+  animation: view-fade-in var(--dur-base) var(--ease-out-soft);
+}
+
+@keyframes shimmer-sweep {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--color-surface-2) 25%,
+    var(--color-surface-3) 50%,
+    var(--color-surface-2) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer-sweep 1.6s ease-in-out infinite;
+}
+
+/* Interaction vocabulary — one set of rules for every hover/press micro-interaction
+ * in the app, built on the two motion tokens declared in @theme above:
+ *   - Rows/cards (interactive .panel surfaces, list rows): background-color +
+ *     a warm-dim border shift on hover, timed at --dur-base (200ms).
+ *   - Buttons: the app-wide press transform (button:active above) plus their
+ *     variant color transitions, timed at --dur-fast (120ms) — see the global
+ *     `button { transition: ... }` rule in @layer base.
+ *   - Icon/ghost buttons: color shift only (no background/border choreography
+ *     beyond what the button rule already gives them), timed at --dur-fast.
+ *   - Nothing that isn't a real <button> scales on hover or press — scale is a
+ *     button-only affordance so it doesn't fight with border/background
+ *     cues on rows and cards.
+ *   - Focus is always the shared .focus-ring utility below, never a bespoke
+ *     hover-only or transition-based focus treatment.
+ */
+@layer components {
+  .app-drag {
+    -webkit-app-region: drag;
+  }
+  .app-no-drag {
+    -webkit-app-region: no-drag;
+  }
+  .panel {
+    background: color-mix(in srgb, var(--color-surface) 94%, transparent);
+    border: 1px solid var(--color-hairline);
+    border-radius: 10px;
+    box-shadow: inset 0 1px 0 rgba(228, 231, 237, 0.04), 0 8px 20px -12px rgba(0, 0, 0, 0.5);
+    transition: border-color var(--dur-base) var(--ease-out-soft), box-shadow var(--dur-base) var(--ease-out-soft);
+    backdrop-filter: blur(6px);
+  }
+  .panel-raised {
+    background: color-mix(in srgb, var(--color-surface-2) 94%, transparent);
+    border: 1px solid var(--color-hairline);
+    border-radius: 10px;
+    box-shadow: inset 0 1px 0 rgba(228, 231, 237, 0.05), 0 8px 20px -12px rgba(0, 0, 0, 0.5);
+    transition: border-color var(--dur-base) var(--ease-out-soft), box-shadow var(--dur-base) var(--ease-out-soft);
+    backdrop-filter: blur(6px);
+  }
+  .label-data {
+    font-family: var(--font-data);
+    letter-spacing: 0.02em;
+  }
+  .focus-ring {
+    outline: none;
+  }
+  .focus-ring:focus-visible {
+    outline: 2px solid var(--color-ink-warm);
+    outline-offset: 2px;
+  }
+  /* "Fig. N —" atlas caption: italic serif, dim, used for stats and empty states. */
+  .fig-caption {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: var(--text-caption);
+    color: var(--color-text-dim);
+    letter-spacing: 0.01em;
+  }
+  .font-serif-display {
+    font-family: var(--font-serif);
+  }
+
+  /* The transcript reads as a set page, not a chat log — one reading measure,
+     centered when the window is wide. */
+  .transcript-measure {
+    max-width: 78ch;
+    width: 100%;
+    margin-inline: auto;
+  }
+
+  /* The tutor's voice — assistant prose reads in serif, like a set page. */
+  .voice-serif {
+    font-family: var(--font-serif);
+    font-size: 0.9375rem;
+    line-height: 1.65;
+  }
+  .voice-serif h1, .voice-serif h2, .voice-serif h3 {
+    font-family: var(--font-display);
+  }
+
+  /* Extended-markdown live preview (see MarkdownPreview.tsx) — scoped rules for the
+   * raw HTML `marked` produces, which arrives as bare semantic tags with no classes. */
+  .md-preview {
+    font-size: 0.875rem;
+    line-height: 1.6;
+    color: var(--color-text-primary);
+    overflow-wrap: break-word;
+  }
+  .md-preview h1, .md-preview h2, .md-preview h3 {
+    font-family: var(--font-display);
+    color: var(--color-text-primary);
+    margin: 0.75em 0 0.35em;
+    line-height: 1.3;
+  }
+  .md-preview h1 { font-size: 1.25rem; }
+  .md-preview h2 { font-size: 1.1rem; }
+  .md-preview h3 { font-size: 1rem; }
+  .md-preview p { margin: 0.5em 0; }
+  .md-preview ul, .md-preview ol {
+    margin: 0.5em 0;
+    padding-left: 1.4em;
+  }
+  .md-preview li { margin: 0.15em 0; }
+  .md-preview code {
+    font-family: var(--font-data);
+    font-size: 0.85em;
+    background: var(--color-surface-3);
+    padding: 0.1em 0.35em;
+    border-radius: 4px;
+  }
+  .md-preview pre {
+    background: var(--color-surface-3);
+    border: 1px solid var(--color-hairline);
+    border-radius: 8px;
+    padding: 0.6em 0.8em;
+    overflow-x: auto;
+    margin: 0.5em 0;
+  }
+  .md-preview pre code {
+    background: none;
+    padding: 0;
+  }
+  .md-preview blockquote {
+    border-left: 2px solid var(--color-ink-warm-dim);
+    padding-left: 0.8em;
+    margin: 0.5em 0;
+    color: var(--color-text-dim);
+  }
+  .md-preview a {
+    color: var(--color-ink-cool);
+    text-decoration: underline;
+  }
+  .md-preview hr {
+    border: none;
+    border-top: 1px solid var(--color-hairline);
+    margin: 0.75em 0;
+  }
+  .md-preview table {
+    border-collapse: collapse;
+    margin: 0.5em 0;
+  }
+  .md-preview th, .md-preview td {
+    border: 1px solid var(--color-hairline);
+    padding: 0.3em 0.6em;
+  }
+
+  /* Recall chamber: blurs the transcript so free recall can't peek at prior turns. */
+  .chamber-blur {
+    filter: blur(7px);
+    pointer-events: none;
+    user-select: none;
+    transition: filter 0.35s ease-out;
+  }
+  @keyframes chamber-invite { 0%,100% { opacity: 0.55 } 50% { opacity: 1 } }
+  .chamber-invite { animation: chamber-invite 2.2s ease-in-out infinite; }
+}
+
+@keyframes frontier-breathe {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.9; }
+}
+.plate-frontier-ring {
+  animation: frontier-breathe 2.6s ease-in-out infinite;
+}
+
+@keyframes trail-breathe {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+.plate-trail {
+  animation: trail-breathe 1.6s ease-in-out infinite;
+}
+
+@keyframes ink-plink {
+  0% { transform: translateY(0); opacity: 0; }
+  35% { opacity: 1; }
+  100% { transform: translateY(14px); opacity: 0; }
+}
+.ink-plink {
+  animation: ink-plink 0.45s ease-in forwards;
+}
+
+@keyframes ink-burst {
+  0% { transform: scale(0.4); opacity: 0.9; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+.ink-burst {
+  animation: ink-burst 0.6s ease-out forwards;
+  transform-origin: center;
+}
+
+@keyframes badge-pulse {
+  0%, 100% { box-shadow: inset 0 -1.5px 0 transparent; }
+  50% { box-shadow: inset 0 -1.5px 0 var(--color-ink-warm-dim); }
+}
+.badge-pulse {
+  animation: badge-pulse 1.4s ease-in-out 2;
+}
+
+/* "The turn" — the grade card lands face-down and flips to reveal. The two
+   halves of the turn are separate elements (back rotates away to 90°, then
+   the revealed card rotates in from -90°), so no 3D backface juggling. */
+.card-flip-scene {
+  perspective: 800px;
+}
+@keyframes flip-away {
+  from { transform: rotateY(0deg); }
+  to { transform: rotateY(90deg); }
+}
+.flip-away {
+  animation: flip-away 0.4s ease-in forwards;
+  transform-origin: center;
+}
+@keyframes flip-in {
+  from { transform: rotateY(-90deg); }
+  to { transform: rotateY(0deg); }
+}
+.flip-in {
+  animation: flip-in 0.35s ease-out;
+  transform-origin: center;
+}
+
+@keyframes chain-link-in {
+  from { transform: scale(0.3); opacity: 0; }
+  to { transform: scale(1); opacity: 0.85; }
+}
+.chain-link-in {
+  animation: chain-link-in 0.3s ease-out;
+  transform-origin: center;
+  transform-box: fill-box;
+}
+
+@keyframes atlas-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes crossing-grow {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+.ritual-crossing-line {
+  animation: crossing-grow 0.9s ease-out;
+}
+@keyframes stamp-press {
+  0% { transform: scale(1.25); opacity: 0; }
+  60% { transform: scale(0.96); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.ritual-stamp {
+  animation: stamp-press 0.4s ease-out;
+}

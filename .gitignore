@@ -1,0 +1,8 @@
+node_modules/
+out/
+dist/
+build/
+*.log
+.DS_Store
+.remember/
+spike/

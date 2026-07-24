@@ -1,0 +1,79 @@
+{
+  "name": "engram-desktop",
+  "version": "0.1.0",
+  "description": "A custom desktop app for the Engram Claude Code learning plugin — scripts the claude CLI directly, no API billing.",
+  "author": "Tyler Hadsell",
+  "private": true,
+  "type": "module",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "icons": "./scripts/build-icons.sh",
+    "bundle:bridge-worker": "esbuild src/main/bridge/mcpBridgeWorker.mjs --bundle --platform=node --format=esm --outfile=resources/mcpBridgeWorker.mjs",
+    "dist": "npm run bundle:bridge-worker && npm run build && electron-builder",
+    "dist:mac": "npm run bundle:bridge-worker && npm run build && electron-builder --mac"
+  },
+  "dependencies": {
+    "@fontsource/fraunces": "^5.3.0",
+    "@fontsource/inter": "^5.3.0",
+    "@fontsource/space-grotesk": "^5.3.0",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@types/three": "^0.185.1",
+    "katex": "^0.18.0",
+    "marked": "^18.0.6",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "three": "^0.185.1",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/katex": "^0.16.8",
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^36.2.1",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^3.1.0",
+    "esbuild": "^0.28.1",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.8.3",
+    "vite": "^6.0.0"
+  },
+  "build": {
+    "appId": "com.learner.engram-desktop",
+    "productName": "Engram Desktop",
+    "files": [
+      "out/**/*"
+    ],
+    "directories": {
+      "buildResources": "build"
+    },
+    "extraResources": [
+      {
+        "from": "resources",
+        "to": "."
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.education",
+      "icon": "build/icon.icns",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "dmg": {
+      "title": "Engram Desktop",
+      "window": { "width": 540, "height": 380 },
+      "contents": [
+        { "x": 140, "y": 190, "type": "file" },
+        { "x": 400, "y": 190, "type": "link", "path": "/Applications" }
+      ]
+    }
+  }
+}
