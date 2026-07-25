@@ -3,7 +3,18 @@ import type { TopicGraph, EngramNode, MapAnnotations } from '../../../shared/typ
 import { humanizeNodeId } from '../../../shared/humanizeId'
 import { EDGE_STYLE, type SimEdge } from './graph3d/types'
 import { buildEdges, computeForwardAdjacency, computeFrontierIds, computeHubNodeIds, seeded } from './graph3d/layout'
-import { settlePlate, cellBodyPath, dendriteStubs, territoryGroups, hullPath, plateStats, type PlateNode } from './graph2d/plate'
+import {
+  settlePlate,
+  cellBodyPath,
+  dendriteStubs,
+  territoryGroups,
+  hullPath,
+  hullCentroid,
+  plateStats,
+  ancestorClosure,
+  descendantPath,
+  type PlateNode,
+} from './graph2d/plate'
 
 // Kept re-exported so TopicMapView's modal edge-kind labels can still import
 // EDGE_STYLE from this module.
@@ -26,6 +37,31 @@ const STATE_COLOR: Record<EngramNode['state'], string> = {
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, v))
+}
+
+type DueStatus = 'overdue' | 'today' | 'future'
+
+const DUE_LENS_COLOR: Record<DueStatus, string> = {
+  overdue: 'var(--color-ink-danger)',
+  today: 'var(--color-ink-warm)',
+  future: 'var(--color-ink-cool-dim)',
+}
+
+/** Where a node's own schedule sits relative to today, LOCAL-date compared —
+ * getFullYear/Month/Date, never toISOString, matching the discipline
+ * ReviewSessionView's daysOverdueLocal and HomeView's due forecast already
+ * use so "today" reads identically everywhere due dates get compared in this
+ * app. `null` for a node with nothing to compare yet: state 'new' has no
+ * schedule, and the due lens leaves those untouched per the brief. */
+function dueStatusFor(node: EngramNode): DueStatus | null {
+  if (node.state === 'new' || !node.fsrs.due) return null
+  const today = new Date()
+  const dayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  const d = new Date(`${node.fsrs.due}T00:00:00`)
+  const diffDays = Math.floor((d.getTime() - dayStart.getTime()) / 86400000)
+  if (diffDays < 0) return 'overdue'
+  if (diffDays === 0) return 'today'
+  return 'future'
 }
 
 /** Edge geometry as a "loose string" — a quadratic bezier whose control
@@ -91,9 +127,14 @@ interface GraphViewProps {
    * stripped; see stripMathDelimiters above). Optional: undefined behaves
    * exactly as before annotate_node existed. */
   annotations?: MapAnnotations | null
+  /** Schedule-lens toggle owned by TopicMapView — while on, node bodies
+   * recolor by fsrs.due standing instead of encode/consolidate state, and
+   * territory labels hide (the plate should read as pure schedule at a
+   * glance, not compete with wash captions). */
+  dueLens: boolean
 }
 
-export function GraphView({ graph, selected, onSelect, onOpen, query, retrievability, annotations }: GraphViewProps) {
+export function GraphView({ graph, selected, onSelect, onOpen, query, retrievability, annotations, dueLens }: GraphViewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState<{ w: number; h: number } | null>(null)
   const [view, setView] = useState({ x: 0, y: 0, zoom: 1 })
@@ -255,22 +296,30 @@ export function GraphView({ graph, selected, onSelect, onOpen, query, retrievabi
     return graph.nodes[id]?.claim.toLowerCase().includes(q) ?? false
   }
 
-  const active = hovered ?? selected
+  // Selecting a node promotes the trail from a one-hop preview to the node's
+  // full transitive prerequisite chain (ancestorClosure/descendantPath in
+  // plate.ts). Hover alone, with nothing selected, keeps the original
+  // first-order-only preview completely untouched — see the branch below.
+  // `active` now prefers `selected` over `hovered` (the old priority was the
+  // reverse) so a selection's trail isn't interrupted by mousing over some
+  // other node; deselecting (selected -> null) falls straight back through
+  // to `hovered`, restoring the pre-existing hover behavior exactly.
+  const isTrailMode = selected !== null
+  const active = selected ?? hovered
 
-  // First-order, hub-excluded trail sets — the exact semantics ported from
-  // the retired three.js scene (commits 1aa5ec0/5fd18a2): "come from" is the
-  // active node's direct `requires` list, "go next" is its direct forward
-  // dependents. Both stay strictly one hop so the trail always reads as
-  // "this is what's adjacent to what I'm looking at", never a full path.
-  const ancestorSet = useMemo(
-    () =>
-      active ? new Set((graph.nodes[active]?.edges.requires ?? []).filter((id) => !hubNodeIds.has(id))) : null,
-    [active, graph, hubNodeIds],
-  )
-  const descendantSet = useMemo(
-    () => (active ? new Set((forwardAdjacency.get(active) ?? []).filter((id) => !hubNodeIds.has(id))) : null),
-    [active, forwardAdjacency, hubNodeIds],
-  )
+  // Ancestors/descendants: transitive closure while selected, first-order
+  // (hub-excluded, direct requires/dependents only — the exact semantics
+  // ported from the retired three.js scene, commits 1aa5ec0/5fd18a2) on bare
+  // hover. Both stay one hop in the hover case so that preview always reads
+  // as "this is what's adjacent to what I'm looking at", never a full path.
+  const ancestorSet = useMemo(() => {
+    if (selected) return ancestorClosure(graph, selected)
+    return active ? new Set((graph.nodes[active]?.edges.requires ?? []).filter((id) => !hubNodeIds.has(id))) : null
+  }, [selected, active, graph, hubNodeIds])
+  const descendantSet = useMemo(() => {
+    if (selected) return descendantPath(graph, selected)
+    return active ? new Set((forwardAdjacency.get(active) ?? []).filter((id) => !hubNodeIds.has(id))) : null
+  }, [selected, active, forwardAdjacency, hubNodeIds])
   const relevantIds = useMemo(() => {
     if (!active) return null
     const s = new Set<string>([active])
@@ -281,11 +330,30 @@ export function GraphView({ graph, selected, onSelect, onOpen, query, retrievabi
 
   // Search-dim and relevance-dim compose via Math.min, not multiplication —
   // a node only needs one good reason (matching the query, or being on the
-  // active trail) to stay at full visibility.
+  // active trail) to stay at full visibility. The relevance floor drops
+  // further while selected (0.15 vs hover's 0.22) — a committed selection
+  // can afford to push everything else further back than a passing hover.
   function nodeOpacity(id: string): number {
     const searchOpacity = matchesQuery(id) ? 1 : 0.18
-    const relevanceOpacity = relevantIds && !relevantIds.has(id) ? 0.22 : 1
+    const dimFloor = isTrailMode ? 0.15 : 0.22
+    const relevanceOpacity = relevantIds && !relevantIds.has(id) ? dimFloor : 1
     return Math.min(searchOpacity, relevanceOpacity)
+  }
+
+  // Whether an edge belongs to the ancestor/descendant trail — while
+  // selected this walks the full chain (both endpoints in the closure, or
+  // one endpoint being the selected node itself); on bare hover it collapses
+  // back to "touches the active node directly", identical to the pre-trail
+  // behavior.
+  function isAncestorTrailEdge(e: SimEdge): boolean {
+    if (e.kind !== 'requires' || !ancestorSet) return false
+    if (isTrailMode) return ancestorSet.has(e.source) && (e.target === active || ancestorSet.has(e.target))
+    return e.target === active && ancestorSet.has(e.source)
+  }
+  function isDescendantTrailEdge(e: SimEdge): boolean {
+    if (e.kind !== 'requires' || !descendantSet) return false
+    if (isTrailMode) return descendantSet.has(e.target) && (e.source === active || descendantSet.has(e.source))
+    return e.source === active && descendantSet.has(e.target)
   }
 
   const fontSize = clamp(11 / view.zoom, 8, 13)
@@ -353,6 +421,11 @@ export function GraphView({ graph, selected, onSelect, onOpen, query, retrievabi
           <filter id="plate-blur">
             <feGaussianBlur stdDeviation="14" />
           </filter>
+          {/* Same blur technique as plate-blur, tuned down to cell scale for
+              the due lens's overdue glow. */}
+          <filter id="plate-node-glow">
+            <feGaussianBlur stdDeviation="4" />
+          </filter>
           {graph.order
             .filter((id) => graph.nodes[id]?.state === 'learning' && !graph.nodes[id]?.capstone)
             .map((id) => {
@@ -397,20 +470,52 @@ export function GraphView({ graph, selected, onSelect, onOpen, query, retrievabi
             )
           })}
 
-          {/* Edges */}
+          {/* Territory labels — faint serif captions at each wash's hull
+              centroid (same hull convexHull feeds hullPath), named from the
+              group's root node id. Hidden under the due lens: that view
+              wants the plate reading as pure schedule, not competing with
+              wash captions. */}
+          {!dueLens &&
+            Array.from(territories.entries()).map(([root, members]) => {
+              const pts = members.map((id) => plate.get(id)).filter((p): p is PlateNode => !!p)
+              const centroid = hullCentroid(pts)
+              if (!centroid) return null
+              return (
+                <text
+                  key={`territory-label-${root}`}
+                  x={centroid.x}
+                  y={centroid.y}
+                  textAnchor="middle"
+                  fontFamily="var(--font-serif)"
+                  fontStyle="italic"
+                  fontSize={11}
+                  fill="var(--color-text-dim)"
+                  opacity={0.35}
+                  pointerEvents="none"
+                >
+                  {humanizeNodeId(root)}
+                </text>
+              )
+            })}
+
+          {/* Edges — dimmed off-trail while selected so the promoted
+              ancestor/descendant chain reads clearly; unchanged (flat 0.35)
+              on bare hover or with nothing active, exactly as before. */}
           {visibleEdges.map((e, i) => {
             const a = drifted.get(e.source)
             const b = drifted.get(e.target)
             if (!a || !b) return null
             const style = EDGE_STYLE[e.kind]
             const d = stringEdgePath(e.source, e.target, a, b, e.kind === 'requires' ? 'requires' : 'other', t)
+            const onTrail = isAncestorTrailEdge(e) || isDescendantTrailEdge(e)
+            const strokeOpacity = isTrailMode ? (onTrail ? 0.5 : 0.08) : 0.35
             return (
               <path
                 key={i}
                 d={d}
                 fill="none"
                 stroke={style.stroke}
-                strokeOpacity={0.35}
+                strokeOpacity={strokeOpacity}
                 strokeWidth={1.1}
                 strokeDasharray={style.dash}
                 pointerEvents="none"
@@ -497,7 +602,30 @@ export function GraphView({ graph, selected, onSelect, onOpen, query, retrievabi
               )
             }
 
-            const color = STATE_COLOR[node.state]
+            // Due lens recolors by schedule standing and wins over the trail
+            // (it's a distinct "show me the schedule" mode); the trail's own
+            // ancestor/descendant/selected ink only applies when the due
+            // lens is off. Neither touches a node's own encode/consolidate
+            // color unless one of them actually claims it.
+            const dueStatus = dueLens ? dueStatusFor(node) : null
+            const trailRole: 'ancestor' | 'descendant' | 'selected' | null = isTrailMode
+              ? id === selected
+                ? 'selected'
+                : ancestorSet?.has(id)
+                  ? 'ancestor'
+                  : descendantSet?.has(id)
+                    ? 'descendant'
+                    : null
+              : null
+            const color = dueStatus
+              ? DUE_LENS_COLOR[dueStatus]
+              : trailRole === 'ancestor'
+                ? 'var(--color-ink-cool)'
+                : trailRole === 'descendant'
+                  ? 'var(--color-ink-warm)'
+                  : trailRole === 'selected'
+                    ? 'var(--color-ink-hot)'
+                    : STATE_COLOR[node.state]
             const fillOpacity = 0.35 + 0.65 * (retrievability?.get(id) ?? 1)
             const dash = node.threshold ? '3 2.5' : undefined
             const bodyPath = cellBodyPath(id, r)
@@ -516,6 +644,15 @@ export function GraphView({ graph, selected, onSelect, onOpen, query, retrievabi
                 {/* Invisible hit disc — outlined shapes otherwise only catch
                     clicks on their thin strokes, not the hollow interior. */}
                 <circle r={r + 3} fill="transparent" stroke="none" />
+                {dueStatus === 'overdue' && (
+                  <path
+                    d={bodyPath}
+                    fill="var(--color-ink-danger)"
+                    fillOpacity={0.55}
+                    filter="url(#plate-node-glow)"
+                    pointerEvents="none"
+                  />
+                )}
                 {node.state === 'new' && (
                   <path d={bodyPath} fill="none" stroke={color} strokeWidth={1.2} strokeDasharray={dash} />
                 )}
@@ -531,22 +668,19 @@ export function GraphView({ graph, selected, onSelect, onOpen, query, retrievabi
             )
           })}
 
-          {/* Hover/selection trails — first-order, hub-excluded, always
-              touching the active node. Drawn after cell bodies so they read
-              as an overlay on top of the plate. */}
+          {/* Hover/selection trails. On bare hover this is still exactly the
+              first-order set touching the active node; while selected it's
+              every edge along the full ancestor/descendant chain (see
+              isAncestorTrailEdge/isDescendantTrailEdge above). Drawn after
+              cell bodies so they read as an overlay on top of the plate. */}
           {active &&
             edges
-              .filter(
-                (e) =>
-                  e.kind === 'requires' &&
-                  ((e.target === active && ancestorSet?.has(e.source)) ||
-                    (e.source === active && descendantSet?.has(e.target))),
-              )
+              .filter((e) => isAncestorTrailEdge(e) || isDescendantTrailEdge(e))
               .map((e, i) => {
                 const a = drifted.get(e.source)
                 const b = drifted.get(e.target)
                 if (!a || !b) return null
-                const isAncestor = e.target === active
+                const isAncestor = isAncestorTrailEdge(e)
                 return (
                   <path
                     key={`trail-${i}`}

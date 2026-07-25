@@ -130,6 +130,11 @@ export function TopicMapView({
   // drawer, drawer stays open behind it).
   const [explorableNode, setExplorableNode] = useState<string | null>(null)
   const [query, setQuery] = useState('')
+  // Schedule lens toggle — legend-area button, see the legend swap below.
+  // Reset isn't tied to topic switches: staying "on" while browsing between
+  // topics matches how a lens works (you don't re-pick it every time you
+  // move your eyes).
+  const [dueLens, setDueLens] = useState(false)
   // Tutor-authored LaTeX overrides for the selected topic's nodes (see
   // mapAnnotations.ts) — keyed by node id, refreshed on topic switch and on
   // every live annotate_node bridge:ui event for this topic.
@@ -314,6 +319,7 @@ export function TopicMapView({
               query={query}
               retrievability={retrievability}
               annotations={annotations}
+              dueLens={dueLens}
             />
 
             {/* Floating search — mirrors Obsidian's graph-view search field. */}
@@ -363,61 +369,101 @@ export function TopicMapView({
                   </clipPath>
                 </defs>
               </svg>
-              <div className="flex items-center gap-2">
-                <svg width={18} height={18} viewBox="-9 -9 18 18" aria-hidden="true">
-                  <path d={cellBodyPath('legend-new', 6)} fill="none" stroke="var(--color-ink-cool-dim)" strokeWidth={1.2} />
-                </svg>
-                not started
+              <div className="flex items-center justify-between gap-3 pb-1 mb-0.5 border-b border-[var(--color-hairline)]">
+                <span>legend</span>
+                <button
+                  onClick={() => setDueLens((v) => !v)}
+                  aria-pressed={dueLens}
+                  className={`focus-ring px-1.5 py-0.5 rounded transition-colors ${
+                    dueLens
+                      ? 'bg-[var(--color-surface-3)] text-[var(--color-ink-warm)]'
+                      : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]'
+                  }`}
+                >
+                  due lens
+                </button>
               </div>
-              <div className="flex items-center gap-2">
-                <svg width={18} height={18} viewBox="-9 -9 18 18" aria-hidden="true">
-                  <path d={cellBodyPath('legend-learning', 6)} fill="none" stroke="var(--color-ink-cool)" strokeWidth={1.2} />
-                  <path
-                    d={cellBodyPath('legend-learning', 6)}
-                    fill="var(--color-ink-cool)"
-                    fillOpacity={0.8}
-                    clipPath="url(#legend-half-clip)"
-                  />
-                </svg>
-                encoding
-              </div>
-              <div className="flex items-center gap-2">
-                <svg width={18} height={18} viewBox="-9 -9 18 18" aria-hidden="true">
-                  <path d={cellBodyPath('legend-review', 6)} fill="var(--color-ink-warm)" fillOpacity={0.85} />
-                </svg>
-                consolidated
-              </div>
-              <div className="flex items-center gap-2">
-                <svg width={18} height={18} viewBox="-9 -9 18 18" aria-hidden="true">
-                  <path d={cellBodyPath('legend-threshold', 6)} fill="none" stroke="var(--color-ink-hot)" strokeWidth={1.2} strokeDasharray="3 2.5" />
-                </svg>
-                threshold
-              </div>
-              <div className="flex items-center gap-2">
-                <svg width={18} height={18} viewBox="-9 -9 18 18" aria-hidden="true">
-                  <path d={cellBodyPath('legend-frontier', 5)} fill="none" stroke="var(--color-ink-cool)" strokeWidth={1} />
-                  <circle r={7.5} fill="none" stroke="var(--color-ink-warm)" strokeWidth={1} />
-                </svg>
-                learn next
-              </div>
-              <div className="flex items-center gap-2">
-                <svg width={18} height={18} viewBox="-9 -9 18 18" aria-hidden="true">
-                  <path d={cellBodyPath('legend-lapsed', 5)} fill="none" stroke="var(--color-ink-cool)" strokeWidth={1} />
-                  {Array.from({ length: 8 }, (_, i) => {
-                    const angle = (i / 8) * Math.PI * 2
-                    const r = 8
-                    return <circle key={i} cx={Math.cos(angle) * r} cy={Math.sin(angle) * r} r={0.8} fill="var(--color-ink-danger)" opacity={0.7} />
-                  })}
-                </svg>
-                lapsed
-              </div>
-              <div className="flex items-center gap-2">
-                <svg width={18} height={18} viewBox="-9 -9 18 18" aria-hidden="true">
-                  <circle r={8} fill="none" stroke="var(--color-ink-warm)" strokeWidth={1} />
-                  <path d={cellBodyPath('legend-capstone', 5)} fill="var(--color-ink-warm)" fillOpacity={0.85} />
-                </svg>
-                capstone seal
-              </div>
+              {dueLens ? (
+                <>
+                  <div className="flex items-center gap-2">
+                    <svg width={18} height={18} viewBox="-9 -9 18 18" aria-hidden="true">
+                      <circle r={7.5} fill="none" stroke="var(--color-ink-danger)" strokeWidth={1.2} />
+                      <path d={cellBodyPath('legend-overdue', 6)} fill="var(--color-ink-danger)" fillOpacity={0.85} />
+                    </svg>
+                    overdue
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <svg width={18} height={18} viewBox="-9 -9 18 18" aria-hidden="true">
+                      <path d={cellBodyPath('legend-due-today', 6)} fill="var(--color-ink-warm)" fillOpacity={0.85} />
+                    </svg>
+                    due today
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <svg width={18} height={18} viewBox="-9 -9 18 18" aria-hidden="true">
+                      <path d={cellBodyPath('legend-due-future', 6)} fill="none" stroke="var(--color-ink-cool-dim)" strokeWidth={1.2} />
+                    </svg>
+                    not yet due
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2">
+                    <svg width={18} height={18} viewBox="-9 -9 18 18" aria-hidden="true">
+                      <path d={cellBodyPath('legend-new', 6)} fill="none" stroke="var(--color-ink-cool-dim)" strokeWidth={1.2} />
+                    </svg>
+                    not started
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <svg width={18} height={18} viewBox="-9 -9 18 18" aria-hidden="true">
+                      <path d={cellBodyPath('legend-learning', 6)} fill="none" stroke="var(--color-ink-cool)" strokeWidth={1.2} />
+                      <path
+                        d={cellBodyPath('legend-learning', 6)}
+                        fill="var(--color-ink-cool)"
+                        fillOpacity={0.8}
+                        clipPath="url(#legend-half-clip)"
+                      />
+                    </svg>
+                    encoding
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <svg width={18} height={18} viewBox="-9 -9 18 18" aria-hidden="true">
+                      <path d={cellBodyPath('legend-review', 6)} fill="var(--color-ink-warm)" fillOpacity={0.85} />
+                    </svg>
+                    consolidated
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <svg width={18} height={18} viewBox="-9 -9 18 18" aria-hidden="true">
+                      <path d={cellBodyPath('legend-threshold', 6)} fill="none" stroke="var(--color-ink-hot)" strokeWidth={1.2} strokeDasharray="3 2.5" />
+                    </svg>
+                    threshold
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <svg width={18} height={18} viewBox="-9 -9 18 18" aria-hidden="true">
+                      <path d={cellBodyPath('legend-frontier', 5)} fill="none" stroke="var(--color-ink-cool)" strokeWidth={1} />
+                      <circle r={7.5} fill="none" stroke="var(--color-ink-warm)" strokeWidth={1} />
+                    </svg>
+                    learn next
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <svg width={18} height={18} viewBox="-9 -9 18 18" aria-hidden="true">
+                      <path d={cellBodyPath('legend-lapsed', 5)} fill="none" stroke="var(--color-ink-cool)" strokeWidth={1} />
+                      {Array.from({ length: 8 }, (_, i) => {
+                        const angle = (i / 8) * Math.PI * 2
+                        const r = 8
+                        return <circle key={i} cx={Math.cos(angle) * r} cy={Math.sin(angle) * r} r={0.8} fill="var(--color-ink-danger)" opacity={0.7} />
+                      })}
+                    </svg>
+                    lapsed
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <svg width={18} height={18} viewBox="-9 -9 18 18" aria-hidden="true">
+                      <circle r={8} fill="none" stroke="var(--color-ink-warm)" strokeWidth={1} />
+                      <path d={cellBodyPath('legend-capstone', 5)} fill="var(--color-ink-warm)" fillOpacity={0.85} />
+                    </svg>
+                    capstone seal
+                  </div>
+                </>
+              )}
               <div className="border-t border-[var(--color-hairline)] mt-1 pt-1 text-[var(--color-text-faint)]">
                 double-click to open
               </div>
