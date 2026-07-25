@@ -40,6 +40,7 @@ import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { SkeletonBar } from '../components/Skeleton'
 import { InkNode } from '../components/ui/InkNode'
+import { PinTackIcon } from '../components/ui/PinTackIcon'
 import { HealthRing } from '../components/ui/HealthRing'
 import { friendlyErrorText } from '../shared/friendlyError'
 import { extractTicketFromMessages } from '../shared/ticketParser'
@@ -391,6 +392,7 @@ export function LearnSessionView({
   // into the hidden header) peeks it back open. The leave timer keeps it from
   // flickering when the pointer grazes the boundary.
   const [mastheadPeek, setMastheadPeek] = useState(false)
+  const [mastheadPinned, setMastheadPinned] = useState(false)
   const peekLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const mastheadRef = useRef<HTMLElement | null>(null)
   const peekMasthead = () => {
@@ -433,14 +435,17 @@ export function LearnSessionView({
   const handleSessionPointer = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect()
     // Masthead: top edge reveals; settling below the open header tucks it.
-    if (e.clientY - rect.top <= 18) {
-      peekMasthead()
-    } else {
-      const header = mastheadRef.current
-      if (header && e.clientY <= header.getBoundingClientRect().bottom + 12) {
+    // Pinned ignores the cursor entirely.
+    if (!mastheadPinned) {
+      if (e.clientY - rect.top <= 18) {
         peekMasthead()
       } else {
-        scheduleMastheadCollapse()
+        const header = mastheadRef.current
+        if (header && e.clientY <= header.getBoundingClientRect().bottom + 12) {
+          peekMasthead()
+        } else {
+          scheduleMastheadCollapse()
+        }
       }
     }
     // Ticket: left edge reveals; while out, the whole card width holds it
@@ -577,6 +582,7 @@ export function LearnSessionView({
     setWhyChainOpen(false)
     setTicketPeek(false)
     setTicketPinned(false)
+    setMastheadPinned(false)
     intentionalStopRef.current = false
     // NeuralField is app-global and this view stays mounted — a new session must not
     // inherit the previous topic's leftover warmth.
@@ -1353,7 +1359,7 @@ export function LearnSessionView({
       onMouseMove={started && messages.length > 0 ? handleSessionPointer : undefined}
     >
       {(() => {
-        const mastheadCollapsed = started && messages.length > 0 && !mastheadPeek && !whyChainOpen
+        const mastheadCollapsed = started && messages.length > 0 && !mastheadPeek && !whyChainOpen && !mastheadPinned
         return (
           <>
             {mastheadCollapsed && (
@@ -1450,6 +1456,20 @@ export function LearnSessionView({
                 className="focus-ring text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]"
               >
                 ← All topics
+              </button>
+            )}
+            {started && messages.length > 0 && (
+              <button
+                onClick={() => setMastheadPinned((v) => !v)}
+                aria-label={mastheadPinned ? 'Unpin header' : 'Pin header'}
+                title={mastheadPinned ? 'Unpin — tuck away unless the cursor visits the top' : 'Pin — keep the header out'}
+                className={`focus-ring no-press h-5 w-5 rounded-full flex items-center justify-center transition-colors duration-[var(--dur-fast)] ${
+                  mastheadPinned
+                    ? 'text-[var(--color-ink-warm)] bg-[var(--color-surface-3)]'
+                    : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]'
+                }`}
+              >
+                <PinTackIcon pinned={mastheadPinned} />
               </button>
             )}
           </div>
@@ -1606,21 +1626,7 @@ export function LearnSessionView({
                             : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]'
                         }`}
                       >
-                        {/* Thumb tack: flat head, shoulder, needle — lies at a
-                            tilt when loose, stands upright when driven in. */}
-                        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                          <g transform={ticketPinned ? undefined : 'rotate(-35 8 8)'}>
-                            <path
-                              d="M5.4 2.5 H10.6 L9.7 6.2 H6.3 Z"
-                              stroke="currentColor"
-                              strokeWidth="1.3"
-                              strokeLinejoin="round"
-                              fill={ticketPinned ? 'currentColor' : 'none'}
-                            />
-                            <path d="M4.6 6.2 H11.4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-                            <path d="M8 6.2 V13.2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-                          </g>
-                        </svg>
+                        <PinTackIcon pinned={ticketPinned} />
                       </button>
                     </div>
                   </div>
