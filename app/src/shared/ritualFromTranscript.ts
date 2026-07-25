@@ -336,7 +336,19 @@ export function deriveRitualMarks(entries: unknown[]): DerivedRitualMark[] {
   // in rather than duplicating the mark — mirrors LearnSessionView's JobsRail
   // matching (see task-3-report.md for why the spawn's path usually never
   // arrives in this transcript at all).
-  const pendingExplorableByNode = new Map<string, number>()
+  //
+  // A QUEUE per node, not a single slot: re-encoding a repeatedly-lapsing
+  // node (the artifact-smith agent's own stated use case) spawns a second
+  // smith for the SAME node within one sitting. A single `Map<node, index>`
+  // slot would have the second spawn's `.set()` clobber the first spawn's
+  // pending entry — so the first spawn's `artifact set` (which lands first,
+  // smiths finish in spawn order) would find no pending entry, fall through,
+  // and push a stray extra mark, while the SECOND spawn's `artifact set`
+  // would then wrongly attach its path to whichever mark happened to still
+  // be indexed. FIFO (append on spawn, shift oldest on `artifact set`)
+  // matches same-node respawns to their own `artifact set` in completion
+  // order instead.
+  const pendingExplorableByNode = new Map<string, number[]>()
 
   for (const event of walkTranscript(entries)) {
     if (event.kind === 'user_message') {
@@ -372,11 +384,12 @@ export function deriveRitualMarks(entries: unknown[]): DerivedRitualMark[] {
       }
       const artifactSet = looksLikeArtifactSetCommand(command)
       if (artifactSet?.path) {
-        const pendingIdx = artifactSet.node ? pendingExplorableByNode.get(artifactSet.node) : undefined
+        const queue = artifactSet.node ? pendingExplorableByNode.get(artifactSet.node) : undefined
+        const pendingIdx = queue?.length ? queue.shift() : undefined
         if (pendingIdx !== undefined) {
           const existing = marks[pendingIdx] as Extract<DerivedRitualMark, { kind: 'explorable' }>
           marks[pendingIdx] = { ...existing, path: artifactSet.path }
-          if (artifactSet.node) pendingExplorableByNode.delete(artifactSet.node)
+          if (queue && queue.length === 0 && artifactSet.node) pendingExplorableByNode.delete(artifactSet.node)
         } else {
           marks.push({
             id: `dmark-${seq++}`,
@@ -395,7 +408,11 @@ export function deriveRitualMarks(entries: unknown[]): DerivedRitualMark[] {
       const title = explorableTitleFromDescription(input.description) ?? 'Explorable'
       const node = explorableNodeFromPrompt(input.prompt)
       marks.push({ id: `dmark-${seq++}`, atIndex: messageCount, kind: 'explorable', title, node })
-      if (node) pendingExplorableByNode.set(node, marks.length - 1)
+      if (node) {
+        const queue = pendingExplorableByNode.get(node)
+        if (queue) queue.push(marks.length - 1)
+        else pendingExplorableByNode.set(node, [marks.length - 1])
+      }
       continue
     }
     if (event.name === SESSION_PHASE) {
