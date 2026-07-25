@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { existsSync } from 'node:fs'
 import { readFile, writeFile, mkdir, stat, readdir } from 'node:fs/promises'
 import { sessionHistoryFor } from './sessionIndex'
-import { transcriptPath, transcriptsDir, readTranscript } from './transcriptReader'
+import { transcriptPath, projectsRoot, readTranscriptFile } from './transcriptReader'
 import { parseGradeResult, parseGradeResults } from '../../shared/gradeResult'
 import type { NodeProvenance, ProvenanceEvent } from '../../shared/types'
 
@@ -208,12 +208,12 @@ function scanTranscriptEntries(lines: unknown[], sittingKind: SittingKind): Omit
  * Returns null if the file doesn't exist or (sweep only) exceeds the size
  * guard — in both cases there's simply nothing to contribute. */
 async function scanOne(
+  path: string,
   sessionId: string,
   sittingKind: SittingKind,
   cache: ScanCache,
   maxBytes: number | null,
 ): Promise<{ events: ScannedEvent[]; dirty: boolean } | null> {
-  const path = transcriptPath(sessionId)
   let fileStat: { mtimeMs: number; size: number }
   try {
     fileStat = await stat(path)
@@ -227,22 +227,40 @@ async function scanOne(
     return { events: cached.events, dirty: false }
   }
 
-  const lines = await readTranscript(sessionId)
+  const lines = await readTranscriptFile(path)
   const events = scanTranscriptEntries(lines, sittingKind).map((e) => ({ ...e, sessionId }))
   cache[path] = { mtimeMs: fileStat.mtimeMs, events }
   return { events, dirty: true }
 }
 
-/** Every `.jsonl` basename (sans extension) in the transcripts directory —
- * candidates for the disk-sweep fallback, filtered by the caller against
- * session ids already covered by the index. */
-async function allTranscriptSessionIds(): Promise<string[]> {
+/** Every `.jsonl` under EVERY project dir in `~/.claude/projects` — not just
+ * the app's own dir. Terminal-run sittings (interactive `claude` started in
+ * some other working directory) transcribe into their own `<flattened-cwd>`
+ * dirs, and that's exactly where pre-app learning history lives. Returned as
+ * absolute paths with the session id (basename); the caller filters against
+ * ids already covered by the index. */
+async function allSweepTranscripts(): Promise<{ path: string; sessionId: string }[]> {
+  const out: { path: string; sessionId: string }[] = []
   try {
-    const files = await readdir(transcriptsDir())
-    return files.filter((f) => f.endsWith('.jsonl')).map((f) => f.slice(0, -'.jsonl'.length))
+    const dirs = await readdir(projectsRoot(), { withFileTypes: true })
+    for (const dir of dirs) {
+      if (!dir.isDirectory()) continue
+      const dirPath = join(projectsRoot(), dir.name)
+      let files: string[]
+      try {
+        files = await readdir(dirPath)
+      } catch {
+        continue
+      }
+      for (const f of files) {
+        if (!f.endsWith('.jsonl')) continue
+        out.push({ path: join(dirPath, f), sessionId: f.slice(0, -'.jsonl'.length) })
+      }
+    }
   } catch {
-    return []
+    // projects root unreadable — sweep contributes nothing
   }
+  return out
 }
 
 /**
@@ -288,20 +306,21 @@ export async function nodeProvenance(topic: string, nodeIds: string[]): Promise<
   const allEvents: ScannedEvent[] = []
 
   for (const job of jobs) {
-    const res = await scanOne(job.sessionId, job.sittingKind, cache, null)
+    const res = await scanOne(transcriptPath(job.sessionId), job.sessionId, job.sittingKind, cache, null)
     if (!res) continue
     if (res.dirty) cacheDirty = true
     allEvents.push(...res.events)
   }
 
   // Disk sweep — pick up sittings from before the index existed at all (see
-  // module doc, layer 3). Every id already covered by an index entry above is
-  // skipped; what's left is scanned with both detector sets (sittingKind
-  // 'sweep') and size-guarded.
-  for (const sessionId of await allTranscriptSessionIds()) {
-    if (seenSessionIds.has(sessionId)) continue
-    seenSessionIds.add(sessionId)
-    const res = await scanOne(sessionId, 'sweep', cache, MAX_SWEEP_FILE_BYTES)
+  // module doc, layer 3), across EVERY project dir (terminal-run sittings
+  // transcribe under their own cwd's dir). Every id already covered by an
+  // index entry above is skipped; what's left is scanned with both detector
+  // sets (sittingKind 'sweep') and size-guarded.
+  for (const t of await allSweepTranscripts()) {
+    if (seenSessionIds.has(t.sessionId)) continue
+    seenSessionIds.add(t.sessionId)
+    const res = await scanOne(t.path, t.sessionId, 'sweep', cache, MAX_SWEEP_FILE_BYTES)
     if (!res) continue
     if (res.dirty) cacheDirty = true
     allEvents.push(...res.events)
