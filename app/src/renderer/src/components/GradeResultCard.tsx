@@ -200,16 +200,20 @@ export function GradeResultCard({
           </span>
         </div>
       )}
-      {result.intervalDays !== null && (
-        <span className="text-xs text-[var(--color-text-dim)]">{nextReviewText(result.intervalDays)}</span>
-      )}
-      {chipText && (
+      {/* The chip subsumes the old "back in N days" prose line — one scheduling
+          statement per card, not three (the stability bar above keeps its own
+          d-values; the chip carries interval + s movement). */}
+      {chipText ? (
         <span
           className="label-data text-[10px] self-start px-2 py-0.5 rounded-full inline-block"
           style={{ color: style.color, background: style.bg }}
         >
           {chipText}
         </span>
+      ) : (
+        result.intervalDays !== null && (
+          <span className="text-xs text-[var(--color-text-dim)]">{nextReviewText(result.intervalDays)}</span>
+        )
       )}
       {confidenceLabel != null && (
         <div className="fig-caption">felt “{confidenceLabel}” → {result.grade}</div>
