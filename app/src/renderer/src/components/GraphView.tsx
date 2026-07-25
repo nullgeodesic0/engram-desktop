@@ -715,6 +715,10 @@ export function GraphView({
                 const a = drifted.get(e.source)
                 const b = drifted.get(e.target)
                 if (!a || !b) return null
+                // Replay clips the trail exactly like the base edge layer —
+                // never draw a bright link into a node the time-lapse says
+                // hasn't been inked yet.
+                if (visibleNodes && (!visibleNodes.has(e.source) || !visibleNodes.has(e.target))) return null
                 const isAncestor = isAncestorTrailEdge(e)
                 return (
                   <path

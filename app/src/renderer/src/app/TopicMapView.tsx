@@ -467,9 +467,11 @@ export function TopicMapView({
                   </button>
                   <button
                     onClick={() => setDueLens((v) => !v)}
-                    aria-pressed={dueLens}
-                    className={`focus-ring px-1.5 py-0.5 rounded transition-colors ${
-                      dueLens
+                    aria-pressed={dueLens && !replayActive}
+                    disabled={replayActive}
+                    title={replayActive ? 'One lens at a time — close the replay first' : undefined}
+                    className={`focus-ring px-1.5 py-0.5 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                      dueLens && !replayActive
                         ? 'bg-[var(--color-surface-3)] text-[var(--color-ink-warm)]'
                         : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]'
                     }`}
@@ -478,7 +480,11 @@ export function TopicMapView({
                   </button>
                 </div>
               </div>
-              {dueLens ? (
+              {/* Keyed on the same EFFECTIVE expression GraphView receives —
+                  the legend must never explain a lens the plate isn't wearing
+                  (replay forces the due lens off; see dueLens && !replayActive
+                  at the GraphView call). */}
+              {dueLens && !replayActive ? (
                 <>
                   <div className="flex items-center gap-2">
                     <svg width={18} height={18} viewBox="-9 -9 18 18" aria-hidden="true">
