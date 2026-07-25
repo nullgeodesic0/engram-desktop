@@ -1469,7 +1469,7 @@ export function LearnSessionView({
                     : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]'
                 }`}
               >
-                <PinTackIcon pinned={mastheadPinned} />
+                <PinTackIcon pinned={mastheadPinned} size={14} />
               </button>
             )}
           </div>
@@ -1626,7 +1626,7 @@ export function LearnSessionView({
                             : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]'
                         }`}
                       >
-                        <PinTackIcon pinned={ticketPinned} />
+                        <PinTackIcon pinned={ticketPinned} size={14} />
                       </button>
                     </div>
                   </div>
