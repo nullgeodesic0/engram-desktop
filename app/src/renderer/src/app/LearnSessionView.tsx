@@ -765,8 +765,6 @@ export function LearnSessionView({
             if (m) {
               const settings = pendingNewTopicSettings.current
               pendingNewTopicSettings.current = null
-    setLastWalk(null)
-    pendingAddTopic.current = null
               void window.engram.setTopicSettings(m[1], settings)
             }
           }
@@ -1098,21 +1096,13 @@ export function LearnSessionView({
   // want to abandon a topic's in-progress thread and begin that same topic over from
   // scratch, rather than continuing where you left off.
   async function startFreshForTopic(topic: TopicSummary) {
-    setAmbientLevel(0) // new session entry point — same reasoning as openTopic above.
     setActiveTopic(topic)
     setStarted(true)
-    setMessages([])
-    setBeat(null)
+    // Same full-ephemera reset openTopic uses (see its comment above) — a fresh
+    // start must not inherit the previous topic's diagnostic gate, pretest items,
+    // or pending explorable-by-node queue any more than a resumed one should.
+    resetSessionEphemera()
     setBusy(true)
-    setMarks([])
-    setGradingPending(false)
-    pendingStashToolUseIds.current.clear()
-    pendingNewTopicSettings.current = null
-    setLastWalk(null)
-    pendingAddTopic.current = null
-    lastNodeIdRef.current = null
-    setTopicGraphCache(null)
-    setWhyChainOpen(false)
     prefetchBanner(topic.topic)
     fetchTopicGraphCache(topic.topic)
     window.engram
@@ -1127,32 +1117,23 @@ export function LearnSessionView({
   }
 
   async function startNewTopic(goal: string, systemPromptExtra = '', contextFiles: string[] = []) {
-    setAmbientLevel(0) // new session entry point — same reasoning as openTopic above.
     setNewTopicOpen(false)
     setActiveTopic(null)
     setStarted(true)
-    setBeat(null)
+    // Same full-ephemera reset openTopic/startFreshForTopic use — a brand new
+    // topic must not inherit the previous session's diagnostic gate, pretest
+    // items, or pending explorable-by-node queue either.
+    resetSessionEphemera()
     setBusy(true)
-    setMarks([])
-    setGradingPending(false)
-    pendingStashToolUseIds.current.clear()
-    pendingNewTopicSettings.current = null
-    setLastWalk(null)
-    pendingAddTopic.current = null
-    lastNodeIdRef.current = null
-    setTopicGraphCache(null)
-    setWhyChainOpen(false)
     fetchCommitment()
     // The topic id doesn't exist until the engine mints it, so these can't be
     // written as TopicSettings yet — they ride the kickoff message for THIS
     // session, and persist as the topic's settings the moment the first
     // `next --topic <id>` call reveals the id (see the tool_use handler).
+    // resetSessionEphemera() above already nulled pendingNewTopicSettings —
+    // only the truthy case needs setting here.
     if (systemPromptExtra || contextFiles.length > 0) {
       pendingNewTopicSettings.current = { systemPromptExtra, contextFiles }
-    } else {
-      pendingNewTopicSettings.current = null
-    setLastWalk(null)
-    pendingAddTopic.current = null
     }
     let message = `Use the /engram:learn skill to start a brand new topic — I don't have an existing topic for this yet. What I want to learn: "${goal}". Please run the new-topic intake (asking about prior exposure and interests as usual) and build the curriculum.`
     if (systemPromptExtra) {

@@ -77,7 +77,9 @@ export const ExplorableForged = memo(function ExplorableForged({
         )}
         {(!path || status === 'missing') && (
           <div className="flex items-center gap-2 pt-0.5">
-            <div className="fig-caption">artifact no longer on disk</div>
+            <div className="fig-caption">
+              {path ? 'artifact no longer on disk' : 'path not recorded — find it in the artifacts gallery'}
+            </div>
             {path && (
               <button
                 onClick={() => window.engram.openArtifact(path)}
