@@ -1,9 +1,9 @@
 import { app } from 'electron'
 import { join } from 'node:path'
 import { existsSync } from 'node:fs'
-import { readFile, writeFile, mkdir, stat } from 'node:fs/promises'
+import { readFile, writeFile, mkdir, stat, readdir } from 'node:fs/promises'
 import { sessionHistoryFor } from './sessionIndex'
-import { transcriptPath, readTranscript } from './transcriptReader'
+import { transcriptPath, transcriptsDir, readTranscript } from './transcriptReader'
 import { parseGradeResult, parseGradeResults } from '../../shared/gradeResult'
 import type { NodeProvenance, ProvenanceEvent } from '../../shared/types'
 
@@ -22,9 +22,33 @@ import type { NodeProvenance, ProvenanceEvent } from '../../shared/types'
  * renderer copies are UI-adjacent (closures over refs/state setters) and this
  * one runs in the main process over a flat entry array — forking the *logic*
  * would be the real risk, so the match patterns themselves are copied verbatim.
+ *
+ * Coverage has three layers, all feeding the same detector/cache machinery:
+ *  1. The session index's per-topic `learn` key + shared `review` key (the
+ *     common case — every sitting since per-topic keying existed).
+ *  2. The index's legacy `learn` key — early sittings recorded before topics
+ *     got their own key (see sessionIndex.ts's migration note). Not
+ *     topic-scoped, so attribution falls back to node-set membership, same
+ *     mechanism as `review`.
+ *  3. A disk sweep of the transcripts directory for `.jsonl` files that
+ *     aren't referenced by *any* index entry at all — sittings that predate
+ *     the index entirely. Also attributed by node-set membership, and
+ *     size-guarded (see MAX_SWEEP_FILE_BYTES) since that directory also holds
+ *     the user's unrelated interactive dev-session transcripts, which can be
+ *     enormous and constantly mutating.
  */
 
 const CACHE_FILE = 'session-scan-cache.json'
+
+// Engram sittings are small (hundreds of KB to a couple MB even for long
+// ones — see the real transcripts this was tuned against). This guards the
+// disk sweep against the user's own huge interactive dev-session transcripts
+// living in the same directory (one on the dev machine this was built on is
+// 100+ MB and grows live) — parsing those on every scan would be slow and
+// their cache entries would thrash on every mtime change. Sweep-only: index
+// (id-known) sittings are trusted regardless of size, matching what
+// `session:transcript` already replays in full for the chat UI.
+const MAX_SWEEP_FILE_BYTES = 25 * 1024 * 1024
 
 interface ScannedEvent {
   node: string
@@ -60,7 +84,14 @@ async function writeCache(cache: ScanCache): Promise<void> {
 }
 
 // ---- Detectors, copied verbatim from the renderer (see LearnSessionView.tsx
-// / ReviewSessionView.tsx) — do not "clean up" divergently from those. ----
+// / ReviewSessionView.tsx) — do not "clean up" divergently from those. Only a
+// genuine Bash tool_use whose `input.command` matches one of these counts —
+// text that merely *quotes* a receipt/rate-looking command (e.g. in a
+// tool_result, or in prose) never reaches this check, because the pending-map
+// lookup below is keyed off `tool_use_id`s these functions actually matched,
+// never off free text. That's what keeps the disk sweep (which walks
+// arbitrary dev-session transcripts) from misattributing a session that
+// merely discusses or displays engram commands. ----
 
 function looksLikeReceiptCall(input: Record<string, unknown>): boolean {
   const command = String(input.command ?? '')
@@ -100,6 +131,8 @@ function contentBlocks(entry: Record<string, unknown> | null): Record<string, un
   return content.filter((b): b is Record<string, unknown> => !!b && typeof b === 'object')
 }
 
+type SittingKind = 'learn' | 'review' | 'sweep'
+
 /**
  * Walks one transcript's parsed lines (as returned by `readTranscript` — same
  * array a resumed session replays into the UI) looking for Bash tool_use
@@ -107,8 +140,14 @@ function contentBlocks(entry: Record<string, unknown> | null): Record<string, un
  * `tool_use_id`) for the grade payload. `anchor` is that tool_result's index
  * in this array — the same indexing `session:transcript` already hands the
  * renderer, so a future "jump to this moment" feature can reuse it directly.
+ *
+ * `sittingKind === 'sweep'` is for transcripts of unknown provenance (the
+ * disk-sweep fallback, see `nodeProvenance`) — since we don't know whether
+ * the sitting was a learn or review session, it checks every detector rather
+ * than gating by kind. The final topic filter in `nodeProvenance` (node id
+ * membership) is what actually keeps unrelated sittings from contributing.
  */
-function scanTranscriptEntries(lines: unknown[], sittingKind: 'learn' | 'review'): Omit<ScannedEvent, 'sessionId'>[] {
+function scanTranscriptEntries(lines: unknown[], sittingKind: SittingKind): Omit<ScannedEvent, 'sessionId'>[] {
   const events: Omit<ScannedEvent, 'sessionId'>[] = []
   const pending = new Map<string, { kind: 'encode' | 'pretest' | 'review' }>()
 
@@ -122,13 +161,18 @@ function scanTranscriptEntries(lines: unknown[], sittingKind: 'learn' | 'review'
         const toolUseId = typeof block.id === 'string' ? block.id : null
         if (!toolUseId) continue
         const input = (block.input ?? {}) as Record<string, unknown>
-        if (sittingKind === 'learn') {
+
+        if (sittingKind === 'learn' || sittingKind === 'sweep') {
           if (looksLikeReceiptCall(input)) {
             pending.set(toolUseId, { kind: 'encode' })
-          } else if (looksLikePretestRate(input)) {
-            pending.set(toolUseId, { kind: 'pretest' })
+            continue
           }
-        } else if (looksLikeRateCall(input)) {
+          if (looksLikePretestRate(input)) {
+            pending.set(toolUseId, { kind: 'pretest' })
+            continue
+          }
+        }
+        if ((sittingKind === 'review' || sittingKind === 'sweep') && looksLikeRateCall(input)) {
           pending.set(toolUseId, { kind: 'review' })
         }
       }
@@ -160,31 +204,77 @@ function scanTranscriptEntries(lines: unknown[], sittingKind: 'learn' | 'review'
   return events
 }
 
+/** Reads (cache-first) and detects events for one transcript by session id.
+ * Returns null if the file doesn't exist or (sweep only) exceeds the size
+ * guard — in both cases there's simply nothing to contribute. */
+async function scanOne(
+  sessionId: string,
+  sittingKind: SittingKind,
+  cache: ScanCache,
+  maxBytes: number | null,
+): Promise<{ events: ScannedEvent[]; dirty: boolean } | null> {
+  const path = transcriptPath(sessionId)
+  let fileStat: { mtimeMs: number; size: number }
+  try {
+    fileStat = await stat(path)
+  } catch {
+    return null
+  }
+  if (maxBytes != null && fileStat.size > maxBytes) return null
+
+  const cached = cache[path]
+  if (cached && cached.mtimeMs === fileStat.mtimeMs) {
+    return { events: cached.events, dirty: false }
+  }
+
+  const lines = await readTranscript(sessionId)
+  const events = scanTranscriptEntries(lines, sittingKind).map((e) => ({ ...e, sessionId }))
+  cache[path] = { mtimeMs: fileStat.mtimeMs, events }
+  return { events, dirty: true }
+}
+
+/** Every `.jsonl` basename (sans extension) in the transcripts directory —
+ * candidates for the disk-sweep fallback, filtered by the caller against
+ * session ids already covered by the index. */
+async function allTranscriptSessionIds(): Promise<string[]> {
+  try {
+    const files = await readdir(transcriptsDir())
+    return files.filter((f) => f.endsWith('.jsonl')).map((f) => f.slice(0, -'.jsonl'.length))
+  } catch {
+    return []
+  }
+}
+
 /**
- * Scans every indexed sitting for a topic (its own `learn` history plus the
- * shared `review` history) and returns each requested node's provenance.
- * Review sittings aren't topic-scoped in the index (see sessionIndex.ts), so
- * a review-kind event only counts if its node id is in `nodeIds` — the
- * caller's topic graph is the only source of that set (readHandlers.ts fetches
- * it via readTopicGraph before calling this).
+ * Scans every indexed sitting for a topic (its own `learn` history, the
+ * legacy shared `learn` key, and the shared `review` key) plus a disk-sweep
+ * fallback for transcripts the index doesn't reference at all, and returns
+ * each requested node's provenance. Only the per-topic `learn` key is
+ * inherently topic-scoped — everything else (legacy `learn`, `review`, sweep)
+ * is attributed to this topic purely by whether the parsed node id is in
+ * `nodeIds` (the caller's topic graph is the only source of that set;
+ * readHandlers.ts fetches it via readTopicGraph before calling this).
  */
 export async function nodeProvenance(topic: string, nodeIds: string[]): Promise<Record<string, NodeProvenance>> {
   const nodeIdSet = new Set(nodeIds)
   const cache = await readCache()
   let cacheDirty = false
 
-  // sessionHistoryFor returns newest-first (see sessionIndex.ts) — reversed
-  // here so jobs (and the events they produce) are walked oldest-first, which
-  // is what lets the firstEncoded aggregation below just take the first
-  // encode/pretest event it sees per node rather than re-deriving order itself.
-  const learnSittings = [...(await sessionHistoryFor(topic))].reverse()
-  const reviewSittings = [...(await sessionHistoryFor('review'))].reverse()
+  const learnSittings = await sessionHistoryFor(topic)
+  const legacyLearnSittings = await sessionHistoryFor('learn')
+  const reviewSittings = await sessionHistoryFor('review')
 
   // A resumed session reappears in the index once per resume but shares one
-  // transcript file — dedupe by sessionId so its events aren't counted twice.
+  // transcript file — dedupe by sessionId so its events aren't counted twice
+  // (also doubles as the "already covered by the index" set for the sweep below).
   const seenSessionIds = new Set<string>()
-  const jobs: { sessionId: string; sittingKind: 'learn' | 'review' }[] = []
+  const jobs: { sessionId: string; sittingKind: SittingKind }[] = []
   for (const s of learnSittings) {
+    if (seenSessionIds.has(s.sessionId)) continue
+    seenSessionIds.add(s.sessionId)
+    jobs.push({ sessionId: s.sessionId, sittingKind: 'learn' })
+  }
+  for (const s of legacyLearnSittings) {
     if (seenSessionIds.has(s.sessionId)) continue
     seenSessionIds.add(s.sessionId)
     jobs.push({ sessionId: s.sessionId, sittingKind: 'learn' })
@@ -198,25 +288,23 @@ export async function nodeProvenance(topic: string, nodeIds: string[]): Promise<
   const allEvents: ScannedEvent[] = []
 
   for (const job of jobs) {
-    const path = transcriptPath(job.sessionId)
-    let mtimeMs: number
-    try {
-      mtimeMs = (await stat(path)).mtimeMs
-    } catch {
-      continue // no transcript on disk for this session id — nothing to scan
-    }
+    const res = await scanOne(job.sessionId, job.sittingKind, cache, null)
+    if (!res) continue
+    if (res.dirty) cacheDirty = true
+    allEvents.push(...res.events)
+  }
 
-    const cached = cache[path]
-    let events: ScannedEvent[]
-    if (cached && cached.mtimeMs === mtimeMs) {
-      events = cached.events
-    } else {
-      const lines = await readTranscript(job.sessionId)
-      events = scanTranscriptEntries(lines, job.sittingKind).map((e) => ({ ...e, sessionId: job.sessionId }))
-      cache[path] = { mtimeMs, events }
-      cacheDirty = true
-    }
-    allEvents.push(...events)
+  // Disk sweep — pick up sittings from before the index existed at all (see
+  // module doc, layer 3). Every id already covered by an index entry above is
+  // skipped; what's left is scanned with both detector sets (sittingKind
+  // 'sweep') and size-guarded.
+  for (const sessionId of await allTranscriptSessionIds()) {
+    if (seenSessionIds.has(sessionId)) continue
+    seenSessionIds.add(sessionId)
+    const res = await scanOne(sessionId, 'sweep', cache, MAX_SWEEP_FILE_BYTES)
+    if (!res) continue
+    if (res.dirty) cacheDirty = true
+    allEvents.push(...res.events)
   }
 
   // Prune rows for transcripts that no longer exist (topic/session deleted,
@@ -232,6 +320,7 @@ export async function nodeProvenance(topic: string, nodeIds: string[]): Promise<
   if (cacheDirty) await writeCache(cache)
 
   const result: Record<string, NodeProvenance> = {}
+  const encodeCandidatesByNode = new Map<string, ProvenanceEvent[]>()
   for (const id of nodeIdSet) result[id] = { firstEncoded: null, reviews: [] }
 
   for (const e of allEvents) {
@@ -240,14 +329,24 @@ export async function nodeProvenance(topic: string, nodeIds: string[]): Promise<
     const event: ProvenanceEvent = { sessionId: e.sessionId, date: e.date, anchor: e.anchor, kind: e.kind, grade: e.grade }
     if (e.kind === 'review') {
       prov.reviews.push(event)
-    } else if (!prov.firstEncoded) {
-      // `allEvents` is walked oldest-sitting-first (see the `.reverse()` above),
-      // so the first encode/pretest event seen per node is already the earliest
-      // — no date comparison needed. `date` itself is only day-granularity, so
-      // comparing it couldn't break same-day ties correctly anyway; processing
-      // order is the real tie-break.
-      prov.firstEncoded = event
+    } else {
+      const candidates = encodeCandidatesByNode.get(e.node) ?? []
+      candidates.push(event)
+      encodeCandidatesByNode.set(e.node, candidates)
     }
+  }
+
+  // firstEncoded must be the globally-earliest encode/pretest across all three
+  // sources (index, legacy key, sweep) — those aren't processed in a single
+  // guaranteed chronological order (the sweep in particular walks directory
+  // listing order, not time order), so this sorts explicitly by date rather
+  // than relying on processing order. `date` is only day-granular; same-day
+  // ties keep whichever was encountered first in `allEvents` (stable sort),
+  // which is an acceptable, deterministic tie-break rather than a meaningful
+  // sub-day ordering.
+  for (const [node, candidates] of encodeCandidatesByNode) {
+    candidates.sort((a, b) => a.date.localeCompare(b.date))
+    result[node].firstEncoded = candidates[0]
   }
 
   for (const prov of Object.values(result)) {
