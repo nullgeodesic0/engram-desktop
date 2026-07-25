@@ -2,10 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import type { ExportSittingFormat, ExportSittingResult, SessionIndexEntry } from '../../../shared/types'
 import type { ChatMessage } from '../../../shared/chatMessages'
 import { parseGradeResult, parseGradeResults, type GradeResult } from '../../../shared/gradeResult'
+import { deriveRitualMarks, type DerivedRitualMark } from '../../../shared/ritualFromTranscript'
 import { sittingToMarkdown, sittingToPrintHtml, type SittingMeta } from '../shared/sittingToMarkdown'
 import { Modal } from './ui/Modal'
 import { ChatMessageView } from './ChatMessageView'
 import { GradeResultCard } from './GradeResultCard'
+import { MarkView } from './ritual/Marks'
 
 interface TranscriptLine {
   type?: string
@@ -35,10 +37,16 @@ export interface GradeBatch {
  * recovered by attempting both the batch (Learn's `receipt`) and single
  * (Review's `rate`) parsers on every tool_result — both parsers already
  * validate shape strictly (a `rating` in a known enum, a string `node`), so
- * this doesn't require re-deriving which Bash command produced it. */
+ * this doesn't require re-deriving which Bash command produced it.
+ *
+ * Durable ritual marks (beat cards + node crossings) come from
+ * `deriveRitualMarks` (`shared/ritualFromTranscript.ts`), which replays the
+ * same skip/merge index rules independently — its `atIndex` values already
+ * line up with this function's `messages` array without any extra bookkeeping
+ * here. */
 export function buildHistoryTimeline(
   rawLines: unknown[],
-): { messages: ChatMessage[]; grades: GradeBatch[]; messageSourceIndex: number[] } {
+): { messages: ChatMessage[]; grades: GradeBatch[]; messageSourceIndex: number[]; marks: DerivedRitualMark[] } {
   const lines = rawLines as TranscriptLine[]
   const messages: ChatMessage[] = []
   // Parallel to `messages` — the raw transcript-line index each message was
@@ -93,7 +101,7 @@ export function buildHistoryTimeline(
     }
   }
 
-  return { messages, grades, messageSourceIndex }
+  return { messages, grades, messageSourceIndex, marks: deriveRitualMarks(rawLines) }
 }
 
 /** The lab-notebook export's single entry point — shared by the drawer's own
@@ -172,6 +180,7 @@ export function SessionHistoryDrawer({
     messages: ChatMessage[]
     grades: GradeBatch[]
     messageSourceIndex: number[]
+    marks: DerivedRitualMark[]
   } | null>(null)
   const [loadingTranscript, setLoadingTranscript] = useState(false)
   const [exportStatus, setExportStatus] = useState<{ text: string; failed: boolean } | null>(null)
@@ -349,6 +358,11 @@ export function SessionHistoryDrawer({
                       ))}
                     </div>
                   ))}
+                {timeline.marks
+                  .filter((k) => k.atIndex === 0)
+                  .map((k) => (
+                    <MarkView key={k.id} mark={k} />
+                  ))}
                 {timeline.messages.map((m, i) => (
                   <div key={m.id} className="contents">
                     <div className="contents" data-anchor-index={timeline.messageSourceIndex[i]}>
@@ -362,6 +376,11 @@ export function SessionHistoryDrawer({
                             <GradeResultCard key={`${g.id}-${j}`} result={r} />
                           ))}
                         </div>
+                      ))}
+                    {timeline.marks
+                      .filter((k) => k.atIndex === i + 1 || (i === timeline.messages.length - 1 && k.atIndex > timeline.messages.length))
+                      .map((k) => (
+                        <MarkView key={k.id} mark={k} />
                       ))}
                   </div>
                 ))}
