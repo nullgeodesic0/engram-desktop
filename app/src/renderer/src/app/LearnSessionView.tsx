@@ -299,6 +299,24 @@ export function LearnSessionView({
   // previous topic never backs a why-chain lookup for the new one.
   const [topicGraphCache, setTopicGraphCache] = useState<TopicGraph | null>(null)
   const [whyChainOpen, setWhyChainOpen] = useState(false)
+  // Once the conversation is under way the masthead auto-collapses so the
+  // transcript owns the window; moving the cursor to the top strip (or tabbing
+  // into the hidden header) peeks it back open. The leave timer keeps it from
+  // flickering when the pointer grazes the boundary.
+  const [mastheadPeek, setMastheadPeek] = useState(false)
+  const peekLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const peekMasthead = () => {
+    if (peekLeaveTimer.current) clearTimeout(peekLeaveTimer.current)
+    peekLeaveTimer.current = null
+    setMastheadPeek(true)
+  }
+  const scheduleMastheadCollapse = () => {
+    if (peekLeaveTimer.current) clearTimeout(peekLeaveTimer.current)
+    peekLeaveTimer.current = setTimeout(() => setMastheadPeek(false), 400)
+  }
+  useEffect(() => () => {
+    if (peekLeaveTimer.current) clearTimeout(peekLeaveTimer.current)
+  }, [])
 
   const pendingNextToolUseId = useRef<string | null>(null)
   const pendingReceiptToolUseId = useRef<string | null>(null)
@@ -1102,8 +1120,29 @@ export function LearnSessionView({
   return (
     // h-full from <main>'s flex-1 (see App.tsx); min-h-0 is required for the flex
     // children below to be allowed to shrink and scroll instead of growing forever.
-    <div className="h-full min-h-0 flex flex-col p-8 gap-4 w-full">
-      <header className="shrink-0 flex flex-col gap-2">
+    // In a live session the padding tightens — the transcript owns the window.
+    <div className={`h-full min-h-0 flex flex-col w-full ${started ? 'px-6 pt-1.5 pb-5 gap-2' : 'p-8 gap-4'}`}>
+      {(() => {
+        const mastheadCollapsed = started && messages.length > 0 && !mastheadPeek && !whyChainOpen
+        return (
+          <>
+            {mastheadCollapsed && (
+              <div
+                className="shrink-0 h-3.5 -mx-6 flex items-center justify-center group cursor-default"
+                onMouseEnter={peekMasthead}
+                aria-hidden="true"
+              >
+                <span className="h-px w-12 rounded bg-[var(--color-hairline)] group-hover:bg-[var(--color-ink-warm-dim)] transition-colors duration-[var(--dur-fast)]" />
+              </div>
+            )}
+            <header
+              onMouseEnter={mastheadCollapsed ? undefined : peekMasthead}
+              onMouseLeave={started && messages.length > 0 ? scheduleMastheadCollapse : undefined}
+              onFocusCapture={peekMasthead}
+              className={`shrink-0 flex flex-col gap-2 overflow-hidden transition-[max-height,opacity,transform] duration-[var(--dur-base)] ease-[var(--ease-out-soft)] ${
+                mastheadCollapsed ? 'max-h-0 opacity-0 -translate-y-1' : 'max-h-72 opacity-100 translate-y-0'
+              }`}
+            >
         <div className="flex items-center justify-between">
           {/* In a session, the topic IS the page — one serif title, no static
               "Learn" h1, no repeated title on the opening plate below. */}
@@ -1205,7 +1244,10 @@ export function LearnSessionView({
             ))}
           </div>
         )}
-      </header>
+            </header>
+          </>
+        )
+      })()}
 
       {rateLimit && (
         <div className="shrink-0">
