@@ -118,6 +118,14 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
   const [exportingFormat, setExportingFormat] = useState<ExportSittingFormat | null>(null)
   const [exportStatus, setExportStatus] = useState<{ text: string; failed: boolean } | null>(null)
   const [lastGrade, setLastGrade] = useState<GradeResult | null>(null)
+  // The topic of whichever item `lastGrade` graded — GradeResult itself only
+  // carries `node` (see shared/gradeResult.ts), and the interval ladder
+  // needs topic+node to filter receipts (SessionHistoryDrawer's ladders do
+  // the same via `historyKey`). Captured off `queueRef.current[0]` at the
+  // rate call's own tool_use (see `pendingRateTopic` below), not read at
+  // tool_result time — by then `refreshQueue()` may already have shifted
+  // the queue past the item that was just graded.
+  const [lastGradeTopic, setLastGradeTopic] = useState<string | null>(null)
   const [sessionGrades, setSessionGrades] = useState<GradeResult[]>([])
   const [streakDays, setStreakDays] = useState<number | null>(null)
   const [chamber, setChamber] = useState(false)
@@ -133,6 +141,13 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
   const [marks, setMarks] = useState<RitualMark[]>([])
 
   const pendingRateToolUseId = useRef<string | null>(null)
+  // The topic of the rate call currently in flight — read from `queueRef`
+  // (not `queue` directly) at the moment its tool_use fires, since the
+  // session-event listener effect below is registered once with `[]` deps
+  // and would otherwise close over a stale `queue`.
+  const pendingRateTopic = useRef<string | null>(null)
+  const queueRef = useRef<DueItem[]>([])
+  queueRef.current = queue
   const sessionIdRef = useRef<string | null>(null)
   const abortedRef = useRef(false)
   const messagesRef = useRef<ChatMessage[]>([])
@@ -210,6 +225,9 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
         appendLog(`→ ${event.name}(${JSON.stringify(event.input).slice(0, 80)})`)
         if (event.name === 'Bash' && looksLikeRateCall(event.input)) {
           pendingRateToolUseId.current = event.id
+          // `queue[0]` is still the item being graded — `refreshQueue()`
+          // (which shifts it out) only runs after the matching tool_result.
+          pendingRateTopic.current = queueRef.current[0]?.topic ?? null
         }
         break
       case 'tool_result':
@@ -224,6 +242,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
               // stale-cached view of it) has changed.
               invalidateSearchIndex()
               setLastGrade(result)
+              setLastGradeTopic(pendingRateTopic.current)
               setSessionGrades((prev) => [...prev, result])
               // The lapse rite — a quiet marker, not the danger-styled grade
               // card's alarm (see LapseRite's doctrine comment in Marks.tsx).
@@ -274,6 +293,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
     setChamber(false)
     if (!resume) {
       setLastGrade(null)
+      setLastGradeTopic(null)
       setSessionGrades([])
       setMarks([])
     }
@@ -557,6 +577,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
               result={lastGrade}
               confidenceLabel={latestPickFor(lastGrade.node)?.label ?? null}
               reveal
+              topic={lastGradeTopic ?? undefined}
             />
           )}
 
