@@ -1309,7 +1309,19 @@ export function LearnSessionView({
             )}
             <header
               onMouseEnter={mastheadCollapsed ? undefined : peekMasthead}
-              onMouseLeave={started && messages.length > 0 ? scheduleMastheadCollapse : undefined}
+              onMouseLeave={
+                started && messages.length > 0
+                  ? (e) => {
+                      // Leaving upward (into the window drag bar / traffic dots)
+                      // shouldn't collapse the masthead — only heading back down
+                      // into the conversation does. A small tolerance covers the
+                      // subpixel coordinates mouseleave reports at the boundary.
+                      const top = e.currentTarget.getBoundingClientRect().top
+                      if (e.clientY <= top + 2) return
+                      scheduleMastheadCollapse()
+                    }
+                  : undefined
+              }
               onFocusCapture={peekMasthead}
               className={`shrink-0 flex flex-col gap-2 overflow-hidden transition-[max-height,opacity,transform] duration-[var(--dur-base)] ease-[var(--ease-out-soft)] ${
                 mastheadCollapsed ? 'max-h-0 opacity-0 -translate-y-1' : 'max-h-72 opacity-100 translate-y-0'
