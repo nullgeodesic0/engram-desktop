@@ -1526,11 +1526,6 @@ export function LearnSessionView({
 
       {started && (
         <div className="flex-1 min-h-0 flex flex-col gap-4">
-          {latestTicket && (
-            <div className="shrink-0 max-w-sm">
-              <TicketCard ticket={latestTicket} walkNumber={walkNumber} compact />
-            </div>
-          )}
           {sessionGrades.length > 0 && (
             <div className="shrink-0">
               <SessionCeremony
@@ -1550,8 +1545,15 @@ export function LearnSessionView({
           {/* The only scrolling region in the session view — header and input stay anchored. */}
           {/* Must be a flex column: ChatScrollRegion sizes itself with
               flex-1/min-h-0 and loses its height bound (killing scrolling)
-              inside a plain block wrapper. */}
-          <div className={`flex-1 min-h-0 flex flex-col${chamber ? ' chamber-blur' : ''}`}>
+              inside a plain block wrapper. `relative` hosts the floating
+              session ticket so the transcript flows underneath it instead of
+              ceding a whole layout row. */}
+          <div className={`relative flex-1 min-h-0 flex flex-col${chamber ? ' chamber-blur' : ''}`}>
+            {latestTicket && (
+              <div className="absolute top-1 right-1 z-10 w-72 max-w-[40%]">
+                <TicketCard ticket={latestTicket} walkNumber={walkNumber} compact />
+              </div>
+            )}
             <ChatScrollRegion deps={[messages, busy]}>
               <div className="transcript-measure flex flex-col gap-5">
                 {activeTopic != null && sessionPhase !== 'intake' && (
