@@ -412,23 +412,50 @@ export function LearnSessionView({
    * rect reads and ref-guarded setState no-ops), so reveal/collapse react to
    * position, not to crossing a thin event target. Above the container
    * (drag bar) never collapses; only settling below the open header does. */
-  const handleMastheadPointer = (e: React.MouseEvent<HTMLDivElement>) => {
-    const top = e.currentTarget.getBoundingClientRect().top
-    if (e.clientY - top <= 18) {
-      peekMasthead()
-      return
-    }
-    const header = mastheadRef.current
-    if (!header) return
-    const bottom = header.getBoundingClientRect().bottom
-    if (e.clientY <= bottom + 12) {
+  // The floating session ticket mirrors the masthead's grammar on the left
+  // edge: cursor near the edge slides it out, drifting away tucks it back,
+  // and a pin toggle keeps it out regardless of the cursor.
+  const [ticketPeek, setTicketPeek] = useState(false)
+  const [ticketPinned, setTicketPinned] = useState(false)
+  const ticketLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const peekTicket = () => {
+    if (ticketLeaveTimer.current) clearTimeout(ticketLeaveTimer.current)
+    ticketLeaveTimer.current = null
+    setTicketPeek(true)
+  }
+  const scheduleTicketTuck = () => {
+    if (ticketLeaveTimer.current) return
+    ticketLeaveTimer.current = setTimeout(() => {
+      ticketLeaveTimer.current = null
+      setTicketPeek(false)
+    }, 250)
+  }
+  const handleSessionPointer = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    // Masthead: top edge reveals; settling below the open header tucks it.
+    if (e.clientY - rect.top <= 18) {
       peekMasthead()
     } else {
-      scheduleMastheadCollapse()
+      const header = mastheadRef.current
+      if (header && e.clientY <= header.getBoundingClientRect().bottom + 12) {
+        peekMasthead()
+      } else {
+        scheduleMastheadCollapse()
+      }
+    }
+    // Ticket: left edge reveals; while out, the whole card width holds it
+    // open (hysteresis); past that it tucks. A pinned ticket ignores all of it.
+    if (ticketPinned) return
+    const x = e.clientX - rect.left
+    if (x <= (ticketPeek ? 340 : 28)) {
+      peekTicket()
+    } else {
+      scheduleTicketTuck()
     }
   }
   useEffect(() => () => {
     if (peekLeaveTimer.current) clearTimeout(peekLeaveTimer.current)
+    if (ticketLeaveTimer.current) clearTimeout(ticketLeaveTimer.current)
   }, [])
 
   const pendingNextToolUseId = useRef<string | null>(null)
@@ -548,6 +575,8 @@ export function LearnSessionView({
     setProgressNote(null)
     setTopicGraphCache(null)
     setWhyChainOpen(false)
+    setTicketPeek(false)
+    setTicketPinned(false)
     intentionalStopRef.current = false
     // NeuralField is app-global and this view stays mounted — a new session must not
     // inherit the previous topic's leftover warmth.
@@ -1321,7 +1350,7 @@ export function LearnSessionView({
     // In a live session the padding tightens — the transcript owns the window.
     <div
       className={`h-full min-h-0 flex flex-col w-full ${started ? 'px-6 pt-1.5 pb-5 gap-2' : 'p-8 gap-4'}`}
-      onMouseMove={started && messages.length > 0 ? handleMastheadPointer : undefined}
+      onMouseMove={started && messages.length > 0 ? handleSessionPointer : undefined}
     >
       {(() => {
         const mastheadCollapsed = started && messages.length > 0 && !mastheadPeek && !whyChainOpen
@@ -1549,11 +1578,44 @@ export function LearnSessionView({
               session ticket so the transcript flows underneath it instead of
               ceding a whole layout row. */}
           <div className={`relative flex-1 min-h-0 flex flex-col${chamber ? ' chamber-blur' : ''}`}>
-            {latestTicket && (
-              <div className="absolute top-1 right-1 z-10 w-72 max-w-[40%]">
-                <TicketCard ticket={latestTicket} walkNumber={walkNumber} compact />
-              </div>
-            )}
+            {latestTicket && (() => {
+              const ticketOut = ticketPinned || ticketPeek
+              return (
+                <>
+                  {!ticketOut && (
+                    <div className="absolute left-0 top-2 z-10 h-16 w-3.5 flex items-center justify-start" aria-hidden="true">
+                      <span className="w-px h-12 rounded bg-[var(--color-hairline)]" />
+                    </div>
+                  )}
+                  <div
+                    className={`absolute top-1 left-0 z-10 w-72 max-w-[40%] transition-[transform,opacity] ${
+                      ticketOut
+                        ? 'duration-[var(--dur-base)] ease-[var(--ease-out-soft)] translate-x-0 opacity-100'
+                        : 'duration-[340ms] ease-[cubic-bezier(0.45,0.05,0.25,1)] -translate-x-[calc(100%+1.75rem)] opacity-0'
+                    }`}
+                  >
+                    <div className="relative">
+                      <TicketCard ticket={latestTicket} walkNumber={walkNumber} compact />
+                      <button
+                        onClick={() => setTicketPinned((v) => !v)}
+                        aria-label={ticketPinned ? 'Unpin session ticket' : 'Pin session ticket'}
+                        title={ticketPinned ? 'Unpin — tuck away unless the cursor visits the left edge' : 'Pin — keep the ticket out'}
+                        className={`focus-ring no-press absolute top-1.5 right-1.5 h-5 w-5 rounded-full flex items-center justify-center transition-colors duration-[var(--dur-fast)] ${
+                          ticketPinned
+                            ? 'text-[var(--color-ink-warm)] bg-[var(--color-surface-3)]'
+                            : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]'
+                        }`}
+                      >
+                        <svg width="11" height="11" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                          <circle cx="8" cy="5.5" r="3" stroke="currentColor" strokeWidth="1.4" fill={ticketPinned ? 'currentColor' : 'none'} />
+                          <path d="M8 8.5 V14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )
+            })()}
             <ChatScrollRegion deps={[messages, busy]}>
               <div className="transcript-measure flex flex-col gap-5">
                 {activeTopic != null && sessionPhase !== 'intake' && (
