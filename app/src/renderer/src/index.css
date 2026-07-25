@@ -491,3 +491,32 @@
 .ritual-stamp {
   animation: stamp-press 0.4s ease-out;
 }
+
+/* Frontispiece (phase frontispiece divider, Marks.tsx/Frontispiece.tsx) —
+ * the hairlines grow in from center like crossing-grow, the glyph+title
+ * settle in a beat after so the eye lands on the line before the title. */
+@keyframes frontispiece-grow {
+  from { transform: scaleX(0); opacity: 0; }
+  to { transform: scaleX(1); opacity: 1; }
+}
+.ritual-frontispiece-line {
+  animation: frontispiece-grow 0.7s var(--ease-out-soft);
+}
+@keyframes frontispiece-settle {
+  from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.ritual-frontispiece-glyph {
+  animation: frontispiece-settle 0.5s var(--ease-out-soft) 0.15s both;
+}
+
+/* DiagnosticPlate (pretest results plate, Marks.tsx/DiagnosticPlate.tsx) —
+ * a brief warm-ink wash on arrival, same family as annotation-ink-in, so the
+ * plate reads as freshly set rather than always having been there. */
+@keyframes diagnostic-ink-in {
+  0% { background-color: color-mix(in srgb, var(--color-ink-warm) 14%, transparent); }
+  100% { background-color: transparent; }
+}
+.ritual-diagnostic-in {
+  animation: diagnostic-ink-in calc(var(--dur-base) * 3) var(--ease-out-soft);
+}
