@@ -22,6 +22,12 @@ import { humanizeNodeId } from './humanizeId'
 
 interface TranscriptLine {
   type?: string
+  /** ISO timestamp on the raw transcript entry — same field
+   * `sessionScan.ts`'s `dateOf` reads for provenance dates. Needed here so a
+   * derived lapse mark's "returns <date>" can anchor to the sitting's own
+   * timestamp rather than replay-time wall-clock (see `lapseReturnDate` in
+   * gradeResult.ts). */
+  timestamp?: string
   message?: {
     content?: string | ContentBlock[]
   }
@@ -51,7 +57,7 @@ type WalkEvent =
   | { kind: 'user_message' }
   | { kind: 'assistant_text' }
   | { kind: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
-  | { kind: 'tool_result'; toolUseId: string; content: unknown }
+  | { kind: 'tool_result'; toolUseId: string; content: unknown; timestamp?: string }
 
 /** Single ordered pass over the transcript, block by block, yielding one
  * event per real chat message (post skip-first-user / merge-consecutive-
@@ -79,7 +85,7 @@ function* walkTranscript(rawLines: unknown[]): Generator<WalkEvent> {
     if (line?.type === 'user' && Array.isArray(line.message?.content)) {
       for (const block of line.message.content) {
         if (block?.type === 'tool_result' && typeof block.tool_use_id === 'string') {
-          yield { kind: 'tool_result', toolUseId: block.tool_use_id, content: block.content }
+          yield { kind: 'tool_result', toolUseId: block.tool_use_id, content: block.content, timestamp: line.timestamp }
         }
       }
       continue
@@ -334,9 +340,14 @@ export type DerivedRitualMark =
  *    and missed verify outcomes still ink the beat trail but never a seal.
  *  - `lapse` marks come from a Review sitting's own `rate --rating` call (not
  *    a pretest one) whose result grades 'lapsed' — mirrors ReviewSessionView's
- *    live push in its rate-result handler exactly, including
- *    `lapseReturnDate` for the "returns <date>" figure (see LapseRite's
- *    doctrine comment in Marks.tsx).
+ *    live push in its rate-result handler, EXCEPT for the "returns <date>"
+ *    figure's anchor: the live push anchors to wall-clock now (the lapse just
+ *    happened), but a replayed sitting anchors to that entry's own transcript
+ *    timestamp instead (same field sessionScan.ts's `dateOf` reads), or omits
+ *    the date entirely when no usable timestamp exists — never wall-clock
+ *    "now", which would fabricate a future date for an old sitting (see
+ *    `lapseReturnDate`'s doctrine comment in gradeResult.ts and LapseRite's
+ *    in Marks.tsx).
  * Figure/atlas/stash/docket marks are NOT derived here — they're one-time
  * signals with no durable record in the transcript to replay from (see the
  * doctrine comment on `RitualMark` in Marks.tsx). */
@@ -396,12 +407,20 @@ export function deriveRitualMarks(entries: unknown[]): DerivedRitualMark[] {
         pendingReviewRateToolUseIds.delete(event.toolUseId)
         const result = parseGradeResult(event.content)
         if (result && result.grade === 'lapsed') {
+          // Anchor to the ENTRY's own timestamp, never wall-clock "now" — a
+          // sitting replayed months later must not fabricate a future
+          // "returns <date>" from today's date (see lapseReturnDate's
+          // doctrine comment in gradeResult.ts). No usable timestamp means
+          // no date, full stop — never falls back to today the way
+          // sessionScan.ts's dateOf does for provenance dates.
+          const parsedTs = event.timestamp ? new Date(event.timestamp) : null
+          const anchor = parsedTs && !Number.isNaN(parsedTs.getTime()) ? parsedTs : null
           marks.push({
             id: `dmark-${seq++}`,
             atIndex: messageCount,
             kind: 'lapse',
             node: result.node,
-            returnDate: lapseReturnDate(result.intervalDays),
+            returnDate: anchor ? lapseReturnDate(result.intervalDays, anchor) : null,
           })
         }
       }

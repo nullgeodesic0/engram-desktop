@@ -208,18 +208,25 @@ export function parseGradeResults(content: unknown): GradeResult[] {
   return parsed.map(toGradeResult).filter((r): r is GradeResult => r !== null)
 }
 
-/** The lapse rite's "returns <date>" — local today plus the result's own
- * `intervalDays`, computed with getFullYear/Month/Date (never toISOString,
- * the codebase's local-date discipline — see HomeView's due forecast for the
- * same pattern) so the shown day never drifts a timezone off from what the
- * user's own calendar would say. Returns null when `intervalDays` is absent
- * (an unusual `rate` result) rather than guessing a date. Shared by
- * ReviewSessionView's live rite push and ritualFromTranscript.ts's
- * derivation so both compute the exact same string. */
-export function lapseReturnDate(intervalDays: number | null): string | null {
+/** The lapse rite's "returns <date>" — `anchor`'s local calendar date plus
+ * the result's own `intervalDays`, computed with getFullYear/Month/Date
+ * (never toISOString, the codebase's local-date discipline — see HomeView's
+ * due forecast for the same pattern) so the shown day never drifts a
+ * timezone off from what the user's own calendar would say. Returns null
+ * when `intervalDays` is absent (an unusual `rate` result) rather than
+ * guessing a date.
+ *
+ * `anchor` defaults to "now" for the LIVE push (ReviewSessionView) — the
+ * lapse just happened, so today is correct. The DERIVED path
+ * (ritualFromTranscript.ts) must NOT use this default: replaying a sitting
+ * from months ago with wall-clock "now" as the anchor fabricates a future
+ * date that has nothing to do with when the lapse actually occurred. It
+ * instead passes the transcript entry's own timestamp as `anchor`, or skips
+ * calling this function entirely (leaving `returnDate: null`) when that
+ * timestamp is missing or unparseable — never fabricating a date either way. */
+export function lapseReturnDate(intervalDays: number | null, anchor: Date = new Date()): string | null {
   if (intervalDays == null) return null
-  const today = new Date()
-  const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + Math.round(intervalDays))
+  const d = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate() + Math.round(intervalDays))
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
