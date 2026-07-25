@@ -1,5 +1,13 @@
 import type { TopicGraph } from '../../../../shared/types'
-import { buildEdges, initSimNodes, stepSimulation, layersOf, seeded } from '../graph3d/layout'
+import {
+  buildEdges,
+  initSimNodes,
+  stepSimulation,
+  layersOf,
+  seeded,
+  computeHubNodeIds,
+  computeForwardAdjacency,
+} from '../graph3d/layout'
 import { DEFAULT_FORCE_PARAMS } from '../graph3d/types'
 
 export interface PlateNode {
@@ -189,24 +197,32 @@ export function territoryGroups(graph: TopicGraph): Map<string, string[]> {
   return groups
 }
 
-/** Convex hull (Andrew's monotone chain) expanded by `padding`, returned as a
- * smoothed closed SVG path through the hull midpoints. */
-export function hullPath(points: { x: number; y: number }[], padding: number): string {
-  if (points.length < 3) return ''
+type Pt = { x: number; y: number }
+
+/** Convex hull (Andrew's monotone chain) — shared by `hullPath` (the wash
+ * outline) and `hullCentroid` (territory label placement) so both read the
+ * exact same shape. */
+function convexHull(points: Pt[]): Pt[] {
   const pts = [...points].sort((a, b) => a.x - b.x || a.y - b.y)
-  type Pt = { x: number; y: number }
   const cross = (o: Pt, a: Pt, b: Pt) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x)
-  const lower: { x: number; y: number }[] = []
+  const lower: Pt[] = []
   for (const p of pts) {
     while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop()
     lower.push(p)
   }
-  const upper: { x: number; y: number }[] = []
+  const upper: Pt[] = []
   for (const p of [...pts].reverse()) {
     while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop()
     upper.push(p)
   }
-  const hull = [...lower.slice(0, -1), ...upper.slice(0, -1)]
+  return [...lower.slice(0, -1), ...upper.slice(0, -1)]
+}
+
+/** Convex hull (Andrew's monotone chain) expanded by `padding`, returned as a
+ * smoothed closed SVG path through the hull midpoints. */
+export function hullPath(points: Pt[], padding: number): string {
+  if (points.length < 3) return ''
+  const hull = convexHull(points)
   const cx = hull.reduce((s, p) => s + p.x, 0) / hull.length
   const cy = hull.reduce((s, p) => s + p.y, 0) / hull.length
   const padded = hull.map((p) => {
@@ -225,6 +241,19 @@ export function hullPath(points: { x: number; y: number }[], padding: number): s
     d += ` Q ${curr.x.toFixed(2)} ${curr.y.toFixed(2)} ${midX.toFixed(2)} ${midY.toFixed(2)}`
   }
   return d + ' Z'
+}
+
+/** The same hull center `hullPath` computes internally before padding —
+ * exposed on its own for territory labels, which sit at the wash's true
+ * visual center rather than tracing its outline. `null` below 3 points,
+ * mirroring `hullPath`'s own too-small-to-hull bailout. */
+export function hullCentroid(points: Pt[]): Pt | null {
+  if (points.length < 3) return null
+  const hull = convexHull(points)
+  return {
+    x: hull.reduce((s, p) => s + p.x, 0) / hull.length,
+    y: hull.reduce((s, p) => s + p.y, 0) / hull.length,
+  }
 }
 
 /** The readout numbers. decaying = nodes with FSRS history whose current
@@ -265,4 +294,55 @@ export function plateStats(
     if (r != null && r < 0.7 && node.state !== 'new') decaying++
   }
   return { total, encoded, consolidated, decaying, thresholdsMet, thresholdsTotal }
+}
+
+/** All requires-ancestors of `nodeId`, transitively — the "everything this
+ * ultimately depends on" set behind the prerequisite trail. BFS with a
+ * `visited` set makes this cycle-safe: a graph edge cycle just means some
+ * node's neighbors get skipped the second time they're reached, not infinite
+ * recursion. Hub/synthesis nodes (`computeHubNodeIds` — the capstone, or a
+ * capstone-like node nearly everything requires-into) are walked *through*
+ * so a genuine prerequisite chain passing through one isn't truncated, but
+ * never themselves land in the returned set — matching the near-universal
+ * fan-in suppression `isEdgeVisible` already applies to their edges on the
+ * map (GraphView.tsx), so a hub id showing up "highlighted" wouldn't have a
+ * highlighted edge to justify it. */
+export function ancestorClosure(graph: TopicGraph, nodeId: string): Set<string> {
+  const hubs = computeHubNodeIds(graph)
+  const result = new Set<string>()
+  const visited = new Set<string>([nodeId])
+  const queue = [nodeId]
+  while (queue.length > 0) {
+    const cur = queue.shift()!
+    for (const req of graph.nodes[cur]?.edges.requires ?? []) {
+      if (visited.has(req)) continue
+      visited.add(req)
+      queue.push(req)
+      if (!hubs.has(req)) result.add(req)
+    }
+  }
+  return result
+}
+
+/** All nodes reachable by walking forward along `requires` edges from
+ * `nodeId`, transitively — the "everything downstream of this" path toward
+ * mastery. Same cycle-safety and hub-suppression discipline as
+ * `ancestorClosure`, just walking `computeForwardAdjacency` instead of
+ * `edges.requires`. */
+export function descendantPath(graph: TopicGraph, nodeId: string): Set<string> {
+  const hubs = computeHubNodeIds(graph)
+  const forwardAdjacency = computeForwardAdjacency(buildEdges(graph))
+  const result = new Set<string>()
+  const visited = new Set<string>([nodeId])
+  const queue = [nodeId]
+  while (queue.length > 0) {
+    const cur = queue.shift()!
+    for (const next of forwardAdjacency.get(cur) ?? []) {
+      if (visited.has(next)) continue
+      visited.add(next)
+      queue.push(next)
+      if (!hubs.has(next)) result.add(next)
+    }
+  }
+  return result
 }
