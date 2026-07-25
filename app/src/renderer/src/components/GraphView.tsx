@@ -306,6 +306,13 @@ export function GraphView({ graph, selected, onSelect, onOpen, query, retrievabi
   // to `hovered`, restoring the pre-existing hover behavior exactly.
   const isTrailMode = selected !== null
   const active = selected ?? hovered
+  // One lens at a time: the due lens already recolors node bodies by
+  // schedule, so a trail overlay drawn in ancestor/descendant vocabulary on
+  // top would mix languages the plate is trying to keep separate — same
+  // instinct that hides territory labels while the lens is on. Selection
+  // itself (pan-to-selected, the node modal) is untouched; only the trail's
+  // *rendering* is suppressed here.
+  const trailEdgesActive = isTrailMode && !dueLens
 
   // Ancestors/descendants: transitive closure while selected, first-order
   // (hub-excluded, direct requires/dependents only — the exact semantics
@@ -500,7 +507,8 @@ export function GraphView({ graph, selected, onSelect, onOpen, query, retrievabi
 
           {/* Edges — dimmed off-trail while selected so the promoted
               ancestor/descendant chain reads clearly; unchanged (flat 0.35)
-              on bare hover or with nothing active, exactly as before. */}
+              on bare hover, with nothing active, or under the due lens
+              (one lens at a time — see trailEdgesActive above). */}
           {visibleEdges.map((e, i) => {
             const a = drifted.get(e.source)
             const b = drifted.get(e.target)
@@ -508,7 +516,7 @@ export function GraphView({ graph, selected, onSelect, onOpen, query, retrievabi
             const style = EDGE_STYLE[e.kind]
             const d = stringEdgePath(e.source, e.target, a, b, e.kind === 'requires' ? 'requires' : 'other', t)
             const onTrail = isAncestorTrailEdge(e) || isDescendantTrailEdge(e)
-            const strokeOpacity = isTrailMode ? (onTrail ? 0.5 : 0.08) : 0.35
+            const strokeOpacity = trailEdgesActive ? (onTrail ? 0.5 : 0.08) : 0.35
             return (
               <path
                 key={i}
@@ -671,9 +679,12 @@ export function GraphView({ graph, selected, onSelect, onOpen, query, retrievabi
           {/* Hover/selection trails. On bare hover this is still exactly the
               first-order set touching the active node; while selected it's
               every edge along the full ancestor/descendant chain (see
-              isAncestorTrailEdge/isDescendantTrailEdge above). Drawn after
-              cell bodies so they read as an overlay on top of the plate. */}
+              isAncestorTrailEdge/isDescendantTrailEdge above). Suppressed
+              entirely under the due lens — one lens at a time, same as the
+              edge dimming above and the territory labels. Drawn after cell
+              bodies so they read as an overlay on top of the plate. */}
           {active &&
+            !dueLens &&
             edges
               .filter((e) => isAncestorTrailEdge(e) || isDescendantTrailEdge(e))
               .map((e, i) => {
