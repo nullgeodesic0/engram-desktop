@@ -49,8 +49,12 @@ function ProvenanceBlock({
   if (!entry || (!entry.firstEncoded && entry.reviews.length === 0)) return null
   const textSize = compact ? 'text-xs' : 'text-sm'
   return (
-    <div className={`${textSize} text-[var(--color-text-dim)]`}>
-      <div className={`label-data uppercase tracking-wide text-[10px] text-[var(--color-text-faint)] ${compact ? 'mb-1' : 'mb-1.5'}`}>
+    // Set apart from the node's prose: a warm-hairline spine and faint wash so
+    // the history register reads as a record, not more description.
+    <div
+      className={`${textSize} text-[var(--color-text-dim)] border-l-2 border-[var(--color-ink-warm-dim)] bg-[var(--color-surface-2)]/40 rounded-r-md ${compact ? 'pl-2.5 pr-2 py-1.5' : 'pl-3 pr-2.5 py-2'}`}
+    >
+      <div className={`label-data uppercase tracking-wide text-[10px] text-[var(--color-ink-warm)] ${compact ? 'mb-1' : 'mb-1.5'}`}>
         Provenance
       </div>
       <div className="flex flex-col gap-1 items-start">
@@ -496,11 +500,14 @@ export function TopicMapView({
                 />
               </div>
 
-              <div className="flex items-center justify-between panel-raised px-2.5 py-1.5">
-                <RetentionCurve stabilityDays={node.fsrs.s} width={100} height={22} />
-                <span className="label-data text-[10px] text-[var(--color-text-faint)]">
-                  {node.fsrs.s != null ? `${node.fsrs.s.toFixed(1)}d` : '—'}
-                </span>
+              <div className="panel-raised px-2.5 pt-2 pb-1.5 flex flex-col gap-1">
+                <div className="flex items-center justify-between">
+                  <span className="fig-caption">Fig. — decay, R(t)</span>
+                  <span className="label-data text-[10px] text-[var(--color-text-faint)]">
+                    s {node.fsrs.s != null ? `${node.fsrs.s.toFixed(1)}d` : '—'}
+                  </span>
+                </div>
+                <RetentionCurve stabilityDays={node.fsrs.s} width={224} height={84} figure />
               </div>
 
               <div className="text-xs text-[var(--color-text-dim)]">
@@ -623,16 +630,15 @@ export function TopicMapView({
               />
             </div>
 
-            <div className="flex items-center justify-between panel-raised px-3 py-2">
-              <div className="flex items-center gap-2">
-                <RetentionCurve stabilityDays={opened.fsrs.s} width={120} height={26} />
-                <span className="label-data text-xs text-[var(--color-text-dim)]">
-                  {opened.fsrs.s != null ? `stability ${opened.fsrs.s.toFixed(1)}d` : 'not yet reviewed'}
+            <div className="panel-raised px-3 pt-2 pb-2 flex flex-col gap-1">
+              <div className="flex items-center justify-between">
+                <span className="fig-caption">Fig. — decay, R(t)</span>
+                <span className="label-data text-xs text-[var(--color-text-faint)]">
+                  {opened.fsrs.s != null ? `stability ${opened.fsrs.s.toFixed(1)}d · ` : ''}
+                  {opened.fsrs.reps} reps · {opened.fsrs.lapses} lapses
                 </span>
               </div>
-              <span className="label-data text-xs text-[var(--color-text-faint)]">
-                {opened.fsrs.reps} reps · {opened.fsrs.lapses} lapses
-              </span>
+              <RetentionCurve stabilityDays={opened.fsrs.s} width={320} height={100} figure />
             </div>
 
             <div className="text-sm text-[var(--color-text-dim)]">
