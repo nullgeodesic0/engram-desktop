@@ -17,6 +17,24 @@ function nextReviewText(intervalDays: number | null): string {
   return `back in ${Math.round(intervalDays)} days`
 }
 
+/** "returns in <n> day(s) · s <b> → <a>" — the return chip's text, built from
+ * whichever of intervalDays/sBefore/sAfter the parsed receipt actually
+ * carries (all three are optional in shared/gradeResult.ts). Stability only
+ * renders when BOTH before/after are present — a lone value isn't a
+ * transition and would read as a typo. Returns '' when nothing to show, the
+ * chip's own render-only-what-exists cue. */
+function returnChipText(result: GradeResult): string {
+  const parts: string[] = []
+  if (result.intervalDays !== null) {
+    const n = Math.round(result.intervalDays)
+    parts.push(`returns in ${n} day${n === 1 ? '' : 's'}`)
+  }
+  if (result.sBefore !== null && result.sAfter !== null) {
+    parts.push(`s ${result.sBefore.toFixed(1)} → ${result.sAfter.toFixed(1)}`)
+  }
+  return parts.join(' · ')
+}
+
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
 /** One-shot ink-burst — dendrite sparks radiating from the grade badge on a
@@ -147,6 +165,10 @@ export function GradeResultCard({
     )
   }
 
+  // Return chip: revealed face only (the scheduling verdict is part of "the
+  // turn"'s payoff, not something to spoil while the card is still facedown).
+  const chipText = returnChipText(result)
+
   return (
     <div className={`panel px-4 py-3 flex flex-col gap-2 max-w-sm ${reveal && !reducedMotion() ? 'flip-in' : ''}`}>
       <div className="flex items-center justify-between gap-2">
@@ -180,6 +202,14 @@ export function GradeResultCard({
       )}
       {result.intervalDays !== null && (
         <span className="text-xs text-[var(--color-text-dim)]">{nextReviewText(result.intervalDays)}</span>
+      )}
+      {chipText && (
+        <span
+          className="label-data text-[10px] self-start px-2 py-0.5 rounded-full inline-block"
+          style={{ color: style.color, background: style.bg }}
+        >
+          {chipText}
+        </span>
       )}
       {confidenceLabel != null && (
         <div className="fig-caption">felt “{confidenceLabel}” → {result.grade}</div>

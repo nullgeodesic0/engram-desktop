@@ -541,3 +541,15 @@
 .ritual-explorable-in {
   animation: explorable-ink-in calc(var(--dur-base) * 3) var(--ease-out-soft);
 }
+
+/* VerifySeal (Marks.tsx) — a single subtle settle-in, once, on arrival: the
+ * seal itself is the payoff, so no repeating pulse or wash, just a quiet
+ * press like StashStamp's but smaller-scale and warm-toned. */
+@keyframes verify-seal-in {
+  0% { opacity: 0; transform: scale(0.7); }
+  60% { opacity: 1; transform: scale(1.08); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.ritual-verify-seal-in {
+  animation: verify-seal-in 0.4s var(--ease-out-soft);
+}
