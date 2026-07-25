@@ -301,12 +301,16 @@ export function plateStats(
  * `visited` set makes this cycle-safe: a graph edge cycle just means some
  * node's neighbors get skipped the second time they're reached, not infinite
  * recursion. Hub/synthesis nodes (`computeHubNodeIds` — the capstone, or a
- * capstone-like node nearly everything requires-into) are walked *through*
- * so a genuine prerequisite chain passing through one isn't truncated, but
- * never themselves land in the returned set — matching the near-universal
- * fan-in suppression `isEdgeVisible` already applies to their edges on the
- * map (GraphView.tsx), so a hub id showing up "highlighted" wouldn't have a
- * highlighted edge to justify it. */
+ * capstone-like node nearly everything requires-into) are walk-stoppers, not
+ * pass-throughs: a hub is neither added to the result nor expanded, so its
+ * own (near-universal) requires list never enters the closure. Applied
+ * symmetrically to both directions, even though only this side is exposed
+ * today — a mid node whose requires includes a hub must not pull ~25% of the
+ * graph into its ancestor set. This mirrors `isEdgeVisible`'s intent in
+ * GraphView.tsx exactly: that function hides a hub's edges to suppress its
+ * fan-in/fan-out clutter on the map; stopping the walk at the hub boundary
+ * suppresses the same clutter from ever entering the trail in the first
+ * place. */
 export function ancestorClosure(graph: TopicGraph, nodeId: string): Set<string> {
   const hubs = computeHubNodeIds(graph)
   const result = new Set<string>()
@@ -317,8 +321,9 @@ export function ancestorClosure(graph: TopicGraph, nodeId: string): Set<string> 
     for (const req of graph.nodes[cur]?.edges.requires ?? []) {
       if (visited.has(req)) continue
       visited.add(req)
+      if (hubs.has(req)) continue
       queue.push(req)
-      if (!hubs.has(req)) result.add(req)
+      result.add(req)
     }
   }
   return result
@@ -326,9 +331,9 @@ export function ancestorClosure(graph: TopicGraph, nodeId: string): Set<string> 
 
 /** All nodes reachable by walking forward along `requires` edges from
  * `nodeId`, transitively — the "everything downstream of this" path toward
- * mastery. Same cycle-safety and hub-suppression discipline as
- * `ancestorClosure`, just walking `computeForwardAdjacency` instead of
- * `edges.requires`. */
+ * mastery. Same cycle-safety and hub-boundary discipline as
+ * `ancestorClosure` (see its comment), just walking `computeForwardAdjacency`
+ * instead of `edges.requires`. */
 export function descendantPath(graph: TopicGraph, nodeId: string): Set<string> {
   const hubs = computeHubNodeIds(graph)
   const forwardAdjacency = computeForwardAdjacency(buildEdges(graph))
@@ -340,8 +345,9 @@ export function descendantPath(graph: TopicGraph, nodeId: string): Set<string> {
     for (const next of forwardAdjacency.get(cur) ?? []) {
       if (visited.has(next)) continue
       visited.add(next)
+      if (hubs.has(next)) continue
       queue.push(next)
-      if (!hubs.has(next)) result.add(next)
+      result.add(next)
     }
   }
   return result
