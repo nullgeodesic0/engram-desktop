@@ -117,6 +117,85 @@ export function parseGradeResult(content: unknown): GradeResult | null {
   return toGradeResult(parseLoose(text, '{'))
 }
 
+/** Extracts every balanced top-level `{...}` object from arbitrary mixed
+ * text, in order. A single pretest Bash call can rate several nodes in one
+ * invocation (SKILL.md §2 rates up to 3 frontier nodes back to back), and the
+ * skill sometimes echoes a `--- node N ---` marker between them rather than
+ * returning a JSON array — so `extractFirstJson`'s single-slice approach
+ * would silently drop every node after the first. This walks the whole text
+ * left to right, respecting string/escape state, and collects each balanced
+ * object it finds. */
+function extractAllJsonObjects(text: string): string[] {
+  const out: string[] = []
+  let i = 0
+  while (i < text.length) {
+    const start = text.indexOf('{', i)
+    if (start === -1) break
+    let depth = 0
+    let inString = false
+    let escaped = false
+    let end = -1
+    for (let j = start; j < text.length; j++) {
+      const ch = text[j]
+      if (inString) {
+        if (escaped) escaped = false
+        else if (ch === '\\') escaped = true
+        else if (ch === '"') inString = false
+        continue
+      }
+      if (ch === '"') inString = true
+      else if (ch === '{') depth++
+      else if (ch === '}') {
+        depth--
+        if (depth === 0) {
+          end = j
+          break
+        }
+      }
+    }
+    if (end === -1) break
+    out.push(text.slice(start, end + 1))
+    i = end + 1
+  }
+  return out
+}
+
+/** Parses a pretest `rate --kind pretest` call's tool_result content (Learn's
+ * §2 diagnostic — see ritualFromTranscript.ts's diagnostic-plate derivation
+ * and LearnSessionView's live pretest wiring). Unlike `parseGradeResult`
+ * (single item) and `parseGradeResults` (one JSON array), a batched pretest
+ * call's result is N standalone JSON objects concatenated with plain-text
+ * `--- node N ---` separators — so this scans for every balanced object
+ * rather than assuming one shape. Malformed/unrecognized objects are skipped,
+ * never thrown; an unparseable result yields an empty array. */
+export function parsePretestGradeResults(content: unknown): GradeResult[] {
+  const text = contentToText(content)
+  if (!text) return []
+  const out: GradeResult[] = []
+  for (const slice of extractAllJsonObjects(text)) {
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(slice)
+    } catch {
+      continue
+    }
+    const result = toGradeResult(parsed)
+    if (result) out.push(result)
+  }
+  return out
+}
+
+/** Maps a `GradeResult.grade` to the diagnostic plate's coarser verdict
+ * vocabulary (RitualMark's `diagnostic` kind) — recalled reads as "held",
+ * partial stays "partial", and lapsed (or anything unrecognized) reads as
+ * "unknown" rather than "lapsed": a pretest miss just means the node hasn't
+ * been taught yet, not that ground was lost. */
+export function verdictFromGrade(grade: GradeResult['grade']): 'held' | 'partial' | 'unknown' {
+  if (grade === 'recalled') return 'held'
+  if (grade === 'partial') return 'partial'
+  return 'unknown'
+}
+
 /** Parses a `receipt` call's tool_result content (Learn's batch-grading path —
  * `cmd_receipt` in engram.py emits an array of the same per-item shape
  * `apply_item` returns for a single `rate`). Non-array or unparseable content

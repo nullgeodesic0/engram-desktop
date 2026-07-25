@@ -3,6 +3,8 @@ import { humanizeNodeId } from '../../../../shared/humanizeId'
 import { MarkdownPreview } from '../MarkdownPreview'
 import { MathRenderer } from '../MathRenderer'
 import { AtlasBirth } from './AtlasBirth'
+import { Frontispiece } from './Frontispiece'
+import { DiagnosticPlate, type DiagnosticPlateItem } from './DiagnosticPlate'
 
 /** Abbreviate to ~cap chars on a word boundary WITHOUT cutting inside a $…$ /
  * $$…$$ span — a dangling delimiter would make KaTeX render the tail as
@@ -53,6 +55,8 @@ export type RitualMark = { id: string; atIndex: number } & (
   | { kind: 'stamp' }
   | { kind: 'figure'; title: string | null; body: string }
   | { kind: 'atlas'; topic: string | null }
+  | { kind: 'phase'; phase: string }
+  | { kind: 'diagnostic'; items: DiagnosticPlateItem[] }
 )
 
 /** Small hand-drawn glyphs, one per dialogue-grammar beat. 16x16 viewBox,
@@ -136,6 +140,8 @@ export function MarkView({ mark }: { mark: RitualMark }) {
   if (mark.kind === 'crossing') return <NodeCrossingDivider nodeId={mark.nodeId} />
   if (mark.kind === 'figure') return <FigureCard title={mark.title} body={mark.body} />
   if (mark.kind === 'atlas') return <AtlasBirth topic={mark.topic} />
+  if (mark.kind === 'phase') return <Frontispiece phase={mark.phase} />
+  if (mark.kind === 'diagnostic') return <DiagnosticPlate items={mark.items} />
   return <StashStamp />
 }
 

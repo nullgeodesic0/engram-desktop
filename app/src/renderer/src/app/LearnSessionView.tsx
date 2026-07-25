@@ -18,7 +18,15 @@ import { parseTranscriptToMessages, type ChatMessage } from '../../../shared/cha
 import { extractLastUsageFromTranscript } from '../../../shared/sessionUsage'
 import { latestBeatLabel } from '../../../shared/beatLabelParser'
 import { extractBannerFromTranscript, extractLastWalkFromTranscript } from '../../../shared/bannerFromTranscript'
-import { deriveRitualMarks } from '../../../shared/ritualFromTranscript'
+import {
+  deriveRitualMarks,
+  createDiagnosticGate,
+  diagnosticGateOnPhase,
+  diagnosticGateOnNextNode,
+  type DiagnosticGate,
+  type DiagnosticItem,
+} from '../../../shared/ritualFromTranscript'
+import { parsePretestGradeResults, verdictFromGrade } from '../../../shared/gradeResult'
 import { invalidateSearchIndex } from '../shared/searchIndex'
 import { humanizeNodeId } from '../../../shared/humanizeId'
 import { emitPulse, setAmbientLevel } from '../../../shared/neuralFieldBus'
@@ -335,6 +343,16 @@ export function LearnSessionView({
   const pendingAddTopic = useRef<{ toolUseId: string; markId: string } | null>(null)
   const lastNodeIdRef = useRef<string | null>(null)
   const intentionalStopRef = useRef(false)
+  // Pretest diagnostic plate (Task 2) — pendingPretestToolUseIds watches each
+  // `rate --kind pretest` Bash call for its tool_result (a single call can
+  // rate several nodes at once, see parsePretestGradeResults); pretestItems
+  // accumulates every verdict seen so far this sitting; diagnosticGate is the
+  // shared shared/ritualFromTranscript.ts state machine deciding WHEN the
+  // plate fires — the same rule the derivation uses, so a resumed session's
+  // history agrees with what the live sitting showed.
+  const pendingPretestToolUseIds = useRef<Set<string>>(new Set())
+  const pretestItemsRef = useRef<DiagnosticItem[]>([])
+  const diagnosticGateRef = useRef<DiagnosticGate>(createDiagnosticGate())
   // Mirrors currentBeat synchronously (unlike the state itself, which only
   // settles after a render) so onBridgeBeat can read "the beat we're leaving"
   // as a plain value in the handler body instead of reaching for it inside a
@@ -394,6 +412,9 @@ export function LearnSessionView({
     setLastWalk(null)
     pendingAddTopic.current = null
     lastNodeIdRef.current = null
+    pendingPretestToolUseIds.current.clear()
+    pretestItemsRef.current = []
+    diagnosticGateRef.current = createDiagnosticGate()
     setWalkNumber(null)
     setCommitment(null)
     setClosedUnexpectedly(false)
@@ -477,8 +498,18 @@ export function LearnSessionView({
       switch (req.tool) {
         case 'session_phase': {
           if (typeof payload.phase !== 'string') return
-          setSessionPhase(payload.phase)
-          if (payload.phase === 'grading') setGradingPending(true)
+          const nextPhase = payload.phase
+          const prevPhase = diagnosticGateRef.current.phase
+          // Diagnostic plate first (if this transition is the one leaving
+          // pretest) so it reads as "here's how pretest went" immediately
+          // ahead of the new phase's own frontispiece — see the shared
+          // gate's doctrine comment in ritualFromTranscript.ts.
+          if (diagnosticGateOnPhase(diagnosticGateRef.current, nextPhase, pretestItemsRef.current.length)) {
+            pushMark({ kind: 'diagnostic', items: [...pretestItemsRef.current] })
+          }
+          if (prevPhase !== nextPhase) pushMark({ kind: 'phase', phase: nextPhase })
+          setSessionPhase(nextPhase)
+          if (nextPhase === 'grading') setGradingPending(true)
           break
         }
         case 'beat_outcome': {
@@ -617,6 +648,13 @@ export function LearnSessionView({
       case 'tool_use':
         if (event.name === 'Bash' && looksLikeNextNodeCall(event.input)) {
           pendingNextToolUseId.current = event.id
+          // Fallback diagnostic-plate trigger (shared/ritualFromTranscript.ts's
+          // DiagnosticGate): if the model never called session_phase to leave
+          // 'pretest', the first real per-node teaching selection still fires
+          // the plate, as long as at least one pretest item is in hand.
+          if (diagnosticGateOnNextNode(diagnosticGateRef.current, pretestItemsRef.current.length)) {
+            pushMark({ kind: 'diagnostic', items: [...pretestItemsRef.current] })
+          }
           // First sight of the engine-minted topic id: persist any settings
           // given in the New Topic modal as this topic's real TopicSettings.
           if (pendingNewTopicSettings.current) {
@@ -677,6 +715,12 @@ export function LearnSessionView({
               { id: event.id, label: `Pretested: ${humanizeNodeId(pretestedNode)} ✓`, status: 'done', artifactPath: null },
             ])
             emitPulse('recalled') // a pretest rate call only ever fires on a solid answer (SKILL.md §2) — a real hit
+            // Watch this call's result for the diagnostic plate — a single Bash
+            // call can rate several frontier nodes at once (SKILL.md §2), so
+            // the node parsePretestGradeResults later pulls from the result
+            // JSON itself, not from `pretestedNode` above (which only ever
+            // captures the first --node in the command).
+            pendingPretestToolUseIds.current.add(event.id)
           }
         }
         if (event.name === 'Task' && isArtifactSmithSpawn(event.input)) {
@@ -760,6 +804,12 @@ export function LearnSessionView({
         if (pendingStashToolUseIds.current.has(event.toolUseId)) {
           pendingStashToolUseIds.current.delete(event.toolUseId)
           if (!event.isError) pushMark({ kind: 'stamp' })
+        }
+        if (pendingPretestToolUseIds.current.has(event.toolUseId)) {
+          pendingPretestToolUseIds.current.delete(event.toolUseId)
+          for (const r of parsePretestGradeResults(event.content)) {
+            pretestItemsRef.current.push({ node: r.node, verdict: verdictFromGrade(r.grade) })
+          }
         }
         setJobs((prev) =>
           prev.map((j) =>
