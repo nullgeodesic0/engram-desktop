@@ -18,6 +18,7 @@
  * synchronously when the bridge event arrives. */
 
 import { parsePretestGradeResults, verdictFromGrade } from './gradeResult'
+import { humanizeNodeId } from './humanizeId'
 
 interface TranscriptLine {
   type?: string
@@ -175,6 +176,116 @@ function isNextNodeCommand(command: string): boolean {
   return command.includes(' next ') && command.includes('--topic')
 }
 
+// Task 3 signals, grep-verified against real transcripts (see task-3-report.md
+// for the full findings) before writing either of these:
+//
+// MISCONCEPTION — confirmed real. `~/.claude/projects/*/*.jsonl` session
+// f1cb000e-9397-49ff-8bbf-3be95b054631 (the grad-quantum-mechanics sitting of
+// 2026-07-23) contains the exact call that logged the ket-ln misconception:
+//   python3 "$ENGRAM" misconception add --topic grad-quantum-mechanics \
+//     --node schrodinger-equation-unitary-evolution --description "Solves the
+//     operator ODE iħ d|ψ>/dt = H|ψ> by taking 'ln(|ψ(t)>/|ψ(0)>)' as if kets
+//     could be divided and logged like scalars — pattern-matched from scalar
+//     exponential decay instead of exponentiating the operator equation
+//     directly to get |ψ(t)>=e^{-iHt/ħ}|ψ(0)>."
+// `--description` is always the LAST flag within a single invocation, which
+// first suggested anchoring its capture to end-of-string — but a real
+// transcript (`54df0c3e-...` — the same physics qual-exam sitting, a later
+// Bash call) disproved that: the tutor sometimes batches TWO `misconception
+// add` invocations into one multi-line Bash call (clear the stash, then log
+// two misconceptions back to back), which an end-of-string anchor would
+// merge into one garbled mark and silently drop the second entirely. Each
+// invocation's description is instead bounded by the next newline (or true
+// end of string) — real descriptions never contain a literal `"` followed
+// immediately by a newline — so multiple invocations in one command are
+// each captured correctly, in order, via the global match below.
+function parseMisconceptionAdds(command: string): Array<{ node: string | undefined; text: string }> {
+  if (!command.includes('misconception add')) return []
+  const out: Array<{ node: string | undefined; text: string }> = []
+  const re = /misconception add\b([\s\S]*?)--description\s+"([\s\S]*?)"(?=\r?\n|$)/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(command))) {
+    const text = m[2].trim().slice(0, 500)
+    if (!text) continue
+    const nodeMatch = m[1].match(/--node\s+"?([a-z0-9]+(?:-[a-z0-9]+)*)"?/)
+    out.push({ node: nodeMatch ? nodeMatch[1] : undefined, text })
+  }
+  return out
+}
+
+// EXPLORABLE — two real signals found, of differing reliability:
+//
+//  1. `artifact set --topic <t> --node <n> --path <p>` (engram.py) is the
+//     literal registration call — confirmed real in multiple sessions (e.g.
+//     `.../12498e68-.../*.jsonl`: `artifact set --topic grad-classical-mechanics
+//     --node small-oscillations-normal-modes --path "$HOME/.claude/learning/
+//     artifacts/grad-classical-mechanics/small-oscillations-normal-modes.html"`).
+//     Gives an exact, existence-checkable path — the strongest possible signal
+//     — but it's run either by the artifact-smith subagent itself (usually
+//     invisible to the parent transcript, see #2) or, per SKILL.md's own
+//     fallback clause ("if its report shows registration failed, run the
+//     `artifact set` line yourself"), by the tutor directly. Only the latter
+//     case actually lands in the transcript this module walks.
+//  2. The artifact-smith spawn (a `Task`/`Agent` tool_use whose input mentions
+//     `engram-artifact-smith`) fires first and is reliably present, but the
+//     smith runs in the BACKGROUND — checked against the exact sitting above
+//     (f1cb000e...) and confirmed its subsequent `artifact set` call never
+//     appears anywhere in the parent transcript at all, only the spawn and
+//     (much later) an ask_user_question referencing the finished explorable.
+//     So the spawn is the only universally-present signal; it carries no path,
+//     only a title (from the spawn's own required `description` field, which
+//     is "Build <X> explorable" in every real example inspected) and,
+//     best-effort, a node id parsed out of the free-form prompt text (whose
+//     exact wording is NOT standardized by SKILL.md and varies session to
+//     session — parsing failure here is expected and handled by leaving the
+//     mark's `node` unset rather than guessing).
+//
+// Tool-name note: every real /learn transcript inspected in this environment
+// names the subagent-spawning tool 'Agent', never 'Task' — this is also true
+// of the pre-existing `isArtifactSmithSpawn`/curriculum-architect atlas-mark
+// checks in LearnSessionView.tsx, which assume 'Task' only and so likely never
+// fire against real sessions here. Both names are accepted below for
+// robustness; see task-3-report.md for this finding (left unfixed elsewhere —
+// out of this task's scope).
+function looksLikeArtifactSetCommand(command: string): { node: string | undefined; path: string | undefined } | null {
+  if (!command.includes('artifact set')) return null
+  const pathMatch = command.match(/--path\s+"?([^"\s]+)"?/)
+  const nodeMatch = command.match(/--node\s+"?([a-z0-9]+(?:-[a-z0-9]+)*)"?/)
+  return { node: nodeMatch ? nodeMatch[1] : undefined, path: pathMatch ? pathMatch[1] : undefined }
+}
+
+function isArtifactSmithSpawnEvent(name: string, input: Record<string, unknown>): boolean {
+  if (name !== 'Task' && name !== 'Agent') return false
+  return JSON.stringify(input).includes('engram-artifact-smith')
+}
+
+/** "Build Schrödinger unitary-evolution explorable" -> "Schrödinger
+ * unitary-evolution" — every real spawn's `description` observed follows this
+ * "Build <X> explorable[.]" shape (it's the Task/Agent tool's own required
+ * short-label field, not SKILL.md-mandated wording, so the strip is best-effort
+ * and falls back to the raw description untouched if it doesn't match). */
+function explorableTitleFromDescription(description: unknown): string | undefined {
+  if (typeof description !== 'string') return undefined
+  const trimmed = description.trim()
+  if (!trimmed) return undefined
+  const stripped = trimmed.replace(/^build\s+/i, '').replace(/\s+explorable\.?$/i, '')
+  const title = stripped || trimmed
+  return title.length > 120 ? `${title.slice(0, 120)}…` : title
+}
+
+/** Best-effort node id out of the spawn prompt's free text — tried against
+ * the phrasings actually observed ("Topic: t. Node id: n." / `node "n" in
+ * topic "t"`); returns undefined rather than guessing when neither matches. */
+function explorableNodeFromPrompt(prompt: unknown): string | undefined {
+  if (typeof prompt !== 'string') return undefined
+  const patterns = [/Node id:\s*([a-z0-9]+(?:-[a-z0-9]+)*)/i, /node\s+"([a-z0-9]+(?:-[a-z0-9]+)*)"/i]
+  for (const re of patterns) {
+    const m = prompt.match(re)
+    if (m) return m[1].toLowerCase()
+  }
+  return undefined
+}
+
 /** Structurally a subset of the `RitualMark` union (components/ritual/Marks.tsx)
  * — only the kinds this module can derive after the fact. Kept as a local
  * type (rather than importing RitualMark) so shared/ doesn't reach into
@@ -185,6 +296,8 @@ export type DerivedRitualMark =
   | { id: string; atIndex: number; kind: 'crossing'; nodeId: string }
   | { id: string; atIndex: number; kind: 'phase'; phase: string }
   | { id: string; atIndex: number; kind: 'diagnostic'; items: DiagnosticItem[] }
+  | { id: string; atIndex: number; kind: 'misconception'; text: string; node?: string }
+  | { id: string; atIndex: number; kind: 'explorable'; title: string; path?: string; node?: string }
 
 /** Rebuilds the durable subset of ritual marks (beat cards, node crossings,
  * phase frontispieces, the pretest diagnostic plate) from a transcript.
@@ -200,6 +313,12 @@ export type DerivedRitualMark =
  *    same transition also satisfies `DiagnosticGate`, the diagnostic mark is
  *    pushed first so it reads as "here's how pretest went" immediately ahead
  *    of the new phase's title — same order the live path uses.
+ *  - `misconception` marks come from `misconception add` Bash calls, and
+ *    `explorable` marks from either an artifact-smith spawn (title/node only)
+ *    or an `artifact set` call (which fills in an existing spawn's path, or
+ *    stands alone if the tutor ran it directly) — see the doctrine comments
+ *    on `parseMisconceptionAdds`/`looksLikeArtifactSetCommand` above for the
+ *    real-transcript verification behind both.
  * Figure/atlas/stash marks are NOT derived here — they're one-time tutor
  * signals with no durable record in the transcript to replay from (see the
  * doctrine comment on `RitualMark` in Marks.tsx). */
@@ -212,6 +331,12 @@ export function deriveRitualMarks(entries: unknown[]): DerivedRitualMark[] {
   const gate = createDiagnosticGate()
   const pretestItems: DiagnosticItem[] = []
   const pendingPretestToolUseIds = new Set<string>()
+  // Explorable marks pushed by an artifact-smith spawn (no path yet), keyed by
+  // node id, so a later `artifact set` call for the same node fills the path
+  // in rather than duplicating the mark — mirrors LearnSessionView's JobsRail
+  // matching (see task-3-report.md for why the spawn's path usually never
+  // arrives in this transcript at all).
+  const pendingExplorableByNode = new Map<string, number>()
 
   for (const event of walkTranscript(entries)) {
     if (event.kind === 'user_message') {
@@ -242,6 +367,35 @@ export function deriveRitualMarks(entries: unknown[]): DerivedRitualMark[] {
       if (isNextNodeCommand(command) && diagnosticGateOnNextNode(gate, pretestItems.length)) {
         marks.push({ id: `dmark-${seq++}`, atIndex: messageCount, kind: 'diagnostic', items: [...pretestItems] })
       }
+      for (const misconception of parseMisconceptionAdds(command)) {
+        marks.push({ id: `dmark-${seq++}`, atIndex: messageCount, kind: 'misconception', text: misconception.text, node: misconception.node })
+      }
+      const artifactSet = looksLikeArtifactSetCommand(command)
+      if (artifactSet?.path) {
+        const pendingIdx = artifactSet.node ? pendingExplorableByNode.get(artifactSet.node) : undefined
+        if (pendingIdx !== undefined) {
+          const existing = marks[pendingIdx] as Extract<DerivedRitualMark, { kind: 'explorable' }>
+          marks[pendingIdx] = { ...existing, path: artifactSet.path }
+          if (artifactSet.node) pendingExplorableByNode.delete(artifactSet.node)
+        } else {
+          marks.push({
+            id: `dmark-${seq++}`,
+            atIndex: messageCount,
+            kind: 'explorable',
+            title: artifactSet.node ? humanizeNodeId(artifactSet.node) : 'Explorable',
+            path: artifactSet.path,
+            node: artifactSet.node,
+          })
+        }
+      }
+      continue
+    }
+    if (isArtifactSmithSpawnEvent(event.name, event.input)) {
+      const input = event.input as { description?: unknown; prompt?: unknown }
+      const title = explorableTitleFromDescription(input.description) ?? 'Explorable'
+      const node = explorableNodeFromPrompt(input.prompt)
+      marks.push({ id: `dmark-${seq++}`, atIndex: messageCount, kind: 'explorable', title, node })
+      if (node) pendingExplorableByNode.set(node, marks.length - 1)
       continue
     }
     if (event.name === SESSION_PHASE) {

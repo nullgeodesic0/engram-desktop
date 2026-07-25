@@ -5,6 +5,8 @@ import { MathRenderer } from '../MathRenderer'
 import { AtlasBirth } from './AtlasBirth'
 import { Frontispiece } from './Frontispiece'
 import { DiagnosticPlate, type DiagnosticPlateItem } from './DiagnosticPlate'
+import { MisconceptionPin } from './MisconceptionPin'
+import { ExplorableForged } from './ExplorableForged'
 
 /** Abbreviate to ~cap chars on a word boundary WITHOUT cutting inside a $…$ /
  * $$…$$ span — a dangling delimiter would make KaTeX render the tail as
@@ -41,14 +43,17 @@ function abbreviateOutsideMath(text: string, cap: number): string {
  * a message index at creation time (atIndex = messages.length when the signal
  * arrived), rendered interleaved by LearnSessionView.
  *
- * Two are derivable from the transcript's own record of `render_beat` tool
- * calls and replay on resume/history: `beat` and `crossing` — see
- * `shared/ritualFromTranscript.ts`'s `deriveRitualMarks`, which walks a
- * reopened session's transcript to rebuild them instead of leaving a resumed
- * sitting's history bare. The rest are genuinely one-time tutor signals with
- * no durable record to replay from — `stamp` (a stash confirmation),
- * `figure` (a `show_figure` aside), and `atlas` (a topic's birth) — those stay
- * live-session-only, same pattern as grade cards and JobsRail. */
+ * Most are derivable from the transcript's own record of tool calls and
+ * replay on resume/history — `beat`/`crossing` (render_beat),
+ * `phase`/`diagnostic` (session_phase + pretest rate calls), `misconception`
+ * (`misconception add` Bash calls), and `explorable` (an artifact-smith spawn
+ * and/or `artifact set` Bash call) — see `shared/ritualFromTranscript.ts`'s
+ * `deriveRitualMarks`, which walks a reopened session's transcript to rebuild
+ * them instead of leaving a resumed sitting's history bare. The rest are
+ * genuinely one-time tutor signals with no durable record to replay from —
+ * `stamp` (a stash confirmation), `figure` (a `show_figure` aside), and
+ * `atlas` (a topic's birth) — those stay live-session-only, same pattern as
+ * grade cards and JobsRail. */
 export type RitualMark = { id: string; atIndex: number } & (
   | { kind: 'beat'; beat: string; content: string }
   | { kind: 'crossing'; nodeId: string }
@@ -57,6 +62,8 @@ export type RitualMark = { id: string; atIndex: number } & (
   | { kind: 'atlas'; topic: string | null }
   | { kind: 'phase'; phase: string }
   | { kind: 'diagnostic'; items: DiagnosticPlateItem[] }
+  | { kind: 'misconception'; text: string; node?: string }
+  | { kind: 'explorable'; title: string; path?: string; node?: string }
 )
 
 /** Small hand-drawn glyphs, one per dialogue-grammar beat. 16x16 viewBox,
@@ -142,6 +149,8 @@ export function MarkView({ mark }: { mark: RitualMark }) {
   if (mark.kind === 'atlas') return <AtlasBirth topic={mark.topic} />
   if (mark.kind === 'phase') return <Frontispiece phase={mark.phase} />
   if (mark.kind === 'diagnostic') return <DiagnosticPlate items={mark.items} />
+  if (mark.kind === 'misconception') return <MisconceptionPin text={mark.text} node={mark.node} />
+  if (mark.kind === 'explorable') return <ExplorableForged title={mark.title} path={mark.path} node={mark.node} />
   return <StashStamp />
 }
 

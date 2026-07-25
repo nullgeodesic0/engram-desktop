@@ -520,3 +520,24 @@
 .ritual-diagnostic-in {
   animation: diagnostic-ink-in calc(var(--dur-base) * 3) var(--ease-out-soft);
 }
+
+/* MisconceptionPin (Marks.tsx/MisconceptionPin.tsx) — same ink-wash family as
+ * diagnostic-ink-in, danger-toned so a freshly-pinned specimen reads as
+ * caught-in-the-act rather than just another card appearing. */
+@keyframes misconception-ink-in {
+  0% { background-color: color-mix(in srgb, var(--color-ink-danger) 16%, transparent); }
+  100% { background-color: transparent; }
+}
+.ritual-misconception-in {
+  animation: misconception-ink-in calc(var(--dur-base) * 3) var(--ease-out-soft);
+}
+
+/* ExplorableForged (Marks.tsx/ExplorableForged.tsx) — same family, violet-
+ * toned to match the card's own ink. */
+@keyframes explorable-ink-in {
+  0% { background-color: color-mix(in srgb, var(--color-ink-violet) 14%, transparent); }
+  100% { background-color: transparent; }
+}
+.ritual-explorable-in {
+  animation: explorable-ink-in calc(var(--dur-base) * 3) var(--ease-out-soft);
+}
