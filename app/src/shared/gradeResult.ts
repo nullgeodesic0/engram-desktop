@@ -208,6 +208,21 @@ export function parseGradeResults(content: unknown): GradeResult[] {
   return parsed.map(toGradeResult).filter((r): r is GradeResult => r !== null)
 }
 
+/** The lapse rite's "returns <date>" — local today plus the result's own
+ * `intervalDays`, computed with getFullYear/Month/Date (never toISOString,
+ * the codebase's local-date discipline — see HomeView's due forecast for the
+ * same pattern) so the shown day never drifts a timezone off from what the
+ * user's own calendar would say. Returns null when `intervalDays` is absent
+ * (an unusual `rate` result) rather than guessing a date. Shared by
+ * ReviewSessionView's live rite push and ritualFromTranscript.ts's
+ * derivation so both compute the exact same string. */
+export function lapseReturnDate(intervalDays: number | null): string | null {
+  if (intervalDays == null) return null
+  const today = new Date()
+  const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + Math.round(intervalDays))
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 /** Trailing consecutive `recalled` count — the sitting's current "flow"
  * (FlowChain renders it from 2 up). Walks backward until the streak breaks. */
 export function trailingRecalled(results: GradeResult[]): number {

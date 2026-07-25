@@ -17,7 +17,7 @@
  * live path's `pushMark`, which stamps `atIndex: messagesRef.current.length`
  * synchronously when the bridge event arrives. */
 
-import { parsePretestGradeResults, verdictFromGrade } from './gradeResult'
+import { parsePretestGradeResults, parseGradeResult, verdictFromGrade, lapseReturnDate } from './gradeResult'
 import { humanizeNodeId } from './humanizeId'
 
 interface TranscriptLine {
@@ -175,6 +175,13 @@ function isPretestRateCommand(command: string): boolean {
 function isNextNodeCommand(command: string): boolean {
   return command.includes(' next ') && command.includes('--topic')
 }
+// Mirrors ReviewSessionView's looksLikeRateCall exactly (a Review sitting's
+// per-item grading call) — excludes pretest `rate` calls (isPretestRateCommand
+// above), which are Learn's own diagnostic path and carry `--kind pretest`
+// rather than a live-review rating.
+function isReviewRateCommand(command: string): boolean {
+  return command.includes(' rate ') && command.includes('--rating') && !command.includes('--kind pretest')
+}
 
 // Task 3 signals, grep-verified against real transcripts (see task-3-report.md
 // for the full findings) before writing either of these:
@@ -299,6 +306,7 @@ export type DerivedRitualMark =
   | { id: string; atIndex: number; kind: 'misconception'; text: string; node?: string }
   | { id: string; atIndex: number; kind: 'explorable'; title: string; path?: string; node?: string }
   | { id: string; atIndex: number; kind: 'verify-seal' }
+  | { id: string; atIndex: number; kind: 'lapse'; node: string; returnDate: string | null }
 
 /** Rebuilds the durable subset of ritual marks (beat cards, node crossings,
  * phase frontispieces, the pretest diagnostic plate) from a transcript.
@@ -324,7 +332,12 @@ export type DerivedRitualMark =
  *    beat `verify` with outcome `confirmed` — mirrors LearnSessionView's live
  *    gate exactly (see VerifySeal's doctrine comment in Marks.tsx); partial
  *    and missed verify outcomes still ink the beat trail but never a seal.
- * Figure/atlas/stash marks are NOT derived here — they're one-time tutor
+ *  - `lapse` marks come from a Review sitting's own `rate --rating` call (not
+ *    a pretest one) whose result grades 'lapsed' — mirrors ReviewSessionView's
+ *    live push in its rate-result handler exactly, including
+ *    `lapseReturnDate` for the "returns <date>" figure (see LapseRite's
+ *    doctrine comment in Marks.tsx).
+ * Figure/atlas/stash/docket marks are NOT derived here — they're one-time
  * signals with no durable record in the transcript to replay from (see the
  * doctrine comment on `RitualMark` in Marks.tsx). */
 export function deriveRitualMarks(entries: unknown[]): DerivedRitualMark[] {
@@ -336,6 +349,10 @@ export function deriveRitualMarks(entries: unknown[]): DerivedRitualMark[] {
   const gate = createDiagnosticGate()
   const pretestItems: DiagnosticItem[] = []
   const pendingPretestToolUseIds = new Set<string>()
+  // A live Review sitting's own `rate --rating` calls (not pretest) — tracked
+  // the same shape as pendingPretestToolUseIds so its tool_result can be
+  // matched back to the call that produced it.
+  const pendingReviewRateToolUseIds = new Set<string>()
   // Explorable marks pushed by an artifact-smith spawn (no path yet), keyed by
   // node id, so a later `artifact set` call for the same node fills the path
   // in rather than duplicating the mark — mirrors LearnSessionView's JobsRail
@@ -375,12 +392,26 @@ export function deriveRitualMarks(entries: unknown[]): DerivedRitualMark[] {
           pretestItems.push({ node: r.node, verdict: verdictFromGrade(r.grade) })
         }
       }
+      if (pendingReviewRateToolUseIds.has(event.toolUseId)) {
+        pendingReviewRateToolUseIds.delete(event.toolUseId)
+        const result = parseGradeResult(event.content)
+        if (result && result.grade === 'lapsed') {
+          marks.push({
+            id: `dmark-${seq++}`,
+            atIndex: messageCount,
+            kind: 'lapse',
+            node: result.node,
+            returnDate: lapseReturnDate(result.intervalDays),
+          })
+        }
+      }
       continue
     }
     // tool_use
     if (event.name === 'Bash') {
       const command = String((event.input as { command?: unknown }).command ?? '')
       if (isPretestRateCommand(command)) pendingPretestToolUseIds.add(event.id)
+      if (isReviewRateCommand(command)) pendingReviewRateToolUseIds.add(event.id)
       if (isNextNodeCommand(command) && diagnosticGateOnNextNode(gate, pretestItems.length)) {
         marks.push({ id: `dmark-${seq++}`, atIndex: messageCount, kind: 'diagnostic', items: [...pretestItems] })
       }

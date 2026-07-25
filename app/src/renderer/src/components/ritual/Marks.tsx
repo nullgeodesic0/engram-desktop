@@ -7,6 +7,8 @@ import { Frontispiece } from './Frontispiece'
 import { DiagnosticPlate, type DiagnosticPlateItem } from './DiagnosticPlate'
 import { MisconceptionPin } from './MisconceptionPin'
 import { ExplorableForged } from './ExplorableForged'
+import { ReviewDocket, type ReviewDocketItem } from './ReviewDocket'
+import { LapseRite } from './LapseRite'
 
 /** Abbreviate to ~cap chars on a word boundary WITHOUT cutting inside a $…$ /
  * $$…$$ span — a dangling delimiter would make KaTeX render the tail as
@@ -47,15 +49,19 @@ function abbreviateOutsideMath(text: string, cap: number): string {
  * replay on resume/history — `beat`/`crossing` (render_beat),
  * `phase`/`diagnostic` (session_phase + pretest rate calls), `misconception`
  * (`misconception add` Bash calls), `explorable` (an artifact-smith spawn
- * and/or `artifact set` Bash call), and `verify-seal` (a `beat_outcome`
- * bridge:ui call naming beat `verify` with outcome `confirmed`) — see
+ * and/or `artifact set` Bash call), `verify-seal` (a `beat_outcome`
+ * bridge:ui call naming beat `verify` with outcome `confirmed`), and `lapse`
+ * (Review's own rite: a `rate --rating again` call whose result grades
+ * 'lapsed') — see
  * `shared/ritualFromTranscript.ts`'s
  * `deriveRitualMarks`, which walks a reopened session's transcript to rebuild
  * them instead of leaving a resumed sitting's history bare. The rest are
- * genuinely one-time tutor signals with no durable record to replay from —
- * `stamp` (a stash confirmation), `figure` (a `show_figure` aside), and
- * `atlas` (a topic's birth) — those stay live-session-only, same pattern as
- * grade cards and JobsRail. */
+ * genuinely one-time signals with no durable record to replay from —
+ * `stamp` (a stash confirmation), `figure` (a `show_figure` aside), `atlas`
+ * (a topic's birth), and `docket` (Review's opening `due()` snapshot — the
+ * read itself never lands in the transcript, only its downstream `rate`
+ * calls do) — those stay live-session-only, same pattern as grade cards and
+ * JobsRail. */
 export type RitualMark = { id: string; atIndex: number } & (
   | { kind: 'beat'; beat: string; content: string }
   | { kind: 'crossing'; nodeId: string }
@@ -67,6 +73,8 @@ export type RitualMark = { id: string; atIndex: number } & (
   | { kind: 'misconception'; text: string; node?: string }
   | { kind: 'explorable'; title: string; path?: string; node?: string }
   | { kind: 'verify-seal' }
+  | { kind: 'lapse'; node: string; returnDate: string | null }
+  | { kind: 'docket'; items: ReviewDocketItem[] }
 )
 
 /** Small hand-drawn glyphs, one per dialogue-grammar beat. 16x16 viewBox,
@@ -177,6 +185,8 @@ export function MarkView({ mark }: { mark: RitualMark }) {
   if (mark.kind === 'misconception') return <MisconceptionPin text={mark.text} node={mark.node} />
   if (mark.kind === 'explorable') return <ExplorableForged title={mark.title} path={mark.path} node={mark.node} />
   if (mark.kind === 'verify-seal') return <VerifySeal />
+  if (mark.kind === 'lapse') return <LapseRite node={mark.node} returnDate={mark.returnDate} />
+  if (mark.kind === 'docket') return <ReviewDocket items={mark.items} />
   return <StashStamp />
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import type { DueItem, ExportSittingFormat } from '../../../shared/types'
 import type { SessionEvent } from '../../../shared/sessionEvents'
 import type { BridgeAskRequest } from '../../../shared/bridgeProtocol'
@@ -14,7 +14,7 @@ import { parseTranscriptToMessages, type ChatMessage } from '../../../shared/cha
 import { extractLastUsageFromTranscript } from '../../../shared/sessionUsage'
 import { humanizeNodeId } from '../../../shared/humanizeId'
 import { emitPulse } from '../../../shared/neuralFieldBus'
-import { parseGradeResult, type GradeResult } from '../../../shared/gradeResult'
+import { parseGradeResult, lapseReturnDate, type GradeResult } from '../../../shared/gradeResult'
 import { GradeResultCard } from '../components/GradeResultCard'
 import { SkeletonBar } from '../components/Skeleton'
 import { SessionCeremony } from '../components/ritual/Bookends'
@@ -28,6 +28,9 @@ import { InkWell } from '../components/ritual/InkWell'
 import { FlowChain } from '../components/ritual/FlowChain'
 import { trailingRecalled } from '../../../shared/gradeResult'
 import { invalidateSearchIndex } from '../shared/searchIndex'
+import { MarkView, type RitualMark } from '../components/ritual/Marks'
+import type { ReviewDocketItem } from '../components/ritual/ReviewDocket'
+import { deriveRitualMarks } from '../../../shared/ritualFromTranscript'
 
 type Phase = 'loading' | 'empty' | 'ready' | 'in-session' | 'done' | 'closed-unexpectedly'
 
@@ -67,6 +70,25 @@ function looksLikeRateCall(input: Record<string, unknown>): boolean {
   return command.includes(' rate ') && command.includes('--rating')
 }
 
+// Local-date discipline (getFullYear/Month/Date — never toISOString, same
+// pattern HomeView's 7-day due forecast uses) rather than trusting the
+// engine's own `overdue_days`, which the opening docket never reads.
+function daysOverdueLocal(due: string): number {
+  const today = new Date()
+  const dayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  const d = new Date(`${due}T00:00:00`)
+  return Math.floor((dayStart.getTime() - d.getTime()) / 86400000)
+}
+
+/** The opening docket's rows — oldest (most overdue) first. ReviewDocket
+ * itself caps the display at 8 with an "and N more…" tail; this just builds
+ * and orders the full list from a fresh `due()` snapshot. */
+function buildDocketItems(due: DueItem[]): ReviewDocketItem[] {
+  return due
+    .map((item) => ({ id: item.id, topic: item.topic, daysOverdue: daysOverdueLocal(item.due) }))
+    .sort((a, b) => b.daysOverdue - a.daysOverdue)
+}
+
 interface ReviewSessionViewProps {
   /** Reports live-session state up to App.tsx so the sidebar nav can show an
    * ink-dot ("a session is alive in there") while this view isn't the active tab. */
@@ -104,10 +126,25 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
   // node next comes due, so "nothing due" says when to come back rather than
   // just sitting blank.
   const [earliestDue, setEarliestDue] = useState<string | null>(null)
+  // Ritual marks — Review's own minimal slice of Learn's atIndex-interleave
+  // plumbing (LearnSessionView), needed here only for the opening docket
+  // (one-time, `kind: 'docket'`) and the lapse rite (derivable, `kind:
+  // 'lapse'`) — see the doctrine comment on RitualMark in Marks.tsx.
+  const [marks, setMarks] = useState<RitualMark[]>([])
 
   const pendingRateToolUseId = useRef<string | null>(null)
   const sessionIdRef = useRef<string | null>(null)
   const abortedRef = useRef(false)
+  const messagesRef = useRef<ChatMessage[]>([])
+  messagesRef.current = messages
+  const markSeq = useRef(0)
+
+  function pushLapseMark(node: string, returnDate: string | null) {
+    setMarks((prev) => [
+      ...prev,
+      { id: `mark-${markSeq.current++}`, atIndex: messagesRef.current.length, kind: 'lapse', node, returnDate },
+    ])
+  }
 
   function refreshQueue(): Promise<DueItem[]> {
     return window.engram.due(12).then((items) => {
@@ -188,6 +225,11 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
               invalidateSearchIndex()
               setLastGrade(result)
               setSessionGrades((prev) => [...prev, result])
+              // The lapse rite — a quiet marker, not the danger-styled grade
+              // card's alarm (see LapseRite's doctrine comment in Marks.tsx).
+              if (result.grade === 'lapsed') {
+                pushLapseMark(result.node, lapseReturnDate(result.intervalDays))
+              }
             }
           }
           refreshQueue().then((items) => {
@@ -233,6 +275,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
     if (!resume) {
       setLastGrade(null)
       setSessionGrades([])
+      setMarks([])
     }
 
     // Hydrate prior chat history before spawning, same as Learn — resume continues the
@@ -246,10 +289,31 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
         // stays blank until the next turn completes despite a resumed session already
         // having real usage.
         setContextUsage(extractLastUsageFromTranscript(lines))
+        // Replay the lapse rite(s) a resumed sitting's history already carries — same
+        // "only when empty" guard Learn uses, so a live session's marks are never
+        // clobbered by a stray re-hydration. The opening docket never replays here
+        // (it's one-time — see deriveRitualMarks's doctrine comment).
+        setMarks((prev) => (prev.length === 0 ? deriveRitualMarks(lines) : prev))
       }
     } else {
       setMessages([])
       setContextUsage(null)
+      // The opening docket — a one-time snapshot of what's due, staged above
+      // the transcript before any turns happen. Fresh sittings only: a
+      // resumed session has no fresh due() read to stage, and the docket
+      // doesn't replay from the transcript either way (see the doctrine
+      // comment on RitualMark in Marks.tsx).
+      window.engram
+        .due()
+        .then((due) => {
+          const items = buildDocketItems(due)
+          if (items.length === 0) return
+          setMarks((prev) => [...prev, { id: `mark-${markSeq.current++}`, atIndex: 0, kind: 'docket', items }])
+        })
+        .catch(() => {
+          // Read failure — the docket just doesn't show; nothing else in the
+          // sitting depends on it.
+        })
     }
 
     const { sessionId: sid } = resume
@@ -503,12 +567,21 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
           <div className={`flex-1 min-h-0 flex flex-col${chamber ? ' chamber-blur' : ''}`}>
             <ChatScrollRegion deps={[messages, busy]}>
               <div className="transcript-measure flex flex-col gap-5">
-                {messages.map((m) => (
-                  <ChatMessageView
-                    key={m.id}
-                    message={m}
-                    onEditResend={m.role === 'user' && m.id === lastUserMessageId && !busy ? editResend : undefined}
-                  />
+                {marks.filter((k) => k.atIndex === 0).map((k) => (
+                  <MarkView key={k.id} mark={k} />
+                ))}
+                {messages.map((m, i) => (
+                  <Fragment key={m.id}>
+                    <ChatMessageView
+                      message={m}
+                      onEditResend={m.role === 'user' && m.id === lastUserMessageId && !busy ? editResend : undefined}
+                    />
+                    {marks
+                      .filter((k) => k.atIndex === i + 1 || (i === messages.length - 1 && k.atIndex > messages.length))
+                      .map((k) => (
+                        <MarkView key={k.id} mark={k} />
+                      ))}
+                  </Fragment>
                 ))}
                 {busy && (
                   <div className="flex items-center gap-2">
