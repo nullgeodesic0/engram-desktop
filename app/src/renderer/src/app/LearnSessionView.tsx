@@ -18,6 +18,7 @@ import { parseTranscriptToMessages, type ChatMessage } from '../../../shared/cha
 import { extractLastUsageFromTranscript } from '../../../shared/sessionUsage'
 import { latestBeatLabel } from '../../../shared/beatLabelParser'
 import { extractBannerFromTranscript, extractLastWalkFromTranscript } from '../../../shared/bannerFromTranscript'
+import { deriveRitualMarks } from '../../../shared/ritualFromTranscript'
 import { invalidateSearchIndex } from '../shared/searchIndex'
 import { humanizeNodeId } from '../../../shared/humanizeId'
 import { emitPulse, setAmbientLevel } from '../../../shared/neuralFieldBus'
@@ -887,6 +888,15 @@ export function LearnSessionView({
         const lastAssistant = [...history].reverse().find((m) => m.role === 'assistant')
         setBeat(lastAssistant ? latestBeatLabel(lastAssistant.text) : null)
       }
+      // Same replay for the beat cards + crossing dividers themselves — a
+      // resumed sitting shouldn't open to a bare transcript when the same
+      // render_beat calls that fed the banner above also carry everything
+      // needed to redraw them. resetSessionEphemera() (called at the top of
+      // this function) already cleared marks to [], but guard with the same
+      // "only when empty" check the live path implicitly gets for free, so a
+      // live session's own marks (should this ever race a second hydration)
+      // are never clobbered.
+      setMarks((prev) => (prev.length === 0 ? deriveRitualMarks(lines) : prev))
     } else {
       setMessages([])
       setContextUsage(null)

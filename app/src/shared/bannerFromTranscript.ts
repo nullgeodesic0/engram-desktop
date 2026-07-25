@@ -1,4 +1,5 @@
 import { parseGradeResults } from './gradeResult'
+import { walkBridgeToolUses, RENDER_BEAT, BEAT_OUTCOME } from './ritualFromTranscript'
 
 /** Rebuild the session banner (current beat, node, position, beat trail) from
  * a resumed session's transcript, so the loop indicator populates instantly on
@@ -7,7 +8,10 @@ import { parseGradeResults } from './gradeResult'
  * The transcript is the same JSONL the app replays for chat history: assistant
  * entries carry `message.content` arrays whose tool_use blocks include every
  * `mcp__engram-ui-bridge__render_beat` / `beat_outcome` call the tutor made —
- * a durable record of exactly the signals that drive the live banner. */
+ * a durable record of exactly the signals that drive the live banner. Walks
+ * those calls via `ritualFromTranscript.ts`'s `walkBridgeToolUses`, the same
+ * ordered extraction `deriveRitualMarks` replays for durable beat marks, so
+ * the two can never disagree about what a bridge call is. */
 
 export type BeatOutcome = 'visited' | 'confirmed' | 'partial' | 'missed'
 
@@ -18,15 +22,6 @@ export interface ResumedBanner {
   trail: Map<string, BeatOutcome>
 }
 
-interface TranscriptLine {
-  type?: string
-  message?: {
-    content?: string | { type?: string; name?: string; input?: Record<string, unknown> }[]
-  }
-}
-
-const RENDER_BEAT = 'mcp__engram-ui-bridge__render_beat'
-const BEAT_OUTCOME = 'mcp__engram-ui-bridge__beat_outcome'
 const OUTCOMES = new Set(['confirmed', 'partial', 'missed'])
 
 export function extractBannerFromTranscript(lines: unknown[]): ResumedBanner {
@@ -35,33 +30,27 @@ export function extractBannerFromTranscript(lines: unknown[]): ResumedBanner {
   let position: string | null = null
   let trail = new Map<string, BeatOutcome>()
 
-  for (const raw of lines) {
-    const line = raw as TranscriptLine
-    if (line?.type !== 'assistant' || !Array.isArray(line.message?.content)) continue
-    for (const block of line.message.content) {
-      if (block?.type !== 'tool_use' || typeof block.input !== 'object' || block.input === null) continue
-
-      if (block.name === RENDER_BEAT) {
-        const input = block.input as { beat?: unknown; node?: unknown; position?: unknown }
-        if (typeof input.beat !== 'string') continue
-        const nextNode = typeof input.node === 'string' ? input.node : null
-        // A new node starts a fresh walk — same reset the live path performs.
-        if (nextNode && node && nextNode !== node) {
-          trail = new Map()
-          position = null
-          beat = null
-        }
-        // The beat we're leaving becomes part of the walked trail (never
-        // downgrading an outcome the tutor already reported for it).
-        if (beat && !trail.has(beat)) trail.set(beat, 'visited')
-        beat = input.beat
-        if (nextNode) node = nextNode
-        if (typeof input.position === 'string') position = input.position
-      } else if (block.name === BEAT_OUTCOME) {
-        const input = block.input as { beat?: unknown; outcome?: unknown }
-        if (typeof input.beat === 'string' && typeof input.outcome === 'string' && OUTCOMES.has(input.outcome)) {
-          trail.set(input.beat, input.outcome as BeatOutcome)
-        }
+  for (const { name, input } of walkBridgeToolUses(lines)) {
+    if (name === RENDER_BEAT) {
+      const beatInput = input as { beat?: unknown; node?: unknown; position?: unknown }
+      if (typeof beatInput.beat !== 'string') continue
+      const nextNode = typeof beatInput.node === 'string' ? beatInput.node : null
+      // A new node starts a fresh walk — same reset the live path performs.
+      if (nextNode && node && nextNode !== node) {
+        trail = new Map()
+        position = null
+        beat = null
+      }
+      // The beat we're leaving becomes part of the walked trail (never
+      // downgrading an outcome the tutor already reported for it).
+      if (beat && !trail.has(beat)) trail.set(beat, 'visited')
+      beat = beatInput.beat
+      if (nextNode) node = nextNode
+      if (typeof beatInput.position === 'string') position = beatInput.position
+    } else if (name === BEAT_OUTCOME) {
+      const outcomeInput = input as { beat?: unknown; outcome?: unknown }
+      if (typeof outcomeInput.beat === 'string' && typeof outcomeInput.outcome === 'string' && OUTCOMES.has(outcomeInput.outcome)) {
+        trail.set(outcomeInput.beat, outcomeInput.outcome as BeatOutcome)
       }
     }
   }

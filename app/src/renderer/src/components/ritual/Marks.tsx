@@ -37,8 +37,16 @@ function abbreviateOutsideMath(text: string, cap: number): string {
 
 /** Ephemeral transcript overlays for the loop's recurring moments — pinned to
  * a message index at creation time (atIndex = messages.length when the signal
- * arrived), rendered interleaved by LearnSessionView. Never persisted, never
- * reconstructed on history replay — same pattern as grade cards and JobsRail. */
+ * arrived), rendered interleaved by LearnSessionView.
+ *
+ * Two are derivable from the transcript's own record of `render_beat` tool
+ * calls and replay on resume/history: `beat` and `crossing` — see
+ * `shared/ritualFromTranscript.ts`'s `deriveRitualMarks`, which walks a
+ * reopened session's transcript to rebuild them instead of leaving a resumed
+ * sitting's history bare. The rest are genuinely one-time tutor signals with
+ * no durable record to replay from — `stamp` (a stash confirmation),
+ * `figure` (a `show_figure` aside), and `atlas` (a topic's birth) — those stay
+ * live-session-only, same pattern as grade cards and JobsRail. */
 export type RitualMark = { id: string; atIndex: number } & (
   | { kind: 'beat'; beat: string; content: string }
   | { kind: 'crossing'; nodeId: string }
