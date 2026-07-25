@@ -1307,6 +1307,10 @@ export function LearnSessionView({
                 <span className="h-px w-12 rounded bg-[var(--color-hairline)] group-hover:bg-[var(--color-ink-warm-dim)] transition-colors duration-[var(--dur-fast)]" />
               </div>
             )}
+            {/* Grid 0fr↔1fr animates to the header's TRUE height — unlike a
+                max-height cap, the motion spans the whole duration in both
+                directions with no dead zone, so collapse starts moving the
+                instant it fires and expand lands exactly, never overshooting. */}
             <header
               onMouseEnter={mastheadCollapsed ? undefined : peekMasthead}
               onMouseLeave={
@@ -1323,10 +1327,14 @@ export function LearnSessionView({
                   : undefined
               }
               onFocusCapture={peekMasthead}
-              className={`shrink-0 flex flex-col gap-2 overflow-hidden transition-[max-height,opacity,transform] duration-[var(--dur-base)] ease-[var(--ease-out-soft)] ${
-                mastheadCollapsed ? 'max-h-0 opacity-0 -translate-y-1' : 'max-h-72 opacity-100 translate-y-0'
-              }`}
+              className="shrink-0 grid transition-[grid-template-rows] duration-[var(--dur-base)] ease-[var(--ease-out-soft)]"
+              style={{ gridTemplateRows: mastheadCollapsed ? '0fr' : '1fr' }}
             >
+              <div
+                className={`min-h-0 overflow-hidden flex flex-col gap-2 transition-[opacity,transform] duration-[var(--dur-base)] ease-[var(--ease-out-soft)] ${
+                  mastheadCollapsed ? 'opacity-0 -translate-y-1' : 'opacity-100 translate-y-0'
+                }`}
+              >
         <div className="flex items-center justify-between">
           {/* In a session, the topic IS the page — one serif title, no static
               "Learn" h1, no repeated title on the opening plate below. */}
@@ -1428,6 +1436,7 @@ export function LearnSessionView({
             ))}
           </div>
         )}
+              </div>
             </header>
           </>
         )
