@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { TopicSummary, TopicGraph, MapAnnotations, NodeProvenance, ProvenanceEvent } from '../../../shared/types'
 import { RetentionCurve } from '../components/RetentionCurve'
 import { GraphView, EDGE_STYLE } from '../components/GraphView'
+import { GrowthScrubber } from '../components/GrowthScrubber'
 import { cellBodyPath, plateStats } from '../components/graph2d/plate'
 import { humanizeNodeId } from '../../../shared/humanizeId'
 import { SkeletonBar } from '../components/Skeleton'
@@ -28,6 +29,30 @@ function formatProvenanceDate(date: string): string {
 
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1)
+}
+
+/** "<Month d>" — same local-parse discipline as formatProvenanceDate, just
+ * without the year (the GrowthScrubber's readout scans a single-topic
+ * timeline short enough that the year would only be clutter). */
+function formatMonthDay(date: string): string {
+  return new Date(`${date}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+/** Local YYYY-MM-DD for a Date object — getFullYear/Month/Date, never
+ * toISOString, matching the local-date discipline every other due/date
+ * comparison in this app already uses (see GraphView's dueStatusFor). */
+function localDateString(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+/** [0,1] → a YYYY-MM-DD between the timeline's earliest dated node and
+ * today, linearly interpolated over local-midnight epoch ms. */
+function dateAtT(timeline: { earliest: string; today: string }, t: number): string {
+  const start = new Date(`${timeline.earliest}T00:00:00`).getTime()
+  const end = new Date(`${timeline.today}T00:00:00`).getTime()
+  if (end <= start) return timeline.today
+  return localDateString(new Date(start + (end - start) * t))
 }
 
 /** Provenance block shown in both the node drawer and the full-node modal —
@@ -154,6 +179,13 @@ export function TopicMapView({
   // null closes it. historyKey follows the encode/pretest→topic,
   // review→'review' mapping (see openProvenanceEvent).
   const [historyDrawer, setHistoryDrawer] = useState<{ historyKey: string; sessionId: string; anchorIndex: number } | null>(null)
+  // Growth time-lapse — the replay ghost button (near the due-lens toggle)
+  // and the GrowthScrubber it reveals. `replayT` is [0,1]; visibleNodes
+  // (below) is what actually drives GraphView's replay lens. Both reset on
+  // topic switch alongside provenance, so a fresh topic never opens with a
+  // stale scrub position.
+  const [replayActive, setReplayActive] = useState(false)
+  const [replayT, setReplayT] = useState(0)
 
   function openProvenanceEvent(ev: ProvenanceEvent, topicId: string) {
     setHistoryDrawer({ historyKey: ev.kind === 'review' ? 'review' : topicId, sessionId: ev.sessionId, anchorIndex: ev.anchor })
@@ -186,6 +218,8 @@ export function TopicMapView({
     setRetrievability(null)
     setAnnotations({})
     setProvenance(null)
+    setReplayActive(false)
+    setReplayT(0)
     window.engram
       .topicGraph(selectedTopic)
       .then((g) => setGraph(g as TopicGraph))
@@ -271,6 +305,38 @@ export function TopicMapView({
   const opened = graph && openNode ? graph.nodes[openNode] : null
   const stats = useMemo(() => (graph ? plateStats(graph, retrievability) : null), [graph, retrievability])
 
+  // Growth timeline — earliest firstEncoded.date across the topic's nodes,
+  // through today. null when provenance hasn't loaded yet or no node has a
+  // date at all (nothing to replay), which also disables the replay toggle.
+  const growthTimeline = useMemo(() => {
+    if (!provenance || !graph) return null
+    const dates = graph.order
+      .map((id) => provenance[id]?.firstEncoded?.date)
+      .filter((d): d is string => Boolean(d))
+    if (dates.length === 0) return null
+    const earliest = dates.reduce((a, b) => (a < b ? a : b))
+    return { earliest, today: localDateString(new Date()) }
+  }, [provenance, graph])
+
+  // visibleNodes for GraphView's replay lens — a node with a firstEncoded
+  // date shows once that date is at or before the scrub cutoff; a node with
+  // no date at all (still un-encoded, or provenance genuinely has nothing
+  // for it) only appears once the scrub reaches the very end (t===1).
+  const replayVisibleNodes = useMemo(() => {
+    if (!replayActive || !growthTimeline || !provenance || !graph) return null
+    const cutoff = dateAtT(growthTimeline, replayT)
+    const s = new Set<string>()
+    for (const id of graph.order) {
+      const date = provenance[id]?.firstEncoded?.date
+      if (date) {
+        if (date <= cutoff) s.add(id)
+      } else if (replayT >= 1) {
+        s.add(id)
+      }
+    }
+    return s
+  }, [replayActive, replayT, growthTimeline, provenance, graph])
+
   return (
     <div className="p-8 flex flex-col gap-4 h-full min-h-0">
       <header className="shrink-0 flex flex-col gap-3">
@@ -319,8 +385,22 @@ export function TopicMapView({
               query={query}
               retrievability={retrievability}
               annotations={annotations}
-              dueLens={dueLens}
+              dueLens={dueLens && !replayActive}
+              visibleNodes={replayVisibleNodes}
             />
+
+            {/* Growth time-lapse scrubber — only mounted while the replay
+                toggle (in the legend header, below) is on and there's an
+                actual timeline to scrub. */}
+            {replayActive && growthTimeline && (
+              <GrowthScrubber
+                t={replayT}
+                onChangeT={setReplayT}
+                dateLabel={formatMonthDay(dateAtT(growthTimeline, replayT))}
+                inked={replayVisibleNodes?.size ?? 0}
+                total={graph.order.length}
+              />
+            )}
 
             {/* Floating search — mirrors Obsidian's graph-view search field. */}
             <div className="absolute top-3 left-3 w-56">
@@ -371,17 +451,32 @@ export function TopicMapView({
               </svg>
               <div className="flex items-center justify-between gap-3 pb-1 mb-0.5 border-b border-[var(--color-hairline)]">
                 <span>legend</span>
-                <button
-                  onClick={() => setDueLens((v) => !v)}
-                  aria-pressed={dueLens}
-                  className={`focus-ring px-1.5 py-0.5 rounded transition-colors ${
-                    dueLens
-                      ? 'bg-[var(--color-surface-3)] text-[var(--color-ink-warm)]'
-                      : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]'
-                  }`}
-                >
-                  due lens
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setReplayActive((v) => !v)}
+                    disabled={!growthTimeline}
+                    title={growthTimeline ? undefined : 'Nothing dated yet to replay'}
+                    aria-pressed={replayActive}
+                    className={`focus-ring px-1.5 py-0.5 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                      replayActive
+                        ? 'bg-[var(--color-surface-3)] text-[var(--color-ink-warm)]'
+                        : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]'
+                    }`}
+                  >
+                    replay
+                  </button>
+                  <button
+                    onClick={() => setDueLens((v) => !v)}
+                    aria-pressed={dueLens}
+                    className={`focus-ring px-1.5 py-0.5 rounded transition-colors ${
+                      dueLens
+                        ? 'bg-[var(--color-surface-3)] text-[var(--color-ink-warm)]'
+                        : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]'
+                    }`}
+                  >
+                    due lens
+                  </button>
+                </div>
               </div>
               {dueLens ? (
                 <>

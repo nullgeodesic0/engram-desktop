@@ -275,6 +275,55 @@
     font-family: var(--font-serif);
   }
 
+  /* GrowthScrubber's range input — Night Atlas track/thumb, tokens only.
+     Firefox gets the standards track/thumb pseudo-elements; the webkit ones
+     are what actually render in this Electron/Chromium shell. */
+  .scrubber-range {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 14px;
+    background: transparent;
+    cursor: pointer;
+  }
+  .scrubber-range::-webkit-slider-runnable-track {
+    height: 3px;
+    border-radius: 2px;
+    background: var(--color-hairline);
+  }
+  .scrubber-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    margin-top: -5.5px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--color-ink-warm);
+    border: 1px solid var(--color-void);
+    box-shadow: 0 0 0 1px var(--color-ink-warm-dim);
+    transition: transform var(--dur-fast) ease-out;
+  }
+  .scrubber-range:active::-webkit-slider-thumb {
+    transform: scale(1.15);
+  }
+  .scrubber-range::-moz-range-track {
+    height: 3px;
+    border-radius: 2px;
+    background: var(--color-hairline);
+  }
+  .scrubber-range::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--color-ink-warm);
+    border: 1px solid var(--color-void);
+    box-shadow: 0 0 0 1px var(--color-ink-warm-dim);
+  }
+  .scrubber-range:focus-visible {
+    outline: 2px solid var(--color-ink-warm);
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+
   /* The transcript reads as a set page, not a chat log — one reading measure,
      centered when the window is wide. */
   .transcript-measure {
