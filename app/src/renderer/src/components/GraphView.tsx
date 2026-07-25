@@ -132,9 +132,25 @@ interface GraphViewProps {
    * territory labels hide (the plate should read as pure schedule at a
    * glance, not compete with wash captions). */
   dueLens: boolean
+  /** Growth-replay lens owned by TopicMapView (GrowthScrubber) — when a
+   * Set, nodes outside it sink to near-zero opacity (still occupying their
+   * plate position, so nothing reflows as the scrub advances) and any edge
+   * touching a hidden node hides outright. `null`/undefined is the live
+   * plate — zero behavior change from before this prop existed. */
+  visibleNodes?: Set<string> | null
 }
 
-export function GraphView({ graph, selected, onSelect, onOpen, query, retrievability, annotations, dueLens }: GraphViewProps) {
+export function GraphView({
+  graph,
+  selected,
+  onSelect,
+  onOpen,
+  query,
+  retrievability,
+  annotations,
+  dueLens,
+  visibleNodes,
+}: GraphViewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState<{ w: number; h: number } | null>(null)
   const [view, setView] = useState({ x: 0, y: 0, zoom: 1 })
@@ -340,11 +356,15 @@ export function GraphView({ graph, selected, onSelect, onOpen, query, retrievabi
   // active trail) to stay at full visibility. The relevance floor drops
   // further while selected (0.15 vs hover's 0.22) — a committed selection
   // can afford to push everything else further back than a passing hover.
+  // The replay floor (visibleNodes) composes the same way: a node not yet
+  // "inked" by the scrub position sinks near-invisible regardless of what
+  // the search/trail lenses think of it.
   function nodeOpacity(id: string): number {
     const searchOpacity = matchesQuery(id) ? 1 : 0.18
     const dimFloor = isTrailMode ? 0.15 : 0.22
     const relevanceOpacity = relevantIds && !relevantIds.has(id) ? dimFloor : 1
-    return Math.min(searchOpacity, relevanceOpacity)
+    const replayOpacity = visibleNodes && !visibleNodes.has(id) ? 0.04 : 1
+    return Math.min(searchOpacity, relevanceOpacity, replayOpacity)
   }
 
   // Whether an edge belongs to the ancestor/descendant trail — while
@@ -513,6 +533,10 @@ export function GraphView({ graph, selected, onSelect, onOpen, query, retrievabi
             const a = drifted.get(e.source)
             const b = drifted.get(e.target)
             if (!a || !b) return null
+            // Growth replay: an edge whose source or target hasn't been
+            // "inked" yet at this scrub position hides outright, rather than
+            // just dimming — the trail should look like it doesn't exist yet.
+            if (visibleNodes && (!visibleNodes.has(e.source) || !visibleNodes.has(e.target))) return null
             const style = EDGE_STYLE[e.kind]
             const d = stringEdgePath(e.source, e.target, a, b, e.kind === 'requires' ? 'requires' : 'other', t)
             const onTrail = isAncestorTrailEdge(e) || isDescendantTrailEdge(e)
