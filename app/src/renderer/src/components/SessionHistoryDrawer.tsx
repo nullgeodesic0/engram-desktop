@@ -11,9 +11,25 @@ import { MarkView } from './ritual/Marks'
 
 interface TranscriptLine {
   type?: string
+  /** ISO timestamp on the raw transcript entry — same field
+   * ritualFromTranscript.ts's `walkTranscript` reads for the lapse rite's
+   * date anchor. Needed here so a replayed grade card's interval ladder can
+   * time-bound itself to the sitting it belongs to (see GradeBatch.date)
+   * instead of reading receipts up through today. */
+  timestamp?: string
   message?: {
     content?: string | { type?: string; text?: string; content?: unknown }[]
   }
+}
+
+// Local-date discipline (getFullYear/Month/Date — never toISOString), same
+// pattern this codebase uses everywhere a timestamp needs to become a
+// calendar day rather than a UTC instant.
+function localDateFromIso(ts: string | undefined): string | null {
+  if (!ts) return null
+  const d = new Date(ts)
+  if (Number.isNaN(d.getTime())) return null
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 export interface GradeBatch {
@@ -27,6 +43,13 @@ export interface GradeBatch {
    * parsed from — same convention as `ProvenanceEvent.anchor` (see
    * shared/types.ts), so an anchor can be matched to a batch by equality. */
   sourceIndex: number
+  /** Local 'YYYY-MM-DD' this batch's tool_result line was timestamped, or
+   * null when the raw line carried no usable timestamp — passed straight
+   * through to GradeResultCard's `asOfDate` prop (time-bounds the interval
+   * ladder to this sitting). Never falls back to "today" here; a missing
+   * date just means the ladder renders as of today, same as before this
+   * field existed — never fabricated. */
+  date: string | null
 }
 
 /** Rebuilds both the chat transcript AND its grade-receipt cards from a raw
@@ -95,7 +118,13 @@ export function buildHistoryTimeline(
           return single ? [single] : []
         })()
         if (results.length > 0) {
-          grades.push({ id: `g${gradeSeq++}`, atIndex: messages.length, results, sourceIndex: idx })
+          grades.push({
+            id: `g${gradeSeq++}`,
+            atIndex: messages.length,
+            results,
+            sourceIndex: idx,
+            date: localDateFromIso(line.timestamp),
+          })
         }
       }
     }
@@ -359,7 +388,7 @@ export function SessionHistoryDrawer({
                   .map((g) => (
                     <div key={g.id} className="contents" data-anchor-index={g.sourceIndex}>
                       {g.results.map((r, j) => (
-                        <GradeResultCard key={`${g.id}-${j}`} result={r} topic={ladderTopic} />
+                        <GradeResultCard key={`${g.id}-${j}`} result={r} topic={ladderTopic} asOfDate={g.date ?? undefined} />
                       ))}
                     </div>
                   ))}
@@ -378,7 +407,7 @@ export function SessionHistoryDrawer({
                       .map((g) => (
                         <div key={g.id} className="contents" data-anchor-index={g.sourceIndex}>
                           {g.results.map((r, j) => (
-                            <GradeResultCard key={`${g.id}-${j}`} result={r} topic={ladderTopic} />
+                            <GradeResultCard key={`${g.id}-${j}`} result={r} topic={ladderTopic} asOfDate={g.date ?? undefined} />
                           ))}
                         </div>
                       ))}

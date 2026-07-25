@@ -107,6 +107,7 @@ export function GradeResultCard({
   confidenceLabel,
   reveal = false,
   topic,
+  asOfDate,
 }: {
   result: GradeResult
   /** The felt-confidence label picked just before this grade landed (see
@@ -122,6 +123,10 @@ export function GradeResultCard({
    * in scope (Review's mixed-topic queue). Purely a filter; `result` itself
    * never carries a topic field. */
   topic?: string
+  /** Time-bounds the interval ladder to this card's own sitting (see
+   * IntervalLadder's `asOfDate`) — threaded straight through, unused by this
+   * component otherwise. Omitted by live surfaces. */
+  asOfDate?: string
 }) {
   const style = GRADE_STYLE[result.grade]
   const before = result.sBefore ?? 0
@@ -212,7 +217,7 @@ export function GradeResultCard({
           interval as the final rung. Revealed face only, same discipline as
           the return chip below — the ladder is part of "the turn"'s payoff,
           not something to show while the card is still facedown. */}
-      <IntervalLadder result={result} topic={topic} />
+      <IntervalLadder result={result} topic={topic} asOfDate={asOfDate} />
       {/* The chip subsumes the old "back in N days" prose line — one scheduling
           statement per card, not three (the stability bar above keeps its own
           d-values; the chip carries interval + s movement). */}
