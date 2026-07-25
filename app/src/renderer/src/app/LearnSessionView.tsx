@@ -1600,15 +1600,26 @@ export function LearnSessionView({
                         onClick={() => setTicketPinned((v) => !v)}
                         aria-label={ticketPinned ? 'Unpin session ticket' : 'Pin session ticket'}
                         title={ticketPinned ? 'Unpin — tuck away unless the cursor visits the left edge' : 'Pin — keep the ticket out'}
-                        className={`focus-ring no-press absolute top-1.5 right-1.5 h-5 w-5 rounded-full flex items-center justify-center transition-colors duration-[var(--dur-fast)] ${
+                        className={`focus-ring no-press absolute bottom-1.5 right-1.5 h-5 w-5 rounded-full flex items-center justify-center transition-colors duration-[var(--dur-fast)] ${
                           ticketPinned
                             ? 'text-[var(--color-ink-warm)] bg-[var(--color-surface-3)]'
                             : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]'
                         }`}
                       >
-                        <svg width="11" height="11" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                          <circle cx="8" cy="5.5" r="3" stroke="currentColor" strokeWidth="1.4" fill={ticketPinned ? 'currentColor' : 'none'} />
-                          <path d="M8 8.5 V14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                        {/* Thumb tack: flat head, shoulder, needle — lies at a
+                            tilt when loose, stands upright when driven in. */}
+                        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                          <g transform={ticketPinned ? undefined : 'rotate(-35 8 8)'}>
+                            <path
+                              d="M5.4 2.5 H10.6 L9.7 6.2 H6.3 Z"
+                              stroke="currentColor"
+                              strokeWidth="1.3"
+                              strokeLinejoin="round"
+                              fill={ticketPinned ? 'currentColor' : 'none'}
+                            />
+                            <path d="M4.6 6.2 H11.4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                            <path d="M8 6.2 V13.2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                          </g>
                         </svg>
                       </button>
                     </div>
