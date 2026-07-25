@@ -428,7 +428,18 @@ export function LearnSessionView({
   // effort prompt parse failed), in which case that mark is never linked and
   // simply stays path-less — the card degrades to its "no longer on disk"
   // caption, same as if the file really had vanished.
-  const pendingExplorableByNode = useRef<Map<string, string>>(new Map())
+  //
+  // A QUEUE of mark ids per node, not a single slot: re-encoding a
+  // repeatedly-lapsing node (the artifact-smith agent's own stated use case)
+  // spawns a second smith for the SAME node in one sitting. A single-slot map
+  // would let the second spawn's `.set()` clobber the first spawn's pending
+  // mark id, so the first smith's `artifact set` (smiths finish in spawn
+  // order) would find nothing pending, fall through to a stray extra card,
+  // while the second smith's `artifact set` would wrongly attach its path to
+  // whichever mark id happened to still be indexed (Open opens the wrong
+  // file). FIFO — append on spawn, shift the oldest id on `artifact set` —
+  // matches same-node respawns to their own registration in completion order.
+  const pendingExplorableByNode = useRef<Map<string, string[]>>(new Map())
   // Pretest diagnostic plate (Task 2) — pendingPretestToolUseIds watches each
   // `rate --kind pretest` Bash call for its tool_result (a single call can
   // rate several nodes at once, see parsePretestGradeResults); pretestItems
@@ -797,10 +808,11 @@ export function LearnSessionView({
             // set` directly per SKILL.md's registration-failed fallback with
             // no matching spawn mark in this sitting, push a fresh one.
             const node = artifactSetNode(event.input)
-            const pendingMarkId = node ? pendingExplorableByNode.current.get(node) : undefined
+            const queue = node ? pendingExplorableByNode.current.get(node) : undefined
+            const pendingMarkId = queue?.length ? queue.shift() : undefined
             if (pendingMarkId) {
               setMarks((prev) => prev.map((m) => (m.id === pendingMarkId && m.kind === 'explorable' ? { ...m, path } : m)))
-              if (node) pendingExplorableByNode.current.delete(node)
+              if (queue && queue.length === 0 && node) pendingExplorableByNode.current.delete(node)
             } else {
               pushMark({ kind: 'explorable', title: node ? humanizeNodeId(node) : 'Explorable', path, node })
             }
@@ -834,7 +846,11 @@ export function LearnSessionView({
           const node = explorableNodeFromPrompt(input.prompt)
           const markId = `mark-${markSeq.current++}`
           setMarks((prev) => [...prev, { id: markId, atIndex: messagesRef.current.length, kind: 'explorable', title, node }])
-          if (node) pendingExplorableByNode.current.set(node, markId)
+          if (node) {
+            const queue = pendingExplorableByNode.current.get(node)
+            if (queue) queue.push(markId)
+            else pendingExplorableByNode.current.set(node, [markId])
+          }
         }
         break
       case 'tool_result':
