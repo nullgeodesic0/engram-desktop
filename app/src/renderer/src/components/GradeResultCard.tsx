@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { GradeResult } from '../../../shared/gradeResult'
 import { humanizeNodeId } from '../../../shared/humanizeId'
 import { InkNode } from './ui/InkNode'
+import { IntervalLadder } from './IntervalLadder'
 import { warmTone } from '../shared/soundscape'
 
 const GRADE_STYLE: Record<GradeResult['grade'], { label: string; color: string; bg: string }> = {
@@ -105,6 +106,7 @@ export function GradeResultCard({
   result,
   confidenceLabel,
   reveal = false,
+  topic,
 }: {
   result: GradeResult
   /** The felt-confidence label picked just before this grade landed (see
@@ -115,6 +117,11 @@ export function GradeResultCard({
    * the anticipation is the point. Default false keeps the instant render
    * (Learn ceremony rows, replayed contexts). Reduced-motion reveals instantly. */
   reveal?: boolean
+  /** Narrows the interval ladder's receipt lookup to one topic (see
+   * IntervalLadder) — optional because not every caller has a single topic
+   * in scope (Review's mixed-topic queue). Purely a filter; `result` itself
+   * never carries a topic field. */
+  topic?: string
 }) {
   const style = GRADE_STYLE[result.grade]
   const before = result.sBefore ?? 0
@@ -200,6 +207,12 @@ export function GradeResultCard({
           </span>
         </div>
       )}
+      {/* The interval ladder: the memory's own return history, one rung per
+          real day-gap between successive reviews, plus this grade's own
+          interval as the final rung. Revealed face only, same discipline as
+          the return chip below — the ladder is part of "the turn"'s payoff,
+          not something to show while the card is still facedown. */}
+      <IntervalLadder result={result} topic={topic} />
       {/* The chip subsumes the old "back in N days" prose line — one scheduling
           statement per card, not three (the stability bar above keeps its own
           d-values; the chip carries interval + s movement). */}

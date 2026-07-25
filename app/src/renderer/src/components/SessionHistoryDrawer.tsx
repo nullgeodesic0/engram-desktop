@@ -174,6 +174,11 @@ export function SessionHistoryDrawer({
    * this index) just leaves the view at the top of the sitting. */
   anchorIndex?: number
 }) {
+  // Learn history's `historyKey` is a real topic id; Review history's is the
+  // literal 'review' sentinel spanning every topic — only the former gives
+  // the interval ladder a single topic to filter receipts by (see
+  // GradeResultCard's optional `topic` prop).
+  const ladderTopic = historyKey !== 'review' ? historyKey : undefined
   const [entries, setEntries] = useState<SessionIndexEntry[] | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [timeline, setTimeline] = useState<{
@@ -354,7 +359,7 @@ export function SessionHistoryDrawer({
                   .map((g) => (
                     <div key={g.id} className="contents" data-anchor-index={g.sourceIndex}>
                       {g.results.map((r, j) => (
-                        <GradeResultCard key={`${g.id}-${j}`} result={r} />
+                        <GradeResultCard key={`${g.id}-${j}`} result={r} topic={ladderTopic} />
                       ))}
                     </div>
                   ))}
@@ -373,7 +378,7 @@ export function SessionHistoryDrawer({
                       .map((g) => (
                         <div key={g.id} className="contents" data-anchor-index={g.sourceIndex}>
                           {g.results.map((r, j) => (
-                            <GradeResultCard key={`${g.id}-${j}`} result={r} />
+                            <GradeResultCard key={`${g.id}-${j}`} result={r} topic={ladderTopic} />
                           ))}
                         </div>
                       ))}
