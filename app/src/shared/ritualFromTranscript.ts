@@ -298,6 +298,7 @@ export type DerivedRitualMark =
   | { id: string; atIndex: number; kind: 'diagnostic'; items: DiagnosticItem[] }
   | { id: string; atIndex: number; kind: 'misconception'; text: string; node?: string }
   | { id: string; atIndex: number; kind: 'explorable'; title: string; path?: string; node?: string }
+  | { id: string; atIndex: number; kind: 'verify-seal' }
 
 /** Rebuilds the durable subset of ritual marks (beat cards, node crossings,
  * phase frontispieces, the pretest diagnostic plate) from a transcript.
@@ -319,6 +320,10 @@ export type DerivedRitualMark =
  *    stands alone if the tutor ran it directly) — see the doctrine comments
  *    on `parseMisconceptionAdds`/`looksLikeArtifactSetCommand` above for the
  *    real-transcript verification behind both.
+ *  - `verify-seal` marks come from a `beat_outcome` bridge:ui call naming
+ *    beat `verify` with outcome `confirmed` — mirrors LearnSessionView's live
+ *    gate exactly (see VerifySeal's doctrine comment in Marks.tsx); partial
+ *    and missed verify outcomes still ink the beat trail but never a seal.
  * Figure/atlas/stash marks are NOT derived here — they're one-time tutor
  * signals with no durable record in the transcript to replay from (see the
  * doctrine comment on `RitualMark` in Marks.tsx). */
@@ -423,6 +428,17 @@ export function deriveRitualMarks(entries: unknown[]): DerivedRitualMark[] {
         const fires = diagnosticGateOnPhase(gate, nextPhase, pretestItems.length)
         if (fires) marks.push({ id: `dmark-${seq++}`, atIndex: messageCount, kind: 'diagnostic', items: [...pretestItems] })
         if (prevPhase !== nextPhase) marks.push({ id: `dmark-${seq++}`, atIndex: messageCount, kind: 'phase', phase: nextPhase })
+      }
+      continue
+    }
+    if (event.name === BEAT_OUTCOME) {
+      const input = event.input as { beat?: unknown; outcome?: unknown }
+      // Mirrors LearnSessionView's live gate exactly: only a confirmed verify
+      // beat earns the seal — partial/missed get nothing (see VerifySeal's
+      // doctrine comment in Marks.tsx for why that's a spec constraint, not
+      // an oversight).
+      if (input.beat === 'verify' && input.outcome === 'confirmed') {
+        marks.push({ id: `dmark-${seq++}`, atIndex: messageCount, kind: 'verify-seal' })
       }
       continue
     }

@@ -46,8 +46,10 @@ function abbreviateOutsideMath(text: string, cap: number): string {
  * Most are derivable from the transcript's own record of tool calls and
  * replay on resume/history — `beat`/`crossing` (render_beat),
  * `phase`/`diagnostic` (session_phase + pretest rate calls), `misconception`
- * (`misconception add` Bash calls), and `explorable` (an artifact-smith spawn
- * and/or `artifact set` Bash call) — see `shared/ritualFromTranscript.ts`'s
+ * (`misconception add` Bash calls), `explorable` (an artifact-smith spawn
+ * and/or `artifact set` Bash call), and `verify-seal` (a `beat_outcome`
+ * bridge:ui call naming beat `verify` with outcome `confirmed`) — see
+ * `shared/ritualFromTranscript.ts`'s
  * `deriveRitualMarks`, which walks a reopened session's transcript to rebuild
  * them instead of leaving a resumed sitting's history bare. The rest are
  * genuinely one-time tutor signals with no durable record to replay from —
@@ -64,6 +66,7 @@ export type RitualMark = { id: string; atIndex: number } & (
   | { kind: 'diagnostic'; items: DiagnosticPlateItem[] }
   | { kind: 'misconception'; text: string; node?: string }
   | { kind: 'explorable'; title: string; path?: string; node?: string }
+  | { kind: 'verify-seal' }
 )
 
 /** Small hand-drawn glyphs, one per dialogue-grammar beat. 16x16 viewBox,
@@ -142,6 +145,28 @@ export const FigureCard = memo(function FigureCard({ title, body }: { title: str
   )
 })
 
+/** A small filled warm roundel holding the verify beat's own glyph — the
+ * receipt for an honestly-confirmed verify beat. Deliberately absent for
+ * partial/missed outcomes: the seal means confirmed, and stamping it for
+ * anything less would counterfeit the receipt (dialogue-grammar's honesty
+ * oath, same spirit as InkBurst never firing for a lapse). */
+export const VerifySeal = memo(function VerifySeal() {
+  const glyph = BEAT_GLYPHS.verify
+  return (
+    <div className="flex justify-end pr-2 my-1.5 ritual-verify-seal-in">
+      <span
+        className="inline-flex items-center justify-center w-6 h-6 rounded-full shrink-0"
+        style={{ background: 'var(--color-ink-warm)' }}
+        aria-label="verify confirmed"
+      >
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true" className="text-[var(--color-void)]">
+          <path d={glyph.path} stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </span>
+    </div>
+  )
+})
+
 export function MarkView({ mark }: { mark: RitualMark }) {
   if (mark.kind === 'beat') return <BeatMarkCard beat={mark.beat} content={mark.content} />
   if (mark.kind === 'crossing') return <NodeCrossingDivider nodeId={mark.nodeId} />
@@ -151,6 +176,7 @@ export function MarkView({ mark }: { mark: RitualMark }) {
   if (mark.kind === 'diagnostic') return <DiagnosticPlate items={mark.items} />
   if (mark.kind === 'misconception') return <MisconceptionPin text={mark.text} node={mark.node} />
   if (mark.kind === 'explorable') return <ExplorableForged title={mark.title} path={mark.path} node={mark.node} />
+  if (mark.kind === 'verify-seal') return <VerifySeal />
   return <StashStamp />
 }
 

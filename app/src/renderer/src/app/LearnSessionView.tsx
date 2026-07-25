@@ -623,6 +623,11 @@ export function LearnSessionView({
             next.set(beat, outcome)
             return next
           })
+          // The verify seal: only a confirmed verify beat earns it — partial/
+          // missed outcomes get nothing, since the seal itself means
+          // "confirmed" and stamping it for less would counterfeit the
+          // receipt (same honesty oath as InkBurst never firing for a lapse).
+          if (beat === 'verify' && outcome === 'confirmed') pushMark({ kind: 'verify-seal' })
           break
         }
         case 'show_figure': {
