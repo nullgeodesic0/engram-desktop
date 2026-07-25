@@ -392,14 +392,40 @@ export function LearnSessionView({
   // flickering when the pointer grazes the boundary.
   const [mastheadPeek, setMastheadPeek] = useState(false)
   const peekLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const mastheadRef = useRef<HTMLElement | null>(null)
   const peekMasthead = () => {
     if (peekLeaveTimer.current) clearTimeout(peekLeaveTimer.current)
     peekLeaveTimer.current = null
     setMastheadPeek(true)
   }
   const scheduleMastheadCollapse = () => {
-    if (peekLeaveTimer.current) clearTimeout(peekLeaveTimer.current)
-    peekLeaveTimer.current = setTimeout(() => setMastheadPeek(false), 400)
+    // Already armed → let the existing deadline stand, so continuous motion
+    // below the header doesn't keep pushing the collapse into the future.
+    if (peekLeaveTimer.current) return
+    peekLeaveTimer.current = setTimeout(() => {
+      peekLeaveTimer.current = null
+      setMastheadPeek(false)
+    }, 250)
+  }
+  /** Pointer-position tracking over the whole session view — runs at the
+   * device's own mousemove rate (no throttle; the handler is a couple of
+   * rect reads and ref-guarded setState no-ops), so reveal/collapse react to
+   * position, not to crossing a thin event target. Above the container
+   * (drag bar) never collapses; only settling below the open header does. */
+  const handleMastheadPointer = (e: React.MouseEvent<HTMLDivElement>) => {
+    const top = e.currentTarget.getBoundingClientRect().top
+    if (e.clientY - top <= 18) {
+      peekMasthead()
+      return
+    }
+    const header = mastheadRef.current
+    if (!header) return
+    const bottom = header.getBoundingClientRect().bottom
+    if (e.clientY <= bottom + 12) {
+      peekMasthead()
+    } else {
+      scheduleMastheadCollapse()
+    }
   }
   useEffect(() => () => {
     if (peekLeaveTimer.current) clearTimeout(peekLeaveTimer.current)
@@ -1293,46 +1319,40 @@ export function LearnSessionView({
     // h-full from <main>'s flex-1 (see App.tsx); min-h-0 is required for the flex
     // children below to be allowed to shrink and scroll instead of growing forever.
     // In a live session the padding tightens — the transcript owns the window.
-    <div className={`h-full min-h-0 flex flex-col w-full ${started ? 'px-6 pt-1.5 pb-5 gap-2' : 'p-8 gap-4'}`}>
+    <div
+      className={`h-full min-h-0 flex flex-col w-full ${started ? 'px-6 pt-1.5 pb-5 gap-2' : 'p-8 gap-4'}`}
+      onMouseMove={started && messages.length > 0 ? handleMastheadPointer : undefined}
+    >
       {(() => {
         const mastheadCollapsed = started && messages.length > 0 && !mastheadPeek && !whyChainOpen
         return (
           <>
             {mastheadCollapsed && (
-              <div
-                className="shrink-0 h-3.5 -mx-6 flex items-center justify-center group cursor-default"
-                onMouseEnter={peekMasthead}
-                aria-hidden="true"
-              >
+              <div className="shrink-0 h-3.5 -mx-6 flex items-center justify-center group cursor-default" aria-hidden="true">
                 <span className="h-px w-12 rounded bg-[var(--color-hairline)] group-hover:bg-[var(--color-ink-warm-dim)] transition-colors duration-[var(--dur-fast)]" />
               </div>
             )}
             {/* Grid 0fr↔1fr animates to the header's TRUE height — unlike a
                 max-height cap, the motion spans the whole duration in both
-                directions with no dead zone, so collapse starts moving the
-                instant it fires and expand lands exactly, never overshooting. */}
+                directions with no dead zone. Directional timing: the reveal is
+                quick (--dur-base, ease-out) so the header feels on-call; the
+                hide is longer and eased through both ends so it reads as a
+                settle, not a snap. */}
             <header
-              onMouseEnter={mastheadCollapsed ? undefined : peekMasthead}
-              onMouseLeave={
-                started && messages.length > 0
-                  ? (e) => {
-                      // Leaving upward (into the window drag bar / traffic dots)
-                      // shouldn't collapse the masthead — only heading back down
-                      // into the conversation does. A small tolerance covers the
-                      // subpixel coordinates mouseleave reports at the boundary.
-                      const top = e.currentTarget.getBoundingClientRect().top
-                      if (e.clientY <= top + 2) return
-                      scheduleMastheadCollapse()
-                    }
-                  : undefined
-              }
+              ref={mastheadRef}
               onFocusCapture={peekMasthead}
-              className="shrink-0 grid transition-[grid-template-rows] duration-[var(--dur-base)] ease-[var(--ease-out-soft)]"
+              className={`shrink-0 grid transition-[grid-template-rows] ${
+                mastheadCollapsed
+                  ? 'duration-[340ms] ease-[cubic-bezier(0.45,0.05,0.25,1)]'
+                  : 'duration-[var(--dur-base)] ease-[var(--ease-out-soft)]'
+              }`}
               style={{ gridTemplateRows: mastheadCollapsed ? '0fr' : '1fr' }}
             >
               <div
-                className={`min-h-0 overflow-hidden flex flex-col gap-2 transition-[opacity,transform] duration-[var(--dur-base)] ease-[var(--ease-out-soft)] ${
-                  mastheadCollapsed ? 'opacity-0 -translate-y-1' : 'opacity-100 translate-y-0'
+                className={`min-h-0 overflow-hidden flex flex-col gap-2 transition-[opacity,transform] ${
+                  mastheadCollapsed
+                    ? 'duration-[340ms] ease-[cubic-bezier(0.45,0.05,0.25,1)] opacity-0 -translate-y-1'
+                    : 'duration-[var(--dur-base)] ease-[var(--ease-out-soft)] opacity-100 translate-y-0'
                 }`}
               >
         <div className="flex items-center justify-between">
