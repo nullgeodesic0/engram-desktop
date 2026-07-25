@@ -60,6 +60,14 @@ function daysBetween(a: string, b: string): number {
   return Math.round((db.getTime() - da.getTime()) / 86400000)
 }
 
+// Local-date discipline (getFullYear/Month/Date — never toISOString), same
+// pattern this codebase uses everywhere a "today" needs to be a calendar day
+// rather than a UTC instant (see ReviewSessionView's daysOverdueLocal).
+function localToday(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 /** The memory's return history, rung by rung — day-gaps between a node's
  * successive REAL dated review events (oldest → newest, left → right), plus
  * the just-landed `result.intervalDays` as one final rung standing in for
@@ -71,6 +79,7 @@ function daysBetween(a: string, b: string): number {
 export function IntervalLadder({
   result,
   topic,
+  asOfDate,
 }: {
   result: GradeResult
   /** Narrows matching receipts to one topic before filtering by node id.
@@ -80,6 +89,16 @@ export function IntervalLadder({
    * matching by node id alone — still correct in practice, since node slugs
    * are not reused across topics in this app's data. */
   topic?: string
+  /** Local 'YYYY-MM-DD' — time-bounds a replayed card's ladder to the
+   * sitting it belongs to, so a historical grade card shows the node's
+   * return history AS OF that sitting, not as of right now (every replayed
+   * card for a node would otherwise look identical — all the way up to
+   * today). Also doubles as the "is the last historical rung actually THIS
+   * result's own receipt" reference date for the same-event dedupe below.
+   * Omitted by live surfaces (ReviewSessionView) and by the drawer when a
+   * batch's own timestamp couldn't be recovered — the ladder then reads as
+   * of today, unchanged from before this prop existed. */
+  asOfDate?: string
 }) {
   const [history, setHistory] = useState<ReceiptsHistory | null>(null)
 
@@ -111,7 +130,10 @@ export function IntervalLadder({
         byDate.set(day.date, item.grade)
       }
     }
-    const dates = [...byDate.keys()].sort()
+    let dates = [...byDate.keys()].sort()
+    // Time-bound a replayed card to its own sitting — a receipt dated after
+    // the sitting this card belongs to hadn't happened yet as of that card.
+    if (asOfDate) dates = dates.filter((d) => d <= asOfDate)
     if (dates.length < 2) return null
 
     const rs: Rung[] = []
@@ -119,11 +141,19 @@ export function IntervalLadder({
       rs.push({ days: daysBetween(dates[i - 1], dates[i]), lapsed: byDate.get(dates[i]) === 'lapsed' })
     }
     if (result.intervalDays !== null) {
+      // `receiptsHistory()` re-reads disk on every call, so the just-landed
+      // grade's own receipt is usually ALREADY the last dated event above —
+      // the historical gap ending on the reference date and this final rung
+      // would otherwise be the same event rendered twice (two adjacent
+      // danger rungs for a single lapse). Drop that last historical gap in
+      // favor of the final rung built straight from `result` itself.
+      const referenceDate = asOfDate ?? localToday()
+      if (rs.length > 0 && dates[dates.length - 1] === referenceDate) rs.pop()
       rs.push({ days: Math.round(result.intervalDays), lapsed: result.grade === 'lapsed' })
     }
-    return rs
+    return rs.length > 0 ? rs : null
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [history, result.node, result.intervalDays, result.grade, topic])
+  }, [history, result.node, result.intervalDays, result.grade, topic, asOfDate])
 
   if (!rungs || rungs.length === 0) return null
 
