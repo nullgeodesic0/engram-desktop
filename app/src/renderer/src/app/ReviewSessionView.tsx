@@ -462,7 +462,22 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
         // receipt tool_results the history drawer reads — so reopening shows
         // the grades in place rather than a transcript with the verdicts
         // silently missing. Same "only when empty" guard as the marks.
-        setGradeBatches((prev) => (prev.length === 0 ? buildHistoryTimeline(lines).grades : prev))
+        const derived = buildHistoryTimeline(lines).grades
+        setGradeBatches((prev) => (prev.length === 0 ? derived : prev))
+        // The same receipts also tell the rail (and the inkwell, the flow
+        // chain, the closing ceremony) how much of this sitting is already
+        // done. Without this a reopened sitting reported zero completed and
+        // sized its rail to the remaining fragment — the queue rail's stated
+        // invariant, sessionTotal - queue.length === sessionGrades.length,
+        // only holds once BOTH sides are rebuilt, so they're set together
+        // off the same fresh queue read.
+        const already = derived.flatMap((b) => b.results)
+        if (already.length > 0) {
+          setSessionGrades((prev) => (prev.length === 0 ? already : prev))
+          refreshQueue().then((items) => {
+            setSessionTotal((prev) => Math.max(prev, items.length + already.length))
+          })
+        }
       }
     } else {
       setMessages([])
