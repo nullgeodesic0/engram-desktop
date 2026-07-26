@@ -32,8 +32,21 @@ export interface ProbeHeader {
 // marker. The `·` separator plus a kebab-case node id is distinctive enough
 // that a bracketed fraction in ordinary prose won't match — verified against
 // adversarial strings in the parser's tests.
-const HEADER_RE =
-  /^[ \t]*(?:\[(\d+)[ \t]*\/[ \t]*(\d+)\]|node[ \t]+(\d+)[ \t]*\/[ \t]*(\d+))[ \t]*·[ \t]*([a-z0-9][a-z0-9-]*)[ \t]*(†)?[ \t]*(?:\*\(([^)]+)\)\*)?[^\n]*\n?/im
+// Tolerant of what a model actually emits rather than the skill's idealized
+// example: `[^\S\n]` (not `[ \t]`) so a non-breaking or thin space around the
+// separator still matches, the whole middle-dot family as the separator, and
+// optional `**`/`` ` `` decoration around the counter and node id. Every one
+// of those variants was observed or is a near-miss of one that was.
+const SP = '[^\\S\\n]*'
+/** Spaces with optional markdown emphasis/code marks — a real tutor bolds the
+ * whole `**[1/12] · node**` and italicizes the topic separately, so the
+ * decoration lands BETWEEN the parts, not just around the whole line. */
+const GAP = `${SP}[*\`]{0,2}${SP}`
+const HEADER_RE = new RegExp(
+  `^${GAP}(?:\\[(\\d+)${SP}/${SP}(\\d+)\\]|node[^\\S\\n]+(\\d+)${SP}/${SP}(\\d+))` +
+    `${GAP}[·•∙⋅]${GAP}([a-z0-9][a-z0-9-]*)${GAP}(†)?${GAP}(?:\\*?\\(([^)]+)\\)\\*?)?[^\\n]*\\n?`,
+  'im',
+)
 
 /** The prose before the marker (if any) and the parsed probe. Null when the
  * text carries no marker at all — the common case. */
