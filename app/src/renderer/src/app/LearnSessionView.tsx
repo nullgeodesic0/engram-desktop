@@ -1607,14 +1607,21 @@ export function LearnSessionView({
                       <span className="w-px h-12 rounded bg-[var(--color-hairline)]" />
                     </div>
                   )}
+                  {/* Unfolds left→right: grid 0fr↔1fr animates to the card's
+                      true width, and the inner fixed-width layer keeps the
+                      content from reflowing as the column opens — so it reads
+                      as the card being unclipped from the edge, not squeezed.
+                      Horizontal twin of the masthead's 0fr↔1fr collapse. */}
                   <div
-                    className={`absolute top-1 left-0 z-10 w-72 max-w-[40%] transition-[transform,opacity] ${
+                    className={`absolute top-1 left-0 z-10 grid transition-[grid-template-columns,opacity] ${
                       ticketOut
-                        ? 'duration-[var(--dur-base)] ease-[var(--ease-out-soft)] translate-x-0 opacity-100'
-                        : 'duration-[340ms] ease-[cubic-bezier(0.45,0.05,0.25,1)] -translate-x-[calc(100%+1.75rem)] opacity-0'
+                        ? 'duration-[var(--dur-base)] ease-[var(--ease-out-soft)] opacity-100'
+                        : 'duration-[340ms] ease-[cubic-bezier(0.45,0.05,0.25,1)] opacity-0'
                     }`}
+                    style={{ gridTemplateColumns: ticketOut ? '1fr' : '0fr' }}
                   >
-                    <div className="relative">
+                    <div className="min-w-0 overflow-hidden">
+                    <div className="relative w-72">
                       <TicketCard ticket={latestTicket} walkNumber={walkNumber} compact />
                       <button
                         onClick={() => setTicketPinned((v) => !v)}
@@ -1628,6 +1635,7 @@ export function LearnSessionView({
                       >
                         <PinTackIcon pinned={ticketPinned} size={14} />
                       </button>
+                    </div>
                     </div>
                   </div>
                 </>

@@ -7,22 +7,28 @@ interface Token {
   content: string
 }
 
+/** Both delimiter families, because a model writes whichever its training
+ * leaned on: TeX's `$…$`/`$$…$$` and LaTeX's `\(…\)`/`\[…\]`. Display forms
+ * are matched first so a `\[` inside a `$$` block can't split it. */
+const DISPLAY_RE = /\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]/g
+const INLINE_RE = /\$([^$\n]+?)\$|\\\(([\s\S]+?)\\\)/g
+
 function tokenize(source: string): Token[] {
   const tokens: Token[] = []
-  const displayRe = /\$\$([\s\S]+?)\$\$/g
   let lastIndex = 0
   let m: RegExpExecArray | null
 
-  while ((m = displayRe.exec(source))) {
+  DISPLAY_RE.lastIndex = 0
+  while ((m = DISPLAY_RE.exec(source))) {
     if (m.index > lastIndex) tokens.push({ type: 'text', content: source.slice(lastIndex, m.index) })
-    tokens.push({ type: 'display-math', content: m[1] })
+    // Whichever alternative matched carries the body.
+    tokens.push({ type: 'display-math', content: m[1] ?? m[2] })
     lastIndex = m.index + m[0].length
   }
   if (lastIndex < source.length) tokens.push({ type: 'text', content: source.slice(lastIndex) })
 
   // Second pass: split remaining text tokens on inline math.
   const out: Token[] = []
-  const inlineRe = /\$([^$\n]+?)\$/g
   for (const tok of tokens) {
     if (tok.type !== 'text') {
       out.push(tok)
@@ -30,10 +36,10 @@ function tokenize(source: string): Token[] {
     }
     let idx = 0
     let im: RegExpExecArray | null
-    inlineRe.lastIndex = 0
-    while ((im = inlineRe.exec(tok.content))) {
+    INLINE_RE.lastIndex = 0
+    while ((im = INLINE_RE.exec(tok.content))) {
       if (im.index > idx) out.push({ type: 'text', content: tok.content.slice(idx, im.index) })
-      out.push({ type: 'inline-math', content: im[1] })
+      out.push({ type: 'inline-math', content: im[1] ?? im[2] })
       idx = im.index + im[0].length
     }
     if (idx < tok.content.length) out.push({ type: 'text', content: tok.content.slice(idx) })
@@ -97,19 +103,30 @@ export function renderMathHtml(text: string): string {
  * this, every message in a session re-runs KaTeX on every unrelated re-render
  * (e.g. every keystroke in a sibling composer textarea), which is what made
  * typing feel laggy/dropped in longer sessions. */
-export const MathRenderer = memo(function MathRenderer({ text, className = '' }: { text: string; className?: string }) {
+export const MathRenderer = memo(function MathRenderer({
+  text,
+  className = '',
+  inlineOnly = false,
+}: {
+  text: string
+  className?: string
+  /** Force display math to render inline. For one-line contexts (the beat
+   * markers' single-row excerpt), a KaTeX display block would break the row
+   * and swallow the ellipsis — the marker is a glance, not a worked figure. */
+  inlineOnly?: boolean
+}) {
   const tokens = useMemo(() => tokenize(text), [text])
 
   const rendered = useMemo(
     () =>
       tokens.map((tok, i) => {
         if (tok.type === 'text') return renderPlainText(tok.content, String(i))
-        if (tok.type === 'inline-math') {
+        if (tok.type === 'inline-math' || inlineOnly) {
           return <span key={i} dangerouslySetInnerHTML={{ __html: renderMath(tok.content, false) }} />
         }
         return <div key={i} className="my-1" dangerouslySetInnerHTML={{ __html: renderMath(tok.content, true) }} />
       }),
-    [tokens],
+    [tokens, inlineOnly],
   )
 
   return <div className={className}>{rendered}</div>
