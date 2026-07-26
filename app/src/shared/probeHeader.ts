@@ -27,24 +27,35 @@ export interface ProbeHeader {
 }
 
 // `[3/6] ·` or `node 3/6 ·`, then the node id, an optional dagger, and an
-// optional *(topic)*. Anchored to the string's start: a marker is always the
-// message's opening line, and matching mid-message would turn any bracketed
-// fraction in prose into a false card.
+// optional *(topic)*. Anchored to the start of a LINE (multiline), not the
+// string: a tutor often leads with a sentence of transition before the
+// marker. The `·` separator plus a kebab-case node id is distinctive enough
+// that a bracketed fraction in ordinary prose won't match — verified against
+// adversarial strings in the parser's tests.
 const HEADER_RE =
-  /^\s*(?:\[(\d+)\s*\/\s*(\d+)\]|node\s+(\d+)\s*\/\s*(\d+))\s*·\s*([a-z0-9][a-z0-9-]*)\s*(†)?\s*(?:\*\(([^)]+)\)\*)?[^\n]*\n?/i
+  /^[ \t]*(?:\[(\d+)[ \t]*\/[ \t]*(\d+)\]|node[ \t]+(\d+)[ \t]*\/[ \t]*(\d+))[ \t]*·[ \t]*([a-z0-9][a-z0-9-]*)[ \t]*(†)?[ \t]*(?:\*\(([^)]+)\)\*)?[^\n]*\n?/im
 
-export function parseProbeHeader(text: string): ProbeHeader | null {
+/** The prose before the marker (if any) and the parsed probe. Null when the
+ * text carries no marker at all — the common case. */
+export function splitAroundProbeHeader(text: string): { before: string; header: ProbeHeader } | null {
   const m = HEADER_RE.exec(text)
   if (!m) return null
   const index = Number(m[1] ?? m[3])
   const total = Number(m[2] ?? m[4])
   if (!Number.isFinite(index) || !Number.isFinite(total) || total <= 0) return null
   return {
-    index,
-    total,
-    node: m[5],
-    threshold: Boolean(m[6]),
-    topic: m[7]?.trim() || null,
-    body: text.slice(m[0].length).trim(),
+    before: text.slice(0, m.index).trim(),
+    header: {
+      index,
+      total,
+      node: m[5],
+      threshold: Boolean(m[6]),
+      topic: m[7]?.trim() || null,
+      body: text.slice(m.index + m[0].length).trim(),
+    },
   }
+}
+
+export function parseProbeHeader(text: string): ProbeHeader | null {
+  return splitAroundProbeHeader(text)?.header ?? null
 }

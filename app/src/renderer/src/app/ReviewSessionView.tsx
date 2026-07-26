@@ -127,6 +127,10 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
   // tool_result time — by then `refreshQueue()` may already have shifted
   // the queue past the item that was just graded.
   const [lastGradeTopic, setLastGradeTopic] = useState<string | null>(null)
+  /** Message index the current verdict belongs after — same pinning the ritual
+   * marks use, so the grade card keeps its chronological place above the
+   * crossing that follows it. */
+  const [lastGradeAtIndex, setLastGradeAtIndex] = useState(0)
   const [sessionGrades, setSessionGrades] = useState<GradeResult[]>([])
   const [streakDays, setStreakDays] = useState<number | null>(null)
   const [chamber, setChamber] = useState(false)
@@ -347,6 +351,11 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
               invalidateSearchIndex()
               setLastGrade(result)
               setLastGradeTopic(pendingRateTopic.current)
+              // Pin the verdict where it landed. Rendering it at the
+              // transcript's tail put it BELOW the "moving to …" crossing that
+              // follows moments later — the wrong order: you're graded on the
+              // item you just finished, then the tutor moves on.
+              setLastGradeAtIndex(messagesRef.current.length)
               setSessionGrades((prev) => [...prev, result])
               // The lapse rite — a quiet marker, not the danger-styled grade
               // card's alarm (see LapseRite's doctrine comment in Marks.tsx).
@@ -570,6 +579,18 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
   }, [current?.id, phase])
 
   const blocked = rateLimit !== null && isBlockingRateLimitStatus(rateLimit.status)
+  // Built once so the interleave below can place it at exactly one index
+  // without repeating the props (and without two cards ever rendering).
+  const gradeCard =
+    lastGrade && phase !== 'done' ? (
+      <GradeResultCard
+        key={`${lastGrade.node}-${sessionGrades.length}`}
+        result={lastGrade}
+        confidenceLabel={latestPickFor(lastGrade.node)?.label ?? null}
+        reveal
+        topic={lastGradeTopic ?? undefined}
+      />
+    ) : null
   const lastUserMessageId = useMemo(() => [...messages].reverse().find((m) => m.role === 'user')?.id ?? null, [messages])
   const latestTicket = useMemo(() => extractTicketFromMessages(messages), [messages])
 
@@ -833,6 +854,12 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
                       message={m}
                       onEditResend={m.role === 'user' && m.id === lastUserMessageId && !busy ? editResend : undefined}
                     />
+                    {/* The verdict sits at the index it landed on, BEFORE any
+                        mark pinned to the same spot — you're graded on the item
+                        you just finished, and only then does the tutor move on. */}
+                    {gradeCard &&
+                      (lastGradeAtIndex === i + 1 || (i === messages.length - 1 && lastGradeAtIndex > messages.length)) &&
+                      gradeCard}
                     {marks
                       .filter((k) => k.atIndex === i + 1 || (i === messages.length - 1 && k.atIndex > messages.length))
                       .map((k) => (
@@ -840,20 +867,8 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
                       ))}
                   </Fragment>
                 ))}
-                {/* The verdict belongs in the conversation, at its tail —
-                    it IS the latest event when it lands, and it scrolls with
-                    the transcript instead of holding a permanent row above
-                    it. Replaced each time a new grade arrives, same as when
-                    it was its own layer. */}
-                {lastGrade && phase !== 'done' && (
-                  <GradeResultCard
-                    key={`${lastGrade.node}-${sessionGrades.length}`}
-                    result={lastGrade}
-                    confidenceLabel={latestPickFor(lastGrade.node)?.label ?? null}
-                    reveal
-                    topic={lastGradeTopic ?? undefined}
-                  />
-                )}
+                {/* Grade landed before any message rendered (index 0). */}
+                {gradeCard && lastGradeAtIndex === 0 && gradeCard}
                 {busy && (
                   <div className="flex items-center gap-2">
                     <TypingIndicator />
