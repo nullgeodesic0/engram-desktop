@@ -583,7 +583,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
    * sitting), so the last message carrying a due item's probe text is a
    * direct, grounded read of the current item. Scanned newest-first; falls
    * back to the queue head before the first probe has been asked. */
-  const current = useMemo(() => {
+  const currentAt = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
       const m = messages[i]
       if (m.role !== 'assistant') continue
@@ -591,16 +591,26 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
       // Long enough to be distinctive — a short probe could collide with
       // ordinary prose, and a false match is worse than the queue fallback.
       const hit = queue.find((it) => it.probe.length >= 24 && hay.includes(it.probe.slice(0, 38).toLowerCase()))
-      if (hit) return hit
+      // `index` is the message that ASKED — the crossing anchors just above
+      // it, so the sweep divider lands after the outgoing item's verdict and
+      // its explanation, not after the new question has already been posed.
+      if (hit) return { item: hit, index: i }
     }
-    return queue[0] ?? null
+    return { item: queue[0] ?? null, index: messages.length }
   }, [messages, queue])
+  const current = currentAt.item
   // The sweep between items — Review's counterpart to Learn's node crossing.
   // Keyed on the probe-derived current item (above), so it fires when the
   // tutor genuinely moves on, not when the due queue reshuffles under it.
   // Live-session-only: the crossing's position comes from matching probes
   // against the due list, which a transcript alone can't reproduce (see the
   // one-time marks in Marks.tsx's doctrine comment).
+  //
+  // Anchored to the ASKING message's own index rather than the transcript's
+  // tail, so the sweep reads in the order the sitting actually happened:
+  // the outgoing item's verdict and the tutor's explanation of it land
+  // first, then "moving to …", then the new probe. Pinning to the tail put
+  // the divider after the next question had already been posed.
   useEffect(() => {
     if (phase !== 'in-session' || !current) return
     const prev = lastReviewedNodeRef.current
@@ -608,7 +618,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
     if (prev === null || prev === current.id) return
     setMarks((p) => [
       ...p,
-      { id: `mark-${markSeq.current++}`, atIndex: messagesRef.current.length, kind: 'crossing', nodeId: current.id, verb: 'moving to' },
+      { id: `mark-${markSeq.current++}`, atIndex: currentAt.index, kind: 'crossing', nodeId: current.id, verb: 'moving to' },
     ])
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current?.id, phase])
