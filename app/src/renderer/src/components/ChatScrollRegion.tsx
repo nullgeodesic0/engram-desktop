@@ -31,7 +31,12 @@ export function ChatScrollRegion({ children, deps }: { children: ReactNode; deps
 
   return (
     <div className="relative flex-1 min-h-0">
-      <div ref={containerRef} onScroll={onScroll} className="h-full overflow-y-auto flex flex-col gap-4">
+      {/* `scroll-fade-top`: content dissolves into the top edge instead of
+          being guillotined by it, so the transcript reads as continuing past
+          the viewport rather than being clipped at an arbitrary line — and
+          the strip the masthead/probe cards tuck into stops looking like a
+          hard boundary. See index.css. */}
+      <div ref={containerRef} onScroll={onScroll} className="h-full overflow-y-auto flex flex-col gap-4 scroll-fade-top">
         {children}
       </div>
       {!stick && (
