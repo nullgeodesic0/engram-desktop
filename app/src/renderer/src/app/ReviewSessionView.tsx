@@ -130,10 +130,39 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
   const [sessionGrades, setSessionGrades] = useState<GradeResult[]>([])
   const [streakDays, setStreakDays] = useState<number | null>(null)
   const [chamber, setChamber] = useState(false)
-  // Pin for the current-item card (Task 2) — same grammar as the masthead/ticket
-  // pins elsewhere (PinTackIcon, warm-filled + raised chip). Resets per sitting
-  // alongside chamber, below.
+  // The probe card floats OVER the transcript on the left edge and tucks away
+  // when the cursor leaves — same grammar as Learn's session ticket, so the
+  // chat owns the full column instead of ceding a whole layout row to a card
+  // you only need between answers. Pinning holds it out regardless of cursor.
   const [probePinned, setProbePinned] = useState(false)
+  const [probePeek, setProbePeek] = useState(false)
+  const probeLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const peekProbe = () => {
+    if (probeLeaveTimer.current) clearTimeout(probeLeaveTimer.current)
+    probeLeaveTimer.current = null
+    setProbePeek(true)
+  }
+  const scheduleProbeTuck = () => {
+    // Already armed → let the existing deadline stand, so continuous motion
+    // across the transcript doesn't keep pushing the tuck into the future.
+    if (probeLeaveTimer.current) return
+    probeLeaveTimer.current = setTimeout(() => {
+      probeLeaveTimer.current = null
+      setProbePeek(false)
+    }, 250)
+  }
+  /** Pointer-position tracking at the device's own mousemove rate: within the
+   * left reveal zone the card slides out; while out, its own width holds it
+   * open (hysteresis); past that it tucks. A pinned card ignores all of it. */
+  const handleProbePointer = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (probePinned) return
+    const x = e.clientX - e.currentTarget.getBoundingClientRect().left
+    if (x <= (probePeek ? 340 : 28)) peekProbe()
+    else scheduleProbeTuck()
+  }
+  useEffect(() => () => {
+    if (probeLeaveTimer.current) clearTimeout(probeLeaveTimer.current)
+  }, [])
   // The honest-blank affordance's readiness — true once the current item has sat
   // unanswered for 45s. See the effect keyed on `current?.id` below for the timer
   // itself; this just tracks whether it has fired.
@@ -342,6 +371,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
     setSessionTotal(resume ? queue.length + sessionGrades.length : queue.length)
     setChamber(false)
     setProbePinned(false)
+    setProbePeek(false)
     if (!resume) {
       setLastGrade(null)
       setLastGradeTopic(null)
@@ -595,61 +625,70 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
               <TicketCard ticket={latestTicket} compact />
             </div>
           )}
-          {current && (
-            // Already hoisted above ChatScrollRegion (a shrink-0 sibling, not a child
-            // of the flex-1 scroll wrapper below) — it never scrolls with the transcript
-            // regardless of pin state. "Pinned" here is therefore the layout-preserving
-            // choice from the brief: no position/hoist change needed, just the same
-            // pin grammar (PinTackIcon, warm-filled + raised chip) the masthead/ticket
-            // use, and `relative` so the tack can sit in the card's corner.
-            <div
-              key={current.id}
-              className="relative shrink-0 panel px-5 py-4 flex flex-col gap-3"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <div>
-                  <div className="text-sm font-medium text-[var(--color-text-primary)]">{humanizeNodeId(current.id)}</div>
-                  <div className="label-data text-xs text-[var(--color-text-faint)] mt-0.5 uppercase tracking-wider">{current.topic}</div>
-                </div>
-                {sessionTotal > 1 && (
-                  <QueueRail
-                    total={sessionTotal}
-                    completedGrades={sessionGrades}
-                    hasCurrent
-                    currentNodeId={current.id}
-                  />
-                )}
-              </div>
-              <p className="text-sm text-[var(--color-text-primary)]">{current.probe}</p>
-              <button
-                onClick={() => setProbePinned((v) => !v)}
-                aria-label={probePinned ? 'Unpin probe' : 'Pin probe'}
-                title={probePinned ? 'Unpin' : 'Pin — keep this probe marked while you work it'}
-                className={`focus-ring no-press absolute bottom-1.5 right-1.5 h-5 w-5 rounded-full flex items-center justify-center transition-colors duration-[var(--dur-fast)] ${
-                  probePinned
-                    ? 'text-[var(--color-ink-warm)] bg-[var(--color-surface-3)]'
-                    : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]'
-                }`}
-              >
-                <PinTackIcon pinned={probePinned} size={14} />
-              </button>
-            </div>
-          )}
-          {lastGrade && phase !== 'done' && (
-            <GradeResultCard
-              key={`${lastGrade.node}-${sessionGrades.length}`}
-              result={lastGrade}
-              confidenceLabel={latestPickFor(lastGrade.node)?.label ?? null}
-              reveal
-              topic={lastGradeTopic ?? undefined}
-            />
-          )}
-
-          {/* The only scrolling region — header, probe card, and input stay anchored. */}
+          {/* The only scrolling region — header and input stay anchored. */}
           {/* Must be a flex column: ChatScrollRegion sizes itself with
               flex-1/min-h-0 and loses its height bound (killing scrolling)
-              inside a plain block wrapper. */}
-          <div className={`flex-1 min-h-0 flex flex-col${chamber ? ' chamber-blur' : ''}`}>
+              inside a plain block wrapper. `relative` hosts the floating probe
+              card, which renders OVER the transcript rather than claiming a
+              layout row of its own. */}
+          <div
+            className={`relative flex-1 min-h-0 flex flex-col${chamber ? ' chamber-blur' : ''}`}
+            onMouseMove={current ? handleProbePointer : undefined}
+          >
+            {current && (() => {
+              const probeOut = probePinned || probePeek
+              return (
+                <>
+                  {!probeOut && (
+                    <div className="absolute left-0 top-2 z-10 h-16 w-3.5 flex items-center justify-start" aria-hidden="true">
+                      <span className="w-px h-12 rounded bg-[var(--color-hairline)]" />
+                    </div>
+                  )}
+                  <div
+                    key={current.id}
+                    className={`absolute top-1 left-0 z-10 w-80 max-w-[44%] transition-[transform,opacity] ${
+                      probeOut
+                        ? 'duration-[var(--dur-base)] ease-[var(--ease-out-soft)] translate-x-0 opacity-100'
+                        : 'duration-[340ms] ease-[cubic-bezier(0.45,0.05,0.25,1)] -translate-x-[calc(100%+1.75rem)] opacity-0'
+                    }`}
+                  >
+                    <div className="relative panel px-5 py-4 flex flex-col gap-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium text-[var(--color-text-primary)] truncate">
+                            {humanizeNodeId(current.id)}
+                          </div>
+                          <div className="label-data text-xs text-[var(--color-text-faint)] mt-0.5 uppercase tracking-wider truncate">
+                            {current.topic}
+                          </div>
+                        </div>
+                        {sessionTotal > 1 && (
+                          <QueueRail
+                            total={sessionTotal}
+                            completedGrades={sessionGrades}
+                            hasCurrent
+                            currentNodeId={current.id}
+                          />
+                        )}
+                      </div>
+                      <p className="text-sm text-[var(--color-text-primary)]">{current.probe}</p>
+                      <button
+                        onClick={() => setProbePinned((v) => !v)}
+                        aria-label={probePinned ? 'Unpin probe' : 'Pin probe'}
+                        title={probePinned ? 'Unpin — tuck away unless the cursor visits the left edge' : 'Pin — keep the probe out'}
+                        className={`focus-ring no-press absolute bottom-1.5 right-1.5 h-5 w-5 rounded-full flex items-center justify-center transition-colors duration-[var(--dur-fast)] ${
+                          probePinned
+                            ? 'text-[var(--color-ink-warm)] bg-[var(--color-surface-3)]'
+                            : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]'
+                        }`}
+                      >
+                        <PinTackIcon pinned={probePinned} size={14} />
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )
+            })()}
             <ChatScrollRegion deps={[messages, busy]}>
               <div className="transcript-measure flex flex-col gap-5">
                 {marks.filter((k) => k.atIndex === 0).map((k) => (
@@ -668,6 +707,20 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
                       ))}
                   </Fragment>
                 ))}
+                {/* The verdict belongs in the conversation, at its tail —
+                    it IS the latest event when it lands, and it scrolls with
+                    the transcript instead of holding a permanent row above
+                    it. Replaced each time a new grade arrives, same as when
+                    it was its own layer. */}
+                {lastGrade && phase !== 'done' && (
+                  <GradeResultCard
+                    key={`${lastGrade.node}-${sessionGrades.length}`}
+                    result={lastGrade}
+                    confidenceLabel={latestPickFor(lastGrade.node)?.label ?? null}
+                    reveal
+                    topic={lastGradeTopic ?? undefined}
+                  />
+                )}
                 {busy && (
                   <div className="flex items-center gap-2">
                     <TypingIndicator />
