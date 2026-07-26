@@ -4,6 +4,8 @@ import { parseBeatSegments } from '../../../shared/beatLabelParser'
 import { BeatCard, PlainDialogueBlock } from './BeatCard'
 import { MathRenderer } from './MathRenderer'
 import { InkNode } from './ui/InkNode'
+import { parseProbeHeader } from '../../../shared/probeHeader'
+import { ProbeCard } from './ritual/ProbeCard'
 
 export function fileName(path: string): string {
   return path.split('/').pop() ?? path
@@ -72,9 +74,15 @@ export const ChatMessageView = memo(function ChatMessageView({ message, onEditRe
         <InkNode id="voice-tutor" variant="filled" size={12} />
       </div>
       <div className="flex flex-col gap-3 flex-1 min-w-0">
-        {segments.map((seg, i) =>
-          seg.beat ? <BeatCard key={i} beat={seg.beat} text={seg.text} /> : <PlainDialogueBlock key={i} text={seg.text} />,
-        )}
+        {segments.map((seg, i) => {
+          if (seg.beat) return <BeatCard key={i} beat={seg.beat} text={seg.text} />
+          // A per-item progress marker opening the segment means this is the
+          // moment of asking — set it as a probe card. Falls through to plain
+          // prose whenever the marker isn't there, which is most segments.
+          const probe = parseProbeHeader(seg.text)
+          if (probe) return <ProbeCard key={i} header={probe} />
+          return <PlainDialogueBlock key={i} text={seg.text} />
+        })}
       </div>
     </div>
   )
