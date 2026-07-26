@@ -24,6 +24,8 @@ import { friendlyErrorText } from '../shared/friendlyError'
 import { recordConfidence, latestPickFor } from '../shared/calibrationStore'
 import { extractTicketFromMessages } from '../shared/ticketParser'
 import { TicketCard } from '../components/ritual/TicketCard'
+import { ReadyRoomPlate } from '../components/ritual/ReadyRoomPlate'
+import { ReviewHorizon } from '../components/ReviewHorizon'
 import { InkWell } from '../components/ritual/InkWell'
 import { FlowChain } from '../components/ritual/FlowChain'
 import { trailingRecalled } from '../../../shared/gradeResult'
@@ -34,35 +36,46 @@ import { deriveRitualMarks } from '../../../shared/ritualFromTranscript'
 
 type Phase = 'loading' | 'empty' | 'ready' | 'in-session' | 'done' | 'closed-unexpectedly'
 
-// due() only ever returns items already due (see readHandlers.ts's `engram:due`) — there's
-// no "next due" query on the engine side. The earliest future date lives in each topic
-// graph's own fsrs.due (same source Home's 7-day forecast reads), so an empty queue looks
-// there instead, across every topic, for the single soonest date among non-new nodes.
-async function earliestUpcomingDue(): Promise<string | null> {
+const HORIZON_DAYS = 14
+const HOLDING_STABILITY_DAYS = 21
+
+/** due() only ever returns items already due (see readHandlers.ts's
+ * `engram:due`) — there's no "next due" query on the engine side. Both
+ * surfaces that have no queue to read from (`empty`, and `done` once the
+ * queue clears) instead walk every topic graph's own fsrs.due (same source
+ * HomeView's 7-day forecast reads, same non-new filter, same local-date
+ * discipline — getFullYear/Month/Date, never toISOString), extended here to
+ * a 14-day horizon. The same walk also counts nodes already at
+ * fsrs.s >= HOLDING_STABILITY_DAYS in the same pass, rather than a second
+ * walk over the same graphs just to get a second number. */
+async function computeReviewHorizon(): Promise<{ buckets: number[]; holdingCount: number }> {
   const topics = await window.engram.topics()
-  let earliest: string | null = null
+  const buckets = new Array(HORIZON_DAYS).fill(0) as number[]
+  let holdingCount = 0
+  const today = new Date()
+  const dayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate())
   await Promise.all(
     topics.map(async (t) => {
       try {
         const g = (await window.engram.topicGraph(t.topic)) as {
-          nodes?: Record<string, { state?: string; fsrs?: { due?: string | null } }>
+          nodes?: Record<string, { state?: string; fsrs?: { due?: string | null; s?: number | null } }>
         }
         if (!g?.nodes) return
         for (const node of Object.values(g.nodes)) {
+          const s = node?.fsrs?.s
+          if (typeof s === 'number' && s >= HOLDING_STABILITY_DAYS) holdingCount += 1
           const due = node?.fsrs?.due
           if (typeof due !== 'string' || node?.state === 'new') continue
-          if (earliest === null || due < earliest) earliest = due
+          const d = new Date(`${due}T00:00:00`)
+          const diffDays = Math.floor((d.getTime() - dayStart.getTime()) / 86400000)
+          if (diffDays >= 0 && diffDays < HORIZON_DAYS) buckets[diffDays] += 1
         }
       } catch {
-        // A topic with an unreadable graph just doesn't contribute a candidate date.
+        // A topic with an unreadable graph just doesn't contribute.
       }
     }),
   )
-  return earliest
-}
-
-function formatDueDate(iso: string): string {
-  return new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+  return { buckets, holdingCount }
 }
 
 function looksLikeRateCall(input: Record<string, unknown>): boolean {
@@ -130,10 +143,12 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
   const [streakDays, setStreakDays] = useState<number | null>(null)
   const [chamber, setChamber] = useState(false)
   const [momentumOn, setMomentumOn] = useState(true)
-  // Only fetched/shown for the empty-queue state — the earliest date any topic's
-  // node next comes due, so "nothing due" says when to come back rather than
-  // just sitting blank.
-  const [earliestDue, setEarliestDue] = useState<string | null>(null)
+  // The 14-day horizon figure + holding count — fetched whenever the queue
+  // empties (both `empty` and `done`, the two phases with no queue left to
+  // read from), null until the first computeReviewHorizon() resolves so the
+  // panel can skeleton rather than flash a false "nothing scheduled".
+  const [horizonBuckets, setHorizonBuckets] = useState<number[] | null>(null)
+  const [holdingCount, setHoldingCount] = useState(0)
   // Ritual marks — Review's own minimal slice of Learn's atIndex-interleave
   // plumbing (LearnSessionView), needed here only for the opening docket
   // (one-time, `kind: 'docket'`) and the lapse rite (derivable, `kind:
@@ -168,10 +183,17 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
     })
   }
 
+  function refreshHorizon() {
+    computeReviewHorizon().then(({ buckets, holdingCount: holding }) => {
+      setHorizonBuckets(buckets)
+      setHoldingCount(holding)
+    })
+  }
+
   useEffect(() => {
     refreshQueue().then((items) => {
       setPhase(items.length > 0 ? 'ready' : 'empty')
-      if (items.length === 0) earliestUpcomingDue().then(setEarliestDue)
+      if (items.length === 0) refreshHorizon()
     })
     // Uncapped, purely for the amnesty-banner heuristic below — `queue` itself
     // stays capped at 12 (the actual review cap /review would use).
@@ -257,6 +279,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
               setPhase('done')
               setChamber(false)
               window.engram.stats().then((s) => setStreakDays(s.streak_days))
+              refreshHorizon()
             }
           })
         }
@@ -408,6 +431,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
   }
 
   const current = queue[0] ?? null
+  const blocked = rateLimit !== null && isBlockingRateLimitStatus(rateLimit.status)
   const lastUserMessageId = useMemo(() => [...messages].reverse().find((m) => m.role === 'user')?.id ?? null, [messages])
   const latestTicket = useMemo(() => extractTicketFromMessages(messages), [messages])
 
@@ -498,9 +522,14 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
         </div>
       )}
       {phase === 'empty' && (
-        <div className="panel px-4 py-3 text-sm text-[var(--color-ink-warm)]">
-          Nothing due{earliestDue ? ` — earliest return ${formatDueDate(earliestDue)}` : ' right now.'}
-        </div>
+        horizonBuckets ? (
+          <ReviewHorizon buckets={horizonBuckets} holdingCount={holdingCount} />
+        ) : (
+          <div className="panel px-4 py-3 max-w-md flex flex-col gap-2">
+            <SkeletonBar height={40} />
+            <SkeletonBar width="60%" height={10} />
+          </div>
+        )
       )}
       {phase === 'closed-unexpectedly' && (
         <div className="panel border-[var(--color-ink-danger-dim)] px-4 py-3 text-sm text-[var(--color-ink-danger)]">
@@ -521,28 +550,14 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
       )}
 
       {phase === 'ready' && current && (
-        <div className="panel px-5 py-4 flex flex-col gap-3">
-          <div className="label-data text-xs text-[var(--color-text-faint)] uppercase tracking-wider">{current.topic}</div>
-          <p className="text-sm text-[var(--color-text-primary)]">{current.probe}</p>
-          <div className="flex gap-2 items-center">
-            <button
-              onClick={() => startSession(false)}
-              disabled={rateLimit !== null && isBlockingRateLimitStatus(rateLimit.status)}
-              className="focus-ring self-start px-4 py-2 rounded-lg text-sm bg-[var(--color-surface-3)] text-[var(--color-ink-warm)] hover:bg-[var(--color-surface-2)] disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              Start review session
-            </button>
-            {hasPriorSession && (
-              <button
-                onClick={() => startSession(true)}
-                disabled={rateLimit !== null && isBlockingRateLimitStatus(rateLimit.status)}
-                className="focus-ring self-start px-3 py-2 rounded-lg text-xs text-[var(--color-text-dim)] hover:text-[var(--color-text-primary)] disabled:opacity-40"
-              >
-                Resume last session
-              </button>
-            )}
-          </div>
-        </div>
+        <ReadyRoomPlate
+          dueItems={queue}
+          totalDue={totalDue}
+          onStart={() => startSession(false)}
+          onResume={() => startSession(true)}
+          hasPriorSession={hasPriorSession}
+          blocked={blocked}
+        />
       )}
 
       {(phase === 'in-session' || phase === 'done') && (
@@ -647,7 +662,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
           )}
 
           {phase === 'done' && (
-            <div className="shrink-0">
+            <div className="shrink-0 flex flex-col gap-4">
               <SessionCeremony
                 results={sessionGrades}
                 streakDays={streakDays}
@@ -655,6 +670,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
                 heading="Queue clear"
                 label="items"
               />
+              {horizonBuckets && <ReviewHorizon buckets={horizonBuckets} holdingCount={holdingCount} />}
             </div>
           )}
         </div>
