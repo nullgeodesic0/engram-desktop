@@ -58,6 +58,7 @@ type WalkEvent =
   | { kind: 'assistant_text' }
   | { kind: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
   | { kind: 'tool_result'; toolUseId: string; content: unknown; timestamp?: string }
+  | { kind: 'task_notification'; content: string }
 
 /** Single ordered pass over the transcript, block by block, yielding one
  * event per real chat message (post skip-first-user / merge-consecutive-
@@ -73,6 +74,15 @@ function* walkTranscript(rawLines: unknown[]): Generator<WalkEvent> {
       if (!seenFirstUser) {
         seenFirstUser = true
         continue // the app's own synthetic kickoff — not a real human message
+      }
+      // A background-agent completion (e.g. the assessor audit below) lands
+      // as an ordinary `type: "user"` string-content line too — chatMessages.ts
+      // (deliberately, out of this module's scope) still renders it as a real
+      // chat bubble, so it must still count toward messageCount via the
+      // `user_message` yield below; this extra yield just lets a consumer
+      // also inspect its raw content before that count advances.
+      if (line.message.content.startsWith('<task-notification>')) {
+        yield { kind: 'task_notification', content: line.message.content }
       }
       yield { kind: 'user_message' }
       continue
@@ -299,6 +309,102 @@ function explorableNodeFromPrompt(prompt: unknown): string | undefined {
   return undefined
 }
 
+// AUDIT (Task 4) — grep-verified against real transcripts before writing any of
+// this: `grep -l audit ~/.claude/projects/*/*.jsonl`, narrowed to real
+// `/engram:review` sittings (transcripts whose first user line's content is
+// literally `<command-name>/engram:review</command-name>` — the app's own
+// resume/kickoff signature) via `~/.claude/projects/-Users-tylerhadsell/*.jsonl`.
+// Of 7 such real review sittings found, exactly ONE (`6130a05d-34c0-4191-96c1-
+// 894e3b359366.jsonl`) actually triggered an audit — SKILL.md §3 only calls for
+// one "if the session had ≥8 items, any disputed grade, or ≥3 partials", so most
+// sittings never spawn one. That one sitting's shape:
+//
+//  1. A Bash call builds a stash whose entries carry `kind: "audit"` and
+//     `tutor_rating` (SKILL.md §3's own documented stash shape: `{topic, node,
+//     probe, claim, rubric, production, confidence, kind:"audit",
+//     tutor_rating:"<r>"}`), then `stash add --file ...`.
+//  2. `Agent({description: "Assessor audit of review session", subagent_type:
+//     "engram:engram-assessor", prompt: "Run \`... stash list\` and audit the 5
+//     items in it (kind: \"audit\") ... return: node, your independent grade
+//     ..., and whether you agree or disagree with the tutor_rating ..."})` —
+//     confirming the same 'Agent'-not-'Task' naming noted in the EXPLORABLE
+//     comment above. Differentiated from a /learn verification spawn of the
+//     SAME subagent (also confirmed real, e.g. the physics-qual sitting
+//     `54df0c3e-...`'s "Assess stashed physics productions") by the literal
+//     word "audit" appearing in the spawn's own input — /learn's stash items
+//     carry `kind:"encode"`, never `kind:"audit"`, so its spawns never
+//     mention the word.
+//  3. The verdict itself does NOT land as this tool_use's `tool_result` — the
+//     spawn runs as a background agent (its own tool_result is just "Async
+//     agent launched successfully…"), and the actual verdict arrives LATER as
+//     a `<task-notification>` string landing in an ordinary `type: "user"`
+//     transcript line, matched back to the spawn via `<tool-use-id>`, gated on
+//     `<status>completed</status>`. That notification's `<result>` embeds a
+//     fenced ```json array — and its shape exactly matches the documented
+//     output contract in `agents/engram-assessor.md`: `"audit": {"tutor_rating":
+//     "...", "agree": true|false, "note": "..."}` per item (verified against
+//     both the real transcript's actual JSON AND the agent spec's own
+//     example — two independent sources agreeing, not a single guessed shape).
+//
+// That async hand-off matters for where this can ever resolve: SessionManager.ts's
+// `type === 'user'` branch only forwards `tool_result` blocks out of an ARRAY
+// `message.content` — a task-notification's content is a bare STRING, so it
+// never reaches the live SessionEvent stream at all today. A live sitting can
+// therefore only ever observe the SPAWN (mark stays `verdict: 'pending'`
+// forever, live); only a replayed transcript (this function) can resolve it.
+function isAssessorAuditSpawnEvent(name: string, input: Record<string, unknown>): boolean {
+  if (name !== 'Task' && name !== 'Agent') return false
+  const s = JSON.stringify(input).toLowerCase()
+  return s.includes('engram-assessor') && s.includes('audit')
+}
+
+/** Best-effort item count out of the spawn's own prompt text ("...audit the 5
+ * items in it (kind: \"audit\")...", the one real phrasing observed) — purely
+ * cosmetic for the `pending` mark; undefined rather than guessed if it
+ * doesn't match, same discipline as `explorableNodeFromPrompt` above. */
+function auditItemCountFromPrompt(prompt: unknown): number | null {
+  if (typeof prompt !== 'string') return null
+  const m = prompt.match(/(\d+)\s+items?\b/i)
+  if (!m) return null
+  const n = parseInt(m[1], 10)
+  return Number.isFinite(n) && n > 0 ? n : null
+}
+
+/** Resolves a pending audit's verdict from a `<task-notification>` string —
+ * see the AUDIT doctrine comment above for the exact real shape this reads.
+ * Returns null on ANY mismatch or parse failure (wrong tool-use-id, not yet
+ * `completed`, no fenced json, an item missing the documented `node`/
+ * `audit.agree` fields): a mark stuck at `pending` forever is honest; a
+ * fabricated verdict is not. */
+function parseAuditNotification(content: string, expectedToolUseId: string): { itemCount: number; disputedNodes: string[] } | null {
+  const toolUseId = content.match(/<tool-use-id>([^<]*)<\/tool-use-id>/)?.[1]
+  if (toolUseId !== expectedToolUseId) return null
+  const status = content.match(/<status>([^<]*)<\/status>/)?.[1]
+  if (status !== 'completed') return null
+  const result = content.match(/<result>([\s\S]*?)<\/result>/)?.[1]
+  if (!result) return null
+  const fence = result.match(/```json\s*([\s\S]*?)```/)
+  if (!fence) return null
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(fence[1])
+  } catch {
+    return null
+  }
+  if (!Array.isArray(parsed) || parsed.length === 0) return null
+  const disputedNodes: string[] = []
+  for (const item of parsed) {
+    if (typeof item !== 'object' || item === null) return null
+    const node = (item as Record<string, unknown>).node
+    const audit = (item as Record<string, unknown>).audit
+    if (typeof node !== 'string' || typeof audit !== 'object' || audit === null) return null
+    const agree = (audit as Record<string, unknown>).agree
+    if (typeof agree !== 'boolean') return null
+    if (!agree) disputedNodes.push(node)
+  }
+  return { itemCount: parsed.length, disputedNodes }
+}
+
 /** Structurally a subset of the `RitualMark` union (components/ritual/Marks.tsx)
  * — only the kinds this module can derive after the fact. Kept as a local
  * type (rather than importing RitualMark) so shared/ doesn't reach into
@@ -313,6 +419,14 @@ export type DerivedRitualMark =
   | { id: string; atIndex: number; kind: 'explorable'; title: string; path?: string; node?: string }
   | { id: string; atIndex: number; kind: 'verify-seal' }
   | { id: string; atIndex: number; kind: 'lapse'; node: string; returnDate: string | null }
+  | {
+      id: string
+      atIndex: number
+      kind: 'audit'
+      itemCount: number | null
+      verdict: 'pending' | 'agreed' | 'disputed'
+      disputedNodes: string[]
+    }
 
 /** Rebuilds the durable subset of ritual marks (beat cards, node crossings,
  * phase frontispieces, the pretest diagnostic plate) from a transcript.
@@ -348,6 +462,11 @@ export type DerivedRitualMark =
  *    "now", which would fabricate a future date for an old sitting (see
  *    `lapseReturnDate`'s doctrine comment in gradeResult.ts and LapseRite's
  *    in Marks.tsx).
+ *  - `audit` marks come from a /review sitting's own assessor-audit spawn (see
+ *    the AUDIT doctrine comment above `isAssessorAuditSpawnEvent` for the
+ *    real-transcript shape) — pushed `pending` at the spawn, resolved to
+ *    `agreed`/`disputed` if and only if a matching `<task-notification>` with
+ *    `<status>completed</status>` later parses cleanly; never fabricated.
  * Figure/atlas/stash/docket marks are NOT derived here — they're one-time
  * signals with no durable record in the transcript to replay from (see the
  * doctrine comment on `RitualMark` in Marks.tsx). */
@@ -382,8 +501,32 @@ export function deriveRitualMarks(entries: unknown[]): DerivedRitualMark[] {
   // matches same-node respawns to their own `artifact set` in completion
   // order instead.
   const pendingExplorableByNode = new Map<string, number[]>()
+  // Pending assessor-audit spawns awaiting their `<task-notification>`
+  // verdict, FIFO like `pendingExplorableByNode` above (same "more than one
+  // per sitting is unlikely but not impossible" caution — the notification's
+  // own `<tool-use-id>` is the real match key, this queue just bounds the
+  // search to spawns not yet resolved).
+  const pendingAudits: Array<{ toolUseId: string; markIndex: number }> = []
 
   for (const event of walkTranscript(entries)) {
+    if (event.kind === 'task_notification') {
+      for (let i = 0; i < pendingAudits.length; i++) {
+        const pending = pendingAudits[i]
+        const verdict = parseAuditNotification(event.content, pending.toolUseId)
+        if (verdict) {
+          const existing = marks[pending.markIndex] as Extract<DerivedRitualMark, { kind: 'audit' }>
+          marks[pending.markIndex] = {
+            ...existing,
+            itemCount: verdict.itemCount,
+            verdict: verdict.disputedNodes.length === 0 ? 'agreed' : 'disputed',
+            disputedNodes: verdict.disputedNodes,
+          }
+          pendingAudits.splice(i, 1)
+          break
+        }
+      }
+      continue
+    }
     if (event.kind === 'user_message') {
       messageCount++
       lastWasAssistantText = false
@@ -468,6 +611,19 @@ export function deriveRitualMarks(entries: unknown[]): DerivedRitualMark[] {
         if (queue) queue.push(marks.length - 1)
         else pendingExplorableByNode.set(node, [marks.length - 1])
       }
+      continue
+    }
+    if (isAssessorAuditSpawnEvent(event.name, event.input)) {
+      const input = event.input as { prompt?: unknown }
+      marks.push({
+        id: `dmark-${seq++}`,
+        atIndex: messageCount,
+        kind: 'audit',
+        itemCount: auditItemCountFromPrompt(input.prompt),
+        verdict: 'pending',
+        disputedNodes: [],
+      })
+      pendingAudits.push({ toolUseId: event.id, markIndex: marks.length - 1 })
       continue
     }
     if (event.name === SESSION_PHASE) {

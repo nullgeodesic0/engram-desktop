@@ -591,6 +591,17 @@
   animation: explorable-ink-in calc(var(--dur-base) * 3) var(--ease-out-soft);
 }
 
+/* AuditCard (Marks.tsx/AuditCard.tsx) — same ink-wash family, cool-toned since
+ * the card itself is neutral (agree/disagree color lives on the text/border,
+ * not the entrance — the wash just marks "freshly landed"). */
+@keyframes audit-ink-in {
+  0% { background-color: color-mix(in srgb, var(--color-ink-cool) 14%, transparent); }
+  100% { background-color: transparent; }
+}
+.ritual-audit-in {
+  animation: audit-ink-in calc(var(--dur-base) * 3) var(--ease-out-soft);
+}
+
 /* VerifySeal (Marks.tsx) — a single subtle settle-in, once, on arrival: the
  * seal itself is the payoff, so no repeating pulse or wash, just a quiet
  * press like StashStamp's but smaller-scale and warm-toned. */
@@ -601,4 +612,15 @@
 }
 .ritual-verify-seal-in {
   animation: verify-seal-in 0.4s var(--ease-out-soft);
+}
+
+/* QueueRail (ReviewSessionView.tsx/QueueRail.tsx) — a single settle-in, once
+ * per mount, on the whole row: the rail is a fixed-length read-out, not a
+ * thing that should keep animating as the sitting progresses. */
+@keyframes rail-settle-in {
+  from { opacity: 0; transform: translateY(-2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.ritual-rail-in {
+  animation: rail-settle-in 0.35s var(--ease-out-soft);
 }
