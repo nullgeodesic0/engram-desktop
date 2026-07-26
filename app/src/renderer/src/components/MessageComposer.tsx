@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { MarkdownPreview } from './MarkdownPreview'
 import { fileName } from './ChatMessageView'
 
@@ -18,6 +19,11 @@ interface MessageComposerProps {
   onChamberChange?: (on: boolean) => void
   /** Pulses the toggle to invite entry (e.g. at a verify beat) without forcing it. */
   inviteChamber?: boolean
+  /** The honest-blank affordance (Task 2): a ghost button that prefills the composer
+   * with an admission of "I don't know" and focuses it. Never submits — the rite and
+   * assessor handle absolution, not this button. Caller (ReviewSessionView) owns the
+   * 45s timer and passes null when it shouldn't show; omit entirely to opt out. */
+  assist?: { label: string; onUse: () => void } | null
 }
 
 /** The response box shared by Learn and Review: attachment chips, a textarea that
@@ -36,10 +42,21 @@ export function MessageComposer({
   chamber,
   onChamberChange,
   inviteChamber,
+  assist,
 }: MessageComposerProps) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
   function submit() {
     onSubmit()
     onChamberChange?.(false)
+  }
+
+  function useAssist() {
+    if (!assist) return
+    assist.onUse()
+    // Prefill lands via the parent's state update; focus right away rather than
+    // waiting on it — the value is already what onUse just set.
+    textareaRef.current?.focus()
   }
 
   return (
@@ -67,6 +84,7 @@ export function MessageComposer({
       {chamber && <div className="fig-caption">recall chamber — nothing to look back at</div>}
       <div className={markdownPreview ? 'grid grid-cols-2 gap-3 w-full' : 'w-full'}>
         <textarea
+          ref={textareaRef}
           value={production}
           onChange={(e) => onProductionChange(e.target.value)}
           onKeyDown={(e) => {
@@ -117,6 +135,15 @@ export function MessageComposer({
               } ${inviteChamber && !chamber ? 'chamber-invite' : ''}`}
             >
               {chamber ? '✕ Leave chamber' : '◐ Begin recall'}
+            </button>
+          )}
+          {assist && (
+            <button
+              onClick={useAssist}
+              title="Prefills an honest blank — you still have to send it yourself"
+              className="focus-ring px-3 py-2 rounded-lg text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-3)]"
+            >
+              {assist.label}
             </button>
           )}
         </div>
