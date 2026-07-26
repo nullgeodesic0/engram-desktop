@@ -334,7 +334,12 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
 
   async function startSession(resume: boolean) {
     setPhase('in-session')
-    setSessionTotal(queue.length)
+    // A resume keeps its already-earned grades (below), so the total has to
+    // stay session-absolute or the queue rail mixes a fragment denominator
+    // with an absolute numerator — past the halfway point that renders a
+    // fully-complete rail mid-sitting. Invariant the rail documents and
+    // depends on: sessionTotal - queue.length === sessionGrades.length.
+    setSessionTotal(resume ? queue.length + sessionGrades.length : queue.length)
     setChamber(false)
     setProbePinned(false)
     if (!resume) {
