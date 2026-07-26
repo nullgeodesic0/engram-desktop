@@ -24,6 +24,18 @@ const READ_ONLY_COMMANDS = new Set([
   'model',
 ])
 
+// Some engram.py subcommands are read-only for SOME of their actions but not
+// others — `misconception add`/`resolve` write misconceptions.json while
+// `misconception list` only reads it; `experiment start`/`assign`/`settle`
+// write experiments.json while `status`/`list` only read it. Putting either
+// command name in READ_ONLY_COMMANDS would therefore permit its write actions
+// too, so these are gated on args[0] instead, consulted only when the flat
+// set above misses.
+const READ_ONLY_SUBCOMMANDS: Map<string, Set<string>> = new Map([
+  ['misconception', new Set(['list'])],
+  ['experiment', new Set(['status', 'list'])],
+])
+
 export class EngramCliError extends Error {
   constructor(
     message: string,
@@ -43,7 +55,14 @@ export class EngramCliError extends Error {
  */
 export async function engramRead<T = unknown>(command: string, args: string[] = []): Promise<T> {
   if (!READ_ONLY_COMMANDS.has(command)) {
-    throw new Error(`engramRead: "${command}" is not on the read-only allowlist`)
+    // Missing action, unknown action, or a command not in either allowlist
+    // all refuse identically — the caller learns nothing about which case it
+    // hit, same as a flat-set miss did before this map existed.
+    const allowedActions = READ_ONLY_SUBCOMMANDS.get(command)
+    const action = args[0]
+    if (!allowedActions || action === undefined || !allowedActions.has(action)) {
+      throw new Error(`engramRead: "${command}" is not on the read-only allowlist`)
+    }
   }
   const { scriptPath } = resolveEngramPlugin()
   try {
