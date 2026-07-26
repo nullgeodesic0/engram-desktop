@@ -98,6 +98,21 @@ function stringEdgePath(
   return `M ${a.x.toFixed(2)} ${a.y.toFixed(2)} Q ${cx.toFixed(2)} ${cy.toFixed(2)} ${b.x.toFixed(2)} ${b.y.toFixed(2)}`
 }
 
+/** Corner registration ticks — small printing-plate crop marks bracketing
+ * each corner of the plate rect, inset `TICK` px along both edges. Pure
+ * function of the plate's measured size, so it costs nothing per frame: it's
+ * called once per render from the (static, non-drifting) furniture layer,
+ * never from inside the drift path. */
+const CORNER_TICK = 12
+function cornerTicks(w: number, h: number): string[] {
+  return [
+    `M 0 ${CORNER_TICK} L 0 0 L ${CORNER_TICK} 0`,
+    `M ${w - CORNER_TICK} 0 L ${w} 0 L ${w} ${CORNER_TICK}`,
+    `M ${w} ${h - CORNER_TICK} L ${w} ${h} L ${w - CORNER_TICK} ${h}`,
+    `M ${CORNER_TICK} ${h} L 0 ${h} L 0 ${h - CORNER_TICK}`,
+  ]
+}
+
 /** Hides any edge touching a hub id (the capstone, or a capstone-like
  * "synthesis" node nearly everything requires-into) except a genuine "final"
  * requires edge — the hub's only dependent is this source, i.e. the natural
@@ -191,9 +206,15 @@ export function GraphView({
     return () => el.removeEventListener('wheel', onWheel)
   }, [])
 
+  // Measured plate dimensions, defaulted before the container's first paint —
+  // same fallback settlePlate always used, just named so the plate-furniture
+  // layer (border, corner ticks, grain/vignette rects) can share it without
+  // re-deriving from `size` at every use site.
+  const plateW = size?.w ?? 800
+  const plateH = size?.h ?? 600
   const plate: Map<string, PlateNode> = useMemo(
-    () => settlePlate(graph, size?.w ?? 800, size?.h ?? 600),
-    [graph, size],
+    () => settlePlate(graph, plateW, plateH),
+    [graph, plateW, plateH],
   )
 
   // Ambient drift clock — cells wander a couple of pixels around their
@@ -453,6 +474,40 @@ export function GraphView({
           <filter id="plate-node-glow">
             <feGaussianBlur stdDeviation="4" />
           </filter>
+          {/* Plate grain — one static feTurbulence filter, referenced by a
+              single full-plate rect below. Never touches `t`/`drifted`/view,
+              so it costs nothing beyond its one-time rasterization; panning
+              and zooming don't re-run it because the rect it's applied to
+              lives outside the pan/zoom transform group entirely (paper, not
+              specimen). feColorMatrix zeroes the RGB channels and derives
+              alpha from the noise's own luminance, so the rect's low opacity
+              (see below) reads as fine black speckle rather than colored
+              static. */}
+          <filter id="plate-grain" x="0" y="0" width="100%" height="100%">
+            <feTurbulence
+              type="fractalNoise"
+              baseFrequency="0.85"
+              numOctaves={2}
+              seed={4}
+              stitchTiles="stitch"
+              result="grain-noise"
+            />
+            <feColorMatrix
+              in="grain-noise"
+              type="matrix"
+              values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0.33 0.33 0.34 0 0"
+            />
+          </filter>
+          {/* Plate vignette — transparent center fading to the void color at
+              the rim. Static gradient, referenced by a rect outside the
+              transform group; the darkening is capped at 0.42 opacity and
+              doesn't start until 65% out, so rim nodes stay legible rather
+              than getting crushed into the frame. */}
+          <radialGradient id="plate-vignette" cx="50%" cy="50%" r="72%">
+            <stop offset="0%" stopColor="var(--color-void)" stopOpacity={0} />
+            <stop offset="65%" stopColor="var(--color-void)" stopOpacity={0} />
+            <stop offset="100%" stopColor="var(--color-void)" stopOpacity={0.42} />
+          </radialGradient>
           {graph.order
             .filter((id) => graph.nodes[id]?.state === 'learning' && !graph.nodes[id]?.capstone)
             .map((id) => {
@@ -475,6 +530,25 @@ export function GraphView({
           onPointerUp={onBgPointerUp}
           onPointerCancel={onBgPointerUp}
         />
+        {/* Plate grain + vignette — deliberately OUTSIDE the pan/zoom
+            transform group below. These are the paper, not the drawing: they
+            must stay put in screen space while the specimen (territories,
+            edges, cells, labels — everything inside the `<g transform>`)
+            pans and zooms across them. Both are fixed-size rects with a
+            static filter/gradient reference — no per-frame computation, no
+            dependency on `t`/`view`/`drifted`. pointer-events:none lets pan
+            drags started here fall through to the capture rect above. */}
+        <rect
+          x={0}
+          y={0}
+          width={plateW}
+          height={plateH}
+          fill="black"
+          filter="url(#plate-grain)"
+          opacity={0.035}
+          pointerEvents="none"
+        />
+        <rect x={0} y={0} width={plateW} height={plateH} fill="url(#plate-vignette)" pointerEvents="none" />
         <g transform={`translate(${view.x} ${view.y}) scale(${view.zoom})`}>
           {/* Territory washes */}
           {Array.from(territories.entries()).map(([root, members]) => {
@@ -796,6 +870,52 @@ export function GraphView({
             )
           })}
         </g>
+
+        {/* Plate furniture — title, hairline border, corner registration
+            ticks. Also OUTSIDE the transform group (fixed to the paper, not
+            the drawing) and entirely pointer-events:none. Hidden during
+            replay: `visibleNodes` is non-null exactly while the growth
+            scrubber is active (see the prop doc above), so it's reused here
+            rather than adding a dedicated `replayActive` prop — the caption
+            would otherwise misreport an N/M that doesn't match what's
+            actually inked on screen mid-scrub. */}
+        {!visibleNodes && (
+          <g pointerEvents="none">
+            <rect
+              x={0.5}
+              y={0.5}
+              width={Math.max(0, plateW - 1)}
+              height={Math.max(0, plateH - 1)}
+              fill="none"
+              stroke="var(--color-hairline)"
+              strokeWidth={1}
+            />
+            {cornerTicks(plateW, plateH).map((d, i) => (
+              <path key={i} d={d} fill="none" stroke="var(--color-ink-warm-dim)" strokeWidth={1.2} />
+            ))}
+            <text
+              x={16}
+              y={54}
+              fontFamily="var(--font-serif)"
+              fontSize={13}
+              fill="var(--color-text-primary)"
+              opacity={0.85}
+            >
+              {`Fig. — ${graph.title}`}
+            </text>
+            <text
+              x={16}
+              y={70}
+              fontFamily="var(--font-data)"
+              fontSize={10}
+              letterSpacing={0.4}
+              fill="var(--color-text-dim)"
+              opacity={0.75}
+            >
+              {`${stats.total} cells · ${stats.consolidated} consolidated`}
+            </text>
+          </g>
+        )}
       </svg>
     </div>
   )
