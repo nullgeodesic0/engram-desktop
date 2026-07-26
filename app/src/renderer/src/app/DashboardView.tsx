@@ -15,6 +15,7 @@ import { Button } from '../components/ui/Button'
 import { allPicks } from '../shared/calibrationStore'
 import { computeWeekDigest } from '../shared/weekDigest'
 import { friendlyErrorText } from '../shared/friendlyError'
+import { MisconceptionLedger } from '../components/MisconceptionLedger'
 
 function gradeColor(grade: string | null): string {
   if (grade === 'recalled') return 'var(--color-ink-warm)'
@@ -55,14 +56,19 @@ interface DashboardViewProps {
   /** Routes the first-run empty state's one action to the Learn view — every
    * stat below reads as noise (all zeros, no history) before a single topic exists. */
   onNewTopic?: () => void
+  /** Deep-links a misconception ledger row to that node's map entry — the
+   * same goToNode plumbing App.tsx wires from the command palette, threaded
+   * through here rather than the ledger inventing its own navigation. */
+  onGoNode?: (topicId: string, nodeId: string) => void
 }
 
-export function DashboardView({ onNewTopic }: DashboardViewProps = {}) {
+export function DashboardView({ onNewTopic, onGoNode }: DashboardViewProps = {}) {
   const [stats, setStats] = useState<EngramStats | null>(null)
   const [history, setHistory] = useState<ReceiptsHistory | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [detail, setDetail] = useState<{ label: string; items: ReceiptItem[] } | null>(null)
   const [graphs, setGraphs] = useState<Record<string, TopicGraph> | null>(null)
+  const [ledgerOpen, setLedgerOpen] = useState(false)
 
   useEffect(() => {
     window.engram
@@ -374,14 +380,22 @@ export function DashboardView({ onNewTopic }: DashboardViewProps = {}) {
       </Section>
 
       {stats.misconceptions_open > 0 && (
-        <Section title="Open misconceptions">
-          <div className="panel px-4 py-3 text-sm text-[var(--color-ink-danger)]">
-            {stats.misconceptions_open} open — surfaced during your next matching session.
-          </div>
+        <Section title="Misconceptions">
+          <button
+            onClick={() => setLedgerOpen(true)}
+            className="focus-ring panel px-4 py-3 flex items-center justify-between gap-3 w-full text-left hover:border-[var(--color-text-faint)] transition-colors"
+          >
+            <span className="text-sm text-[var(--color-text-primary)]">
+              {stats.misconceptions_open} open — noticed along the way, filed for re-testing.
+            </span>
+            <span className="text-xs text-[var(--color-ink-warm)] shrink-0">View →</span>
+          </button>
         </Section>
       )}
         </>
       )}
+
+      <MisconceptionLedger open={ledgerOpen} onClose={() => setLedgerOpen(false)} onGoNode={onGoNode} />
     </div>
   )
 }

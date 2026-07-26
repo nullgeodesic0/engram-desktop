@@ -328,7 +328,7 @@ export default function App() {
           )}
           {(visited.dashboard || view === 'dashboard') && (
             <KeepMounted active={view === 'dashboard'}>
-              <DashboardView onNewTopic={() => setView('learn')} />
+              <DashboardView onNewTopic={() => setView('learn')} onGoNode={goToNode} />
             </KeepMounted>
           )}
           {view === 'artifacts' && (
