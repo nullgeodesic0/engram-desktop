@@ -77,8 +77,10 @@ export function ScheduleDelta({
   return (
     <div className="panel-raised p-4 max-w-md flex flex-col gap-1.5">
       <div className="flex flex-col gap-1">
-        {rows.map((r) => (
-          <div key={r.node} className="flex items-baseline justify-between gap-3 text-xs">
+        {/* Index-suffixed for the same reason as StabilityMovement: one node
+            can be graded more than once in a single sitting. */}
+        {rows.map((r, i) => (
+          <div key={`${r.node}-${i}`} className="flex items-baseline justify-between gap-3 text-xs">
             <span className="text-[var(--color-text-dim)] truncate">{humanizeNodeId(r.node)}</span>
             <span className="label-data shrink-0 text-[var(--color-text-faint)]">
               {r.before}d → <span className="text-[var(--color-ink-warm)]">{r.after}d</span>
