@@ -69,7 +69,7 @@ function abbreviateOutsideMath(text: string, cap: number): string {
  * JobsRail. */
 export type RitualMark = { id: string; atIndex: number } & (
   | { kind: 'beat'; beat: string; content: string }
-  | { kind: 'crossing'; nodeId: string }
+  | { kind: 'crossing'; nodeId: string; verb?: string }
   | { kind: 'stamp' }
   | { kind: 'figure'; title: string | null; body: string }
   | { kind: 'atlas'; topic: string | null }
@@ -122,12 +122,22 @@ export const BeatMarkCard = memo(function BeatMarkCard({ beat, content }: { beat
 })
 
 /** The border-crossing between nodes — a dendrite line that grows across the
- * transcript with the new territory's name. */
-export const NodeCrossingDivider = memo(function NodeCrossingDivider({ nodeId }: { nodeId: string }) {
+ * transcript with the new territory's name. Learn crosses INTO new ground
+ * ("entering"); Review sweeps across ground already held ("moving to"), so
+ * the verb is the caller's to set. */
+export const NodeCrossingDivider = memo(function NodeCrossingDivider({
+  nodeId,
+  verb = 'entering',
+}: {
+  nodeId: string
+  verb?: string
+}) {
   return (
     <div className="flex items-center gap-3 my-3 ritual-crossing">
       <span className="h-px flex-1 bg-[var(--color-ink-warm-dim)] origin-left ritual-crossing-line" />
-      <span className="fig-caption shrink-0 text-[var(--color-ink-warm)]">entering {humanizeNodeId(nodeId)}</span>
+      <span className="fig-caption shrink-0 text-[var(--color-ink-warm)]">
+        {verb} {humanizeNodeId(nodeId)}
+      </span>
       <span className="h-px flex-1 bg-[var(--color-ink-warm-dim)] origin-right ritual-crossing-line" />
     </div>
   )
@@ -183,7 +193,7 @@ export const VerifySeal = memo(function VerifySeal() {
 
 export function MarkView({ mark }: { mark: RitualMark }) {
   if (mark.kind === 'beat') return <BeatMarkCard beat={mark.beat} content={mark.content} />
-  if (mark.kind === 'crossing') return <NodeCrossingDivider nodeId={mark.nodeId} />
+  if (mark.kind === 'crossing') return <NodeCrossingDivider nodeId={mark.nodeId} verb={mark.verb} />
   if (mark.kind === 'figure') return <FigureCard title={mark.title} body={mark.body} />
   if (mark.kind === 'atlas') return <AtlasBirth topic={mark.topic} />
   if (mark.kind === 'phase') return <Frontispiece phase={mark.phase} />
