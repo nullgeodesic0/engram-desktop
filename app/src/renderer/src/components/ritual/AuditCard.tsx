@@ -49,7 +49,15 @@ export const AuditCard = memo(function AuditCard({
             ? `${itemCount} item${itemCount === 1 ? '' : 's'} independently re-graded, blind to this session`
             : 'Items independently re-graded, blind to this session'}
         </div>
-        {verdict === 'pending' && <div className="fig-caption">awaiting verdict…</div>}
+        {/* Honest about where the verdict actually appears: the assessor's
+            result arrives as a background-agent notification the live event
+            stream never forwards (see the AUDIT doctrine comment in
+            shared/ritualFromTranscript.ts), so this card can only resolve when
+            the sitting is reopened or read in History. An "awaiting…" ellipsis
+            would promise an update this view will never receive. */}
+        {verdict === 'pending' && (
+          <div className="fig-caption">verdict lands in this sitting’s record — reopen to read it</div>
+        )}
         {verdict === 'agreed' && <div className="fig-caption">grading held — no disagreement</div>}
         {verdict === 'disputed' && (
           <div className="fig-caption">disagreed on {disputedNodes.map((n) => humanizeNodeId(n)).join(', ')}</div>
