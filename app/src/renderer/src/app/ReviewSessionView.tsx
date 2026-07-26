@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { PinTackIcon } from '../components/ui/PinTackIcon'
 import type { DueItem, ExportSittingFormat } from '../../../shared/types'
 import type { SessionEvent } from '../../../shared/sessionEvents'
 import type { BridgeAskRequest } from '../../../shared/bridgeProtocol'
@@ -112,6 +113,14 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
   const [sessionGrades, setSessionGrades] = useState<GradeResult[]>([])
   const [streakDays, setStreakDays] = useState<number | null>(null)
   const [chamber, setChamber] = useState(false)
+  // Pin for the current-item card (Task 2) — same grammar as the masthead/ticket
+  // pins elsewhere (PinTackIcon, warm-filled + raised chip). Resets per sitting
+  // alongside chamber, below.
+  const [probePinned, setProbePinned] = useState(false)
+  // The honest-blank affordance's readiness — true once the current item has sat
+  // unanswered for 45s. See the effect keyed on `current?.id` below for the timer
+  // itself; this just tracks whether it has fired.
+  const [honestBlankReady, setHonestBlankReady] = useState(false)
   const [momentumOn, setMomentumOn] = useState(true)
   // The 14-day horizon figure + holding count — fetched whenever the queue
   // empties (both `empty` and `done`, the two phases with no queue left to
@@ -180,6 +189,18 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
     onActivity?.({ active: phase === 'in-session', busy })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, busy])
+
+  // Honest-blank timer (Task 2) — starts fresh whenever the current item changes,
+  // clears on item change/unmount via the effect cleanup, and never fires outside
+  // `in-session` (a fresh item queued up while `ready`/`done` shouldn't arm it).
+  useEffect(() => {
+    setHonestBlankReady(false)
+    const itemId = queue[0]?.id
+    if (phase !== 'in-session' || !itemId) return
+    const t = setTimeout(() => setHonestBlankReady(true), 45000)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queue[0]?.id, phase])
 
   useEffect(() => {
     window.engram.lastSessionFor('review').then((id) => setHasPriorSession(id !== null))
@@ -284,6 +305,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
     setPhase('in-session')
     setSessionTotal(queue.length)
     setChamber(false)
+    setProbePinned(false)
     if (!resume) {
       setLastGrade(null)
       setLastGradeTopic(null)
@@ -538,9 +560,15 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
             </div>
           )}
           {current && (
+            // Already hoisted above ChatScrollRegion (a shrink-0 sibling, not a child
+            // of the flex-1 scroll wrapper below) — it never scrolls with the transcript
+            // regardless of pin state. "Pinned" here is therefore the layout-preserving
+            // choice from the brief: no position/hoist change needed, just the same
+            // pin grammar (PinTackIcon, warm-filled + raised chip) the masthead/ticket
+            // use, and `relative` so the tack can sit in the card's corner.
             <div
               key={current.id}
-              className="shrink-0 panel px-5 py-4 flex flex-col gap-3"
+              className="relative shrink-0 panel px-5 py-4 flex flex-col gap-3"
             >
               <div className="flex items-center justify-between gap-2">
                 <div>
@@ -554,6 +582,18 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
                 )}
               </div>
               <p className="text-sm text-[var(--color-text-primary)]">{current.probe}</p>
+              <button
+                onClick={() => setProbePinned((v) => !v)}
+                aria-label={probePinned ? 'Unpin probe' : 'Pin probe'}
+                title={probePinned ? 'Unpin' : 'Pin — keep this probe marked while you work it'}
+                className={`focus-ring no-press absolute bottom-1.5 right-1.5 h-5 w-5 rounded-full flex items-center justify-center transition-colors duration-[var(--dur-fast)] ${
+                  probePinned
+                    ? 'text-[var(--color-ink-warm)] bg-[var(--color-surface-3)]'
+                    : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]'
+                }`}
+              >
+                <PinTackIcon pinned={probePinned} size={14} />
+              </button>
             </div>
           )}
           {lastGrade && phase !== 'done' && (
@@ -628,6 +668,11 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
               chamber={chamber}
               onChamberChange={setChamber}
               inviteChamber={false}
+              assist={
+                honestBlankReady && !production.trim()
+                  ? { label: "I can't retrieve this", onUse: () => setProduction("I can't retrieve this one.") }
+                  : null
+              }
             />
           )}
 
