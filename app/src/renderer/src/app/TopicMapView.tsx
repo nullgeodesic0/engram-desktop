@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { TopicSummary, TopicGraph, MapAnnotations, NodeProvenance, ProvenanceEvent } from '../../../shared/types'
+import type { TopicSummary, TopicGraph, MapAnnotations, NodeProvenance, ProvenanceEvent, Misconception } from '../../../shared/types'
 import { RetentionCurve } from '../components/RetentionCurve'
 import { GraphView, EDGE_STYLE } from '../components/GraphView'
 import { GrowthScrubber } from '../components/GrowthScrubber'
@@ -115,6 +115,48 @@ function ProvenanceBlock({
   )
 }
 
+/** This node's open misconceptions — shown in both the node drawer and the
+ * full-node modal, right alongside Provenance. Deliberately quiet: no danger
+ * ink, no "you still owe this" framing, since a misconception is a recorded
+ * fact about the learner's model of the world (something noticed, filed for
+ * re-testing), not a failure — same absolve-never-pity voice LapseRite uses
+ * for a lapse. Renders nothing once loaded with zero items — no empty
+ * chrome for the common case (most nodes have none). */
+function NodeMisconceptions({
+  items,
+  loaded,
+  error,
+  compact,
+}: {
+  items: Misconception[]
+  loaded: boolean
+  error: boolean
+  compact: boolean
+}) {
+  const textSize = compact ? 'text-xs' : 'text-sm'
+  if (error) {
+    return <div className={`${textSize} text-[var(--color-text-faint)]`}>couldn’t read misconceptions</div>
+  }
+  if (!loaded) return <div className="fig-caption">reading misconceptions…</div>
+  if (items.length === 0) return null
+  return (
+    <div
+      className={`${textSize} text-[var(--color-text-dim)] border-l-2 border-[var(--color-ink-cool-dim)] bg-[var(--color-surface-2)]/40 rounded-r-md ${compact ? 'pl-2.5 pr-2 py-1.5' : 'pl-3 pr-2.5 py-2'}`}
+    >
+      <div className={`label-data uppercase tracking-wide text-[10px] text-[var(--color-ink-cool)] ${compact ? 'mb-1' : 'mb-1.5'}`}>
+        Filed here
+      </div>
+      <div className="flex flex-col gap-1.5">
+        {items.map((m) => (
+          <p key={m.id} className="leading-snug">
+            {m.description}
+          </p>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 interface TopicMapViewProps {
   /** Set by App.tsx when arriving from the ⌘K command palette's global node
    * search — selects that topic, waits for its graph to actually load, then
@@ -186,9 +228,20 @@ export function TopicMapView({
   // stale scrub position.
   const [replayActive, setReplayActive] = useState(false)
   const [replayT, setReplayT] = useState(0)
+  // The whole ledger, fetched once (unscoped by topic — window.engram.misconceptions()
+  // always returns everything) and filtered per-node below. null = still loading,
+  // a rejected read leaves it null forever and flips misconceptionsError instead —
+  // the drawer/modal render a quiet inline message rather than losing the whole map.
+  const [misconceptions, setMisconceptions] = useState<Misconception[] | null>(null)
+  const [misconceptionsError, setMisconceptionsError] = useState(false)
 
   function openProvenanceEvent(ev: ProvenanceEvent, topicId: string) {
     setHistoryDrawer({ historyKey: ev.kind === 'review' ? 'review' : topicId, sessionId: ev.sessionId, anchorIndex: ev.anchor })
+  }
+
+  function openMisconceptionsFor(topicId: string | null, nodeId: string | null): Misconception[] {
+    if (!misconceptions || !topicId || !nodeId) return []
+    return misconceptions.filter((m) => m.topic === topicId && m.node === nodeId && m.status === 'open')
   }
 
   useEffect(() => {
@@ -198,6 +251,13 @@ export function TopicMapView({
       if (ts.length > 0 && !deepLinkNode && !spotlightNode) setSelectedTopic(ts[0].topic)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    window.engram
+      .misconceptions()
+      .then(setMisconceptions)
+      .catch(() => setMisconceptionsError(true))
   }, [])
 
   useEffect(() => {
@@ -698,6 +758,13 @@ export function TopicMapView({
                 </div>
               )}
 
+              <NodeMisconceptions
+                items={openMisconceptionsFor(selectedTopic, selectedNode)}
+                loaded={misconceptions !== null}
+                error={misconceptionsError}
+                compact
+              />
+
               {provenance === null && <div className="fig-caption">reading provenance…</div>}
               {provenance !== null && (
                 <ProvenanceBlock
@@ -861,6 +928,13 @@ export function TopicMapView({
                   </div>
                 )
             )}
+
+            <NodeMisconceptions
+              items={openMisconceptionsFor(selectedTopic, openNode)}
+              loaded={misconceptions !== null}
+              error={misconceptionsError}
+              compact={false}
+            />
 
             {provenance === null && <div className="fig-caption">reading provenance…</div>}
             {provenance !== null && (
