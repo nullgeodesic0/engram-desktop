@@ -1,10 +1,10 @@
-import { memo, useMemo } from 'react'
+import { Fragment, memo, useMemo } from 'react'
 import type { ChatMessage } from '../../../shared/chatMessages'
 import { parseBeatSegments } from '../../../shared/beatLabelParser'
 import { BeatCard, PlainDialogueBlock } from './BeatCard'
 import { MathRenderer } from './MathRenderer'
 import { InkNode } from './ui/InkNode'
-import { parseProbeHeader } from '../../../shared/probeHeader'
+import { splitAroundProbeHeader } from '../../../shared/probeHeader'
 import { ProbeCard } from './ritual/ProbeCard'
 
 export function fileName(path: string): string {
@@ -76,11 +76,20 @@ export const ChatMessageView = memo(function ChatMessageView({ message, onEditRe
       <div className="flex flex-col gap-3 flex-1 min-w-0">
         {segments.map((seg, i) => {
           if (seg.beat) return <BeatCard key={i} beat={seg.beat} text={seg.text} />
-          // A per-item progress marker opening the segment means this is the
-          // moment of asking — set it as a probe card. Falls through to plain
-          // prose whenever the marker isn't there, which is most segments.
-          const probe = parseProbeHeader(seg.text)
-          if (probe) return <ProbeCard key={i} header={probe} />
+          // A per-item progress marker means this is the moment of asking —
+          // set it as a probe card. The marker doesn't have to open the
+          // segment (a tutor often leads with a line of transition), so any
+          // prose before it still renders as prose. Falls through entirely
+          // when there's no marker, which is most segments.
+          const probe = splitAroundProbeHeader(seg.text)
+          if (probe) {
+            return (
+              <Fragment key={i}>
+                {probe.before && <PlainDialogueBlock text={probe.before} />}
+                <ProbeCard header={probe.header} />
+              </Fragment>
+            )
+          }
           return <PlainDialogueBlock key={i} text={seg.text} />
         })}
       </div>
