@@ -148,6 +148,28 @@ export interface Misconception {
   status: 'open' | 'resolved'
 }
 
+/** The engine's one-active-experiment-at-a-time record, as `engram.py`
+ * writes it into experiments.json when `experiment start` runs (see
+ * cmd_experiment's "start" action) — id, seed, and question are set once and
+ * never edited afterwards. `EngramStats.active_experiment` only ever carries
+ * this record's `question` string (or null); this fuller shape comes from
+ * `experiment list` filtered to `status === "active"`, the read path Task 1's
+ * action map already allows.
+ *
+ * UNVERIFIED against live data as of this writing — no experiment has ever
+ * run on this install (`stats().active_experiment` and `experiment status`
+ * both read null/"no active experiment" here). This type mirrors exactly
+ * what cmd_experiment's "start" action constructs and writes; it has not
+ * been seen populated. */
+export interface ActiveExperiment {
+  id: string
+  question: string
+  /** ISO date (YYYY-MM-DD) the design was registered — `today().isoformat()`. */
+  started: string
+  arms: string[]
+  metric: string
+}
+
 export interface TopicSettings {
   systemPromptExtra: string
   contextFiles: string[]
@@ -218,6 +240,26 @@ export interface EnvironmentCheckResult {
   claudeOk: boolean
   claudePath?: string
   claudeError?: string
+}
+
+/** engram.py's own health check (`doctor`) — state-dir writability, the
+ * learner model, and every topic graph on disk, walked node by node. Shells
+ * out and re-reads every graph file, so this only ever runs on demand (a
+ * button), never on mount. See engram.py's cmd_doctor for the exact fields
+ * written; verified live against this machine's real state. */
+export interface DoctorResult {
+  python: string
+  home: string
+  writable: boolean
+  model_ok: boolean
+  topics: number
+  nodes: number
+  receipts: number
+  pending_verify: number
+  artifacts: number
+  issues: string[]
+  notes: string[]
+  ok: boolean
 }
 
 export interface ReceiptItem {

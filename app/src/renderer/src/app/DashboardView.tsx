@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { EngramStats, ReceiptsHistory, ReceiptItem, TopicGraph } from '../../../shared/types'
+import type { EngramStats, ReceiptsHistory, ReceiptItem, TopicGraph, ActiveExperiment } from '../../../shared/types'
 import { CoachSessionPanel } from '../components/CoachSessionPanel'
 import { SkeletonBar, SkeletonGrid } from '../components/Skeleton'
 import { StreakCalendar } from '../components/StreakCalendar'
@@ -16,6 +16,7 @@ import { allPicks } from '../shared/calibrationStore'
 import { computeWeekDigest } from '../shared/weekDigest'
 import { friendlyErrorText } from '../shared/friendlyError'
 import { MisconceptionLedger } from '../components/MisconceptionLedger'
+import { ExperimentBanner } from '../components/ExperimentBanner'
 
 function gradeColor(grade: string | null): string {
   if (grade === 'recalled') return 'var(--color-ink-warm)'
@@ -69,11 +70,21 @@ export function DashboardView({ onNewTopic, onGoNode }: DashboardViewProps = {})
   const [detail, setDetail] = useState<{ label: string; items: ReceiptItem[] } | null>(null)
   const [graphs, setGraphs] = useState<Record<string, TopicGraph> | null>(null)
   const [ledgerOpen, setLedgerOpen] = useState(false)
+  const [activeExperiment, setActiveExperiment] = useState<ActiveExperiment | null>(null)
 
   useEffect(() => {
     window.engram
       .stats()
-      .then(setStats)
+      .then((s) => {
+        setStats(s)
+        // stats.active_experiment is only ever the experiment's question
+        // string (or null) — see engram.py's compute_stats. Gate the richer
+        // fetch (started date, arms) on that so a fresh install with no
+        // experiment ever run never pays a second subprocess call for this.
+        if (typeof s.active_experiment === 'string' && s.active_experiment.length > 0) {
+          window.engram.activeExperiment().then(setActiveExperiment)
+        }
+      })
       .catch((e: Error) => setError(e.message))
     window.engram.receiptsHistory().then(setHistory)
   }, [])
@@ -158,6 +169,8 @@ export function DashboardView({ onNewTopic, onGoNode }: DashboardViewProps = {})
           <StatBlock label="Streak" value={`${stats.streak_days}d`} />
         </div>
       </header>
+
+      <ExperimentBanner experiment={activeExperiment} />
 
       {stats.topics.length === 0 ? (
         <div className="flex flex-col items-start gap-3 py-10">

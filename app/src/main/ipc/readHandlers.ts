@@ -10,7 +10,7 @@ import { getTopicsCached } from '../engramCli/topicsCache'
 import { readReceiptsHistory } from '../engramCli/receiptsHistory'
 import { getMapAnnotations } from '../session/mapAnnotations'
 import { nodeProvenance } from '../session/sessionScan'
-import type { TopicGraph, NodeProvenance, Misconception } from '../../shared/types'
+import type { TopicGraph, NodeProvenance, Misconception, ActiveExperiment } from '../../shared/types'
 
 // misconceptions.json is engine-written but hand-editable — shape-guard each
 // row rather than trusting the file, and drop malformed entries instead of
@@ -25,6 +25,24 @@ function isMisconception(row: unknown): row is Misconception {
     typeof r.node === 'string' &&
     typeof r.description === 'string' &&
     (r.status === 'open' || r.status === 'resolved')
+  )
+}
+
+// experiments.json is engine-written but hand-editable, same discipline as
+// isMisconception above — shape-guard each row and only trust one whose
+// status is currently "active" (settled/never-started rows are cheap to
+// hand-edit malformed and must not surface as a live banner).
+function isActiveExperiment(row: unknown): row is ActiveExperiment {
+  if (typeof row !== 'object' || row === null) return false
+  const r = row as Record<string, unknown>
+  return (
+    r.status === 'active' &&
+    typeof r.id === 'string' &&
+    typeof r.question === 'string' &&
+    typeof r.started === 'string' &&
+    typeof r.metric === 'string' &&
+    Array.isArray(r.arms) &&
+    r.arms.every((a) => typeof a === 'string')
   )
 }
 
@@ -53,6 +71,14 @@ export function registerReadHandlers(): void {
   ipcMain.handle('engram:misconceptions', async (): Promise<Misconception[]> => {
     const rows = await engramRead<unknown[]>('misconception', ['list'])
     return Array.isArray(rows) ? rows.filter(isMisconception) : []
+  })
+  // `stats` only ever carries this experiment's `question` string (or null) —
+  // see engram.py's compute_stats. The fuller record (started date, arms,
+  // metric) requires the `experiment list` read path (Task 1's action map),
+  // filtered here to whichever row is currently active.
+  ipcMain.handle('engram:activeExperiment', async (): Promise<ActiveExperiment | null> => {
+    const rows = await engramRead<unknown[]>('experiment', ['list'])
+    return (Array.isArray(rows) ? rows.find(isActiveExperiment) : undefined) ?? null
   })
   ipcMain.handle('mapAnnotations:get', (_e, topicId: string) => getMapAnnotations(topicId))
 
