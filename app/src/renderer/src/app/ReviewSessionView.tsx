@@ -20,7 +20,7 @@ import { GradeResultCard } from '../components/GradeResultCard'
 import { SkeletonBar } from '../components/Skeleton'
 import { SessionCeremony } from '../components/ritual/Bookends'
 import { ScheduleDelta } from '../components/ritual/ScheduleDelta'
-import { SessionHistoryDrawer, exportSittingTranscript } from '../components/SessionHistoryDrawer'
+import { SessionHistoryDrawer, exportSittingTranscript, buildHistoryTimeline, type GradeBatch } from '../components/SessionHistoryDrawer'
 import { Button } from '../components/ui/Button'
 import { friendlyErrorText } from '../shared/friendlyError'
 import { recordConfidence, latestPickFor } from '../shared/calibrationStore'
@@ -118,7 +118,6 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
   const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false)
   const [exportingFormat, setExportingFormat] = useState<ExportSittingFormat | null>(null)
   const [exportStatus, setExportStatus] = useState<{ text: string; failed: boolean } | null>(null)
-  const [lastGrade, setLastGrade] = useState<GradeResult | null>(null)
   // The topic of whichever item `lastGrade` graded — GradeResult itself only
   // carries `node` (see shared/gradeResult.ts), and the interval ladder
   // needs topic+node to filter receipts (SessionHistoryDrawer's ladders do
@@ -127,10 +126,20 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
   // tool_result time — by then `refreshQueue()` may already have shifted
   // the queue past the item that was just graded.
   const [lastGradeTopic, setLastGradeTopic] = useState<string | null>(null)
-  /** Message index the current verdict belongs after — same pinning the ritual
-   * marks use, so the grade card keeps its chronological place above the
-   * crossing that follows it. */
-  const [lastGradeAtIndex, setLastGradeAtIndex] = useState(0)
+  /** Every verdict this sitting has produced, each pinned to the message index
+   * it landed on — the same convention the ritual marks use, so a grade keeps
+   * its chronological place above the crossing that follows it.
+   *
+   * A list rather than a single card because these are DURABLE: a receipt's
+   * tool_result is in the transcript, so reopening a sitting rebuilds all of
+   * them (see the resume branch below) exactly as the history drawer does.
+   * The previous single-card version showed only the newest and lost the rest
+   * on reopen. */
+  const [gradeBatches, setGradeBatches] = useState<GradeBatch[]>([])
+  /** Only the freshly-landed card performs "the turn" (face-down → flip);
+   * replayed ones render revealed, since their reveal already happened. */
+  const [revealBatchId, setRevealBatchId] = useState<string | null>(null)
+  const gradeSeq = useRef(0)
   const [sessionGrades, setSessionGrades] = useState<GradeResult[]>([])
   const [streakDays, setStreakDays] = useState<number | null>(null)
   const [chamber, setChamber] = useState(false)
@@ -349,13 +358,18 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
               // A receipt just landed — the node's state (and the palette's
               // stale-cached view of it) has changed.
               invalidateSearchIndex()
-              setLastGrade(result)
+
               setLastGradeTopic(pendingRateTopic.current)
-              // Pin the verdict where it landed. Rendering it at the
-              // transcript's tail put it BELOW the "moving to …" crossing that
-              // follows moments later — the wrong order: you're graded on the
-              // item you just finished, then the tutor moves on.
-              setLastGradeAtIndex(messagesRef.current.length)
+              // Pin the verdict where it landed. Rendering at the transcript's
+              // tail put it BELOW the "moving to …" crossing that follows
+              // moments later — the wrong order: you're graded on the item you
+              // just finished, then the tutor moves on.
+              const batchId = `live-g${gradeSeq.current++}`
+              setRevealBatchId(batchId)
+              setGradeBatches((prev) => [
+                ...prev,
+                { id: batchId, atIndex: messagesRef.current.length, results: [result], sourceIndex: -1, date: null },
+              ])
               setSessionGrades((prev) => [...prev, result])
               // The lapse rite — a quiet marker, not the danger-styled grade
               // card's alarm (see LapseRite's doctrine comment in Marks.tsx).
@@ -421,10 +435,11 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
     // session start; `current` narrows it further from the transcript.
     refreshQueue()
     if (!resume) {
-      setLastGrade(null)
       setLastGradeTopic(null)
       setSessionGrades([])
       setMarks([])
+      setGradeBatches([])
+      setRevealBatchId(null)
     }
 
     // Hydrate prior chat history before spawning, same as Learn — resume continues the
@@ -443,6 +458,11 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
         // clobbered by a stray re-hydration. The opening docket never replays here
         // (it's one-time — see deriveRitualMarks's doctrine comment).
         setMarks((prev) => (prev.length === 0 ? deriveRitualMarks(lines) : prev))
+        // Rebuild every verdict this sitting already produced, from the same
+        // receipt tool_results the history drawer reads — so reopening shows
+        // the grades in place rather than a transcript with the verdicts
+        // silently missing. Same "only when empty" guard as the marks.
+        setGradeBatches((prev) => (prev.length === 0 ? buildHistoryTimeline(lines).grades : prev))
       }
     } else {
       setMessages([])
@@ -579,18 +599,23 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
   }, [current?.id, phase])
 
   const blocked = rateLimit !== null && isBlockingRateLimitStatus(rateLimit.status)
-  // Built once so the interleave below can place it at exactly one index
-  // without repeating the props (and without two cards ever rendering).
-  const gradeCard =
-    lastGrade && phase !== 'done' ? (
-      <GradeResultCard
-        key={`${lastGrade.node}-${sessionGrades.length}`}
-        result={lastGrade}
-        confidenceLabel={latestPickFor(lastGrade.node)?.label ?? null}
-        reveal
-        topic={lastGradeTopic ?? undefined}
-      />
-    ) : null
+  /** Cards for one message index, in landing order. `atIndex > messages.length`
+   * folds onto the last message so a verdict that arrived after the final turn
+   * still renders (mirrors the marks' own tail clause). */
+  const gradeCardsAt = (i: number) =>
+    gradeBatches
+      .filter((b) => b.atIndex === i || (i === messages.length - 1 && b.atIndex > messages.length))
+      .flatMap((b) =>
+        b.results.map((r, ri) => (
+          <GradeResultCard
+            key={`${b.id}-${ri}`}
+            result={r}
+            confidenceLabel={latestPickFor(r.node)?.label ?? null}
+            reveal={b.id === revealBatchId}
+            topic={b.id === revealBatchId ? lastGradeTopic ?? undefined : undefined}
+          />
+        )),
+      )
   const lastUserMessageId = useMemo(() => [...messages].reverse().find((m) => m.role === 'user')?.id ?? null, [messages])
   const latestTicket = useMemo(() => extractTicketFromMessages(messages), [messages])
 
@@ -854,12 +879,10 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
                       message={m}
                       onEditResend={m.role === 'user' && m.id === lastUserMessageId && !busy ? editResend : undefined}
                     />
-                    {/* The verdict sits at the index it landed on, BEFORE any
+                    {/* Verdicts sit at the index they landed on, BEFORE any
                         mark pinned to the same spot — you're graded on the item
                         you just finished, and only then does the tutor move on. */}
-                    {gradeCard &&
-                      (lastGradeAtIndex === i + 1 || (i === messages.length - 1 && lastGradeAtIndex > messages.length)) &&
-                      gradeCard}
+                    {gradeCardsAt(i + 1)}
                     {marks
                       .filter((k) => k.atIndex === i + 1 || (i === messages.length - 1 && k.atIndex > messages.length))
                       .map((k) => (
@@ -867,8 +890,8 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
                       ))}
                   </Fragment>
                 ))}
-                {/* Grade landed before any message rendered (index 0). */}
-                {gradeCard && lastGradeAtIndex === 0 && gradeCard}
+                {/* Verdicts that landed before any message rendered. */}
+                {gradeCardsAt(0)}
                 {busy && (
                   <div className="flex items-center gap-2">
                     <TypingIndicator />
