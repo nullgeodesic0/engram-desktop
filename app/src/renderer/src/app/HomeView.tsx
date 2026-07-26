@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { EngramStats, TopicSummary, TopicGraph, EnvironmentCheckResult } from '../../../shared/types'
+import type { EngramStats, TopicSummary, TopicGraph, EnvironmentCheckResult, ActiveExperiment } from '../../../shared/types'
 import { SkeletonBar, SkeletonGrid } from '../components/Skeleton'
 import { emitPulse } from '../../../shared/neuralFieldBus'
 import { humanizeNodeId } from '../../../shared/humanizeId'
@@ -12,6 +12,7 @@ import { DendriteDivider } from '../components/ui/DendriteDivider'
 import { StatBlock } from '../components/ui/StatBlock'
 import { Button } from '../components/ui/Button'
 import { EnvironmentSteps } from '../components/EnvironmentSteps'
+import { ExperimentBanner } from '../components/ExperimentBanner'
 import { computeDueBuckets } from '../shared/dueBuckets'
 
 const LAST_SEEN_STREAK_KEY = 'engram-desktop:last-seen-streak-days'
@@ -64,9 +65,17 @@ export function HomeView({ onGoReview, onGoCoach, onGoTopic, onNewTopic }: HomeV
   const [toastQueue, setToastQueue] = useState<AchievementDef[]>([])
   const [forecast, setForecast] = useState<number[] | null>(null)
   const [duePulse, setDuePulse] = useState(false)
+  const [activeExperiment, setActiveExperiment] = useState<ActiveExperiment | null>(null)
   useEffect(() => {
     window.engram.stats().then(async (s) => {
       setStats(s)
+      // stats.active_experiment is only ever the experiment's question string
+      // (or null) — see engram.py's compute_stats. Gate the richer fetch
+      // (started date, arms) on that so a fresh install with no experiment
+      // ever run never pays a second subprocess call for this.
+      if (typeof s.active_experiment === 'string' && s.active_experiment.length > 0) {
+        window.engram.activeExperiment().then(setActiveExperiment)
+      }
       // A genuinely new streak day, not just "streak_days > 0" on every visit —
       // localStorage is fine here (renderer-local, decorative, not app state).
       const lastSeen = Number(localStorage.getItem(LAST_SEEN_STREAK_KEY) ?? '0')
@@ -172,6 +181,8 @@ export function HomeView({ onGoReview, onGoCoach, onGoTopic, onNewTopic }: HomeV
           </div>
         )}
       </header>
+
+      <ExperimentBanner experiment={activeExperiment} />
 
       {flashback && (
         <div className="panel px-5 py-4 flex flex-col gap-1.5">

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type {
   BackupInfo,
   DescribeArchiveResult,
+  DoctorResult,
   LearnerModel,
   NotifierSettings,
   UpdateCheckResult,
@@ -13,6 +14,7 @@ import { Modal } from '../components/ui/Modal'
 import { DendriteDivider } from '../components/ui/DendriteDivider'
 import { CopyButton } from '../components/ui/CopyButton'
 import { soundOn, setSoundOn } from '../shared/soundscape'
+import { friendlyErrorText } from '../shared/friendlyError'
 
 // Mirrors docs/development.md's "Packaged install flow" exactly — keep the two
 // in sync if the packaging steps ever change.
@@ -74,6 +76,55 @@ function formatWhen(iso: string): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return iso
   return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+}
+
+/** engram.py's `doctor` health check, rendered the same way EnvironmentSteps
+ * shows the claude-CLI / plugin checks — a status row, then any issues called
+ * out plainly (danger ink), with hand-editable-state notes tucked behind a
+ * disclosure the same way UpdateStatusLine tucks its update commands. */
+function DoctorFindings({ doctor }: { doctor: DoctorResult }) {
+  return (
+    <div className="flex flex-col gap-3">
+      <div className={`panel px-4 py-3 flex items-start gap-3 ${doctor.ok ? '' : 'border-[var(--color-ink-danger-dim)]'}`}>
+        <span className={doctor.ok ? 'text-[var(--color-ink-warm)]' : 'text-[var(--color-ink-danger)]'}>
+          {doctor.ok ? '✓' : '✕'}
+        </span>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm text-[var(--color-text-primary)]">
+            {doctor.ok ? 'Everything checks out' : `${doctor.issues.length} issue${doctor.issues.length === 1 ? '' : 's'} found`}
+          </div>
+          <div className="label-data text-xs text-[var(--color-text-faint)] mt-1">
+            {doctor.topics} topic{doctor.topics === 1 ? '' : 's'} · {doctor.nodes} node{doctor.nodes === 1 ? '' : 's'} ·{' '}
+            {doctor.receipts} receipt{doctor.receipts === 1 ? '' : 's'} · {doctor.artifacts} artifact
+            {doctor.artifacts === 1 ? '' : 's'} · python {doctor.python}
+          </div>
+        </div>
+      </div>
+      {doctor.issues.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          {doctor.issues.map((issue, i) => (
+            <div key={i} className="panel border-[var(--color-ink-danger-dim)] px-3 py-2 text-xs text-[var(--color-ink-danger)]">
+              {issue}
+            </div>
+          ))}
+        </div>
+      )}
+      {doctor.notes.length > 0 && (
+        <details className="fig-caption">
+          <summary className="cursor-pointer">
+            {doctor.notes.length} note{doctor.notes.length === 1 ? '' : 's'}
+          </summary>
+          <div className="mt-2 flex flex-col gap-1.5 not-italic">
+            {doctor.notes.map((note, i) => (
+              <div key={i} className="text-xs text-[var(--color-text-dim)]">
+                {note}
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+    </div>
+  )
 }
 
 type RestoreStep =
@@ -303,6 +354,10 @@ export function SettingsView() {
   const [restoreOpen, setRestoreOpen] = useState(false)
   const [update, setUpdate] = useState<UpdateCheckResult | null>(null)
   const [updateChecking, setUpdateChecking] = useState(false)
+  const [version, setVersion] = useState<string | null>(null)
+  const [doctor, setDoctor] = useState<DoctorResult | null>(null)
+  const [doctorRunning, setDoctorRunning] = useState(false)
+  const [doctorError, setDoctorError] = useState<string | null>(null)
 
   function refresh() {
     window.engram.model().then(setModel)
@@ -311,6 +366,7 @@ export function SettingsView() {
     window.engram.getLoginItemSettings().then((s) => setLaunchAtLoginState(s.openAtLogin))
     window.engram.getBackupInfo().then(setBackupInfo)
     window.engram.getCachedUpdateCheck().then(setUpdate)
+    window.engram.getVersion().then(setVersion)
   }
 
   useEffect(refresh, [])
@@ -412,6 +468,21 @@ export function SettingsView() {
       setUpdate(await window.engram.checkForUpdate())
     } finally {
       setUpdateChecking(false)
+    }
+  }
+
+  // On demand only — never on mount. doctor() shells out to engram.py and
+  // re-reads every topic graph on disk; Settings shouldn't pay that cost on
+  // every open, only when asked.
+  async function runDoctor() {
+    setDoctorRunning(true)
+    setDoctorError(null)
+    try {
+      setDoctor(await window.engram.doctor())
+    } catch (e) {
+      setDoctorError(friendlyErrorText(e instanceof Error ? e.message : String(e)).headline)
+    } finally {
+      setDoctorRunning(false)
     }
   }
 
@@ -719,9 +790,34 @@ export function SettingsView() {
           </div>
         </div>
         <DendriteDivider />
+        {version && (
+          <div className="text-sm text-[var(--color-text-dim)]">
+            Version <span className="label-data text-[var(--color-text-primary)]">{version}</span>
+          </div>
+        )}
         {update ? <UpdateStatusLine update={update} /> : <div className="fig-caption">not checked yet this launch</div>}
         <Button variant="ghost" onClick={recheckUpdate} disabled={updateChecking} className="self-start">
           {updateChecking ? 'Checking…' : 'Check for updates'}
+        </Button>
+      </div>
+
+      <div className="panel px-5 py-5 flex flex-col gap-3">
+        <div>
+          <div className="text-sm text-[var(--color-text-primary)]">Diagnostics</div>
+          <div className="text-xs text-[var(--color-text-faint)] mt-0.5">
+            Runs engram.py’s own health check — state-dir writability, the learner model, and every topic graph on
+            disk. Nothing runs until you ask for it below.
+          </div>
+        </div>
+        <DendriteDivider />
+        {doctor && <DoctorFindings doctor={doctor} />}
+        {doctorError && (
+          <div className="panel border-[var(--color-ink-danger-dim)] px-3 py-2 text-xs text-[var(--color-ink-danger)]">
+            {doctorError}
+          </div>
+        )}
+        <Button variant="ghost" onClick={runDoctor} disabled={doctorRunning} className="self-start">
+          {doctorRunning ? 'Checking…' : doctor ? 'Run again' : 'Run diagnostics'}
         </Button>
       </div>
 
