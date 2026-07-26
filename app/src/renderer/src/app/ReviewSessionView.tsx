@@ -19,6 +19,7 @@ import { parseGradeResult, lapseReturnDate, type GradeResult } from '../../../sh
 import { GradeResultCard } from '../components/GradeResultCard'
 import { SkeletonBar } from '../components/Skeleton'
 import { SessionCeremony } from '../components/ritual/Bookends'
+import { ScheduleDelta } from '../components/ritual/ScheduleDelta'
 import { SessionHistoryDrawer, exportSittingTranscript } from '../components/SessionHistoryDrawer'
 import { Button } from '../components/ui/Button'
 import { friendlyErrorText } from '../shared/friendlyError'
@@ -685,6 +686,11 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
                 heading="Queue clear"
                 label="items"
               />
+              {/* Review's queue is mixed-topic, so ScheduleDelta (like IntervalLadder)
+                  matches by node id alone rather than a single topic prop; it renders
+                  its own panel only when at least one row (or the all-lapsed line)
+                  survives, so nothing empty ever shows up here. */}
+              <ScheduleDelta results={sessionGrades} />
               {horizonBuckets && <ReviewHorizon buckets={horizonBuckets} holdingCount={holdingCount} />}
             </div>
           )}

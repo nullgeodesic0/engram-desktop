@@ -2,6 +2,7 @@ import { memo } from 'react'
 import { GradeTally } from '../GradeTally'
 import type { GradeResult } from '../../../../shared/gradeResult'
 import { humanizeNodeId } from '../../../../shared/humanizeId'
+import { StabilityMovement } from '../charts/StabilityMovement'
 
 /** Ceremonial first element of a Learn session's transcript. */
 /** A single ceremonial opener line — the topic title and frontier node live
@@ -62,16 +63,7 @@ export const SessionCeremony = memo(function SessionCeremony({
         {heading}
       </div>
       <GradeTally results={results} streakDays={streakDays} label={label} />
-      <div className="flex flex-col gap-1">
-        {results.map((r, i) => (
-          <div key={`${r.node}-${i}`} className="flex items-baseline justify-between gap-3 text-xs">
-            <span className="text-[var(--color-text-dim)] truncate">{humanizeNodeId(r.node)}</span>
-            <span className="label-data shrink-0 text-[var(--color-text-faint)]">
-              s {(r.sBefore ?? 0).toFixed(1)} → <span className="text-[var(--color-ink-warm)]">{(r.sAfter ?? 0).toFixed(1)}</span>
-            </span>
-          </div>
-        ))}
-      </div>
+      <StabilityMovement results={results} />
       {nextDueValue != null && (
         <div className="fig-caption">
           Fig. — earliest return in {nextDueValue} {nextDueValue === 1 ? 'day' : 'days'}
