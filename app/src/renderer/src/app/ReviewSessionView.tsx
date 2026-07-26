@@ -30,6 +30,7 @@ import { InkWell } from '../components/ritual/InkWell'
 import { FlowChain } from '../components/ritual/FlowChain'
 import { trailingRecalled } from '../../../shared/gradeResult'
 import { invalidateSearchIndex } from '../shared/searchIndex'
+import { computeDueBuckets } from '../shared/dueBuckets'
 import { MarkView, type RitualMark } from '../components/ritual/Marks'
 import type { ReviewDocketItem } from '../components/ritual/ReviewDocket'
 import { deriveRitualMarks } from '../../../shared/ritualFromTranscript'
@@ -39,44 +40,13 @@ type Phase = 'loading' | 'empty' | 'ready' | 'in-session' | 'done' | 'closed-une
 const HORIZON_DAYS = 14
 const HOLDING_STABILITY_DAYS = 21
 
-/** due() only ever returns items already due (see readHandlers.ts's
- * `engram:due`) — there's no "next due" query on the engine side. Both
- * surfaces that have no queue to read from (`empty`, and `done` once the
- * queue clears) instead walk every topic graph's own fsrs.due (same source
- * HomeView's 7-day forecast reads, same non-new filter, same local-date
- * discipline — getFullYear/Month/Date, never toISOString), extended here to
- * a 14-day horizon. The same walk also counts nodes already at
- * fsrs.s >= HOLDING_STABILITY_DAYS in the same pass, rather than a second
- * walk over the same graphs just to get a second number. */
-async function computeReviewHorizon(): Promise<{ buckets: number[]; holdingCount: number }> {
-  const topics = await window.engram.topics()
-  const buckets = new Array(HORIZON_DAYS).fill(0) as number[]
-  let holdingCount = 0
-  const today = new Date()
-  const dayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate())
-  await Promise.all(
-    topics.map(async (t) => {
-      try {
-        const g = (await window.engram.topicGraph(t.topic)) as {
-          nodes?: Record<string, { state?: string; fsrs?: { due?: string | null; s?: number | null } }>
-        }
-        if (!g?.nodes) return
-        for (const node of Object.values(g.nodes)) {
-          const s = node?.fsrs?.s
-          if (typeof s === 'number' && s >= HOLDING_STABILITY_DAYS) holdingCount += 1
-          const due = node?.fsrs?.due
-          if (typeof due !== 'string' || node?.state === 'new') continue
-          const d = new Date(`${due}T00:00:00`)
-          const diffDays = Math.floor((d.getTime() - dayStart.getTime()) / 86400000)
-          if (diffDays >= 0 && diffDays < HORIZON_DAYS) buckets[diffDays] += 1
-        }
-      } catch {
-        // A topic with an unreadable graph just doesn't contribute.
-      }
-    }),
-  )
-  return { buckets, holdingCount }
-}
+// due() only ever returns items already due (see readHandlers.ts's
+// `engram:due`) — there's no "next due" query on the engine side. Both
+// surfaces that have no queue to read from (`empty`, and `done` once the
+// queue clears) instead read the shared `computeDueBuckets` walk (see
+// shared/dueBuckets.ts — the same walk HomeView's 7-day forecast uses,
+// extended here to 14 days), which also folds in the holding-count pass so
+// there's still only one walk over the topic graphs, not two.
 
 function looksLikeRateCall(input: Record<string, unknown>): boolean {
   const command = String(input.command ?? '')
@@ -145,7 +115,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
   const [momentumOn, setMomentumOn] = useState(true)
   // The 14-day horizon figure + holding count — fetched whenever the queue
   // empties (both `empty` and `done`, the two phases with no queue left to
-  // read from), null until the first computeReviewHorizon() resolves so the
+  // read from), null until the first refreshHorizon() resolves so the
   // panel can skeleton rather than flash a false "nothing scheduled".
   const [horizonBuckets, setHorizonBuckets] = useState<number[] | null>(null)
   const [holdingCount, setHoldingCount] = useState(0)
@@ -184,7 +154,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
   }
 
   function refreshHorizon() {
-    computeReviewHorizon().then(({ buckets, holdingCount: holding }) => {
+    computeDueBuckets(HORIZON_DAYS, HOLDING_STABILITY_DAYS).then(({ buckets, holdingCount: holding }) => {
       setHorizonBuckets(buckets)
       setHoldingCount(holding)
     })

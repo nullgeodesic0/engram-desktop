@@ -12,6 +12,7 @@ import { DendriteDivider } from '../components/ui/DendriteDivider'
 import { StatBlock } from '../components/ui/StatBlock'
 import { Button } from '../components/ui/Button'
 import { EnvironmentSteps } from '../components/EnvironmentSteps'
+import { computeDueBuckets } from '../shared/dueBuckets'
 
 const LAST_SEEN_STREAK_KEY = 'engram-desktop:last-seen-streak-days'
 const LAST_SEEN_DUE_KEY = 'engram-desktop:last-seen-due-now'
@@ -121,34 +122,11 @@ export function HomeView({ onGoReview, onGoCoach, onGoTopic, onNewTopic }: HomeV
   }, [])
 
   // 7-day due forecast, computed from the topic graphs' own fsrs.due dates
-  // (the engine's `due` command has no future horizon; the graphs on disk do).
+  // (the engine's `due` command has no future horizon; the graphs on disk
+  // do) — shared walk, see shared/dueBuckets.ts (also used by Review's
+  // 14-day horizon; behavior here is unchanged, just extracted).
   useEffect(() => {
-    window.engram.topics().then(async (ts) => {
-      const buckets = new Array(7).fill(0) as number[]
-      const today = new Date()
-      const dayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate())
-      await Promise.all(
-        ts.map(async (t) => {
-          try {
-            const g = (await window.engram.topicGraph(t.topic)) as {
-              nodes?: Record<string, { state?: string; fsrs?: { due?: string | null } }>
-            }
-            if (!g?.nodes) return
-            for (const node of Object.values(g.nodes)) {
-              const due = node?.fsrs?.due
-              if (typeof due !== 'string' || node?.state === 'new') continue
-              const d = new Date(`${due}T00:00:00`)
-              const diffDays = Math.floor((d.getTime() - dayStart.getTime()) / 86400000)
-              const idx = Math.min(6, Math.max(0, diffDays))
-              if (diffDays <= 6) buckets[idx] += 1
-            }
-          } catch {
-            // A topic with an unreadable graph just doesn't contribute.
-          }
-        }),
-      )
-      setForecast(buckets)
-    })
+    computeDueBuckets(7).then(({ buckets }) => setForecast(buckets))
   }, [])
 
   const inProgress = topics?.filter((t) => t.states.new > 0 || t.states.learning > 0) ?? []
