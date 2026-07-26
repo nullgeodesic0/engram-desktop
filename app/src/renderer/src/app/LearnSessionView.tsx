@@ -1355,7 +1355,10 @@ export function LearnSessionView({
     // children below to be allowed to shrink and scroll instead of growing forever.
     // In a live session the padding tightens — the transcript owns the window.
     <div
-      className={`h-full min-h-0 flex flex-col w-full ${started ? 'px-6 pt-1.5 pb-5 gap-2' : 'p-8 gap-4'}`}
+      // In a session the masthead rides right up against the window chrome
+      // (pt-0.5) and the gap below it does the separating instead — the chat
+      // gains the room the old top padding was holding.
+      className={`h-full min-h-0 flex flex-col w-full ${started ? 'px-6 pt-0.5 pb-5 gap-3' : 'p-8 gap-4'}`}
       onMouseMove={started && messages.length > 0 ? handleSessionPointer : undefined}
     >
       {(() => {
@@ -1363,7 +1366,7 @@ export function LearnSessionView({
         return (
           <>
             {mastheadCollapsed && (
-              <div className="shrink-0 h-3.5 -mx-6 flex items-center justify-center group cursor-default" aria-hidden="true">
+              <div className="shrink-0 h-2 -mx-6 flex items-center justify-center group cursor-default" aria-hidden="true">
                 <span className="h-px w-12 rounded bg-[var(--color-hairline)] group-hover:bg-[var(--color-ink-warm-dim)] transition-colors duration-[var(--dur-fast)]" />
               </div>
             )}

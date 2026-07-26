@@ -645,7 +645,10 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
   const latestTicket = useMemo(() => extractTicketFromMessages(messages), [messages])
 
   return (
-    <div className="h-full min-h-0 flex flex-col p-8 gap-4 w-full">
+    // Tighter at the top than the standard p-8 so the header sits near the
+    // window chrome and the transcript gets the reclaimed height; the gap
+    // does the separating.
+    <div className="h-full min-h-0 flex flex-col px-8 pt-3 pb-6 gap-3 w-full">
       <header className="shrink-0 flex items-center justify-between">
         <div>
           <h1 className="font-[var(--font-display)] text-2xl text-[var(--color-text-primary)]">Review</h1>
@@ -836,7 +839,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
               return (
                 <>
                   {probeCollapsed && (
-                    <div className="shrink-0 h-3.5 flex items-center justify-center group cursor-default" aria-hidden="true">
+                    <div className="shrink-0 h-2 flex items-center justify-center group cursor-default" aria-hidden="true">
                       <span className="h-px w-12 rounded bg-[var(--color-hairline)] group-hover:bg-[var(--color-ink-warm-dim)] transition-colors duration-[var(--dur-fast)]" />
                     </div>
                   )}
