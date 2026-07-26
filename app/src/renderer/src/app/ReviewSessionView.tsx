@@ -130,38 +130,56 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
   const [sessionGrades, setSessionGrades] = useState<GradeResult[]>([])
   const [streakDays, setStreakDays] = useState<number | null>(null)
   const [chamber, setChamber] = useState(false)
-  // The probe card floats OVER the transcript on the left edge and tucks away
-  // when the cursor leaves — same grammar as Learn's session ticket, so the
-  // chat owns the full column instead of ceding a whole layout row to a card
-  // you only need between answers. Pinning holds it out regardless of cursor.
+  // Two session cards, two edges, two tacks: the ticket slides in from the
+  // LEFT, the probe collapses UPWARD (Learn's masthead grammar). Both float
+  // free of the transcript's layout so the chat owns the column; pinning
+  // either holds it out regardless of the cursor.
   const [probePinned, setProbePinned] = useState(false)
   const [probePeek, setProbePeek] = useState(false)
+  const [ticketPinned, setTicketPinned] = useState(false)
+  const [ticketPeek, setTicketPeek] = useState(false)
   const probeLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const peekProbe = () => {
-    if (probeLeaveTimer.current) clearTimeout(probeLeaveTimer.current)
-    probeLeaveTimer.current = null
-    setProbePeek(true)
-  }
-  const scheduleProbeTuck = () => {
-    // Already armed → let the existing deadline stand, so continuous motion
-    // across the transcript doesn't keep pushing the tuck into the future.
-    if (probeLeaveTimer.current) return
-    probeLeaveTimer.current = setTimeout(() => {
-      probeLeaveTimer.current = null
-      setProbePeek(false)
-    }, 250)
-  }
-  /** Pointer-position tracking at the device's own mousemove rate: within the
-   * left reveal zone the card slides out; while out, its own width holds it
-   * open (hysteresis); past that it tucks. A pinned card ignores all of it. */
-  const handleProbePointer = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (probePinned) return
-    const x = e.clientX - e.currentTarget.getBoundingClientRect().left
-    if (x <= (probePeek ? 340 : 28)) peekProbe()
-    else scheduleProbeTuck()
+  const ticketLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /** Shared peek/tuck pair — `armed` guards against continuous motion pushing
+   * the tuck deadline forward forever. */
+  const makePeek = (
+    timer: React.MutableRefObject<ReturnType<typeof setTimeout> | null>,
+    set: (v: boolean) => void,
+  ) => ({
+    peek: () => {
+      if (timer.current) clearTimeout(timer.current)
+      timer.current = null
+      set(true)
+    },
+    tuck: () => {
+      if (timer.current) return
+      timer.current = setTimeout(() => {
+        timer.current = null
+        set(false)
+      }, 250)
+    },
+  })
+  const probeCtl = makePeek(probeLeaveTimer, setProbePeek)
+  const ticketCtl = makePeek(ticketLeaveTimer, setTicketPeek)
+  /** Pointer-position tracking at the device's own mousemove rate. Top strip
+   * reveals the probe (and its own height holds it open); left strip reveals
+   * the ticket (its own width holds it open). Pinned cards opt out. */
+  const handleSessionPointer = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    if (!probePinned) {
+      const y = e.clientY - rect.top
+      if (y <= (probePeek ? 220 : 18)) probeCtl.peek()
+      else probeCtl.tuck()
+    }
+    if (!ticketPinned) {
+      const x = e.clientX - rect.left
+      if (x <= (ticketPeek ? 320 : 28)) ticketCtl.peek()
+      else ticketCtl.tuck()
+    }
   }
   useEffect(() => () => {
     if (probeLeaveTimer.current) clearTimeout(probeLeaveTimer.current)
+    if (ticketLeaveTimer.current) clearTimeout(ticketLeaveTimer.current)
   }, [])
   // The honest-blank affordance's readiness — true once the current item has sat
   // unanswered for 45s. See the effect keyed on `current?.id` below for the timer
@@ -284,9 +302,17 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
         appendLog(`→ ${event.name}(${JSON.stringify(event.input).slice(0, 80)})`)
         if (event.name === 'Bash' && looksLikeRateCall(event.input)) {
           pendingRateToolUseId.current = event.id
-          // `queue[0]` is still the item being graded — `refreshQueue()`
-          // (which shifts it out) only runs after the matching tool_result.
-          pendingRateTopic.current = queueRef.current[0]?.topic ?? null
+          // Read the topic off the rate command's own `--topic` flag rather
+          // than guessing from `queue[0]`: the tutor works in its own order
+          // (it interleaves topics — see `current` above), so the queue head
+          // is frequently a different item, and its topic would mislabel the
+          // grade card's interval ladder. Falls back to the head only if the
+          // flag is somehow absent.
+          const cmd = typeof (event.input as { command?: unknown })?.command === 'string'
+            ? ((event.input as { command: string }).command)
+            : ''
+          pendingRateTopic.current =
+            /--topic\s+["']?([a-z0-9-]+)/.exec(cmd)?.[1] ?? queueRef.current[0]?.topic ?? null
         }
         if (looksLikeAssessorAuditSpawn(event.name, event.input)) {
           // Live-session-only half of the audit mark: the spawn itself is a
@@ -372,6 +398,11 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
     setChamber(false)
     setProbePinned(false)
     setProbePeek(false)
+    // The queue was last read at mount (or after the previous grade) — a
+    // resume especially can be minutes or days later, and a stale head makes
+    // the probe card describe work that's already done. Re-read on every
+    // session start; `current` narrows it further from the transcript.
+    refreshQueue()
     if (!resume) {
       setLastGrade(null)
       setLastGradeTopic(null)
@@ -488,7 +519,30 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
     }
   }
 
-  const current = queue[0] ?? null
+  /** What the tutor is ACTUALLY probing right now.
+   *
+   * `queue[0]` is engram's most-overdue-first head, which is not the tutor's
+   * working order — a real sitting interleaves topics (verified against
+   * transcript 6130a05d: eight items rated in an order the due list never
+   * produces), so the head of the queue routinely names an item the tutor
+   * isn't asking, and a resumed sitting shows one it already finished.
+   *
+   * The tutor does, however, ask each probe verbatim (8/8 in that same
+   * sitting), so the last message carrying a due item's probe text is a
+   * direct, grounded read of the current item. Scanned newest-first; falls
+   * back to the queue head before the first probe has been asked. */
+  const current = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i]
+      if (m.role !== 'assistant') continue
+      const hay = m.text.toLowerCase()
+      // Long enough to be distinctive — a short probe could collide with
+      // ordinary prose, and a false match is worse than the queue fallback.
+      const hit = queue.find((it) => it.probe.length >= 24 && hay.includes(it.probe.slice(0, 38).toLowerCase()))
+      if (hit) return hit
+    }
+    return queue[0] ?? null
+  }, [messages, queue])
   const blocked = rateLimit !== null && isBlockingRateLimitStatus(rateLimit.status)
   const lastUserMessageId = useMemo(() => [...messages].reverse().find((m) => m.role === 'user')?.id ?? null, [messages])
   const latestTicket = useMemo(() => extractTicketFromMessages(messages), [messages])
@@ -620,70 +674,116 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
 
       {(phase === 'in-session' || phase === 'done') && (
         <div className="flex-1 min-h-0 flex flex-col gap-4">
-          {latestTicket && phase === 'in-session' && (
-            <div className="shrink-0 max-w-sm">
-              <TicketCard ticket={latestTicket} compact />
-            </div>
-          )}
           {/* The only scrolling region — header and input stay anchored. */}
           {/* Must be a flex column: ChatScrollRegion sizes itself with
               flex-1/min-h-0 and loses its height bound (killing scrolling)
-              inside a plain block wrapper. `relative` hosts the floating probe
-              card, which renders OVER the transcript rather than claiming a
-              layout row of its own. */}
+              inside a plain block wrapper. `relative` hosts the floating
+              session drawer (ticket + probe), which renders OVER the
+              transcript rather than claiming layout rows of its own. */}
           <div
             className={`relative flex-1 min-h-0 flex flex-col${chamber ? ' chamber-blur' : ''}`}
-            onMouseMove={current ? handleProbePointer : undefined}
+            onMouseMove={current || latestTicket ? handleSessionPointer : undefined}
           >
-            {current && (() => {
-              const probeOut = probePinned || probePeek
+            {/* Session ticket — floats over the transcript on the LEFT edge,
+                tucking away unless the cursor visits that edge or its tack is
+                driven in. */}
+            {latestTicket && phase === 'in-session' && (() => {
+              const ticketOut = ticketPinned || ticketPeek
               return (
                 <>
-                  {!probeOut && (
-                    <div className="absolute left-0 top-2 z-10 h-16 w-3.5 flex items-center justify-start" aria-hidden="true">
+                  {!ticketOut && (
+                    <div className="absolute left-0 top-10 z-10 h-16 w-3.5 flex items-center justify-start" aria-hidden="true">
                       <span className="w-px h-12 rounded bg-[var(--color-hairline)]" />
                     </div>
                   )}
                   <div
-                    key={current.id}
-                    className={`absolute top-1 left-0 z-10 w-80 max-w-[44%] transition-[transform,opacity] ${
-                      probeOut
+                    className={`absolute top-9 left-0 z-10 w-72 max-w-[40%] transition-[transform,opacity] ${
+                      ticketOut
                         ? 'duration-[var(--dur-base)] ease-[var(--ease-out-soft)] translate-x-0 opacity-100'
                         : 'duration-[340ms] ease-[cubic-bezier(0.45,0.05,0.25,1)] -translate-x-[calc(100%+1.75rem)] opacity-0'
                     }`}
                   >
-                    <div className="relative panel px-5 py-4 flex flex-col gap-3">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className="text-sm font-medium text-[var(--color-text-primary)] truncate">
-                            {humanizeNodeId(current.id)}
-                          </div>
-                          <div className="label-data text-xs text-[var(--color-text-faint)] mt-0.5 uppercase tracking-wider truncate">
-                            {current.topic}
-                          </div>
-                        </div>
-                        {sessionTotal > 1 && (
-                          <QueueRail
-                            total={sessionTotal}
-                            completedGrades={sessionGrades}
-                            hasCurrent
-                            currentNodeId={current.id}
-                          />
-                        )}
-                      </div>
-                      <p className="text-sm text-[var(--color-text-primary)]">{current.probe}</p>
+                    <div className="relative">
+                      <TicketCard ticket={latestTicket} compact />
                       <button
-                        onClick={() => setProbePinned((v) => !v)}
-                        aria-label={probePinned ? 'Unpin probe' : 'Pin probe'}
-                        title={probePinned ? 'Unpin — tuck away unless the cursor visits the left edge' : 'Pin — keep the probe out'}
+                        onClick={() => setTicketPinned((v) => !v)}
+                        aria-label={ticketPinned ? 'Unpin session ticket' : 'Pin session ticket'}
+                        title={ticketPinned ? 'Unpin — tuck away unless the cursor visits the left edge' : 'Pin — keep the ticket out'}
                         className={`focus-ring no-press absolute bottom-1.5 right-1.5 h-5 w-5 rounded-full flex items-center justify-center transition-colors duration-[var(--dur-fast)] ${
-                          probePinned
+                          ticketPinned
                             ? 'text-[var(--color-ink-warm)] bg-[var(--color-surface-3)]'
                             : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]'
                         }`}
                       >
-                        <PinTackIcon pinned={probePinned} size={14} />
+                        <PinTackIcon pinned={ticketPinned} size={14} />
                       </button>
+                    </div>
+                  </div>
+                </>
+              )
+            })()}
+
+            {/* Probe card — collapses UPWARD like Learn's masthead: grid
+                0fr↔1fr animates to its true height, so a tucked probe costs
+                the transcript nothing. Cursor near the top edge (or the tack)
+                brings it back. */}
+            {current && (() => {
+              const probeCollapsed = !probePinned && !probePeek
+              return (
+                <>
+                  {probeCollapsed && (
+                    <div className="shrink-0 h-3.5 flex items-center justify-center group cursor-default" aria-hidden="true">
+                      <span className="h-px w-12 rounded bg-[var(--color-hairline)] group-hover:bg-[var(--color-ink-warm-dim)] transition-colors duration-[var(--dur-fast)]" />
+                    </div>
+                  )}
+                  <div
+                    className={`shrink-0 grid transition-[grid-template-rows] ${
+                      probeCollapsed
+                        ? 'duration-[340ms] ease-[cubic-bezier(0.45,0.05,0.25,1)]'
+                        : 'duration-[var(--dur-base)] ease-[var(--ease-out-soft)]'
+                    }`}
+                    style={{ gridTemplateRows: probeCollapsed ? '0fr' : '1fr' }}
+                  >
+                    <div
+                      className={`min-h-0 overflow-hidden transition-[opacity] ${
+                        probeCollapsed
+                          ? 'duration-[340ms] ease-[cubic-bezier(0.45,0.05,0.25,1)] opacity-0'
+                          : 'duration-[var(--dur-base)] ease-[var(--ease-out-soft)] opacity-100'
+                      }`}
+                    >
+                      <div key={current.id} className="relative panel px-5 py-4 flex flex-col gap-3 mb-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium text-[var(--color-text-primary)] truncate">
+                              {humanizeNodeId(current.id)}
+                            </div>
+                            <div className="label-data text-xs text-[var(--color-text-faint)] mt-0.5 uppercase tracking-wider truncate">
+                              {current.topic}
+                            </div>
+                          </div>
+                          {sessionTotal > 1 && (
+                            <QueueRail
+                              total={sessionTotal}
+                              completedGrades={sessionGrades}
+                              hasCurrent
+                              currentNodeId={current.id}
+                            />
+                          )}
+                        </div>
+                        <p className="text-sm text-[var(--color-text-primary)] pr-7">{current.probe}</p>
+                        <button
+                          onClick={() => setProbePinned((v) => !v)}
+                          aria-label={probePinned ? 'Unpin probe' : 'Pin probe'}
+                          title={probePinned ? 'Unpin — tuck away unless the cursor visits the top' : 'Pin — keep the probe out'}
+                          className={`focus-ring no-press absolute bottom-1.5 right-1.5 h-5 w-5 rounded-full flex items-center justify-center transition-colors duration-[var(--dur-fast)] ${
+                            probePinned
+                              ? 'text-[var(--color-ink-warm)] bg-[var(--color-surface-3)]'
+                              : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]'
+                          }`}
+                        >
+                          <PinTackIcon pinned={probePinned} size={14} />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </>
