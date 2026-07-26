@@ -4,6 +4,7 @@ import type {
   EngramStats,
   DueItem,
   ArtifactEntry,
+  Misconception,
   LearnerModel,
   TopicSettings,
   EnvironmentCheckResult,
@@ -38,6 +39,7 @@ const engramApi = {
   nextNode: (topic: string): Promise<NextNodeResult> => ipcRenderer.invoke('engram:next', topic),
   artifactList: (): Promise<ArtifactEntry[]> => ipcRenderer.invoke('engram:artifactList'),
   receiptsHistory: (): Promise<ReceiptsHistory> => ipcRenderer.invoke('engram:receiptsHistory'),
+  misconceptions: (): Promise<Misconception[]> => ipcRenderer.invoke('engram:misconceptions'),
   mapAnnotations: (topicId: string): Promise<MapAnnotations> => ipcRenderer.invoke('mapAnnotations:get', topicId),
   nodeProvenance: (topic: string): Promise<Record<string, NodeProvenance>> =>
     ipcRenderer.invoke('engram:nodeProvenance', topic),

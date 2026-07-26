@@ -134,6 +134,20 @@ export interface EngramStats {
   active_experiment: unknown
 }
 
+/** One row from engram.py's misconceptions.json, as returned by
+ * `misconception list` — window.engram.misconceptions() surfaces the whole
+ * ledger (open + resolved). Note the file can also carry a `resolved_ts`
+ * field on resolved rows; not modeled here since nothing in this app reads
+ * it yet. */
+export interface Misconception {
+  id: string
+  ts: string
+  topic: string
+  node: string
+  description: string
+  status: 'open' | 'resolved'
+}
+
 export interface TopicSettings {
   systemPromptExtra: string
   contextFiles: string[]

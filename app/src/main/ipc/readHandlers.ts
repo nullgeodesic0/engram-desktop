@@ -10,7 +10,23 @@ import { getTopicsCached } from '../engramCli/topicsCache'
 import { readReceiptsHistory } from '../engramCli/receiptsHistory'
 import { getMapAnnotations } from '../session/mapAnnotations'
 import { nodeProvenance } from '../session/sessionScan'
-import type { TopicGraph, NodeProvenance } from '../../shared/types'
+import type { TopicGraph, NodeProvenance, Misconception } from '../../shared/types'
+
+// misconceptions.json is engine-written but hand-editable — shape-guard each
+// row rather than trusting the file, and drop malformed entries instead of
+// throwing (a partially-bad file shouldn't blank out the whole ledger).
+function isMisconception(row: unknown): row is Misconception {
+  if (typeof row !== 'object' || row === null) return false
+  const r = row as Record<string, unknown>
+  return (
+    typeof r.id === 'string' &&
+    typeof r.ts === 'string' &&
+    typeof r.topic === 'string' &&
+    typeof r.node === 'string' &&
+    typeof r.description === 'string' &&
+    (r.status === 'open' || r.status === 'resolved')
+  )
+}
 
 export function registerReadHandlers(): void {
   ipcMain.handle('engram:topics', () => getTopicsCached())
@@ -34,6 +50,10 @@ export function registerReadHandlers(): void {
   ipcMain.handle('engram:topicGraph', (_e, topic: string) => readTopicGraph(topic))
   ipcMain.handle('engram:artifactList', () => engramArtifactList())
   ipcMain.handle('engram:receiptsHistory', () => readReceiptsHistory())
+  ipcMain.handle('engram:misconceptions', async (): Promise<Misconception[]> => {
+    const rows = await engramRead<unknown[]>('misconception', ['list'])
+    return Array.isArray(rows) ? rows.filter(isMisconception) : []
+  })
   ipcMain.handle('mapAnnotations:get', (_e, topicId: string) => getMapAnnotations(topicId))
 
   // Node ids come from the topic's own graph (same file readTopicGraph already
