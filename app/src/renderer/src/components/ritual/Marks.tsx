@@ -11,17 +11,20 @@ import { ReviewDocket, type ReviewDocketItem } from './ReviewDocket'
 import { LapseRite } from './LapseRite'
 import { AuditCard, type AuditVerdict } from './AuditCard'
 
-/** Abbreviate to ~cap chars on a word boundary WITHOUT cutting inside a $…$ /
- * $$…$$ span — a dangling delimiter would make KaTeX render the tail as
- * garbled math. Walks segments (outside/inside math) and stops cleanly. */
+/** Abbreviate to ~cap chars on a word boundary WITHOUT cutting inside a math
+ * span — a dangling delimiter would make KaTeX render the tail as garbled
+ * math. Handles both delimiter families the tutor might use ($…$/$$…$$ and
+ * \(…\)/\[…\], matching MathRenderer's own tokenizer), walking alternating
+ * outside/inside segments and stopping cleanly. */
+const MATH_SPAN_RE = /(\$\$[^$]*\$\$|\$[^$]*\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\))/g
 function abbreviateOutsideMath(text: string, cap: number): string {
   if (text.length <= cap) return text
   // Split into alternating outside/inside-math segments, keeping delimiters.
-  const parts = text.split(/(\$\$[^$]*\$\$|\$[^$]*\$)/g).filter((p) => p.length > 0)
+  const parts = text.split(MATH_SPAN_RE).filter((p) => p.length > 0)
   let out = ''
   for (const part of parts) {
     if (out.length >= cap) break
-    const isMath = part.startsWith('$')
+    const isMath = part.startsWith('$') || part.startsWith('\\[') || part.startsWith('\\(')
     if (isMath) {
       // Math spans are atomic: include whole or stop before it.
       if (out.length + part.length > cap + 24) break
@@ -99,9 +102,11 @@ export const BeatMarkCard = memo(function BeatMarkCard({ beat, content }: { beat
   const glyph = BEAT_GLYPHS[beat]
   if (!glyph) return null
   // One-line caption: collapse newlines, abbreviate on a word boundary, and
-  // render through the KaTeX pipeline so $…$ / $$…$$ set as real math. An
-  // unclosed delimiter after the cut would derail KaTeX, so keep the cut
-  // outside math: never split between a $ and its closer.
+  // render through the KaTeX pipeline so every delimiter family the tutor
+  // might use ($…$, $$…$$, \(…\), \[…\]) sets as real math. An unclosed
+  // delimiter after the cut would derail KaTeX, so keep the cut outside
+  // math: never split a span from its closer. `inlineOnly` keeps display
+  // math from breaking this single row into a block.
   const flat = content.replace(/\s+/g, ' ').trim()
   const excerpt = abbreviateOutsideMath(flat, 90)
   return (
@@ -113,6 +118,7 @@ export const BeatMarkCard = memo(function BeatMarkCard({ beat, content }: { beat
       {excerpt && (
         <MathRenderer
           text={excerpt}
+          inlineOnly
           className="font-[var(--font-serif)] italic text-xs text-[var(--color-text-dim)] flex-1 min-w-0 overflow-hidden whitespace-nowrap text-ellipsis"
         />
       )}

@@ -722,14 +722,20 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
                       <span className="w-px h-12 rounded bg-[var(--color-hairline)]" />
                     </div>
                   )}
+                  {/* Unfolds left→right (see the twin in LearnSessionView):
+                      grid 0fr↔1fr animates to true width, the inner fixed
+                      layer holds the content still so it unclips rather than
+                      squeezes. */}
                   <div
-                    className={`absolute top-9 left-0 z-10 w-72 max-w-[40%] transition-[transform,opacity] ${
+                    className={`absolute top-9 left-0 z-10 grid transition-[grid-template-columns,opacity] ${
                       ticketOut
-                        ? 'duration-[var(--dur-base)] ease-[var(--ease-out-soft)] translate-x-0 opacity-100'
-                        : 'duration-[340ms] ease-[cubic-bezier(0.45,0.05,0.25,1)] -translate-x-[calc(100%+1.75rem)] opacity-0'
+                        ? 'duration-[var(--dur-base)] ease-[var(--ease-out-soft)] opacity-100'
+                        : 'duration-[340ms] ease-[cubic-bezier(0.45,0.05,0.25,1)] opacity-0'
                     }`}
+                    style={{ gridTemplateColumns: ticketOut ? '1fr' : '0fr' }}
                   >
-                    <div className="relative">
+                    <div className="min-w-0 overflow-hidden">
+                    <div className="relative w-72">
                       <TicketCard ticket={latestTicket} compact />
                       <button
                         onClick={() => setTicketPinned((v) => !v)}
@@ -743,6 +749,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
                       >
                         <PinTackIcon pinned={ticketPinned} size={14} />
                       </button>
+                    </div>
                     </div>
                   </div>
                 </>
