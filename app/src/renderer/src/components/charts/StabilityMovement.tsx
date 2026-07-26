@@ -43,7 +43,11 @@ export function StabilityMovement({ results }: { results: GradeResult[] }) {
           const afterPct = Math.min(100, (r.after / max) * 100)
           return (
             <div
-              key={r.node}
+              // Index-suffixed: a node can be graded twice in one sitting
+              // (Learn re-teaches a repeatedly-lapsing node), and rows are
+              // sorted by movement — a bare node key would reconcile the two
+              // rows into each other's values.
+              key={`${r.node}-${i}`}
               className="tick-fade-in flex items-center gap-2"
               style={{ ['--tick-delay' as string]: `${Math.min(i, 8) * 25}ms` }}
             >
