@@ -36,7 +36,11 @@ export function ChatScrollRegion({ children, deps }: { children: ReactNode; deps
           the viewport rather than being clipped at an arbitrary line — and
           the strip the masthead/probe cards tuck into stops looking like a
           hard boundary. See index.css. */}
-      <div ref={containerRef} onScroll={onScroll} className="h-full overflow-y-auto flex flex-col gap-4 scroll-fade-top">
+      {/* `pb-7` matches the mask's 28px bottom ramp: scrolled to the end, the
+          last line sits ABOVE the fade with only padding inside it, so the
+          newest message is never dimmed — the fade only ever eats empty space
+          or content still scrolling past. */}
+      <div ref={containerRef} onScroll={onScroll} className="h-full overflow-y-auto flex flex-col gap-4 pb-7 scroll-fade-top">
         {children}
       </div>
       {!stick && (
