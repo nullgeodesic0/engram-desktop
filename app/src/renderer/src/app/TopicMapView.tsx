@@ -376,7 +376,12 @@ export function TopicMapView({
 
       {graph && (
         <div className="flex-1 min-h-0 flex gap-4">
-          <div className="relative flex-1 min-w-0 flex flex-col">
+          {/* The plate sits over the app's ambient NeuralField canvas, which
+              competes with the specimen for attention. A backdrop blur (plus
+              a whisper of surface tint) pushes that field out of focus behind
+              the map without touching the map's own ink — the plate reads as
+              the thing in focus, everything else as depth. */}
+          <div className="relative flex-1 min-w-0 flex flex-col rounded-xl overflow-hidden backdrop-blur-md bg-[var(--color-void)]/55">
             <GraphView
               graph={graph}
               selected={selectedNode}
