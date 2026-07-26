@@ -450,7 +450,7 @@ export function TopicMapView({
                 </defs>
               </svg>
               <div className="flex items-center justify-between gap-3 pb-1 mb-0.5 border-b border-[var(--color-hairline)]">
-                <span>legend</span>
+                <span className="uppercase tracking-wide">Key</span>
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => setReplayActive((v) => !v)}
@@ -485,7 +485,7 @@ export function TopicMapView({
                   (replay forces the due lens off; see dueLens && !replayActive
                   at the GraphView call). */}
               {dueLens && !replayActive ? (
-                <>
+                <div className="flex flex-col divide-y divide-[var(--color-hairline)] [&>div]:py-1 first:[&>div]:pt-0 last:[&>div]:pb-0">
                   <div className="flex items-center gap-2">
                     <svg width={18} height={18} viewBox="-9 -9 18 18" aria-hidden="true">
                       <circle r={7.5} fill="none" stroke="var(--color-ink-danger)" strokeWidth={1.2} />
@@ -505,9 +505,9 @@ export function TopicMapView({
                     </svg>
                     not yet due
                   </div>
-                </>
+                </div>
               ) : (
-                <>
+                <div className="flex flex-col divide-y divide-[var(--color-hairline)] [&>div]:py-1 first:[&>div]:pt-0 last:[&>div]:pb-0">
                   <div className="flex items-center gap-2">
                     <svg width={18} height={18} viewBox="-9 -9 18 18" aria-hidden="true">
                       <path d={cellBodyPath('legend-new', 6)} fill="none" stroke="var(--color-ink-cool-dim)" strokeWidth={1.2} />
@@ -563,7 +563,7 @@ export function TopicMapView({
                     </svg>
                     capstone seal
                   </div>
-                </>
+                </div>
               )}
               <div className="border-t border-[var(--color-hairline)] mt-1 pt-1 text-[var(--color-text-faint)]">
                 double-click to open
