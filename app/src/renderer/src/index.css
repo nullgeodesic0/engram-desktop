@@ -332,15 +332,13 @@
     margin-inline: auto;
   }
 
-  /* The transcript dissolves into its top edge rather than being cut off at
-     one. A mask (not an overlay gradient) so it works over the void, over a
+  /* The transcript dissolves into both edges rather than being cut off at
+     them. A mask (not an overlay gradient) so it works over the void, over a
      panel, and under the floating session cards alike — nothing has to know
-     what colour is behind it. Bottom is left hard: the newest line and the
-     composer belong to each other, and fading that edge would read as the
-     conversation trailing off just where it's most current. */
+     what colour is behind it. */
   .scroll-fade-top {
-    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 28px);
-    mask-image: linear-gradient(to bottom, transparent 0, #000 28px);
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 28px, #000 calc(100% - 28px), transparent 100%);
+    mask-image: linear-gradient(to bottom, transparent 0, #000 28px, #000 calc(100% - 28px), transparent 100%);
   }
 
   /* CSS-virtualize old transcript blocks: skip layout/paint for message
