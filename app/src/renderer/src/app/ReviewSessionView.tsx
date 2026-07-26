@@ -219,6 +219,11 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
     ])
   }
 
+  /** The node under audit at the last crossing — so the sweep only marks a
+   * real change of item, never the first one (there's nothing to move FROM)
+   * and never a re-render that happens to recompute the same item. */
+  const lastReviewedNodeRef = useRef<string | null>(null)
+
   function refreshQueue(): Promise<DueItem[]> {
     return window.engram.due(12).then((items) => {
       setQueue(items)
@@ -398,6 +403,9 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
     setChamber(false)
     setProbePinned(false)
     setProbePeek(false)
+    // A fresh sitting has nothing to move FROM; a resumed one shouldn't mark
+    // a crossing into the item it left off on either.
+    lastReviewedNodeRef.current = null
     // The queue was last read at mount (or after the previous grade) — a
     // resume especially can be minutes or days later, and a stale head makes
     // the probe card describe work that's already done. Re-read on every
@@ -543,6 +551,24 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
     }
     return queue[0] ?? null
   }, [messages, queue])
+  // The sweep between items — Review's counterpart to Learn's node crossing.
+  // Keyed on the probe-derived current item (above), so it fires when the
+  // tutor genuinely moves on, not when the due queue reshuffles under it.
+  // Live-session-only: the crossing's position comes from matching probes
+  // against the due list, which a transcript alone can't reproduce (see the
+  // one-time marks in Marks.tsx's doctrine comment).
+  useEffect(() => {
+    if (phase !== 'in-session' || !current) return
+    const prev = lastReviewedNodeRef.current
+    lastReviewedNodeRef.current = current.id
+    if (prev === null || prev === current.id) return
+    setMarks((p) => [
+      ...p,
+      { id: `mark-${markSeq.current++}`, atIndex: messagesRef.current.length, kind: 'crossing', nodeId: current.id, verb: 'moving to' },
+    ])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current?.id, phase])
+
   const blocked = rateLimit !== null && isBlockingRateLimitStatus(rateLimit.status)
   const lastUserMessageId = useMemo(() => [...messages].reverse().find((m) => m.role === 'user')?.id ?? null, [messages])
   const latestTicket = useMemo(() => extractTicketFromMessages(messages), [messages])
