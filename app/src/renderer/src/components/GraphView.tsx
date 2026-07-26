@@ -64,20 +64,20 @@ function dueStatusFor(node: EngramNode): DueStatus | null {
   return 'future'
 }
 
-/** Edge geometry as a "loose string" — a quadratic bezier whose control
- * point carries both the deterministic per-edge bow (requires edges only)
- * and a slow ambient sway driven by the drift clock `t`, so links ripple
- * like slack threads while their endpoints ride the nodes' own drift.
- * Shared by the base edge layer and the hover/selection trail overlay so
- * trail edges sit exactly on top of their base edge at every instant. */
-function stringEdgePath(
+/** Shared control-point math for the "loose string" quadratic — factored out
+ * of stringEdgePath so the calligraphic taper (below) samples the EXACT same
+ * curve rather than a re-derivation that could silently drift out of sync
+ * with the hairline spine. Both baseBow (deterministic per-edge bow, requires
+ * edges only) and sway (ambient drift-clock ripple) are unchanged from the
+ * pre-taper implementation. */
+function edgeBezierControl(
   source: string,
   target: string,
   a: { x: number; y: number },
   b: { x: number; y: number },
   kind: 'requires' | 'other',
   t: number,
-): string {
+): { cx: number; cy: number } {
   const dx = b.x - a.x
   const dy = b.y - a.y
   const len = Math.hypot(dx, dy) || 1
@@ -93,10 +93,119 @@ function stringEdgePath(
   const swayRate = 0.35 + seeded(key, 8) * 0.3
   const swayPhase = seeded(key, 9) * Math.PI * 2
   const sway = t === 0 ? 0 : Math.sin(t * swayRate + swayPhase) * Math.min(9, len * 0.06)
-  const cx = mx + nx * (baseBow + sway)
-  const cy = my + ny * (baseBow + sway)
+  return { cx: mx + nx * (baseBow + sway), cy: my + ny * (baseBow + sway) }
+}
+
+/** Edge geometry as a "loose string" — a quadratic bezier whose control
+ * point carries both the deterministic per-edge bow (requires edges only)
+ * and a slow ambient sway driven by the drift clock `t`, so links ripple
+ * like slack threads while their endpoints ride the nodes' own drift.
+ * Shared by the base edge layer (non-requires hairlines) and the
+ * hover/selection trail overlay so trail edges sit exactly on top of their
+ * base edge at every instant. */
+function stringEdgePath(
+  source: string,
+  target: string,
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+  kind: 'requires' | 'other',
+  t: number,
+): string {
+  const { cx, cy } = edgeBezierControl(source, target, a, b, kind, t)
   return `M ${a.x.toFixed(2)} ${a.y.toFixed(2)} Q ${cx.toFixed(2)} ${cy.toFixed(2)} ${b.x.toFixed(2)} ${b.y.toFixed(2)}`
 }
+
+/** Point and unit tangent at parameter `s` (0..1) along the quadratic bezier
+ * A -> (cx,cy) -> B. Used to sample the taper outline below. */
+function quadPointAndTangent(
+  a: { x: number; y: number },
+  cx: number,
+  cy: number,
+  b: { x: number; y: number },
+  s: number,
+): { x: number; y: number; nx: number; ny: number } {
+  const mt = 1 - s
+  const x = mt * mt * a.x + 2 * mt * s * cx + s * s * b.x
+  const y = mt * mt * a.y + 2 * mt * s * cy + s * s * b.y
+  // B'(s) = 2(1-s)(C-A) + 2s(B-C)
+  const tx = 2 * mt * (cx - a.x) + 2 * s * (b.x - cx)
+  const ty = 2 * mt * (cy - a.y) + 2 * s * (b.y - cy)
+  const tlen = Math.hypot(tx, ty) || 1
+  // Unit normal (perpendicular to the tangent), not the tangent itself.
+  return { x, y, nx: -ty / tlen, ny: tx / tlen }
+}
+
+// Sample count for the taper outline — a quadratic bezier is already a very
+// low-order curve (one control point), so a handful of samples reproduces it
+// with no visible faceting once anti-aliased; this is a fixed, modest cost
+// per requires-edge per render (not per-pixel, not per-frame beyond the
+// existing drift re-render), comparable to the single stroked path it
+// replaces.
+const TAPER_SAMPLES = 12
+
+/** Requires-edge spine, offset perpendicular into a filled tapered ribbon —
+ * ~2.2px at the prerequisite end (source/`a`, per buildEdges: `source` is
+ * always the node listed in another node's `requires`, i.e. the
+ * prerequisite) narrowing to ~0.8px at the dependent end (target/`b`), so
+ * the ink visibly "lifts" as it travels from what-you-need to what-it-
+ * unlocks. Built from the identical edgeBezierControl the hairline spine
+ * uses, so sway/drift are pixel-identical to stringEdgePath's output. */
+function calligraphicEdgePath(
+  source: string,
+  target: string,
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+  t: number,
+  widthStart = 2.2,
+  widthEnd = 0.8,
+): string {
+  const { cx, cy } = edgeBezierControl(source, target, a, b, 'requires', t)
+  const top: { x: number; y: number }[] = []
+  const bottom: { x: number; y: number }[] = []
+  for (let i = 0; i <= TAPER_SAMPLES; i++) {
+    const s = i / TAPER_SAMPLES
+    const { x, y, nx, ny } = quadPointAndTangent(a, cx, cy, b, s)
+    const halfW = (widthStart + (widthEnd - widthStart) * s) / 2
+    top.push({ x: x + nx * halfW, y: y + ny * halfW })
+    bottom.push({ x: x - nx * halfW, y: y - ny * halfW })
+  }
+  const pts = [...top, ...bottom.reverse()]
+  return (
+    pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(' ') + ' Z'
+  )
+}
+
+/** Small filled arrowhead at the dependent end of a requires edge, oriented
+ * along the spine's own end tangent (so it "points the way the string
+ * travels" — from prerequisite into dependent) and sized in screen space via
+ * the caller-supplied inverse-zoom scale, so it reads the same size whether
+ * the plate is zoomed to 0.35x or 4x. */
+function arrowheadTransform(
+  source: string,
+  target: string,
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+  targetRadius: number,
+  t: number,
+  invZoom: number,
+): string {
+  const { cx, cy } = edgeBezierControl(source, target, a, b, 'requires', t)
+  // Tangent at s=1: B'(1) = 2(B - C).
+  const tx = 2 * (b.x - cx)
+  const ty = 2 * (b.y - cy)
+  const tlen = Math.hypot(tx, ty) || 1
+  const angle = (Math.atan2(ty, tx) * 180) / Math.PI
+  // The spine runs all the way to the target node's CENTER (same as the
+  // pre-taper hairline always did — node bodies render after edges, so the
+  // segment inside a node's own disc is simply painted over). An arrowhead
+  // is small enough that placing it at the center would land entirely
+  // inside that disc and never be seen, so it's pulled back along the
+  // tangent by the node's own drifted radius to sit right at the rim.
+  const tipX = b.x - (tx / tlen) * targetRadius
+  const tipY = b.y - (ty / tlen) * targetRadius
+  return `translate(${tipX.toFixed(2)} ${tipY.toFixed(2)}) rotate(${angle.toFixed(2)}) scale(${invZoom.toFixed(4)})`
+}
+const ARROWHEAD_PATH = 'M -6 -3 L 0 0 L -6 3 Z'
 
 /** Corner registration ticks — small printing-plate crop marks bracketing
  * each corner of the plate rect, inset `TICK` px along both edges. Pure
@@ -508,6 +617,38 @@ export function GraphView({
             <stop offset="65%" stopColor="var(--color-void)" stopOpacity={0} />
             <stop offset="100%" stopColor="var(--color-void)" stopOpacity={0.42} />
           </radialGradient>
+          {/* Node-fill engraving patterns — fine diagonal hatch for 'review'
+              (warm), sparse stipple for 'learning' (cool); 'new' stays hollow
+              (no pattern) since the point of that state is emptiness. Layered
+              on TOP of the existing STATE_COLOR/DUE_LENS_COLOR fill as a
+              second path with fill="url(#...)", never replacing it.
+
+              Unit-space reasoning: these <pattern>s live in this top-level
+              <defs>, outside the pan/zoom `<g transform>` below, but they're
+              REFERENCED by fill="url(...)" from paths INSIDE that group. Per
+              the SVG spec, patternUnits="userSpaceOnUse" resolves x/y/width/
+              height in the user coordinate system of the referencing element
+              at reference time — which includes every ancestor transform,
+              i.e. the group's `scale(view.zoom)`. Left alone, that means a
+              6px tile would render at 6*zoom screen pixels: hatch spacing
+              would visibly balloon as you zoom in, exactly the "spacing
+              constant in screen space" failure the brief calls out.
+              `patternTransform={scale(1/view.zoom)}` cancels that ambient
+              scale (scale(s) ∘ scale(1/s) = identity), so the tile is 6
+              local units defined at zoom=1 and stays ~6 screen px at any
+              zoom from 0.35 to 4 — objectBoundingBox units were not an
+              option here since that ties tile size to each node's own bbox
+              (every node a different hatch scale), not to screen space. This
+              re-renders on view.zoom changes (wheel zoom, pan-to-selected
+              easing) but never on the per-frame drift clock `t`, so it's no
+              more per-frame cost than the rest of the static furniture. */}
+          <pattern id="hatch-review" patternUnits="userSpaceOnUse" width={6} height={6} patternTransform={`scale(${1 / view.zoom}) rotate(45)`}>
+            <line x1={0} y1={0} x2={0} y2={6} stroke="var(--color-ink-warm)" strokeWidth={1.1} />
+          </pattern>
+          <pattern id="stipple-learning" patternUnits="userSpaceOnUse" width={9} height={9} patternTransform={`scale(${1 / view.zoom})`}>
+            <circle cx={2.25} cy={2.25} r={0.9} fill="var(--color-ink-cool)" />
+            <circle cx={6.75} cy={6.75} r={0.9} fill="var(--color-ink-cool)" />
+          </pattern>
           {graph.order
             .filter((id) => graph.nodes[id]?.state === 'learning' && !graph.nodes[id]?.capstone)
             .map((id) => {
@@ -602,7 +743,18 @@ export function GraphView({
           {/* Edges — dimmed off-trail while selected so the promoted
               ancestor/descendant chain reads clearly; unchanged (flat 0.35)
               on bare hover, with nothing active, or under the due lens
-              (one lens at a time — see trailEdgesActive above). */}
+              (one lens at a time — see trailEdgesActive above).
+
+              Requires edges render as a filled calligraphic ribbon (taper
+              2.2px at the prerequisite end -> 0.8px at the dependent end)
+              plus a small screen-space arrowhead at the dependent end;
+              every other edge kind keeps the original uniform hairline
+              stroke. Both branches read from `visibleEdges` (hub
+              suppression already applied via isEdgeVisible above) and apply
+              the SAME replay-clip (`visibleNodes`) and trail-dimming
+              (`onTrail`/`strokeOpacity`) checks as before — no parallel
+              suppression logic, just the existing rules feeding a different
+              paint. */}
           {visibleEdges.map((e, i) => {
             const a = drifted.get(e.source)
             const b = drifted.get(e.target)
@@ -612,16 +764,27 @@ export function GraphView({
             // just dimming — the trail should look like it doesn't exist yet.
             if (visibleNodes && (!visibleNodes.has(e.source) || !visibleNodes.has(e.target))) return null
             const style = EDGE_STYLE[e.kind]
-            const d = stringEdgePath(e.source, e.target, a, b, e.kind === 'requires' ? 'requires' : 'other', t)
             const onTrail = isAncestorTrailEdge(e) || isDescendantTrailEdge(e)
-            const strokeOpacity = trailEdgesActive ? (onTrail ? 0.5 : 0.08) : 0.35
+            const opacity = trailEdgesActive ? (onTrail ? 0.5 : 0.08) : 0.35
+
+            if (e.kind === 'requires') {
+              const d = calligraphicEdgePath(e.source, e.target, a, b, t)
+              const arrowTransform = arrowheadTransform(e.source, e.target, a, b, b.r, t, 1 / view.zoom)
+              return (
+                <g key={i} pointerEvents="none">
+                  <path d={d} fill={style.stroke} fillOpacity={opacity} />
+                  <path d={ARROWHEAD_PATH} fill={style.stroke} fillOpacity={opacity} transform={arrowTransform} />
+                </g>
+              )
+            }
+            const d = stringEdgePath(e.source, e.target, a, b, 'other', t)
             return (
               <path
                 key={i}
                 d={d}
                 fill="none"
                 stroke={style.stroke}
-                strokeOpacity={strokeOpacity}
+                strokeOpacity={opacity}
                 strokeWidth={1.1}
                 strokeDasharray={style.dash}
                 pointerEvents="none"
@@ -766,9 +929,30 @@ export function GraphView({
                   <>
                     <path d={bodyPath} fill="none" stroke={color} strokeWidth={1.2} strokeDasharray={dash} />
                     <path d={bodyPath} fill={color} fillOpacity={fillOpacity} clipPath={`url(#half-${id})`} />
+                    {/* Stipple engraving — suppressed under the due lens (one
+                        lens at a time: the lens's own recolor already owns
+                        this node's fill language, see dueStatus above) and
+                        clipped to the same half-region as the fill it sits
+                        on top of. */}
+                    {!dueLens && (
+                      <path
+                        d={bodyPath}
+                        fill="url(#stipple-learning)"
+                        fillOpacity={0.9}
+                        clipPath={`url(#half-${id})`}
+                        pointerEvents="none"
+                      />
+                    )}
                   </>
                 )}
-                {node.state === 'review' && <path d={bodyPath} fill={color} fillOpacity={fillOpacity} />}
+                {node.state === 'review' && (
+                  <>
+                    <path d={bodyPath} fill={color} fillOpacity={fillOpacity} />
+                    {!dueLens && (
+                      <path d={bodyPath} fill="url(#hatch-review)" fillOpacity={0.85} pointerEvents="none" />
+                    )}
+                  </>
+                )}
                 {isSelected && <path d={bodyPath} fill="none" stroke="var(--color-text-primary)" strokeWidth={1.8} />}
               </g>
             )
