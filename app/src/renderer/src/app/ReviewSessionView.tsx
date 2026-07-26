@@ -36,6 +36,7 @@ import { computeDueBuckets } from '../shared/dueBuckets'
 import { MarkView, type RitualMark } from '../components/ritual/Marks'
 import type { ReviewDocketItem } from '../components/ritual/ReviewDocket'
 import { deriveRitualMarks } from '../../../shared/ritualFromTranscript'
+import { QueueRail } from '../components/ritual/QueueRail'
 
 type Phase = 'loading' | 'empty' | 'ready' | 'in-session' | 'done' | 'closed-unexpectedly'
 
@@ -53,6 +54,21 @@ const HOLDING_STABILITY_DAYS = 21
 function looksLikeRateCall(input: Record<string, unknown>): boolean {
   const command = String(input.command ?? '')
   return command.includes(' rate ') && command.includes('--rating')
+}
+
+// Mirrors ritualFromTranscript.ts's `isAssessorAuditSpawnEvent` exactly — see
+// the AUDIT doctrine comment there for the real-transcript signal (SKILL.md
+// §3's honesty check: an engram-assessor spawn auditing this sitting's own
+// self-graded items, differentiated from a /learn verification spawn of the
+// same subagent by the literal word "audit" in the spawn's own input, which
+// /learn's stash items never carry — theirs are kind:"encode"). Duplicated
+// rather than imported, same convention LearnSessionView's own live
+// tool_use-shape checks use for the sibling `isArtifactSmithSpawn`/
+// `isSubagentSpawnTool` checks.
+function looksLikeAssessorAuditSpawn(name: string, input: Record<string, unknown>): boolean {
+  if (name !== 'Agent' && name !== 'Task') return false
+  const s = JSON.stringify(input).toLowerCase()
+  return s.includes('engram-assessor') && s.includes('audit')
 }
 
 // Local-date discipline (getFullYear/Month/Date — never toISOString, same
@@ -242,6 +258,20 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
           // `queue[0]` is still the item being graded — `refreshQueue()`
           // (which shifts it out) only runs after the matching tool_result.
           pendingRateTopic.current = queueRef.current[0]?.topic ?? null
+        }
+        if (looksLikeAssessorAuditSpawn(event.name, event.input)) {
+          // Live-session-only half of the audit mark: the spawn itself is a
+          // real SessionEvent, so it can push a `pending` mark immediately.
+          // Its verdict never resolves live — SessionManager.ts's live event
+          // parser doesn't forward the background agent's eventual
+          // `<task-notification>` completion at all (see the AUDIT doctrine
+          // comment in shared/ritualFromTranscript.ts) — only a transcript
+          // replay (deriveRitualMarks, the `resume` branch of startSession
+          // below) can ever resolve it to agreed/disputed.
+          setMarks((prev) => [
+            ...prev,
+            { id: `mark-${markSeq.current++}`, atIndex: messagesRef.current.length, kind: 'audit', itemCount: null, verdict: 'pending', disputedNodes: [] },
+          ])
         }
         break
       case 'tool_result':
@@ -576,10 +606,13 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
                   <div className="text-sm font-medium text-[var(--color-text-primary)]">{humanizeNodeId(current.id)}</div>
                   <div className="label-data text-xs text-[var(--color-text-faint)] mt-0.5 uppercase tracking-wider">{current.topic}</div>
                 </div>
-                {sessionTotal > 0 && (
-                  <span className="label-data text-[10px] text-[var(--color-text-faint)] shrink-0">
-                    Item {sessionTotal - queue.length + 1} of {sessionTotal}
-                  </span>
+                {sessionTotal > 1 && (
+                  <QueueRail
+                    total={sessionTotal}
+                    completedGrades={sessionGrades}
+                    hasCurrent
+                    currentNodeId={current.id}
+                  />
                 )}
               </div>
               <p className="text-sm text-[var(--color-text-primary)]">{current.probe}</p>

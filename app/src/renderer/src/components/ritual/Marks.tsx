@@ -9,6 +9,7 @@ import { MisconceptionPin } from './MisconceptionPin'
 import { ExplorableForged } from './ExplorableForged'
 import { ReviewDocket, type ReviewDocketItem } from './ReviewDocket'
 import { LapseRite } from './LapseRite'
+import { AuditCard, type AuditVerdict } from './AuditCard'
 
 /** Abbreviate to ~cap chars on a word boundary WITHOUT cutting inside a $…$ /
  * $$…$$ span — a dangling delimiter would make KaTeX render the tail as
@@ -50,9 +51,13 @@ function abbreviateOutsideMath(text: string, cap: number): string {
  * `phase`/`diagnostic` (session_phase + pretest rate calls), `misconception`
  * (`misconception add` Bash calls), `explorable` (an artifact-smith spawn
  * and/or `artifact set` Bash call), `verify-seal` (a `beat_outcome`
- * bridge:ui call naming beat `verify` with outcome `confirmed`), and `lapse`
+ * bridge:ui call naming beat `verify` with outcome `confirmed`), `lapse`
  * (Review's own rite: a `rate --rating again` call whose result grades
- * 'lapsed') — see
+ * 'lapsed'), and `audit` (Review's own honesty check: an engram-assessor
+ * spawn auditing the tutor's self-grading, `pending` until a matching
+ * `<task-notification>` resolves it — replay-only, see the AUDIT doctrine
+ * comment in shared/ritualFromTranscript.ts for why a live sitting never
+ * sees a resolved verdict) — see
  * `shared/ritualFromTranscript.ts`'s
  * `deriveRitualMarks`, which walks a reopened session's transcript to rebuild
  * them instead of leaving a resumed sitting's history bare. The rest are
@@ -75,6 +80,7 @@ export type RitualMark = { id: string; atIndex: number } & (
   | { kind: 'verify-seal' }
   | { kind: 'lapse'; node: string; returnDate: string | null }
   | { kind: 'docket'; items: ReviewDocketItem[] }
+  | { kind: 'audit'; itemCount: number | null; verdict: AuditVerdict; disputedNodes: string[] }
 )
 
 /** Small hand-drawn glyphs, one per dialogue-grammar beat. 16x16 viewBox,
@@ -187,6 +193,7 @@ export function MarkView({ mark }: { mark: RitualMark }) {
   if (mark.kind === 'verify-seal') return <VerifySeal />
   if (mark.kind === 'lapse') return <LapseRite node={mark.node} returnDate={mark.returnDate} />
   if (mark.kind === 'docket') return <ReviewDocket items={mark.items} />
+  if (mark.kind === 'audit') return <AuditCard itemCount={mark.itemCount} verdict={mark.verdict} disputedNodes={mark.disputedNodes} />
   return <StashStamp />
 }
 
