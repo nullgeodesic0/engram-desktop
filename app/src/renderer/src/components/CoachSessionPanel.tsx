@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { SessionEvent } from '../../../shared/sessionEvents'
 import type { BridgeAskRequest } from '../../../shared/bridgeProtocol'
 import { AskDialog } from './AskDialog'
-import { MathRenderer } from './MathRenderer'
+import { ProseMarkdown } from './ProseMarkdown'
 import { Button } from './ui/Button'
 import { TypingIndicator } from './TypingIndicator'
 import { friendlyErrorText } from '../shared/friendlyError'
@@ -141,7 +141,7 @@ export function CoachSessionPanel() {
 
       {streamText && (
         <div className="panel-raised px-4 py-3 max-h-80 overflow-y-auto">
-          <MathRenderer text={streamText} className="voice-serif text-[var(--color-text-primary)]" />
+          <ProseMarkdown text={streamText} className="voice-serif text-[var(--color-text-primary)]" />
         </div>
       )}
       {busy && <TypingIndicator label="the coach is thinking…" />}

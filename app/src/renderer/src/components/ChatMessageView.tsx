@@ -2,7 +2,7 @@ import { Fragment, memo, useMemo, type ReactNode } from 'react'
 import type { ChatMessage } from '../../../shared/chatMessages'
 import { parseBeatSegments } from '../../../shared/beatLabelParser'
 import { BeatCard, PlainDialogueBlock } from './BeatCard'
-import { MathRenderer } from './MathRenderer'
+import { ProseMarkdown } from './ProseMarkdown'
 import { InkNode } from './ui/InkNode'
 import { splitAroundProbeHeader } from '../../../shared/probeHeader'
 import { ProbeCard } from './ritual/ProbeCard'
@@ -86,7 +86,7 @@ export const ChatMessageView = memo(function ChatMessageView({
               ))}
             </div>
           )}
-          <MathRenderer text={message.text} className="text-sm text-[var(--color-text-primary)] leading-relaxed" />
+          <ProseMarkdown text={message.text} className="text-sm text-[var(--color-text-primary)] leading-relaxed" />
         </div>
       </div>
     )
