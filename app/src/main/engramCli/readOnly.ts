@@ -6,8 +6,16 @@ import { resolveEngramPlugin } from '../session/pluginResolver'
 const execFileAsync = promisify(execFile)
 
 // Exact allowlist of engram.py subcommands this module will ever invoke.
-// These are the commands engram.py itself treats as read-only (no lockfile
-// taken) — see MUTATING_COMMANDS / the main() dispatch in engram.py.
+//
+// The guarantee here is "no WRITE action is reachable" — NOT "no lock is
+// taken". engram.py's `main()` keeps a local `mutating` set that decides
+// lock acquisition per COMMAND, not per action, and it includes
+// `misconception`, `experiment`, and `model` — so those three acquire the
+// advisory lock even for their read actions (`LOCK_TIMEOUT_S = 10`, so a
+// read can block briefly, or throw, while a live session is mid-write).
+// That's pre-existing and accepted: `artifact list` has always done it.
+// What must stay true is that every entry below either has no write action
+// at all, or is gated by READ_ONLY_SUBCOMMANDS to its read actions only.
 const READ_ONLY_COMMANDS = new Set([
   'topics',
   'stats',

@@ -294,7 +294,9 @@ export function HomeView({ onGoReview, onGoCoach, onGoTopic, onNewTopic }: HomeV
           >
             <div className="text-sm">
               {stats.pending_verify > 0 ? `${stats.pending_verify} pending grading · ` : ''}
-              {stats.misconceptions_open > 0 ? `${stats.misconceptions_open} open misconceptions` : 'Loop closure looking good'}
+              {stats.misconceptions_open > 0
+                ? `${stats.misconceptions_open} noticed, filed for re-testing`
+                : 'Nothing filed for re-testing'}
             </div>
             <span className="text-sm">Coach →</span>
           </Button>
