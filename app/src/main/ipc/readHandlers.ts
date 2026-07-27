@@ -8,9 +8,17 @@ import {
 } from '../engramCli/readOnly'
 import { getTopicsCached } from '../engramCli/topicsCache'
 import { readReceiptsHistory } from '../engramCli/receiptsHistory'
+import { readGraderAuditHistory } from '../engramCli/graderAuditHistory'
 import { getMapAnnotations } from '../session/mapAnnotations'
 import { nodeProvenance } from '../session/sessionScan'
-import type { TopicGraph, NodeProvenance, Misconception, ActiveExperiment } from '../../shared/types'
+import type {
+  TopicGraph,
+  NodeProvenance,
+  Misconception,
+  ActiveExperiment,
+  GraderHealthResult,
+  GraderAuditFile,
+} from '../../shared/types'
 
 // misconceptions.json is engine-written but hand-editable — shape-guard each
 // row rather than trusting the file, and drop malformed entries instead of
@@ -64,6 +72,17 @@ export function registerReadHandlers(): void {
   ipcMain.handle('engram:next', (_e, topic: string) => engramRead('next', ['--topic', topic]))
   ipcMain.handle('engram:doctor', () => engramRead('doctor'))
   ipcMain.handle('engram:model', () => engramRead('model'))
+  // Already on the read-only allowlist (main/engramCli/readOnly.ts) with zero
+  // call sites before this — see readOnly.ts's READ_ONLY_COMMANDS. Returns
+  // the latest audit's full body, field-checked; see shared/types.ts's
+  // GraderHealthResult for the two shapes (audited vs not) verified against
+  // engram.py's own source.
+  ipcMain.handle('engram:graderHealth', () => engramRead<GraderHealthResult>('grader-health'))
+  // Direct read of ~/.claude/learning/audits/*.json, newest first — same
+  // discipline as readTopicGraph below: a documented, engine-owned,
+  // append-only directory, read and never written. Supplies `thresholds`
+  // and `bias_note`, which `grader-health` omits (see graderAuditHistory.ts).
+  ipcMain.handle('engram:graderAuditHistory', (): Promise<GraderAuditFile[]> => readGraderAuditHistory())
   ipcMain.handle('engram:topicStatusText', (_e, topic: string) => engramTopicStatusText(topic))
   ipcMain.handle('engram:topicGraph', (_e, topic: string) => readTopicGraph(topic))
   ipcMain.handle('engram:artifactList', () => engramArtifactList())
