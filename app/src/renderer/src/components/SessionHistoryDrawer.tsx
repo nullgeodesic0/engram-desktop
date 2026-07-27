@@ -182,10 +182,12 @@ export const ALL_HISTORY_KEY = '*'
  * `SessionIndexEntry` so those modes can keep handing the drawer plain
  * index entries, untouched. */
 export interface AllHistoryEntry extends SessionIndexEntry {
-  kind: 'learn' | 'review'
+  kind: 'learn' | 'review' | 'coach'
   /** The topic this sitting belongs to, when attributable — absent for
    * review sittings (the queue spans every topic, same as `ladderTopic`'s
-   * existing 'review' special-case below) and for sittings recorded under
+   * existing 'review' special-case below), for coach sittings (never
+   * topic-scoped — sessionIndex.ts's own key comment: 'review'/'coach' key
+   * by kind, only 'learn' keys by topic), and for sittings recorded under
    * the legacy shared 'learn' key, from before per-topic keying existed
    * (see sessionScan.ts's module doc) — those carry no topic at all. */
   topicId?: string
@@ -194,6 +196,32 @@ export interface AllHistoryEntry extends SessionIndexEntry {
 
 type HistoryRow = SessionIndexEntry & Partial<Pick<AllHistoryEntry, 'kind' | 'topicId' | 'topicTitle'>>
 
+/** Collapses raw session-index entries down to one row per distinct
+ * sessionId. `recordSession` (sessionIndex.ts) appends a fresh entry on
+ * every resume of the same session, so a key's raw list can carry many rows
+ * for a handful of actual sittings — visible in real data as e.g. 66 raw
+ * entries under a topic key for just 4 distinct sessionIds. Mirrors
+ * `fetchAllHistory`'s own dedupe below: `list` must already be newest-first
+ * (`sessionHistoryFor`'s contract), so "first occurrence wins" means the
+ * surviving record for a given sessionId is deliberately the LATEST
+ * resume — its `startedAt` is what "sitting of <date>" and the ordinal
+ * "N sessions ago" ranking are measured from, since that's the most recent
+ * time the learner was actually looking at that transcript. Never touches
+ * which sessionIds survive, only which single record represents each one —
+ * `initialSessionId` matching and the anchor-index walk (both keyed on
+ * sessionId / the transcript itself, not on which raw record was kept)
+ * still resolve exactly as before. */
+function dedupeBySessionId<T extends SessionIndexEntry>(list: T[]): T[] {
+  const seen = new Set<string>()
+  const out: T[] = []
+  for (const e of list) {
+    if (seen.has(e.sessionId)) continue
+    seen.add(e.sessionId)
+    out.push(e)
+  }
+  return out
+}
+
 /** The "everything" list's per-row tag — kind plus topic when attributable.
  * A legacy-key 'learn' sitting (see `fetchAllHistory`'s doc below) has no
  * topic to show, so it reads as plain "Learn" rather than fabricating an
@@ -201,19 +229,22 @@ type HistoryRow = SessionIndexEntry & Partial<Pick<AllHistoryEntry, 'kind' | 'to
  * never carry a `kind`. */
 function historyRowTag(entry: HistoryRow): string {
   if (entry.kind === 'review') return 'Review'
+  if (entry.kind === 'coach') return 'Coach'
   return entry.topicTitle ? `Learn · ${entry.topicTitle}` : 'Learn'
 }
 
-/** Every sitting across every topic and both loops, newest first — the data
- * behind the drawer's `ALL_HISTORY_KEY` mode. Walks the same three source
- * layers sessionScan.ts's `nodeProvenance` already established for
- * provenance recovery: each topic's own 'learn' key, the shared 'review'
- * key, and the legacy shared 'learn' key that early sittings (recorded
- * before per-topic keying existed) still live under. A sessionId can
- * legitimately turn up more than once across — or even within — those lists
- * (a resumed session reappears in its own key once per resume, sharing one
- * transcript — see sessionIndex.ts's `recordSession`), so this dedupes by
- * sessionId across the whole combined set, same "first occurrence wins" rule
+/** Every sitting across every topic and all three loops, newest first — the
+ * data behind the drawer's `ALL_HISTORY_KEY` mode (and hence what "Session
+ * History…"/"All Sessions" actually promise). Walks the same source layers
+ * sessionScan.ts's `nodeProvenance` already established for provenance
+ * recovery, plus the topic-less 'coach' key: each topic's own 'learn' key,
+ * the shared 'review' key, the shared 'coach' key, and the legacy shared
+ * 'learn' key that early sittings (recorded before per-topic keying existed)
+ * still live under. A sessionId can legitimately turn up more than once
+ * across — or even within — those lists (a resumed session reappears in its
+ * own key once per resume, sharing one transcript — see sessionIndex.ts's
+ * `recordSession`), so this dedupes by sessionId across the whole combined
+ * set with `dedupeBySessionId`'s same "first occurrence wins" rule
  * `nodeProvenance`'s own `seenSessionIds` walk already uses. Because each
  * source list already comes back newest-first (`sessionHistoryFor`'s own
  * contract), "first occurrence" here also means "latest resume" wins the
@@ -222,9 +253,10 @@ function historyRowTag(entry: HistoryRow): string {
  * the same sessionId. */
 export async function fetchAllHistory(): Promise<AllHistoryEntry[]> {
   const topics = await window.engram.topics()
-  const [perTopicLists, reviewList, legacyList] = await Promise.all([
+  const [perTopicLists, reviewList, coachList, legacyList] = await Promise.all([
     Promise.all(topics.map((t) => window.engram.sessionHistoryFor('learn', t.topic))),
     window.engram.sessionHistoryFor('review'),
+    window.engram.sessionHistoryFor('coach'),
     window.engram.sessionHistoryFor('learn'),
   ])
 
@@ -242,6 +274,7 @@ export async function fetchAllHistory(): Promise<AllHistoryEntry[]> {
     take(perTopicLists[i], (e) => ({ ...e, kind: 'learn', topicId: t.topic, topicTitle: t.title })),
   )
   take(reviewList, (e) => ({ ...e, kind: 'review' }))
+  take(coachList, (e) => ({ ...e, kind: 'coach' }))
   take(legacyList, (e) => ({ ...e, kind: 'learn' }))
 
   // Newest first across the combined set — per-key ordering alone isn't
@@ -313,12 +346,15 @@ export function SessionHistoryDrawer({
     setSelectedId(null)
     setTimeline(null)
     anchorAppliedRef.current = false
+    // The per-topic/review branches dedupe here (fetchAllHistory does its own,
+    // see dedupeBySessionId's doc) — without it a resumed sitting's repeat
+    // recordSession appends would each surface as their own row.
     const fetchEntries: Promise<HistoryRow[]> =
       historyKey === ALL_HISTORY_KEY
         ? fetchAllHistory()
         : historyKey === 'review'
-          ? window.engram.sessionHistoryFor('review')
-          : window.engram.sessionHistoryFor('learn', historyKey)
+          ? window.engram.sessionHistoryFor('review').then(dedupeBySessionId)
+          : window.engram.sessionHistoryFor('learn', historyKey).then(dedupeBySessionId)
     fetchEntries.then((list) => {
       setEntries(list)
       // Anchored open lands on the requested sitting; otherwise most-recent

@@ -5,7 +5,7 @@ import { GraphView, EDGE_STYLE } from '../components/GraphView'
 import { NodeTable } from '../components/NodeTable'
 import { GrowthScrubber } from '../components/GrowthScrubber'
 import { cellBodyPath, plateStats, ancestorClosure, descendantPath } from '../components/graph2d/plate'
-import { layersOf } from '../components/graph3d/layout'
+import { layersOf, computeHubNodeIds } from '../components/graph3d/layout'
 import { humanizeNodeId } from '../../../shared/humanizeId'
 import { SkeletonBar } from '../components/Skeleton'
 import { StatBlock } from '../components/ui/StatBlock'
@@ -16,12 +16,7 @@ import { SessionHistoryDrawer } from '../components/SessionHistoryDrawer'
 import { ExplorableViewer } from '../components/ExplorableViewer'
 import { friendlyErrorText } from '../shared/friendlyError'
 import { recordView } from '../shared/recentlyViewed'
-
-function stateLabel(state: string): string {
-  if (state === 'new') return 'not started'
-  if (state === 'learning') return 'encoding'
-  return 'consolidated'
-}
+import { stateLabel, formatMonthDay } from '../shared/nodeDisplay'
 
 /** `date` is a local YYYY-MM-DD string (see ProvenanceEvent) — parsed without
  * a `Z` suffix so `Date` reads it in local time instead of shifting it a day
@@ -32,13 +27,6 @@ function formatProvenanceDate(date: string): string {
 
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1)
-}
-
-/** "<Month d>" — same local-parse discipline as formatProvenanceDate, just
- * without the year (the GrowthScrubber's readout scans a single-topic
- * timeline short enough that the year would only be clutter). */
-function formatMonthDay(date: string): string {
-  return new Date(`${date}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
 /** Local YYYY-MM-DD for a Date object — getFullYear/Month/Date, never
@@ -166,18 +154,34 @@ function NodeMisconceptions({
  * determinism. Requires reads shallowest-layer-first: the deepest
  * ancestors — the foundational nodes with no prerequisites of their own —
  * come first, building up toward what's nearest this node. Unlocks reads
- * the same direction, nearest milestone first. */
+ * the same direction, nearest milestone first.
+ *
+ * `ancestorClosure`/`descendantPath` (plate.ts) stop the walk at a hub
+ * boundary for every OTHER node's trail, but neither stops at the START
+ * node itself — so calling this on a hub node (`computeHubNodeIds`: the
+ * capstone, or a capstone-like synthesis node nearly everything requires-
+ * into) would enumerate its own near-universal direct requires right back
+ * out as "the closure". `hubRequiresCount` is how the caller renders that
+ * case instead: `requires` comes back empty and the direct-requires count
+ * rides along separately, so NodeStructure can show one honest line ("the
+ * territory — N nodes") rather than a 30+ row list. Unlocks doesn't need the
+ * same guard — nothing but another hub ever requires-into a hub, and hubs
+ * are excluded from the walk, so a hub's descendantPath is empty in every
+ * graph shipped today. */
 function computeNodeStructure(
   graph: TopicGraph,
   nodeId: string,
   layers: Map<string, number>,
   orderIndex: Map<string, number>,
-): { requires: string[]; unlocks: string[] } {
+  hubs: Set<string>,
+): { requires: string[]; unlocks: string[]; hubRequiresCount: number | null } {
   const byDepth = (a: string, b: string) =>
     (layers.get(a) ?? 0) - (layers.get(b) ?? 0) || (orderIndex.get(a) ?? 0) - (orderIndex.get(b) ?? 0)
+  const isHub = hubs.has(nodeId)
   return {
-    requires: [...ancestorClosure(graph, nodeId)].sort(byDepth),
+    requires: isHub ? [] : [...ancestorClosure(graph, nodeId)].sort(byDepth),
     unlocks: [...descendantPath(graph, nodeId)].sort(byDepth),
+    hubRequiresCount: isHub ? (graph.nodes[nodeId]?.edges.requires ?? []).length : null,
   }
 }
 
@@ -189,30 +193,39 @@ function computeNodeStructure(
  * node) still gets a real, bounded trail instead of the whole topic. This is
  * the SINGLE place a node's requires relationships render: the drawer's old
  * direct-`edges.requires` chip row and the modal's `requires` case in the
- * EDGE_STYLE loop were both removed in favor of this block, since a node's
- * ancestor closure is non-empty exactly when its direct requires is (the
- * closure always includes the direct edges as its final, nearest layer) —
- * two labels both reading "REQUIRES" over overlapping node sets read as a
- * rendering bug, not two different things. `derives_from`/`contrasts_with`/
- * `analogous_to` have no closure equivalent, so they still render via their
- * own EDGE_STYLE loop elsewhere in the modal. Violet is this app's
- * synthesis/structure accent: warm is provenance/history, cool is
+ * EDGE_STYLE loop were both removed in favor of this block. In the common
+ * case a node's ancestor closure is non-empty whenever its direct requires
+ * is — the closure includes the direct edges as its own nearest layer — but
+ * that's not a guarantee: a node whose direct prerequisites are ALL hubs
+ * would have a non-empty `edges.requires` and an empty closure (every one of
+ * them stopped at the hub boundary). No node in any graph shipped today hits
+ * that case, so it isn't specially handled — a node like that would silently
+ * render no Requires line at all, same as an actual root. `derives_from`/
+ * `contrasts_with`/`analogous_to` have no closure equivalent, so they still
+ * render via their own EDGE_STYLE loop elsewhere in the modal. Violet is this
+ * app's synthesis/structure accent: warm is provenance/history, cool is
  * misconceptions, violet is the shape of the graph itself — hence the outer
  * "Structure" label, with "Requires"/"Unlocks" as sub-captions. Renders
- * nothing for a node with neither (roots have no requires, leaves have no
- * unlocks) — no empty chrome, same discipline as NodeMisconceptions. */
+ * nothing for a node with neither and no hub count (roots have no requires,
+ * leaves have no unlocks) — no empty chrome, same discipline as
+ * NodeMisconceptions. */
 function NodeStructure({
   requires,
   unlocks,
+  hubRequiresCount,
   onSelect,
   compact,
 }: {
   requires: string[]
   unlocks: string[]
+  /** Set (instead of null) only when this node is itself a hub — the direct-
+   * requires count to state in place of enumerating `requires` (always empty
+   * in that case; see computeNodeStructure). */
+  hubRequiresCount: number | null
   onSelect: (id: string) => void
   compact: boolean
 }) {
-  if (requires.length === 0 && unlocks.length === 0) return null
+  if (requires.length === 0 && unlocks.length === 0 && hubRequiresCount === null) return null
   const textSize = compact ? 'text-xs' : 'text-sm'
   return (
     <div
@@ -222,19 +235,23 @@ function NodeStructure({
         Structure
       </div>
       <div className="flex flex-col gap-2">
-        {requires.length > 0 && (
+        {(requires.length > 0 || hubRequiresCount !== null) && (
           <div className="flex flex-col gap-1 items-start">
             <div className="text-[10px] label-data text-[var(--color-text-faint)]">Requires</div>
-            {requires.map((id) => (
-              <button
-                key={id}
-                onClick={() => onSelect(id)}
-                title={id}
-                className="focus-ring pl-2 text-left hover:text-[var(--color-text-primary)]"
-              >
-                {humanizeNodeId(id)}
-              </button>
-            ))}
+            {hubRequiresCount !== null ? (
+              <p className="pl-2">the territory — {hubRequiresCount} nodes</p>
+            ) : (
+              requires.map((id) => (
+                <button
+                  key={id}
+                  onClick={() => onSelect(id)}
+                  title={id}
+                  className="focus-ring pl-2 text-left hover:text-[var(--color-text-primary)]"
+                >
+                  {humanizeNodeId(id)}
+                </button>
+              ))
+            )}
           </div>
         )}
         {unlocks.length > 0 && (
@@ -443,9 +460,22 @@ export function TopicMapView({
 
   // Only fires once the freshly-loaded graph actually matches the deep-linked
   // topic — setting openNode any earlier would just get wiped by the effect above.
+  // Waiting on `graph.topic === deepLinkNode.topicId` first (rather than
+  // consuming as soon as `deepLinkNode` is set) is what keeps this from
+  // canceling a legitimate pending open: the right graph might just not have
+  // finished loading yet, and that's not the same thing as an unresolvable link.
   useEffect(() => {
     if (!deepLinkNode || !graph || graph.topic !== deepLinkNode.topicId) return
-    if (!graph.nodes[deepLinkNode.nodeId]) return
+    if (!graph.nodes[deepLinkNode.nodeId]) {
+      // The right topic loaded, but this node doesn't exist in it — a stale
+      // or poisoned deep link (e.g. a recentlyViewed row pointing at a node
+      // id that never belonged to this topic). Consume it anyway: leaving
+      // `deepLinkNode` set would force this topic open on every subsequent
+      // Topic Map mount (see the `!deepLinkNode` guard in the topics-load
+      // effect above), silently overriding whatever the learner picks next.
+      onDeepLinkConsumed?.()
+      return
+    }
     setOpenNode(deepLinkNode.nodeId)
     // Also select it, so the plate pans/zooms to the node — closing the modal
     // then leaves you looking at the right spot instead of the default view.
@@ -472,13 +502,21 @@ export function TopicMapView({
   // deep-link/spotlight effects above), so one effect per state covers all of
   // them rather than a recordView() sprinkled at each call site. Never fires
   // on a clear (selectedNode/openNode going back to null).
+  //
+  // The `graph.topic === selectedTopic` check matters on a topic switch:
+  // React can commit a render where `selectedTopic` already reads the new
+  // topic while `selectedNode`/`graph` are still the OLD topic's — the effect
+  // that resets them on a topic change only *schedules* those clears, it
+  // doesn't apply them synchronously. Without this check that render would
+  // record `{topic: <new>, node: <old node>}` — a node id that doesn't even
+  // exist in the new topic, mislabeled with the old topic's title.
   useEffect(() => {
-    if (!selectedTopic || !selectedNode || !graph) return
+    if (!selectedTopic || !selectedNode || !graph || graph.topic !== selectedTopic) return
     recordView({ kind: 'node', topic: selectedTopic, node: selectedNode, label: humanizeNodeId(selectedNode), topicTitle: graph.title })
   }, [selectedTopic, selectedNode, graph])
 
   useEffect(() => {
-    if (!selectedTopic || !openNode || !graph) return
+    if (!selectedTopic || !openNode || !graph || graph.topic !== selectedTopic) return
     recordView({ kind: 'node', topic: selectedTopic, node: openNode, label: humanizeNodeId(openNode), topicTitle: graph.title })
   }, [selectedTopic, openNode, graph])
 
@@ -489,25 +527,29 @@ export function TopicMapView({
   // Dependency-depth layers + a stable graph-order index, both reused by
   // NodeStructure's root-first sort below — computed once per graph rather
   // than per render, since ancestorClosure/descendantPath already do a full
-  // walk of their own.
+  // walk of their own. structureHubs is the same hub set ancestorClosure/
+  // descendantPath already consult internally — computeNodeStructure needs
+  // its own copy too, to know when the SELECTED node (not just a node it
+  // walks through) is itself a hub.
   const structureLayers = useMemo(() => (graph ? layersOf(graph) : null), [graph])
   const structureOrderIndex = useMemo(
     () => (graph ? new Map(graph.order.map((id, i) => [id, i] as const)) : null),
     [graph],
   )
+  const structureHubs = useMemo(() => (graph ? computeHubNodeIds(graph) : null), [graph])
   const selectedStructure = useMemo(
     () =>
-      graph && selectedNode && structureLayers && structureOrderIndex
-        ? computeNodeStructure(graph, selectedNode, structureLayers, structureOrderIndex)
-        : { requires: [], unlocks: [] },
-    [graph, selectedNode, structureLayers, structureOrderIndex],
+      graph && selectedNode && structureLayers && structureOrderIndex && structureHubs
+        ? computeNodeStructure(graph, selectedNode, structureLayers, structureOrderIndex, structureHubs)
+        : { requires: [], unlocks: [], hubRequiresCount: null },
+    [graph, selectedNode, structureLayers, structureOrderIndex, structureHubs],
   )
   const openedStructure = useMemo(
     () =>
-      graph && openNode && structureLayers && structureOrderIndex
-        ? computeNodeStructure(graph, openNode, structureLayers, structureOrderIndex)
-        : { requires: [], unlocks: [] },
-    [graph, openNode, structureLayers, structureOrderIndex],
+      graph && openNode && structureLayers && structureOrderIndex && structureHubs
+        ? computeNodeStructure(graph, openNode, structureLayers, structureOrderIndex, structureHubs)
+        : { requires: [], unlocks: [], hubRequiresCount: null },
+    [graph, openNode, structureLayers, structureOrderIndex, structureHubs],
   )
 
   // Growth timeline — earliest firstEncoded.date across the topic's nodes,
@@ -929,6 +971,7 @@ export function TopicMapView({
               <NodeStructure
                 requires={selectedStructure.requires}
                 unlocks={selectedStructure.unlocks}
+                hubRequiresCount={selectedStructure.hubRequiresCount}
                 onSelect={setSelectedNode}
                 compact
               />
@@ -1111,6 +1154,7 @@ export function TopicMapView({
             <NodeStructure
               requires={openedStructure.requires}
               unlocks={openedStructure.unlocks}
+              hubRequiresCount={openedStructure.hubRequiresCount}
               onSelect={setOpenNode}
               compact={false}
             />
