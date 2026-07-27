@@ -8,6 +8,7 @@ import { CommandPalette } from './components/CommandPalette'
 import { SessionHistoryDrawer, ALL_HISTORY_KEY } from './components/SessionHistoryDrawer'
 import { TitleBar } from './components/TitleBar'
 import { SkeletonBar, SkeletonGrid } from './components/Skeleton'
+import { HelpSheet } from './components/HelpSheet'
 
 // Code-split: both views unmount on tab switch already (they're not inside
 // KeepMounted — see the comment on `main` below), so there's no "resolve once,
@@ -112,6 +113,12 @@ export default function App() {
   // every topic and both loops, so it isn't scoped to whichever view is
   // active. Reachable from the Session menu and the command palette.
   const [allHistoryOpen, setAllHistoryOpen] = useState(false)
+  // The help sheet (keyboard reference + glossary) — reachable from the app
+  // menu (a plain navigateTo('help'), see onNavigate below) and from `?`
+  // (the keydown listener further down, which is careful never to fire while
+  // a text field has focus). Owned here, not inside any one view, since both
+  // entry points are global rather than scoped to whatever's on screen.
+  const [helpOpen, setHelpOpen] = useState(false)
   // Deep-link into the "All Sessions" drawer from a recently-viewed sitting
   // (Home's quiet row, the palette's empty-query state) — cleared on close so
   // a later plain open (Session menu, ⇧⌘H) always falls back to the drawer's
@@ -158,6 +165,10 @@ export default function App() {
         setAllHistoryOpen(true)
         return
       }
+      if (v === 'help') {
+        setHelpOpen(true)
+        return
+      }
       if (v === 'home' || v === 'topics' || v === 'dashboard' || v === 'artifacts' || v === 'review' || v === 'learn' || v === 'settings') {
         goToView(v)
       }
@@ -166,6 +177,23 @@ export default function App() {
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
+      // `?` opens Help — but never while the learner is typing. A bare
+      // `e.key === '?'` check alone would fire on every "?" typed into the
+      // composer, a settings field, or the palette's search box, so this is
+      // gated on the focused element rather than on a modifier key (there
+      // isn't one to gate on: `?` is Shift+/ on a US layout, and `e.key`
+      // already reports the shifted character either way). `isContentEditable`
+      // covers a contenteditable region; INPUT/TEXTAREA covers everything
+      // else in this app that accepts free text.
+      if (e.key === '?' && !e.metaKey && !e.ctrlKey) {
+        const el = document.activeElement as HTMLElement | null
+        const typing = !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)
+        if (!typing) {
+          e.preventDefault()
+          setHelpOpen((v) => !v)
+        }
+        return
+      }
       if (!e.metaKey && !e.ctrlKey) return
       if (e.key === 'k') {
         e.preventDefault()
@@ -415,6 +443,7 @@ export default function App() {
         }}
         initialSessionId={historyDeepLinkSession ?? undefined}
       />
+      <HelpSheet open={helpOpen} onClose={() => setHelpOpen(false)} />
       </div>
     </div>
   )
