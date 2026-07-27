@@ -2,8 +2,6 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { PinTackIcon } from '../components/ui/PinTackIcon'
 import type { DueItem, ExportSittingFormat } from '../../../shared/types'
 import type { SessionEvent } from '../../../shared/sessionEvents'
-import type { BridgeAskRequest } from '../../../shared/bridgeProtocol'
-import { AskDialog } from '../components/AskDialog'
 import { RateLimitBanner } from '../components/RateLimitBanner'
 import { isBlockingRateLimitStatus } from '../../../shared/rateLimit'
 import { ChatMessageView } from '../components/ChatMessageView'
@@ -111,7 +109,6 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
   const [busy, setBusy] = useState(false)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [contextUsage, setContextUsage] = useState<{ usedTokens: number; contextWindow: number } | null>(null)
-  const [askRequest, setAskRequest] = useState<BridgeAskRequest | null>(null)
   const [rateLimit, setRateLimit] = useState<{ status: string; resetsAt: number | null } | null>(null)
   const [log, setLog] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -330,7 +327,25 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
     })
     const offAsk = window.engram.onBridgeAsk((req) => {
       if (req.sessionId !== sessionIdRef.current) return
-      setAskRequest(req)
+      // Wave E, Task 11 — inline transcript mark instead of the AskDialog
+      // modal; same atIndex convention every other live mark here uses
+      // (pushLapseMark/pushMilestoneMark/pushToolFailureMark above).
+      // `answerAsk` below resolves it in place by `requestId`.
+      setMarks((prev) => [
+        ...prev,
+        {
+          id: `mark-${markSeq.current++}`,
+          atIndex: messagesRef.current.length,
+          kind: 'ask',
+          requestId: req.requestId,
+          header: req.header,
+          question: req.question,
+          options: req.options,
+          multiSelect: req.multiSelect,
+          answer: null,
+          live: true,
+        },
+      ])
       tutorActivity.dispatchAskOpened()
     })
     return () => {
@@ -629,16 +644,19 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
     await window.engram.sendMessage(sessionId, sentText)
   }
 
-  async function answerAsk(chosen: string[] | null) {
-    if (!askRequest) return
+  async function answerAsk(requestId: string, chosen: string[] | null) {
+    const mark = marks.find((m): m is Extract<RitualMark, { kind: 'ask' }> => m.kind === 'ask' && m.requestId === requestId)
+    if (!mark) return
     // Mirror the confidence pick locally before forwarding — best-effort, never
     // blocks the real answer even if the current item isn't known yet.
-    if (askRequest.header === 'Confidence' && chosen && chosen[0] && current) {
-      const index = askRequest.options.findIndex((o) => o.label === chosen[0])
+    if (mark.header === 'Confidence' && chosen && chosen[0] && current) {
+      const index = mark.options.findIndex((o) => o.label === chosen[0])
       recordConfidence(current.topic, current.id, chosen[0], index >= 0 ? index : undefined)
     }
-    await window.engram.answerBridgeQuestion(askRequest.requestId, { chosen })
-    setAskRequest(null)
+    await window.engram.answerBridgeQuestion(requestId, { chosen })
+    // `chosen ?? []` — see LearnSessionView's identical answerAsk for why a
+    // real Skip must never be stored as `null` on this mark.
+    setMarks((prev) => prev.map((m) => (m.kind === 'ask' && m.requestId === requestId ? { ...m, answer: chosen ?? [] } : m)))
     tutorActivity.dispatchAskAnswered()
   }
 
@@ -1041,7 +1059,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
                 </>
               )
             })()}
-            <ChatScrollRegion deps={[messages, busy]}>
+            <ChatScrollRegion deps={[messages, busy, marks]}>
               <div className="transcript-measure flex flex-col gap-5">
                 {/* lapse/milestone excluded here — re-anchored via
                     inlineForMessage/tailOtherMarks below (the carried-over
@@ -1050,7 +1068,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
                 {marks
                   .filter((k) => k.atIndex === 0 && k.kind !== 'lapse' && k.kind !== 'milestone')
                   .map((k) => (
-                    <MarkView key={k.id} mark={k} />
+                    <MarkView key={k.id} mark={k} onAnswerAsk={answerAsk} />
                   ))}
                 {messages.map((m, i) => (
                   <Fragment key={m.id}>
@@ -1077,7 +1095,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
                           k.kind !== 'milestone',
                       )
                       .map((k) => (
-                        <MarkView key={k.id} mark={k} />
+                        <MarkView key={k.id} mark={k} onAnswerAsk={answerAsk} />
                       ))}
                   </Fragment>
                 ))}
@@ -1130,7 +1148,10 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
             <div className="shrink-0 fig-caption px-1">this sitting has closed · session history holds the record</div>
           )}
 
-          {current && !busy && phase !== 'done' && (
+          {/* Chat Presence Wave E, Task 11 — stays mounted (disabled via
+              disabledReason) alongside an open inline AskCard, instead of
+              vanishing the way it did under the old modal. */}
+          {current && (!busy || tutorActivity.activity.kind === 'awaiting-ask') && phase !== 'done' && (
             <MessageComposer
               production={production}
               onProductionChange={setProduction}
@@ -1173,7 +1194,6 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
         </div>
       )}
 
-      {askRequest && <AskDialog request={askRequest} onAnswer={answerAsk} />}
       <SessionHistoryDrawer historyKey="review" title="Review" open={historyDrawerOpen} onClose={() => setHistoryDrawerOpen(false)} />
     </div>
   )

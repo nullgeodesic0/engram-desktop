@@ -12,6 +12,7 @@ import { LapseRite } from './LapseRite'
 import { AuditCard, type AuditVerdict } from './AuditCard'
 import { MilestoneCard } from './MilestoneCard'
 import { ToolFailureCard } from './ToolFailureCard'
+import { AskCard, type AskCardOption } from './AskCard'
 import type { ToolFailureKind } from '../../../../shared/signals/tutorSignals'
 import type { StabilityMilestoneScale } from '../../../../shared/gradeResult'
 
@@ -80,7 +81,30 @@ function abbreviateOutsideMath(text: string, cap: number): string {
  * (a topic's birth), and `docket` (Review's opening `due()` snapshot — the
  * read itself never lands in the transcript, only its downstream `rate`
  * calls do) — those stay live-session-only, same pattern as grade cards and
- * JobsRail. */
+ * JobsRail.
+ *
+ * `ask` (Wave E, Task 11) — the bridge:ask prompt (including the fixed
+ * Confidence picker, see AskCard's own doctrine comment), now inline in the
+ * transcript instead of a blocking modal. `answer` is `string[] | null`, but
+ * unlike every other nullable field on this type, null carries exactly ONE
+ * meaning here — "nothing has resolved this yet" — never "the learner
+ * declined." `live` disambiguates WHY it's still null:
+ *   - `live: true, answer: null` — a real, still-open ask this session is
+ *     actually blocked on right now (bridgeServer is holding the HTTP
+ *     response open server-side; see bridgeServer.ts's doctrine comment).
+ *     Pushed by onBridgeAsk, resolved in place by answerAsk.
+ *   - `live: false, answer: null` — `deriveRitualMarks` replayed a transcript
+ *     whose ask tool_use never got a matching tool_result before the
+ *     transcript ended. That HTTP promise died with the old process; nothing
+ *     will ever resolve it. Rendered honestly as "no answer was given," not
+ *     a live pulsing card — see AskCard.
+ * An answer the learner genuinely gave — including an explicit Skip via the
+ * "Other…" flow — is stored as a (possibly empty) array, never `null`: the
+ * live wiring maps the wire protocol's `chosen: null` ("skipped," see
+ * BridgeAskResponse's own doctrine comment in bridgeProtocol.ts) to `[]` when
+ * writing it into this mark, specifically so a real skip can never collide
+ * with the "still open" / "orphaned" states above. `deriveRitualMarks` does
+ * the same translation reading a real transcript's tool_result. */
 export type RitualMark = { id: string; atIndex: number } & (
   | { kind: 'beat'; beat: string; content: string }
   | { kind: 'crossing'; nodeId: string; verb?: string }
@@ -97,6 +121,16 @@ export type RitualMark = { id: string; atIndex: number } & (
   | { kind: 'audit'; itemCount: number | null; verdict: AuditVerdict; disputedNodes: string[] }
   | { kind: 'milestone'; node: string; scale: StabilityMilestoneScale; sBefore: number; sAfter: number }
   | { kind: 'tool-failure'; failureKind: ToolFailureKind }
+  | {
+      kind: 'ask'
+      requestId: string
+      header: string
+      question: string
+      options: AskCardOption[]
+      multiSelect: boolean
+      answer: string[] | null
+      live: boolean
+    }
 )
 
 /** Small hand-drawn glyphs, one per dialogue-grammar beat. 16x16 viewBox,
@@ -210,7 +244,18 @@ export const VerifySeal = memo(function VerifySeal() {
   )
 })
 
-export function MarkView({ mark }: { mark: RitualMark }) {
+export function MarkView({
+  mark,
+  onAnswerAsk,
+}: {
+  mark: RitualMark
+  /** Only meaningful for `kind: 'ask'` marks — omit at any call site that
+   * only ever renders replayed/history marks (SessionHistoryDrawer), which
+   * have no live bridge request behind them to answer. Both live session
+   * views pass this; AskCard itself only renders it as interactive when the
+   * mark is BOTH `live` and still unanswered (see AskCard's own gating). */
+  onAnswerAsk?: (requestId: string, chosen: string[] | null) => void
+}) {
   if (mark.kind === 'beat') return <BeatMarkCard beat={mark.beat} content={mark.content} />
   if (mark.kind === 'crossing') return <NodeCrossingDivider nodeId={mark.nodeId} verb={mark.verb} />
   if (mark.kind === 'figure') return <FigureCard title={mark.title} body={mark.body} />
@@ -225,6 +270,18 @@ export function MarkView({ mark }: { mark: RitualMark }) {
   if (mark.kind === 'audit') return <AuditCard itemCount={mark.itemCount} verdict={mark.verdict} disputedNodes={mark.disputedNodes} />
   if (mark.kind === 'milestone') return <MilestoneCard node={mark.node} scale={mark.scale} sBefore={mark.sBefore} sAfter={mark.sAfter} />
   if (mark.kind === 'tool-failure') return <ToolFailureCard failureKind={mark.failureKind} />
+  if (mark.kind === 'ask') {
+    return (
+      <AskCard
+        header={mark.header}
+        question={mark.question}
+        options={mark.options}
+        answer={mark.answer}
+        live={mark.live}
+        onAnswer={onAnswerAsk ? (chosen) => onAnswerAsk(mark.requestId, chosen) : undefined}
+      />
+    )
+  }
   return <StashStamp />
 }
 
