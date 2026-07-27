@@ -9,6 +9,7 @@ export function Modal({
   title,
   wide = false,
   panelClassName,
+  headerExtra,
   children,
 }: {
   open: boolean
@@ -18,6 +19,10 @@ export function Modal({
   /** Extra classes appended to the panel (the `panel-raised` div) — e.g. to
    * override its border color for a conditional treatment. */
   panelClassName?: string
+  /** Rendered beside the title in the same row (e.g. an explicit Close
+   * button for content with no other focusable element — see HelpSheet).
+   * No-op without a `title`, since there'd be no header row to join. */
+  headerExtra?: ReactNode
   children: ReactNode
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -40,9 +45,12 @@ export function Modal({
         className={`panel-raised max-h-[85vh] overflow-y-auto p-6 w-full ${wide ? 'max-w-2xl' : 'max-w-md'}${panelClassName ? ` ${panelClassName}` : ''}`}
       >
         {title && (
-          <h2 className="font-[var(--font-display)] text-[length:var(--text-heading)] text-[var(--color-text-primary)] mb-4">
-            {title}
-          </h2>
+          <div className="flex items-start justify-between gap-4 mb-4">
+            <h2 className="font-[var(--font-display)] text-[length:var(--text-heading)] text-[var(--color-text-primary)]">
+              {title}
+            </h2>
+            {headerExtra}
+          </div>
         )}
         {children}
       </div>

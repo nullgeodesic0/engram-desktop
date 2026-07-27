@@ -6,8 +6,16 @@ import { app, Menu } from 'electron'
  * works even when the window has been closed (tray-only mode) and needs to
  * be recreated first.
  *
- * No Help menu: package.json has no `homepage`/`repository` to link to, and
- * a wrong/placeholder URL is worse than no Help menu at all. */
+ * The Help menu below opens the in-app help sheet, not a link out — that
+ * distinction is why it exists now when it didn't before. This app has no
+ * `homepage`/`repository` in package.json, so an external "visit our docs"
+ * link would either be a placeholder or dead on arrival — worse than no menu
+ * item at all. A keyboard reference and glossary rendered from the app's own
+ * data has no such dependency, so that reasoning never applied to it.
+ * Deliberately no accelerator here: the sheet's other entry point is `?`,
+ * bound in the renderer (App.tsx) where it can check focus state before
+ * firing. An Electron-level accelerator can't do that — it would fire while
+ * the learner is mid-sentence in the composer, "?" and all. */
 export function installAppMenu(focusOrCreateWindow: (navigateTo?: string) => void): void {
   const isDev = !app.isPackaged
   const template: Electron.MenuItemConstructorOptions[] = [
@@ -53,6 +61,10 @@ export function installAppMenu(focusOrCreateWindow: (navigateTo?: string) => voi
       ],
     },
     { role: 'windowMenu' },
+    {
+      label: 'Help',
+      submenu: [{ label: 'Keyboard Shortcuts && Glossary', click: () => focusOrCreateWindow('help') }],
+    },
   ]
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
