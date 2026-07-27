@@ -64,6 +64,67 @@ function localDateNDaysAgo(n: number, now: Date = new Date()): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
+// ------------------------------------------------------------- date range
+//
+// Task 4: ONE range control per surface (DashboardView, TopicDrilldownView),
+// governing the receipt-derived charts — Activity, weekly trend, Calibration,
+// and (drilldown only) the retention buckets below. It deliberately does NOT
+// govern: the global Retention/Momentum StatCards (`stats.retention`/
+// `stats.momentum` — the engine's own fixed windows, the oracle from the P3
+// Task 1 fix wave; see p3-t1-fixwave-report.md) or Momentum in EITHER scope
+// (the drilldown's own `computeMomentum` mirrors the engine's compute_momentum
+// field-for-field, including its hardcoded 7-day window — MOMENTUM_WINDOW_DAYS
+// is not a parameter, it is what "momentum" means here, the same way it is in
+// engram.py; two of its five fields, `mostDurable`/`retainedTotal`, are
+// current-graph-state snapshots with no date-range meaning at all regardless).
+// See task-4-report.md for the full boundary justification.
+
+export interface DateRange {
+  from: string // YYYY-MM-DD, local, inclusive
+  to: string // YYYY-MM-DD, local, inclusive
+}
+
+export type RangeKey = '7' | '30' | '90' | 'all'
+
+export const RANGE_OPTIONS: { value: RangeKey; label: string; days: number | null }[] = [
+  { value: '7', label: '7d', days: 7 },
+  { value: '30', label: '30d', days: 30 },
+  { value: '90', label: '90d', days: 90 },
+  { value: 'all', label: 'All', days: null },
+]
+
+/** Local-date bounds for a range preset, or `null` for 'all' (no filter —
+ * every governed chart shows its full unwindowed/180-day population, exactly
+ * the pre-Task-4 behavior). `to` is always local today; `from` is `days - 1`
+ * back so a "7d" range covers exactly 7 calendar days INCLUDING today — both
+ * ends inclusive. Built on `localDateNDaysAgo` (never toISOString), the same
+ * helper `computeMomentum`'s own 7-day cutoff already uses. */
+export function rangeBounds(key: RangeKey, now: Date = new Date()): DateRange | null {
+  const opt = RANGE_OPTIONS.find((o) => o.value === key)
+  if (!opt || opt.days === null) return null
+  return { from: localDateNDaysAgo(opt.days - 1, now), to: localDateNDaysAgo(0, now) }
+}
+
+/** The active range, stated in words — placed beside every chart it governs
+ * so a filtered number can never be mistaken for an all-time one (spec §4).
+ * Local calendar-date formatting only (`T00:00:00`, never toISOString/UTC),
+ * matching TopicDrilldownView's own `formatDate`. */
+export function rangeCaption(key: RangeKey, bounds: DateRange | null): string {
+  if (!bounds) return 'all time — last 180 days'
+  const fmt = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  const opt = RANGE_OPTIONS.find((o) => o.value === key)
+  return `${opt?.label ?? key} — ${fmt(bounds.from)}–${fmt(bounds.to)}`
+}
+
+/** `DayActivity[]` restricted to a date range — plain string comparison,
+ * never Date parsing: `.date` is always YYYY-MM-DD, which sorts lexically
+ * exactly as it sorts chronologically, so this needs no timezone handling at
+ * all. `null` range (the 'all' preset) is a no-op passthrough. */
+export function filterDaysByRange(days: DayActivity[], range: DateRange | null): DayActivity[] {
+  if (!range) return days
+  return days.filter((d) => d.date >= range.from && d.date <= range.to)
+}
+
 /** Stable ordering for receipts whose `ts`/`id` may be missing on a
  * hand-edited file — mirrors engram.py's `_sort_key`: an unparseable/missing
  * `ts` sorts LAST so it can never win a node's day-0 encoding slot. */
@@ -155,8 +216,19 @@ export interface RetentionBucket {
  * one topic — the exact port of engram.py's `compute_retention` bucket loop,
  * over `_by_node`'s grouping. Every review is bucketed by ITS OWN
  * days-since-encode (not just first reviews), so a chronic node keeps
- * contributing to every window it ever lands in. */
-export function computeRetentionBuckets(receipts: RawReceipt[], topic?: string): Record<string, RetentionBucket> {
+ * contributing to every window it ever lands in.
+ *
+ * `range` (Task 4, drilldown only — DashboardView never passes one) restricts
+ * WHICH REVIEWS are tallied, by the review's own date — it never restricts
+ * which receipts `groupByNode` sees when finding each node's `first`
+ * (encoding) receipt. That distinction is the whole point: `first` must
+ * always be the node's TRUE first-ever receipt, full stop, or a review at day
+ * 100 whose encoding fell outside a narrow selected range would look like a
+ * fresh day-0 encode and land in `early` instead of `90d` — silently
+ * corrupting the one thing this bucket structure exists to measure. So
+ * `groupByNode(receipts, topic)` below is deliberately called with the FULL,
+ * unranged receipt list; only the per-review tally loop checks `range`. */
+export function computeRetentionBuckets(receipts: RawReceipt[], topic?: string, range?: DateRange | null): Record<string, RetentionBucket> {
   const nodes = groupByNode(receipts, topic)
   const buckets: Record<string, RetentionBucket> = {}
   for (const [name] of RETENTION_BUCKETS) buckets[name] = { recalled: 0, partial: 0, lapsed: 0, n: 0, rate: null }
@@ -164,6 +236,7 @@ export function computeRetentionBuckets(receipts: RawReceipt[], topic?: string):
   for (const slot of nodes.values()) {
     const enc = slot.first.ts
     for (const r of slot.reviews) {
+      if (range && (r.ts < range.from || r.ts > range.to)) continue
       const elapsed = daysBetweenLocal(enc, r.ts)
       if (elapsed === null) continue
       for (const [name, lo, hi] of RETENTION_BUCKETS) {
@@ -360,10 +433,13 @@ export function computeCalibration(days: DayActivity[], picks: ConfidencePick[],
 
 /** `receiptsHistory().days`, restricted to one topic's own items — feeds
  * ActivityStrip in the drilldown the same shape the global Coach view feeds
- * it, just pre-filtered. */
-export function topicDayActivity(days: DayActivity[], topic: string): DayActivity[] {
+ * it, just pre-filtered. `topic` optional (Task 4): the global Activity chart
+ * now goes through the SAME range-filtering call site as the drilldown's, so
+ * `undefined` here means "every topic pooled" rather than a second identity
+ * copy of this function for the global surface. */
+export function topicDayActivity(days: DayActivity[], topic?: string): DayActivity[] {
   return days.map((d) => {
-    const items = d.items.filter((it) => it.topic === topic)
+    const items = topic ? d.items.filter((it) => it.topic === topic) : d.items
     return { date: d.date, count: items.length, items }
   })
 }
@@ -373,11 +449,24 @@ export function topicDayActivity(days: DayActivity[], topic: string): DayActivit
  * week aggregation uses (imported from weekDigest.ts, not a third copy). One
  * week entry per Monday actually present in `days`, oldest first, so a topic
  * with a quiet stretch still renders a well-formed (if empty) series rather
- * than an object in arbitrary key order. */
-export function topicWeekRetention(days: DayActivity[], topic: string): WeekRetention[] {
+ * than an object in arbitrary key order.
+ *
+ * `topic` optional (Task 4) — the global weekly-trend charts (RetentionCurve/
+ * RetentionTrend) now recompute from `receiptsHistory().days` through this
+ * SAME function with no topic filter, instead of reading `receiptsHistory().weeks`
+ * (main process's own pre-aggregation) directly. That switch is what lets a
+ * date-range control filter the global weekly trend at all — `weeks` is
+ * pre-aggregated server-side with no range parameter, but `days` (already
+ * fetched, per-day) can be range-sliced in the renderer and re-rolled up
+ * here. Verified once against real data that this produces byte-identical
+ * per-week totals/recalled to `receiptsHistory().weeks` when given the full,
+ * unfiltered `days` (see task-4-report.md) — this is not a second algorithm,
+ * it is the SAME one `receiptsHistory.ts`'s main-process aggregation uses,
+ * now also reachable from the renderer with an optional slice. */
+export function topicWeekRetention(days: DayActivity[], topic?: string): WeekRetention[] {
   const totals = new Map<string, { total: number; recalled: number }>()
   for (const d of days) {
-    const items = d.items.filter((it) => it.topic === topic)
+    const items = topic ? d.items.filter((it) => it.topic === topic) : d.items
     if (items.length === 0) continue
     const week = mondayOf(d.date)
     const bucket = totals.get(week) ?? { total: 0, recalled: 0 }
