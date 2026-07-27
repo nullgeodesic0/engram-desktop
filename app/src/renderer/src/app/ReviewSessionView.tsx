@@ -37,6 +37,7 @@ import { MarkView, type RitualMark } from '../components/ritual/Marks'
 import type { ReviewDocketItem } from '../components/ritual/ReviewDocket'
 import { deriveRitualMarks } from '../../../shared/ritualFromTranscript'
 import { parseAuditNotification } from '../../../shared/taskNotification'
+import { isReviewRateCommand, isAssessorAuditSpawnEvent } from '../../../shared/signals/tutorSignals'
 import { QueueRail } from '../components/ritual/QueueRail'
 
 type Phase = 'loading' | 'empty' | 'ready' | 'in-session' | 'done' | 'closed-unexpectedly'
@@ -52,25 +53,14 @@ const HOLDING_STABILITY_DAYS = 21
 // extended here to 14 days), which also folds in the holding-count pass so
 // there's still only one walk over the topic graphs, not two.
 
-function looksLikeRateCall(input: Record<string, unknown>): boolean {
-  const command = String(input.command ?? '')
-  return command.includes(' rate ') && command.includes('--rating')
-}
-
-// Mirrors ritualFromTranscript.ts's `isAssessorAuditSpawnEvent` exactly — see
-// the AUDIT doctrine comment there for the real-transcript signal (SKILL.md
-// §3's honesty check: an engram-assessor spawn auditing this sitting's own
-// self-graded items, differentiated from a /learn verification spawn of the
-// same subagent by the literal word "audit" in the spawn's own input, which
-// /learn's stash items never carry — theirs are kind:"encode"). Duplicated
-// rather than imported, same convention LearnSessionView's own live
-// tool_use-shape checks use for the sibling `isArtifactSmithSpawn`/
-// `isSubagentSpawnTool` checks.
-function looksLikeAssessorAuditSpawn(name: string, input: Record<string, unknown>): boolean {
-  if (name !== 'Agent' && name !== 'Task') return false
-  const s = JSON.stringify(input).toLowerCase()
-  return s.includes('engram-assessor') && s.includes('audit')
-}
+// isReviewRateCommand / isAssessorAuditSpawnEvent now live in
+// shared/signals/tutorSignals.ts (imported above) — the single copies this
+// view, LearnSessionView, and shared/ritualFromTranscript.ts's replay walk
+// all share. Reconciled during that consolidation: this view's own prior
+// local check (`looksLikeRateCall`) did not exclude Learn's pretest
+// `--kind pretest` rate calls the way ritualFromTranscript.ts's version did —
+// harmless in practice (pretest never runs inside a /review sitting), but the
+// canonical version now carries the exclusion everywhere for safety.
 
 // Local-date discipline (getFullYear/Month/Date — never toISOString, same
 // pattern HomeView's 7-day due forecast uses) rather than trusting the
@@ -326,7 +316,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
         break
       case 'tool_use':
         appendLog(`→ ${event.name}(${JSON.stringify(event.input).slice(0, 80)})`)
-        if (event.name === 'Bash' && looksLikeRateCall(event.input)) {
+        if (event.name === 'Bash' && isReviewRateCommand(String((event.input as { command?: unknown }).command ?? ''))) {
           pendingRateToolUseId.current = event.id
           // Read the topic off the rate command's own `--topic` flag rather
           // than guessing from `queue[0]`: the tutor works in its own order
@@ -340,7 +330,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
           pendingRateTopic.current =
             /--topic\s+["']?([a-z0-9-]+)/.exec(cmd)?.[1] ?? queueRef.current[0]?.topic ?? null
         }
-        if (looksLikeAssessorAuditSpawn(event.name, event.input)) {
+        if (isAssessorAuditSpawnEvent(event.name, event.input)) {
           // The spawn itself is a real SessionEvent, so it can push a
           // `pending` mark immediately. Its verdict CAN now resolve live too
           // (see the `task_notification` case below) — SessionManager.ts

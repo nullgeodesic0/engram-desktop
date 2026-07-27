@@ -3,6 +3,7 @@ import type { ExportSittingFormat, ExportSittingResult, SessionIndexEntry } from
 import type { ChatMessage } from '../../../shared/chatMessages'
 import { parseGradeResult, parseGradeResults, type GradeResult } from '../../../shared/gradeResult'
 import { deriveRitualMarks, type DerivedRitualMark } from '../../../shared/ritualFromTranscript'
+import { isTaskNotificationContent } from '../../../shared/taskNotification'
 import { sittingToMarkdown, sittingToPrintHtml, type SittingMeta } from '../shared/sittingToMarkdown'
 import { recordView } from '../shared/recentlyViewed'
 import { Modal } from './ui/Modal'
@@ -91,6 +92,13 @@ export function buildHistoryTimeline(
         seenFirstUser = true
         continue // the app's own synthetic kickoff — not a real human message
       }
+      // A background-agent completion (e.g. the assessor audit — see
+      // shared/taskNotification.ts's doctrine comment) also lands as an
+      // ordinary `type: "user"` string-content line, but it is NOT a genuine
+      // learner turn — it's the assessor's raw envelope, quoting the very
+      // rubric the audited sitting is being graded against. Never render it
+      // as a chat bubble, same discipline as chatMessages.ts.
+      if (isTaskNotificationContent(line.message.content)) continue
       messages.push({ id: `t${idCounter++}`, role: 'user', text: line.message.content })
       messageSourceIndex.push(idx)
       continue

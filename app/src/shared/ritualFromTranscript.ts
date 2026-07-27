@@ -19,7 +19,18 @@
 
 import { parsePretestGradeResults, parseGradeResult, verdictFromGrade, lapseReturnDate } from './gradeResult'
 import { humanizeNodeId } from './humanizeId'
-import { parseAuditNotification } from './taskNotification'
+import { parseAuditNotification, isTaskNotificationContent } from './taskNotification'
+import {
+  isPretestRateCommand,
+  isNextNodeCommand,
+  isReviewRateCommand,
+  parseMisconceptionAdds,
+  looksLikeArtifactSetCommand,
+  isArtifactSmithSpawnEvent,
+  isAssessorAuditSpawnEvent,
+  explorableTitleFromDescription,
+  explorableNodeFromPrompt,
+} from './signals/tutorSignals'
 
 interface TranscriptLine {
   type?: string
@@ -77,13 +88,21 @@ function* walkTranscript(rawLines: unknown[]): Generator<WalkEvent> {
         continue // the app's own synthetic kickoff — not a real human message
       }
       // A background-agent completion (e.g. the assessor audit below) lands
-      // as an ordinary `type: "user"` string-content line too — chatMessages.ts
-      // (deliberately, out of this module's scope) still renders it as a real
-      // chat bubble, so it must still count toward messageCount via the
-      // `user_message` yield below; this extra yield just lets a consumer
-      // also inspect its raw content before that count advances.
-      if (line.message.content.startsWith('<task-notification>')) {
+      // as an ordinary `type: "user"` string-content line too — a
+      // `<task-notification>` envelope, never a genuine learner turn (see
+      // shared/taskNotification.ts's doctrine comment: it carries the
+      // assessor's raw JSON, including `rubric_notes` quoting the very
+      // rubric the audited sitting is being graded against). It must NOT
+      // count toward messageCount or yield a `user_message` — doing either
+      // would make chatMessages.ts's sibling walk (which also skips it, see
+      // that file) or this module's own callers treat the envelope as a real
+      // chat turn. Yielding only `task_notification` here means any mark
+      // whose atIndex would have landed AFTER this line in a transcript that
+      // contains one shifts down by exactly the count of skipped envelopes —
+      // an intentional, documented reindexing, not a bug.
+      if (isTaskNotificationContent(line.message.content)) {
         yield { kind: 'task_notification', content: line.message.content }
+        continue
       }
       yield { kind: 'user_message' }
       continue
@@ -180,25 +199,11 @@ export function diagnosticGateOnNextNode(gate: DiagnosticGate, itemCount: number
   return true
 }
 
-// Mirrors LearnSessionView's looksLikePretestRate/looksLikeNextNodeCall core
-// checks (Bash-command substring tests) — duplicated rather than imported
-// since shared/ must not reach into renderer/ (see the doctrine comment atop
-// this file). Kept in careful sync with those; node/rating extraction isn't
-// needed here since parsePretestGradeResults reads `node`/`rating` straight
-// out of the result JSON instead of the command text.
-function isPretestRateCommand(command: string): boolean {
-  return command.includes(' rate ') && command.includes('--kind pretest')
-}
-function isNextNodeCommand(command: string): boolean {
-  return command.includes(' next ') && command.includes('--topic')
-}
-// Mirrors ReviewSessionView's looksLikeRateCall exactly (a Review sitting's
-// per-item grading call) — excludes pretest `rate` calls (isPretestRateCommand
-// above), which are Learn's own diagnostic path and carry `--kind pretest`
-// rather than a live-review rating.
-function isReviewRateCommand(command: string): boolean {
-  return command.includes(' rate ') && command.includes('--rating') && !command.includes('--kind pretest')
-}
+// isPretestRateCommand / isNextNodeCommand / isReviewRateCommand now live in
+// shared/signals/tutorSignals.ts (imported above) — the single copy Learn,
+// Review, and this replay walk all share. node/rating extraction isn't needed
+// here since parsePretestGradeResults reads `node`/`rating` straight out of
+// the result JSON instead of the command text.
 
 // Task 3 signals, grep-verified against real transcripts (see task-3-report.md
 // for the full findings) before writing either of these:
@@ -223,19 +228,8 @@ function isReviewRateCommand(command: string): boolean {
 // end of string) — real descriptions never contain a literal `"` followed
 // immediately by a newline — so multiple invocations in one command are
 // each captured correctly, in order, via the global match below.
-function parseMisconceptionAdds(command: string): Array<{ node: string | undefined; text: string }> {
-  if (!command.includes('misconception add')) return []
-  const out: Array<{ node: string | undefined; text: string }> = []
-  const re = /misconception add\b([\s\S]*?)--description\s+"([\s\S]*?)"(?=\r?\n|$)/g
-  let m: RegExpExecArray | null
-  while ((m = re.exec(command))) {
-    const text = m[2].trim().slice(0, 500)
-    if (!text) continue
-    const nodeMatch = m[1].match(/--node\s+"?([a-z0-9]+(?:-[a-z0-9]+)*)"?/)
-    out.push({ node: nodeMatch ? nodeMatch[1] : undefined, text })
-  }
-  return out
-}
+// `parseMisconceptionAdds` now lives in shared/signals/tutorSignals.ts
+// (imported above) — the single copy this walk and LearnSessionView share.
 
 // EXPLORABLE — two real signals found, of differing reliability:
 //
@@ -271,44 +265,11 @@ function parseMisconceptionAdds(command: string): Array<{ node: string | undefin
 // fire against real sessions here. Both names are accepted below for
 // robustness; see task-3-report.md for this finding (left unfixed elsewhere —
 // out of this task's scope).
-function looksLikeArtifactSetCommand(command: string): { node: string | undefined; path: string | undefined } | null {
-  if (!command.includes('artifact set')) return null
-  const pathMatch = command.match(/--path\s+"?([^"\s]+)"?/)
-  const nodeMatch = command.match(/--node\s+"?([a-z0-9]+(?:-[a-z0-9]+)*)"?/)
-  return { node: nodeMatch ? nodeMatch[1] : undefined, path: pathMatch ? pathMatch[1] : undefined }
-}
-
-function isArtifactSmithSpawnEvent(name: string, input: Record<string, unknown>): boolean {
-  if (name !== 'Task' && name !== 'Agent') return false
-  return JSON.stringify(input).includes('engram-artifact-smith')
-}
-
-/** "Build Schrödinger unitary-evolution explorable" -> "Schrödinger
- * unitary-evolution" — every real spawn's `description` observed follows this
- * "Build <X> explorable[.]" shape (it's the Task/Agent tool's own required
- * short-label field, not SKILL.md-mandated wording, so the strip is best-effort
- * and falls back to the raw description untouched if it doesn't match). */
-function explorableTitleFromDescription(description: unknown): string | undefined {
-  if (typeof description !== 'string') return undefined
-  const trimmed = description.trim()
-  if (!trimmed) return undefined
-  const stripped = trimmed.replace(/^build\s+/i, '').replace(/\s+explorable\.?$/i, '')
-  const title = stripped || trimmed
-  return title.length > 120 ? `${title.slice(0, 120)}…` : title
-}
-
-/** Best-effort node id out of the spawn prompt's free text — tried against
- * the phrasings actually observed ("Topic: t. Node id: n." / `node "n" in
- * topic "t"`); returns undefined rather than guessing when neither matches. */
-function explorableNodeFromPrompt(prompt: unknown): string | undefined {
-  if (typeof prompt !== 'string') return undefined
-  const patterns = [/Node id:\s*([a-z0-9]+(?:-[a-z0-9]+)*)/i, /node\s+"([a-z0-9]+(?:-[a-z0-9]+)*)"/i]
-  for (const re of patterns) {
-    const m = prompt.match(re)
-    if (m) return m[1].toLowerCase()
-  }
-  return undefined
-}
+//
+// `looksLikeArtifactSetCommand`, `isArtifactSmithSpawnEvent`,
+// `explorableTitleFromDescription`, and `explorableNodeFromPrompt` now live in
+// shared/signals/tutorSignals.ts (imported above) — the single copies this
+// walk and LearnSessionView share.
 
 // AUDIT (Task 4) — grep-verified against real transcripts before writing any of
 // this: `grep -l audit ~/.claude/projects/*/*.jsonl`, narrowed to real
@@ -353,11 +314,9 @@ function explorableNodeFromPrompt(prompt: unknown): string | undefined {
 // never reaches the live SessionEvent stream at all today. A live sitting can
 // therefore only ever observe the SPAWN (mark stays `verdict: 'pending'`
 // forever, live); only a replayed transcript (this function) can resolve it.
-function isAssessorAuditSpawnEvent(name: string, input: Record<string, unknown>): boolean {
-  if (name !== 'Task' && name !== 'Agent') return false
-  const s = JSON.stringify(input).toLowerCase()
-  return s.includes('engram-assessor') && s.includes('audit')
-}
+//
+// `isAssessorAuditSpawnEvent` now lives in shared/signals/tutorSignals.ts
+// (imported above) — the single copy this walk and ReviewSessionView share.
 
 /** Best-effort item count out of the spawn's own prompt text ("...audit the 5
  * items in it (kind: \"audit\")...", the one real phrasing observed) — purely

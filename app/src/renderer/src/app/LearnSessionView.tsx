@@ -26,6 +26,16 @@ import {
   type DiagnosticGate,
   type DiagnosticItem,
 } from '../../../shared/ritualFromTranscript'
+import {
+  isNextNodeCommand,
+  pretestRateNode,
+  parseMisconceptionAdds,
+  looksLikeArtifactSetCommand,
+  isArtifactSmithSpawnEvent,
+  isSubagentSpawnTool,
+  explorableTitleFromDescription,
+  explorableNodeFromPrompt,
+} from '../../../shared/signals/tutorSignals'
 import { parsePretestGradeResults, verdictFromGrade } from '../../../shared/gradeResult'
 import { invalidateSearchIndex } from '../shared/searchIndex'
 import { humanizeNodeId } from '../../../shared/humanizeId'
@@ -50,15 +60,12 @@ import { FlowChain } from '../components/ritual/FlowChain'
 import { trailingRecalled } from '../../../shared/gradeResult'
 import { paperSlide, warmTone } from '../shared/soundscape'
 
-// NOT `rate` — confirmed live (spike/FINDINGS.md Finding 5.2) that /learn's VERIFY step
-// stashes the production and only grades in a batch at session end via the assessor, so a
-// `rate` call essentially never happens mid-session. `next --topic` is the call the skill
-// actually makes at the start of every node (`python3 "$ENGRAM" next --topic <topic>`),
-// making it the real node-boundary signal.
-function looksLikeNextNodeCall(input: Record<string, unknown>): boolean {
-  const command = String(input.command ?? '')
-  return command.includes(' next ') && command.includes('--topic')
-}
+// isNextNodeCommand / pretestRateNode / parseMisconceptionAdds /
+// looksLikeArtifactSetCommand / isArtifactSmithSpawnEvent / isSubagentSpawnTool /
+// explorableTitleFromDescription / explorableNodeFromPrompt now live in
+// shared/signals/tutorSignals.ts (imported above) — the single copies this
+// view, ReviewSessionView, and shared/ritualFromTranscript.ts's replay walk
+// all share.
 
 // `python3 "$ENGRAM" receipt --file <assessor-output.json>` (SKILL.md step 4) is
 // the batch-grade call — the one place /learn's tool_result carries an ARRAY of
@@ -67,90 +74,6 @@ function looksLikeNextNodeCall(input: Record<string, unknown>): boolean {
 function looksLikeReceiptCall(input: Record<string, unknown>): boolean {
   const command = String(input.command ?? '')
   return command.includes('receipt') && command.includes('--file')
-}
-
-function looksLikeArtifactSet(input: Record<string, unknown>): string | null {
-  const command = String(input.command ?? '')
-  if (!command.includes('artifact set')) return null
-  const m = command.match(/--path\s+"?([^"\s]+)"?/)
-  return m ? m[1] : null
-}
-
-// `artifact set`'s --node, kept separate from looksLikeArtifactSet (which the
-// pre-existing JobsRail code already reads for --path only) so the
-// explorable-mark path-fill below can match a spawn's node without touching
-// that established call site.
-function artifactSetNode(input: Record<string, unknown>): string | undefined {
-  const command = String(input.command ?? '')
-  if (!command.includes('artifact set')) return undefined
-  const m = command.match(/--node\s+"?([a-z0-9]+(?:-[a-z0-9]+)*)"?/)
-  return m ? m[1] : undefined
-}
-
-// Real signal, grep-verified against the grad-quantum-mechanics sitting of
-// 2026-07-23 (session f1cb000e-9397-49ff-8bbf-3be95b054631, ~/.claude/projects) —
-// the exact call that logged the ket-ln misconception on
-// schrodinger-equation-unitary-evolution: `python3 "$ENGRAM" misconception add
-// --topic <t> --node <n> --description "<text>"`. A separate real transcript
-// (54df0c3e-..., a physics qual-exam sitting) showed the tutor can batch TWO
-// invocations into one multi-line Bash call — each description is bounded by
-// the next newline (or end of string) rather than end-of-string alone, so
-// multiple invocations in one command are each captured, in order. Mirrors
-// parseMisconceptionAdds in shared/ritualFromTranscript.ts — see that file's
-// doctrine comment for the full finding.
-function looksLikeMisconceptionAdds(input: Record<string, unknown>): Array<{ node: string | undefined; text: string }> {
-  const command = String(input.command ?? '')
-  if (!command.includes('misconception add')) return []
-  const out: Array<{ node: string | undefined; text: string }> = []
-  const re = /misconception add\b([\s\S]*?)--description\s+"([\s\S]*?)"(?=\r?\n|$)/g
-  let m: RegExpExecArray | null
-  while ((m = re.exec(command))) {
-    const text = m[2].trim().slice(0, 500)
-    if (!text) continue
-    const nodeMatch = m[1].match(/--node\s+"?([a-z0-9]+(?:-[a-z0-9]+)*)"?/)
-    out.push({ node: nodeMatch ? nodeMatch[1] : undefined, text })
-  }
-  return out
-}
-
-// "Build Schrödinger unitary-evolution explorable" -> "Schrödinger
-// unitary-evolution" — every real artifact-smith spawn's `description`
-// observed (a dozen+ across several sessions) follows this "Build <X>
-// explorable[.]" shape; it's the Task/Agent tool's own required short-label
-// field, not SKILL.md-mandated wording, so this is best-effort and falls back
-// to the raw description if it doesn't match.
-function explorableTitleFromDescription(description: unknown): string | undefined {
-  if (typeof description !== 'string') return undefined
-  const trimmed = description.trim()
-  if (!trimmed) return undefined
-  const stripped = trimmed.replace(/^build\s+/i, '').replace(/\s+explorable\.?$/i, '')
-  const title = stripped || trimmed
-  return title.length > 120 ? `${title.slice(0, 120)}…` : title
-}
-
-// Best-effort node id out of the spawn prompt's free text — real prompts
-// inspected varied wildly ("Topic: t. Node id: n." / `node "n" in topic "t"` /
-// prose with no structured mention at all), so this is deliberately a
-// last-resort parse, not a relied-upon signal; returns undefined rather than
-// guessing when nothing matches.
-function explorableNodeFromPrompt(prompt: unknown): string | undefined {
-  if (typeof prompt !== 'string') return undefined
-  const patterns = [/Node id:\s*([a-z0-9]+(?:-[a-z0-9]+)*)/i, /node\s+"([a-z0-9]+(?:-[a-z0-9]+)*)"/i]
-  for (const re of patterns) {
-    const m = prompt.match(re)
-    if (m) return m[1].toLowerCase()
-  }
-  return undefined
-}
-
-// Pretest (SKILL.md §2, new topics only) is the one place /learn calls `rate`
-// directly rather than stash-then-batch-grade — `--kind pretest` is a real,
-// distinct Tier-1 signal, not a guess. Returns the pretested node id, if any.
-function looksLikePretestRate(input: Record<string, unknown>): string | null {
-  const command = String(input.command ?? '')
-  if (!command.includes(' rate ') || !command.includes('--kind pretest')) return null
-  const m = command.match(/--node\s+"?([^"\s]+)"?/)
-  return m ? m[1] : null
 }
 
 // Stash is the "production filed for later grading" moment (spike/FINDINGS.md
@@ -168,9 +91,9 @@ function looksLikeAddTopicCall(input: Record<string, unknown>): boolean {
 function looksLikeStashCall(input: Record<string, unknown>): boolean {
   const command = String(input.command ?? '')
   if (!/\bstash\b/.test(command)) return false
-  if (looksLikeNextNodeCall(input)) return false
+  if (isNextNodeCommand(command)) return false
   if (looksLikeReceiptCall(input)) return false
-  if (looksLikePretestRate(input)) return false
+  if (pretestRateNode(command) !== null) return false
   return true
 }
 
@@ -186,22 +109,6 @@ type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K>
 const KNOWN_BEATS = new Set(['open_gap', 'predict', 'struggle', 'resolve', 'self_explain', 'connect', 'verify'])
 const KNOWN_OUTCOMES = new Set(['confirmed', 'partial', 'missed'])
 const KNOWN_ACTION_KINDS = new Set(['open_explorable', 'show_on_map', 'go_review', 'prefill'])
-
-function isArtifactSmithSpawn(input: Record<string, unknown>): boolean {
-  const blob = JSON.stringify(input)
-  return blob.includes('engram-artifact-smith')
-}
-
-// Task 3 finding: every real /learn transcript inspected in this environment
-// (`grep -o '"name":"Task"\|"name":"Agent"' ~/.claude/projects/*/*.jsonl`)
-// names the subagent-spawning tool 'Agent', never 'Task' — so the two
-// call sites below (curriculum-architect atlas mark, artifact-smith spawn)
-// that previously checked `event.name === 'Task'` only were, as far as this
-// audit found, never actually firing against a real session. Widened to
-// accept both names; see task-3-report.md for the full finding.
-function isSubagentSpawnTool(name: string): boolean {
-  return name === 'Task' || name === 'Agent'
-}
 
 /** The node id being taught isn't in the `next --topic` command itself — `next`
  * picks the node and returns it. `cmd_next` in engram.py `emit()`s
@@ -810,7 +717,7 @@ export function LearnSessionView({
         })
         break
       case 'tool_use':
-        if (event.name === 'Bash' && looksLikeNextNodeCall(event.input)) {
+        if (event.name === 'Bash' && isNextNodeCommand(String((event.input as { command?: unknown }).command ?? ''))) {
           pendingNextToolUseId.current = event.id
           // Fallback diagnostic-plate trigger (shared/ritualFromTranscript.ts's
           // DiagnosticGate): if the model never called session_phase to leave
@@ -857,7 +764,8 @@ export function LearnSessionView({
           }
         }
         if (event.name === 'Bash') {
-          const path = looksLikeArtifactSet(event.input)
+          const artifactSet = looksLikeArtifactSetCommand(String((event.input as { command?: unknown }).command ?? ''))
+          const path = artifactSet?.path
           if (path) {
             setJobs((prev) => {
               const idx = prev.findIndex((j) => j.status === 'running' && !j.artifactPath)
@@ -871,7 +779,7 @@ export function LearnSessionView({
             // pendingExplorableByNode above) or, if the tutor ran `artifact
             // set` directly per SKILL.md's registration-failed fallback with
             // no matching spawn mark in this sitting, push a fresh one.
-            const node = artifactSetNode(event.input)
+            const node = artifactSet?.node
             const queue = node ? pendingExplorableByNode.current.get(node) : undefined
             const pendingMarkId = queue?.length ? queue.shift() : undefined
             if (pendingMarkId) {
@@ -883,7 +791,7 @@ export function LearnSessionView({
           }
         }
         if (event.name === 'Bash') {
-          const pretestedNode = looksLikePretestRate(event.input)
+          const pretestedNode = pretestRateNode(String((event.input as { command?: unknown }).command ?? ''))
           if (pretestedNode) {
             setJobs((prev) => [
               ...prev,
@@ -899,11 +807,11 @@ export function LearnSessionView({
           }
         }
         if (event.name === 'Bash') {
-          for (const misconception of looksLikeMisconceptionAdds(event.input)) {
+          for (const misconception of parseMisconceptionAdds(String((event.input as { command?: unknown }).command ?? ''))) {
             pushMark({ kind: 'misconception', text: misconception.text, node: misconception.node })
           }
         }
-        if (isSubagentSpawnTool(event.name) && isArtifactSmithSpawn(event.input)) {
+        if (isArtifactSmithSpawnEvent(event.name, event.input)) {
           setJobs((prev) => [...prev, { id: event.id, label: 'Building explorable…', status: 'running', artifactPath: null }])
           const input = event.input as { description?: unknown; prompt?: unknown }
           const title = explorableTitleFromDescription(input.description) ?? 'Explorable'
