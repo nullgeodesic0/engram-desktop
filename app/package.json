@@ -12,6 +12,7 @@
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "check:topic-metrics": "tsx scripts/checkTopicMetricsAgreement.ts",
+    "check:doctrine": "tsx scripts/checkDoctrine.ts",
     "icons": "./scripts/build-icons.sh",
     "bundle:bridge-worker": "esbuild src/main/bridge/mcpBridgeWorker.mjs --bundle --platform=node --format=esm --outfile=resources/mcpBridgeWorker.mjs",
     "dist": "npm run bundle:bridge-worker && npm run build && electron-builder",
