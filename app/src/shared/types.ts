@@ -520,6 +520,18 @@ export interface ExportSittingRequest {
 
 export type ExportSittingResult = { ok: true; path: string } | { ok: false; reason: string }
 
+/** IPC `map:export`'s request — the renderer builds the self-contained print
+ * HTML (shared/mapToPrintHtml.ts) exactly the way it already builds a
+ * sitting's `printHtml` for ExportSittingRequest, and hands main a finished
+ * document; main never re-derives a plate from a graph itself. Reuses
+ * ExportSittingResult (below) rather than a parallel result type since the
+ * shape — ok+path, or ok:false+reason — is identical. */
+export interface ExportMapRequest {
+  /** Seeds the save dialog's suggested filename only. */
+  title: string
+  printHtml: string
+}
+
 // ---- Backup & restore (see main/session/backup.ts) ----
 
 export type BackupNowResult = { ok: true; path: string; bytes: number } | { ok: false; reason: string }

@@ -7,14 +7,59 @@ import type { ExportSittingRequest, ExportSittingResult } from '../../shared/typ
 /** Mirrors the filename-sanitizing a save dialog itself would reject —
  * strips path separators and other characters that would either break on
  * disk or get silently swapped by the OS, so the suggested filename doesn't
- * surprise the user by differing from what they typed as the sitting title. */
-function sanitizeFilename(title: string): string {
+ * surprise the user by differing from what they typed as the sitting title.
+ * Exported so exportMap.ts's save-dialog filename goes through the exact
+ * same sanitizing rather than a second, possibly-drifting copy. */
+export function sanitizeFilename(title: string): string {
   const cleaned = title.replace(/[/\\:*?"<>|]/g, ' ').trim()
   return cleaned.length > 0 ? cleaned : 'sitting'
 }
 
-function todayStamp(): string {
+/** Exported for the same reason as sanitizeFilename — exportMap.ts's default
+ * filename uses the identical date stamp convention. */
+export function todayStamp(): string {
   return new Date().toISOString().slice(0, 10)
+}
+
+/** THE hidden-window print pipeline, factored out so exportMap.ts (the print
+ * plate) and this file's own PDF branch (below) share exactly one
+ * implementation of "load a self-contained HTML document into an offscreen
+ * BrowserWindow and drive printToPDF" — not two copies that could drift.
+ * Loaded via a TEMP FILE rather than a `data:` URL for the reason given in
+ * this file's own header comment (the ~2M-character data: URL cap); the
+ * window is always destroyed and the temp file always cleaned up in the
+ * `finally`, success or failure, so a printToPDF failure can never leak a
+ * stray window or temp file. Returns the PDF bytes — writing them to the
+ * user-chosen path is the CALLER's job (both callers' destinations differ:
+ * a sitting export vs. a map export), so this function itself never touches
+ * the save path or the dialog. */
+export async function renderPrintHtmlToPdf(
+  printHtml: string,
+  options?: Partial<Electron.PrintToPDFOptions>,
+): Promise<Buffer> {
+  const tempHtmlPath = join(app.getPath('temp'), `engram-print-export-${randomUUID()}.html`)
+  let printWindow: BrowserWindow | null = null
+  try {
+    await writeFile(tempHtmlPath, printHtml, 'utf-8')
+    printWindow = new BrowserWindow({
+      show: false,
+      webPreferences: { offscreen: true, contextIsolation: true, nodeIntegration: false, sandbox: true },
+    })
+    await printWindow.loadFile(tempHtmlPath)
+    return await printWindow.webContents.printToPDF({
+      printBackground: true,
+      pageSize: 'Letter',
+      margins: { top: 0, bottom: 0, left: 0, right: 0 },
+      ...options,
+    })
+  } finally {
+    if (printWindow && !printWindow.isDestroyed()) printWindow.destroy()
+    await unlink(tempHtmlPath).catch(() => {
+      // Best-effort cleanup — a leftover temp file in the OS temp dir is
+      // harmless (cleaned by the OS eventually) and must never mask the
+      // real export result above.
+    })
+  }
 }
 
 /** Exports one sitting's transcript to a user-chosen path — the main-process
@@ -48,40 +93,11 @@ export async function exportSitting(
 
   if (req.printHtml == null) return { ok: false, reason: 'No print document was provided.' }
 
-  // Offscreen + never shown: this window exists only to run Chromium's print
-  // pipeline against a document that never needs to paint on screen.
-  //
-  // Loaded via a TEMP FILE rather than a `data:` URL — a data: URL is capped
-  // at roughly 2M characters in Chromium, and `encodeURIComponent` on
-  // KaTeX-dense HTML (this app's actual math-heavy sittings) can roughly
-  // triple the string length, so a long equation-heavy sitting could exceed
-  // the cap and fail with a cryptic ERR_INVALID_URL. A temp file has no such
-  // ceiling; it's written and deleted around the same try/finally that owns
-  // the hidden window.
-  const tempHtmlPath = join(app.getPath('temp'), `engram-sitting-export-${randomUUID()}.html`)
-  let printWindow: BrowserWindow | null = null
   try {
-    await writeFile(tempHtmlPath, req.printHtml, 'utf-8')
-    printWindow = new BrowserWindow({
-      show: false,
-      webPreferences: { offscreen: true, contextIsolation: true, nodeIntegration: false, sandbox: true },
-    })
-    await printWindow.loadFile(tempHtmlPath)
-    const pdfBuffer = await printWindow.webContents.printToPDF({
-      printBackground: true,
-      pageSize: 'Letter',
-      margins: { top: 0, bottom: 0, left: 0, right: 0 },
-    })
+    const pdfBuffer = await renderPrintHtmlToPdf(req.printHtml)
     await writeFile(filePath, pdfBuffer)
     return { ok: true, path: filePath }
   } catch (err) {
     return { ok: false, reason: err instanceof Error ? err.message : String(err) }
-  } finally {
-    if (printWindow && !printWindow.isDestroyed()) printWindow.destroy()
-    await unlink(tempHtmlPath).catch(() => {
-      // Best-effort cleanup — a leftover temp file in the OS temp dir is
-      // harmless (cleaned by the OS eventually) and must never mask the
-      // real export result above.
-    })
   }
 }

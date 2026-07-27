@@ -6,6 +6,7 @@ import { NodeTable } from '../components/NodeTable'
 import { GrowthScrubber } from '../components/GrowthScrubber'
 import { PressureReadout } from '../components/PressureReadout'
 import { cellBodyPath, plateStats, ancestorClosure, descendantPath } from '../components/graph2d/plate'
+import { mapToPrintHtml } from '../shared/mapToPrintHtml'
 import { layersOf, computeHubNodeIds } from '../components/graph3d/layout'
 import { humanizeNodeId } from '../../../shared/humanizeId'
 import { SkeletonBar } from '../components/Skeleton'
@@ -363,6 +364,35 @@ export function TopicMapView({
   // of how long ago it was.
   const [targetDate, setTargetDate] = useState<string | null>(null)
   const [receipts, setReceipts] = useState<RawReceipt[]>([])
+  // Map-as-plate export (P5 Task 3) — same exporting/status shape
+  // SessionHistoryDrawer's sitting export already uses, so this reads
+  // identically rather than inventing a second export-feedback convention.
+  const [exportingMap, setExportingMap] = useState(false)
+  const [mapExportStatus, setMapExportStatus] = useState<{ text: string; failed: boolean } | null>(null)
+
+  /** The print-plate export's entry point — builds the SAME figure GraphView
+   * renders (mapToPrintHtml calls the identical settlePlate/cellBodyPath/
+   * edge-path functions, just as markup instead of JSX; see that file's own
+   * header comment for the full reasoning) and hands it to main's
+   * exportSitting-pipeline-reusing hidden-window printer. Deliberately reads
+   * `graph`/`retrievability`/`annotations` — never `selectedNode`, `query`,
+   * `dueLens`, `replayActive`/`replayT` — so an export never freezes
+   * whatever transient interaction happened to be on screen; see
+   * mapToPrintHtml.ts for why each of those is resolved off/full rather than
+   * captured mid-interaction. */
+  async function handleExportMap() {
+    if (!graph) return
+    setExportingMap(true)
+    setMapExportStatus(null)
+    try {
+      const printHtml = mapToPrintHtml(graph, retrievability, annotations)
+      const result = await window.engram.exportMap({ title: graph.title, printHtml })
+      if (result.ok) setMapExportStatus({ text: `Saved to ${result.path}`, failed: false })
+      else if (result.reason !== 'canceled') setMapExportStatus({ text: `Export failed: ${result.reason}`, failed: true })
+    } finally {
+      setExportingMap(false)
+    }
+  }
 
   function openProvenanceEvent(ev: ProvenanceEvent, topicId: string) {
     setHistoryDrawer({ historyKey: ev.kind === 'review' ? 'review' : topicId, sessionId: ev.sessionId, anchorIndex: ev.anchor })
@@ -417,6 +447,7 @@ export function TopicMapView({
     setReplayActive(false)
     setReplayT(0)
     setTargetDate(null)
+    setMapExportStatus(null)
     window.engram
       .topicGraph(selectedTopic)
       .then((g) => setGraph(g as TopicGraph))
@@ -654,7 +685,24 @@ export function TopicMapView({
                 the top-left/top-right corners the map's search box and stats
                 readout already occupy, so the toggle lives above both instead
                 of stacking on top of either. */}
-            <div className="shrink-0 flex items-center justify-end px-3 py-2 border-b border-[var(--color-hairline)]">
+            <div className="shrink-0 flex items-center justify-between gap-3 px-3 py-2 border-b border-[var(--color-hairline)]">
+              <div className="flex items-center gap-3 min-w-0">
+                {mapExportStatus && (
+                  <span
+                    className={`text-xs truncate max-w-[16rem] ${mapExportStatus.failed ? 'text-[var(--color-ink-danger)]' : 'text-[var(--color-text-faint)]'}`}
+                    title={mapExportStatus.text}
+                  >
+                    {mapExportStatus.text}
+                  </span>
+                )}
+                <button
+                  onClick={handleExportMap}
+                  disabled={exportingMap}
+                  className="focus-ring no-press text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] disabled:opacity-50"
+                >
+                  {exportingMap ? 'Exporting…' : 'Export plate ↗'}
+                </button>
+              </div>
               <div role="group" aria-label="Map or table view" className="flex items-center gap-0.5 panel p-0.5 bg-[var(--color-surface)]/90">
                 {(['map', 'table'] as const).map((v) => (
                   <button

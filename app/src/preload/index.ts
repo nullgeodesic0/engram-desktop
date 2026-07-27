@@ -23,6 +23,7 @@ import type {
   GraderAuditFile,
   ExportSittingRequest,
   ExportSittingResult,
+  ExportMapRequest,
   BackupNowResult,
   DescribeArchiveResult,
   RestoreArchiveResult,
@@ -95,6 +96,7 @@ const engramApi = {
     ipcRenderer.invoke('session:historyFor', kind, topicId),
   getTranscript: (sessionId: string): Promise<unknown[]> => ipcRenderer.invoke('session:transcript', sessionId),
   exportSitting: (req: ExportSittingRequest): Promise<ExportSittingResult> => ipcRenderer.invoke('session:export', req),
+  exportMap: (req: ExportMapRequest): Promise<ExportSittingResult> => ipcRenderer.invoke('map:export', req),
 
   backupNow: (destDir?: string): Promise<BackupNowResult> => ipcRenderer.invoke('backup:now', destDir),
   describeArchive: (archivePath: string): Promise<DescribeArchiveResult> =>
