@@ -4,7 +4,8 @@ import { RetentionCurve } from '../components/RetentionCurve'
 import { GraphView, EDGE_STYLE } from '../components/GraphView'
 import { NodeTable } from '../components/NodeTable'
 import { GrowthScrubber } from '../components/GrowthScrubber'
-import { cellBodyPath, plateStats } from '../components/graph2d/plate'
+import { cellBodyPath, plateStats, ancestorClosure, descendantPath } from '../components/graph2d/plate'
+import { layersOf } from '../components/graph3d/layout'
 import { humanizeNodeId } from '../../../shared/humanizeId'
 import { SkeletonBar } from '../components/Skeleton'
 import { StatBlock } from '../components/ui/StatBlock'
@@ -153,6 +154,97 @@ function NodeMisconceptions({
             {m.description}
           </p>
         ))}
+      </div>
+    </div>
+  )
+}
+
+/** Requires (root-first prerequisite closure) and Unlocks (downstream
+ * closure) for a node — sorted by `layers` (the same dependency-depth
+ * `layersOf` gives the map itself), ties broken by graph order for
+ * determinism. Requires reads shallowest-layer-first: the deepest
+ * ancestors — the foundational nodes with no prerequisites of their own —
+ * come first, building up toward what's nearest this node. Unlocks reads
+ * the same direction, nearest milestone first. */
+function computeNodeStructure(
+  graph: TopicGraph,
+  nodeId: string,
+  layers: Map<string, number>,
+  orderIndex: Map<string, number>,
+): { requires: string[]; unlocks: string[] } {
+  const byDepth = (a: string, b: string) =>
+    (layers.get(a) ?? 0) - (layers.get(b) ?? 0) || (orderIndex.get(a) ?? 0) - (orderIndex.get(b) ?? 0)
+  return {
+    requires: [...ancestorClosure(graph, nodeId)].sort(byDepth),
+    unlocks: [...descendantPath(graph, nodeId)].sort(byDepth),
+  }
+}
+
+/** The node's place in the graph's shape — shown in both the node drawer and
+ * the full-node modal, alongside Provenance and Filed-here. Built on
+ * `ancestorClosure`/`descendantPath` (plate.ts), NOT the node's own direct
+ * `edges.requires` (that's the compact inline chip row shown higher up this
+ * same panel) — those two walks already stop at hub boundaries, so a node
+ * sitting right next to the capstone (or a capstone-like synthesis node)
+ * still gets a real, bounded trail instead of the whole topic. Violet is
+ * this app's synthesis/structure accent: warm is provenance/history, cool is
+ * misconceptions, violet is the shape of the graph itself — hence the outer
+ * "Structure" label, with "Requires"/"Unlocks" as sub-captions rather than
+ * reusing "Requires" as the block's own header (which already names the
+ * direct-edges row above). Renders nothing for a node with neither (roots
+ * have no requires, leaves have no unlocks) — no empty chrome, same
+ * discipline as NodeMisconceptions. */
+function NodeStructure({
+  requires,
+  unlocks,
+  onSelect,
+  compact,
+}: {
+  requires: string[]
+  unlocks: string[]
+  onSelect: (id: string) => void
+  compact: boolean
+}) {
+  if (requires.length === 0 && unlocks.length === 0) return null
+  const textSize = compact ? 'text-xs' : 'text-sm'
+  return (
+    <div
+      className={`${textSize} text-[var(--color-text-dim)] border-l-2 border-[var(--color-ink-violet-dim)] bg-[var(--color-surface-2)]/40 rounded-r-md ${compact ? 'pl-2.5 pr-2 py-1.5' : 'pl-3 pr-2.5 py-2'}`}
+    >
+      <div className={`label-data uppercase tracking-wide text-[10px] text-[var(--color-ink-violet)] ${compact ? 'mb-1' : 'mb-1.5'}`}>
+        Structure
+      </div>
+      <div className="flex flex-col gap-2">
+        {requires.length > 0 && (
+          <div className="flex flex-col gap-1 items-start">
+            <div className="text-[10px] label-data text-[var(--color-text-faint)]">Requires</div>
+            {requires.map((id) => (
+              <button
+                key={id}
+                onClick={() => onSelect(id)}
+                title={id}
+                className="focus-ring pl-2 text-left hover:text-[var(--color-text-primary)]"
+              >
+                {humanizeNodeId(id)}
+              </button>
+            ))}
+          </div>
+        )}
+        {unlocks.length > 0 && (
+          <div className="flex flex-col gap-1 items-start">
+            <div className="text-[10px] label-data text-[var(--color-text-faint)]">Unlocks</div>
+            {unlocks.map((id) => (
+              <button
+                key={id}
+                onClick={() => onSelect(id)}
+                title={id}
+                className="focus-ring pl-2 text-left hover:text-[var(--color-text-primary)]"
+              >
+                {humanizeNodeId(id)}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -369,6 +461,30 @@ export function TopicMapView({
   const node = graph && selectedNode ? graph.nodes[selectedNode] : null
   const opened = graph && openNode ? graph.nodes[openNode] : null
   const stats = useMemo(() => (graph ? plateStats(graph, retrievability) : null), [graph, retrievability])
+
+  // Dependency-depth layers + a stable graph-order index, both reused by
+  // NodeStructure's root-first sort below — computed once per graph rather
+  // than per render, since ancestorClosure/descendantPath already do a full
+  // walk of their own.
+  const structureLayers = useMemo(() => (graph ? layersOf(graph) : null), [graph])
+  const structureOrderIndex = useMemo(
+    () => (graph ? new Map(graph.order.map((id, i) => [id, i] as const)) : null),
+    [graph],
+  )
+  const selectedStructure = useMemo(
+    () =>
+      graph && selectedNode && structureLayers && structureOrderIndex
+        ? computeNodeStructure(graph, selectedNode, structureLayers, structureOrderIndex)
+        : { requires: [], unlocks: [] },
+    [graph, selectedNode, structureLayers, structureOrderIndex],
+  )
+  const openedStructure = useMemo(
+    () =>
+      graph && openNode && structureLayers && structureOrderIndex
+        ? computeNodeStructure(graph, openNode, structureLayers, structureOrderIndex)
+        : { requires: [], unlocks: [] },
+    [graph, openNode, structureLayers, structureOrderIndex],
+  )
 
   // Growth timeline — earliest firstEncoded.date across the topic's nodes,
   // through today. null when provenance hasn't loaded yet or no node has a
@@ -804,6 +920,13 @@ export function TopicMapView({
                 compact
               />
 
+              <NodeStructure
+                requires={selectedStructure.requires}
+                unlocks={selectedStructure.unlocks}
+                onSelect={setSelectedNode}
+                compact
+              />
+
               {provenance === null && <div className="fig-caption">reading provenance…</div>}
               {provenance !== null && (
                 <ProvenanceBlock
@@ -972,6 +1095,13 @@ export function TopicMapView({
               items={openMisconceptionsFor(selectedTopic, openNode)}
               loaded={misconceptions !== null}
               error={misconceptionsError}
+              compact={false}
+            />
+
+            <NodeStructure
+              requires={openedStructure.requires}
+              unlocks={openedStructure.unlocks}
+              onSelect={setOpenNode}
               compact={false}
             />
 
