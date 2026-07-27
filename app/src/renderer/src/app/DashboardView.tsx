@@ -19,7 +19,16 @@ import { MisconceptionLedger } from '../components/MisconceptionLedger'
 import { GraderAudit } from '../components/GraderAudit'
 import { ExperimentBanner } from '../components/ExperimentBanner'
 import { TopicDrilldownView } from './TopicDrilldownView'
-import { computeCalibration } from '../shared/topicMetrics'
+import {
+  RANGE_OPTIONS,
+  computeCalibration,
+  filterDaysByRange,
+  rangeBounds,
+  rangeCaption,
+  topicWeekRetention,
+  type RangeKey,
+} from '../shared/topicMetrics'
+import { SegmentedControl } from '../components/ui/SegmentedControl'
 
 function gradeColor(grade: string | null): string {
   if (grade === 'recalled') return 'var(--color-ink-warm)'
@@ -93,6 +102,24 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts }: Dashboard
   // drilldown's own "Coach" button clears it.
   const [openTopic, setOpenTopic] = useState<string | null>(null)
 
+  // Task 4: ONE range control for this whole surface. Governs Activity,
+  // weekly trend, and Calibration below (all receipt-derived) — never the
+  // Retention/Momentum StatCards above, which read `stats.retention`/
+  // `stats.momentum` (the engine's own fixed windows; see topicMetrics.ts's
+  // "date range" header comment for the full boundary and why). Default
+  // 'all' means every chart shows exactly what it showed before this
+  // control existed.
+  const [rangeKey, setRangeKey] = useState<RangeKey>('all')
+  const bounds = useMemo(() => rangeBounds(rangeKey), [rangeKey])
+  const rangeText = rangeCaption(rangeKey, bounds)
+  const daysInRange = useMemo(() => filterDaysByRange(history?.days ?? [], bounds), [history, bounds])
+  // Weekly rollup re-derived from the (possibly range-sliced) days, through
+  // the SAME function TopicDrilldownView already uses for its own weekly
+  // chart — not `history.weeks` (the main process's own pre-aggregation),
+  // which has no range parameter. Verified once against real data that this
+  // reproduces `history.weeks` exactly when unfiltered (task-4-report.md).
+  const weeksInRange = useMemo(() => topicWeekRetention(daysInRange), [daysInRange])
+
   useEffect(() => {
     window.engram
       .stats()
@@ -156,10 +183,13 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts }: Dashboard
   // computeCalibration re-sorts/re-joins every local pick against every
   // receipt day — cheap today, but there is no reason to redo it on every
   // render (a StatCard hover, an unrelated setState) rather than once per
-  // `history` load. Retention/Momentum no longer need this treatment: they
-  // read `stats.retention`/`stats.momentum` directly now (F1), which is
-  // already-computed data, not a render-body computation.
-  const cal = useMemo(() => (history ? computeCalibration(history.days, allPicks()) : null), [history])
+  // `history`/range change. Retention/Momentum no longer need this
+  // treatment: they read `stats.retention`/`stats.momentum` directly now
+  // (F1), which is already-computed data, not a render-body computation.
+  // `daysInRange` (Task 4) — passing the range-filtered day set here is
+  // enough to scope the whole join: a pick whose own local day isn't a key
+  // in `daysInRange` simply finds no match and is dropped, correctly.
+  const cal = useMemo(() => (history ? computeCalibration(daysInRange, allPicks()) : null), [history, daysInRange])
 
   if (error) {
     const fe = friendlyErrorText(error)
@@ -265,15 +295,31 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts }: Dashboard
         </div>
       )}
 
+      {/* This install has SOME history ever — the gate above stays unfiltered
+          by design: narrowing the range to an empty window should show the
+          honest blank inside these panels (each chart component already
+          falls back to its own "no activity"/"not enough reviews yet"
+          caption when handed empty data), not hide the whole surface as if
+          this were a fresh install. */}
       {history && (history.days.some((d) => d.count > 0) || history.weeks.some((w) => w.total > 0)) && (
         <>
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="text-xs text-[var(--color-text-dim)]">
+              Range — <span className="label-data text-[var(--color-text-primary)]">{rangeText}</span>
+            </div>
+            <SegmentedControl
+              options={RANGE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+              value={rangeKey}
+              onChange={setRangeKey}
+            />
+          </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="panel px-4 py-4 flex flex-col gap-3">
               <div className="text-xs font-medium text-[var(--color-text-dim)] uppercase tracking-wide">
-                Activity, last 180 days
+                Activity, {rangeText}
               </div>
               <StreakCalendar
-                days={history.days}
+                days={daysInRange}
                 onSelectDay={(day) => setDetail({ label: day.date, items: day.items })}
               />
             </div>
@@ -282,8 +328,8 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts }: Dashboard
                 Recall rate, weekly
               </div>
               <RetentionTrend
-                weeks={history.weeks}
-                days={history.days}
+                weeks={weeksInRange}
+                days={daysInRange}
                 onSelectWeek={(weekStart, items) => setDetail({ label: `Week of ${weekStart}`, items })}
               />
             </div>
@@ -360,6 +406,13 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts }: Dashboard
             />
           ))}
         </div>
+        {/* The range control above the Activity panel doesn't reach the
+            cards above — they're the engine's own fixed windows (stats.
+            retention.buckets), never re-scoped from the app (see
+            topicMetrics.ts's "date range" header comment). Said in words
+            here so a filtered chart just below never gets mistaken for a
+            filtered StatCard above it. */}
+        <div className="fig-caption mt-1">n/rate above are the engine's own fixed windows — not affected by the range.</div>
         {history === null ? (
           <div className="panel px-4 py-4 flex flex-col gap-4 mt-1">
             <SkeletonBar width="45%" height={12} />
@@ -369,15 +422,22 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts }: Dashboard
           </div>
         ) : (
           <div className="panel px-4 py-4 flex flex-col gap-5 mt-1">
-            <RetentionCurve data={history.weeks} />
-            <ActivityStrip data={history.days} />
+            <div className="fig-caption">Chart below reflects: {rangeText}</div>
+            <RetentionCurve data={weeksInRange} />
+            <ActivityStrip data={daysInRange} />
           </div>
         )}
       </Section>
 
       <Section title="Momentum">
         {/* stats.momentum — the engine's own compute_momentum, not the port
-            (see the Retention section's comment above; same doctrine). */}
+            (see the Retention section's comment above; same doctrine).
+            Always the engine's own 7-day window, regardless of the range
+            control above: momentum's meaning IS "the last 7 days," the same
+            way it is in engram.py, and two of its three numbers below
+            (stability gained, most durable) are graph-state reads with no
+            date-range concept at all — see topicMetrics.ts's header comment. */}
+        <div className="fig-caption mb-1">Always the engine's own last {stats.momentum.window_days} days — not affected by the range above.</div>
         <div className="grid grid-cols-3 gap-3">
           <StatBlock label={`Reviews (${stats.momentum.window_days}d)`} value={String(stats.momentum.reviews_7d)} />
           <StatBlock label="Stability gained" value={`+${stats.momentum.stability_gained_7d.toFixed(0)}d`} tone="warm" />
@@ -393,9 +453,10 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts }: Dashboard
         {history == null || cal == null ? (
           <SkeletonBar width="60%" height={14} />
         ) : cal.total === 0 ? (
-          <div className="fig-caption">no paired picks yet</div>
+          <div className="fig-caption">no paired picks yet ({rangeText})</div>
         ) : (
           <>
+            <div className="fig-caption">Reflects: {rangeText}</div>
             <div className="grid grid-cols-3 gap-3">
               <StatBlock label="Overconfident" value={String(cal.overconfident)} tone="warm" />
               <StatBlock label="Underconfident" value={String(cal.underconfident)} tone="cool" />
@@ -403,7 +464,7 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts }: Dashboard
             </div>
             <div className="fig-caption">Fig. — how your felt-sense tracks the assessor</div>
             <div className="panel px-4 py-4 mt-1">
-              <CalibrationScatter data={{ picks: cal.picks, days: history.days }} />
+              <CalibrationScatter data={{ picks: cal.picks, days: daysInRange }} />
             </div>
           </>
         )}

@@ -103,7 +103,7 @@ export function StreakCalendar({ days, onSelectDay }: { days: DayActivity[]; onS
       <div className="mt-2 text-xs text-[var(--color-text-dim)]">
         <span className="text-[var(--color-ink-warm)] font-medium">{activeDays}</span> active day{activeDays === 1 ? '' : 's'} ·{' '}
         <span className="text-[var(--color-ink-warm)] font-medium">{totalReviews}</span> review{totalReviews === 1 ? '' : 's'} in the
-        last 180 days
+        last {days.length} day{days.length === 1 ? '' : 's'}
       </div>
 
       {hover &&

@@ -6,6 +6,7 @@ import { CalibrationScatter } from '../components/charts/CalibrationScatter'
 import { NodeTable } from '../components/NodeTable'
 import { StatBlock } from '../components/ui/StatBlock'
 import { Button } from '../components/ui/Button'
+import { SegmentedControl } from '../components/ui/SegmentedControl'
 import { ArtifactTile } from '../components/ArtifactTile'
 import { DendriteDivider } from '../components/ui/DendriteDivider'
 import { SkeletonBar, SkeletonGrid } from '../components/Skeleton'
@@ -15,13 +16,18 @@ import { allPicks } from '../shared/calibrationStore'
 import { friendlyErrorText } from '../shared/friendlyError'
 import {
   CALIBRATION_MIN_N,
+  RANGE_OPTIONS,
   RETENTION_BUCKETS,
   bucketDisplay,
   computeCalibration,
   computeMomentum,
   computeRetentionBuckets,
+  filterDaysByRange,
+  rangeBounds,
+  rangeCaption,
   topicDayActivity,
   topicWeekRetention,
+  type RangeKey,
 } from '../shared/topicMetrics'
 
 /** Local YYYY-MM-DD → "Mon d, yyyy" — same local-midnight parse as
@@ -163,28 +169,60 @@ export function TopicDrilldownView({ topic, topicSummary, due, history, graphs, 
   const graph = graphs[topic]
   const [selectedNode, setSelectedNode] = useState<string | null>(null)
 
+  // Task 4: ONE range control for this surface. Governs the Retention
+  // buckets/chart, the Activity/weekly-trend charts, and Calibration below —
+  // never Momentum (see its own section comment: `computeMomentum` mirrors
+  // the engine's compute_momentum field-for-field, including its hardcoded
+  // 7-day window; two of its three rendered fields are current-graph-state
+  // reads with no date-range meaning at all regardless). Default 'all' means
+  // every number here shows exactly what it showed before this control
+  // existed.
+  const [rangeKey, setRangeKey] = useState<RangeKey>('all')
+  const bounds = useMemo(() => rangeBounds(rangeKey), [rangeKey])
+  const rangeText = rangeCaption(rangeKey, bounds)
+  const daysInRange = useMemo(() => filterDaysByRange(history.days, bounds), [history, bounds])
+
   // Each of these sorts/re-groups `history.receipts` (every receipt this
   // install has ever written, unfiltered — see ReceiptsHistory's own doc
   // comment) down to one topic on every call; memoized so a re-render that
-  // doesn't touch `history`/`graphs`/`topic` (opening the node table,
-  // toggling an artifact viewer) doesn't redo that work.
-  const buckets = useMemo(() => computeRetentionBuckets(history.receipts, topic), [history, topic])
+  // doesn't touch `history`/`graphs`/`topic`/the range (opening the node
+  // table, toggling an artifact viewer) doesn't redo that work.
+  //
+  // `allBuckets` — UNfiltered by range, on purpose: it's what decides
+  // whether this topic has EVER had a review/retrieval (see `hasActivity`
+  // below), a question the range control must not be able to answer "no"
+  // to just because the current window happens to be empty. `buckets` is
+  // the range-filtered one the StatCards/chart actually render — `range`
+  // only restricts WHICH REVIEWS are tallied, never which receipt counts as
+  // a node's first (encoding) receipt, so a review from day 100 doesn't get
+  // silently miscounted as a fresh day-0 encode just because its encoding
+  // predates a narrow selected window (see computeRetentionBuckets's own
+  // comment).
+  const allBuckets = useMemo(() => computeRetentionBuckets(history.receipts, topic), [history, topic])
+  const buckets = useMemo(() => computeRetentionBuckets(history.receipts, topic, bounds), [history, topic, bounds])
+  // Momentum is NOT range-filtered — always the engine-mirrored last 7 days,
+  // regardless of what's selected above (see the Momentum section's comment).
   const momentum = useMemo(() => computeMomentum(history.receipts, graphs, topic), [history, graphs, topic])
-  const cal = useMemo(() => computeCalibration(history.days, allPicks(), topic), [history, topic])
-  const days = useMemo(() => topicDayActivity(history.days, topic), [history, topic])
-  const weeks = useMemo(() => topicWeekRetention(history.days, topic), [history, topic])
+  const cal = useMemo(() => computeCalibration(daysInRange, allPicks(), topic), [daysInRange, topic])
+  const days = useMemo(() => topicDayActivity(daysInRange, topic), [daysInRange, topic])
+  const weeks = useMemo(() => topicWeekRetention(daysInRange, topic), [daysInRange, topic])
   // Whether this topic has EVER had a review/retrieval — deliberately the
-  // same unwindowed population `buckets` is computed over (every receipt
-  // ever written), not `days` (windowed to the last 180 days, like
-  // ReceiptsHistory.days always is). A topic whose only activity predates
-  // that window has n>0 buckets but zero windowed `days`; deriving this from
-  // `days` made the caption ("no reviews yet") lie under real numbers. Also
-  // gates the whole Momentum section, not just the Retention chart panel —
-  // a topic with no reviews at all has nothing real to report in either
-  // section, and rendering five "— / no reviews yet" cards plus an all-zero
-  // Momentum grid is exactly the empty chrome this app's hidden-when-empty
-  // discipline exists to avoid.
-  const hasActivity = useMemo(() => Object.values(buckets).some((b) => b.n > 0), [buckets])
+  // same unwindowed, unranged population `allBuckets` is computed over
+  // (every receipt ever written), not `days` (windowed to the last 180 days,
+  // like ReceiptsHistory.days always is, and now also range-sliced). A topic
+  // whose only activity predates that window has n>0 buckets but zero
+  // windowed `days`; deriving this from `days` made the caption ("no reviews
+  // yet") lie under real numbers. Also gates the whole Momentum section, not
+  // just the Retention chart panel — a topic with no reviews at all has
+  // nothing real to report in either section, and rendering five "— / no
+  // reviews yet" cards plus an all-zero Momentum grid is exactly the empty
+  // chrome this app's hidden-when-empty discipline exists to avoid.
+  const hasActivity = useMemo(() => Object.values(allBuckets).some((b) => b.n > 0), [allBuckets])
+  // Whether the SELECTED RANGE has any activity, given the topic has some
+  // ever — the honest-blank case Task 4 asks for: a narrow range with zero
+  // reviews in it must not render five dash cards implying zero learning,
+  // it renders one caption saying so (see the Retention section below).
+  const rangeHasActivity = useMemo(() => Object.values(buckets).some((b) => b.n > 0), [buckets])
 
   return (
     <div className="p-8 flex flex-col gap-8 w-full h-full overflow-y-auto">
@@ -205,13 +243,28 @@ export function TopicDrilldownView({ topic, topicSummary, due, history, graphs, 
             {due > 0 && <span className="text-[var(--color-ink-danger)]">{due} due</span>}
           </div>
         </div>
+        {hasActivity && (
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="text-xs text-[var(--color-text-dim)]">
+              Range — <span className="label-data text-[var(--color-text-primary)]">{rangeText}</span>
+            </div>
+            <SegmentedControl
+              options={RANGE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+              value={rangeKey}
+              onChange={setRangeKey}
+            />
+          </div>
+        )}
       </header>
 
       <Section title="Retention">
         {!hasActivity ? (
           <div className="fig-caption">no reviews yet for this topic</div>
+        ) : !rangeHasActivity ? (
+          <div className="fig-caption">no reviews in the selected range ({rangeText})</div>
         ) : (
           <>
+            <div className="fig-caption">Reflects: {rangeText}</div>
             <div className="grid grid-cols-5 gap-2">
               {RETENTION_BUCKETS.map(([name]) => {
                 const { value, caption, tone } = bucketDisplay(buckets[name])
@@ -230,27 +283,37 @@ export function TopicDrilldownView({ topic, topicSummary, due, history, graphs, 
         {!hasActivity ? (
           <div className="fig-caption">no reviews yet for this topic</div>
         ) : (
-          <div className="grid grid-cols-3 gap-3">
-            <StatBlock label={`Reviews (${momentum.windowDays}d)`} value={String(momentum.reviewsWindow)} />
-            <StatBlock label="Stability gained" value={`+${momentum.stabilityGainedWindow.toFixed(0)}d`} tone="warm" />
-            <StatBlock
-              label="Most durable"
-              value={momentum.mostDurable ? `${momentum.mostDurable.stabilityDays.toFixed(0)}d` : '—'}
-              caption={momentum.mostDurable ? humanizeNodeId(momentum.mostDurable.node) : undefined}
-            />
-          </div>
+          <>
+            {/* Always the engine-mirrored last N days, regardless of the range
+                control above — `computeMomentum` mirrors engram.py's
+                compute_momentum field-for-field, including its hardcoded
+                window, and "Most durable" is a current-graph-state read with
+                no date-range meaning at all (see topicMetrics.ts's "date
+                range" header comment). */}
+            <div className="fig-caption mb-1">Always the last {momentum.windowDays} days — not affected by the range above.</div>
+            <div className="grid grid-cols-3 gap-3">
+              <StatBlock label={`Reviews (${momentum.windowDays}d)`} value={String(momentum.reviewsWindow)} />
+              <StatBlock label="Stability gained" value={`+${momentum.stabilityGainedWindow.toFixed(0)}d`} tone="warm" />
+              <StatBlock
+                label="Most durable"
+                value={momentum.mostDurable ? `${momentum.mostDurable.stabilityDays.toFixed(0)}d` : '—'}
+                caption={momentum.mostDurable ? humanizeNodeId(momentum.mostDurable.node) : undefined}
+              />
+            </div>
+          </>
         )}
       </Section>
 
       <Section title="Calibration">
         {cal.total === 0 ? (
-          <div className="fig-caption">no paired picks yet for this topic</div>
+          <div className="fig-caption">no paired picks yet for this topic ({rangeText})</div>
         ) : cal.total < CALIBRATION_MIN_N ? (
           <div className="fig-caption">
-            too few paired picks to rate yet (n={cal.total}, need {CALIBRATION_MIN_N})
+            too few paired picks to rate yet (n={cal.total}, need {CALIBRATION_MIN_N}) — {rangeText}
           </div>
         ) : (
           <>
+            <div className="fig-caption">Reflects: {rangeText}</div>
             <div className="grid grid-cols-3 gap-3">
               <StatBlock label="Overconfident" value={String(cal.overconfident)} tone="warm" />
               <StatBlock label="Underconfident" value={String(cal.underconfident)} tone="cool" />
@@ -258,7 +321,7 @@ export function TopicDrilldownView({ topic, topicSummary, due, history, graphs, 
             </div>
             <div className="fig-caption">Fig. — how your felt-sense tracks the assessor, this topic only</div>
             <div className="panel px-4 py-4 mt-1">
-              <CalibrationScatter data={{ picks: cal.picks, days: history.days }} />
+              <CalibrationScatter data={{ picks: cal.picks, days: daysInRange }} />
             </div>
           </>
         )}

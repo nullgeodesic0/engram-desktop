@@ -19,7 +19,12 @@ const MONTH_INITIALS = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', '
  * separate concern from the local-date pick↔grade join used elsewhere. */
 export function ActivityStrip({ data }: { data: DayActivity[] }) {
   if (data.length === 0 || !data.some((d) => d.count > 0)) {
-    return <div className="fig-caption">Fig. — no activity in the last 180 days</div>
+    // `data.length` is however many days the caller actually passed — the
+    // full 180 by default, or a date-range control's narrower slice (Task 4).
+    // Never a hardcoded "180" here: that would keep claiming the full window
+    // even when a caller filtered it, exactly the "control that appears to
+    // filter a number it doesn't" failure the range control exists to avoid.
+    return <div className="fig-caption">Fig. — no activity in the last {data.length || 0} day{data.length === 1 ? '' : 's'}</div>
   }
 
   const n = data.length
@@ -77,7 +82,7 @@ export function ActivityStrip({ data }: { data: DayActivity[] }) {
       </svg>
       <div className="fig-caption">
         Fig. — <span style={{ fontVariantNumeric: 'tabular-nums' }}>{activeDays}</span> active day{activeDays === 1 ? '' : 's'},{' '}
-        <span style={{ fontVariantNumeric: 'tabular-nums' }}>{totalReviews}</span> review{totalReviews === 1 ? '' : 's'} over 180 days
+        <span style={{ fontVariantNumeric: 'tabular-nums' }}>{totalReviews}</span> review{totalReviews === 1 ? '' : 's'} over {n} day{n === 1 ? '' : 's'}
       </div>
     </div>
   )
