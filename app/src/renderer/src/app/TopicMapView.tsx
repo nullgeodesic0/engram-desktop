@@ -307,6 +307,15 @@ export function TopicMapView({
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null)
   const [graph, setGraph] = useState<TopicGraph | null>(null)
   const [retrievability, setRetrievability] = useState<Map<string, number> | null>(null)
+  // F10: `retrievability === null` is ALREADY a legitimate resolved state
+  // (a topic with no decay-relevant history yet — GraphView treats it as
+  // full brightness, see the `.catch` below), so it can't double as "still
+  // loading" too. Without this flag, exporting in the gap between the graph
+  // resolving and `decay()` resolving silently printed every cell at full
+  // ink — a plate that looks nothing like the (correctly faded) screen it
+  // claims to reproduce. True once the in-flight `decay()` call for the
+  // CURRENT `selectedTopic` has settled, resolved or rejected either way.
+  const [decayReady, setDecayReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedNode, setSelectedNode] = useState<string | null>(null)
   const [openNode, setOpenNode] = useState<string | null>(null)
@@ -379,9 +388,18 @@ export function TopicMapView({
    * `dueLens`, `replayActive`/`replayT` — so an export never freezes
    * whatever transient interaction happened to be on screen; see
    * mapToPrintHtml.ts for why each of those is resolved off/full rather than
-   * captured mid-interaction. */
+   * captured mid-interaction.
+   *
+   * F10: guarded on `decayReady` too, not just `graph` — the export button
+   * itself is disabled until both are true (see the render below), so this
+   * is the defensive second line, not the only one: without it, a
+   * still-possible race between a fast graph load and a slower still-pending
+   * `decay()` call would export with `retrievability` stuck at its initial
+   * `null` — indistinguishable from "no decay history", so every cell would
+   * silently print at full ink, unlike the correctly-faded screen it's
+   * supposed to reproduce. */
   async function handleExportMap() {
-    if (!graph) return
+    if (!graph || !decayReady) return
     setExportingMap(true)
     setMapExportStatus(null)
     try {
@@ -442,6 +460,7 @@ export function TopicMapView({
     setSelectedNode(null)
     setOpenNode(null)
     setRetrievability(null)
+    setDecayReady(false)
     setAnnotations({})
     setProvenance(null)
     setReplayActive(false)
@@ -463,6 +482,7 @@ export function TopicMapView({
         setRetrievability(map)
       })
       .catch(() => setRetrievability(null)) // topic with no decay-relevant history yet — GraphView treats this as full brightness
+      .finally(() => setDecayReady(true))
     window.engram
       .mapAnnotations(selectedTopic)
       .then(setAnnotations)
@@ -697,10 +717,11 @@ export function TopicMapView({
                 )}
                 <button
                   onClick={handleExportMap}
-                  disabled={exportingMap}
+                  disabled={exportingMap || !decayReady}
+                  title={!decayReady ? 'Waiting on this topic’s decay figures before the plate can print them faithfully…' : undefined}
                   className="focus-ring no-press text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] disabled:opacity-50"
                 >
-                  {exportingMap ? 'Exporting…' : 'Export plate ↗'}
+                  {exportingMap ? 'Exporting…' : decayReady ? 'Export plate ↗' : 'Preparing plate…'}
                 </button>
               </div>
               <div role="group" aria-label="Map or table view" className="flex items-center gap-0.5 panel p-0.5 bg-[var(--color-surface)]/90">

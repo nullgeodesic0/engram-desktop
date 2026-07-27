@@ -41,6 +41,239 @@ function escapeXml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
+// ---------------------------------------------------------------- F2: text measurement + label placement
+//
+// This document is assembled as a plain markup STRING (see the header
+// comment above) well before it ever reaches a renderer that could measure
+// real glyphs — there is no `canvas`/`document` to hand a `measureText` call
+// to at the point this function runs (main's hidden print `BrowserWindow`
+// only exists downstream, in exportMap.ts). So width is ESTIMATED, per
+// character, from a small bucketed table rather than computed exactly.
+//
+// Calibrated against real headless-Chromium prints of this exact SVG for
+// both real topics and hand-built calibration strings (`--print-to-pdf`,
+// word boxes read back with `pdftotext -bbox`; see the P4/P5 closing
+// fix-wave report for the full before/after measurement) — then deliberately
+// padded to the WIDE side for both typefaces this document uses (Inter for
+// labels, Fraunces for the masthead): every real topic label's MEASURED
+// rendered width came in at or under what this table would have predicted
+// for it, never over. That's the property that matters — this may wrap a
+// title or relocate a label a little earlier than strictly necessary, but
+// must never UNDER-measure into a real collision. `LABEL_PAD` (below) adds a
+// further fixed margin on top of that for the same reason: better a few
+// extra labels dropped or relocated than one truly touching its neighbor on
+// paper.
+const NARROW_CHARS = /[iIl.,:;'"!|\s]/
+const WIDE_CHARS = /[mwMW@%]/
+const DIGIT_CHARS = /[0-9]/
+const UPPER_CHARS = /[A-Z]/
+
+function estimateTextWidth(text: string, fontSizePx: number): number {
+  let units = 0
+  for (const ch of text) {
+    if (NARROW_CHARS.test(ch)) units += 0.32
+    else if (WIDE_CHARS.test(ch)) units += 0.85
+    else if (DIGIT_CHARS.test(ch)) units += 0.62
+    else if (UPPER_CHARS.test(ch)) units += 0.68
+    else units += 0.56
+  }
+  return units * fontSizePx
+}
+
+/** Greedy word-wrap into at most `maxLines`, truncating the LAST line with
+ * an ellipsis (backing off whole words, never mid-word, with a char-by-char
+ * fallback for one pathologically long word) rather than ever silently
+ * dropping the overflow with no indication anything was cut. This is F2(b)'s
+ * fix: `mapToPrintHtml` used to emit the masthead as one un-wrapped,
+ * un-truncated `<text>` at font-size 15 — grad-classical-mechanics' real
+ * 295-character title (`viewBox` width 1008px) rendered as roughly 2170px of
+ * text, clipped by the SVG's own bounds mid-word ("…Central Force &
+ * Two-Body/Kepler/Scatte"). */
+function wrapText(text: string, maxWidth: number, fontSize: number, maxLines: number): string[] {
+  const words = text.split(/\s+/).filter(Boolean)
+  const lines: string[] = []
+  let i = 0
+  while (i < words.length && lines.length < maxLines) {
+    let line = words[i]
+    i++
+    while (i < words.length) {
+      const candidate = `${line} ${words[i]}`
+      if (estimateTextWidth(candidate, fontSize) > maxWidth) break
+      line = candidate
+      i++
+    }
+    lines.push(line)
+  }
+  if (i < words.length) {
+    let last = lines[lines.length - 1] ?? ''
+    while (last.length > 0 && estimateTextWidth(`${last}…`, fontSize) > maxWidth) {
+      const cut = last.lastIndexOf(' ')
+      last = cut > 0 ? last.slice(0, cut) : last.slice(0, -1)
+    }
+    lines[lines.length - 1] = `${last}…`
+  }
+  return lines
+}
+
+interface Rect {
+  x0: number
+  y0: number
+  x1: number
+  y1: number
+}
+
+function rectsOverlap(a: Rect, b: Rect): boolean {
+  return a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0
+}
+
+/** Padding added to every label/cell rectangle before comparing — absorbs
+ * `estimateTextWidth`'s own error margin and leaves a visible gap between
+ * neighbors even when the estimate is exact, rather than two labels sitting
+ * pixel-adjacent. */
+const LABEL_PAD = 1.5
+
+type LabelAnchor = 'start' | 'middle' | 'end'
+
+interface LabelCandidate {
+  dx: number
+  dy: number
+  anchor: LabelAnchor
+  fontSize: number
+}
+
+/** Candidate positions for one node's label, tried in this order until one
+ * clears every obstacle. The first is the plate's original, always-to-the-
+ * right placement (unchanged for the common case where nothing is nearby);
+ * the rest fan out around the cell before finally trying a smaller face —
+ * "nudging, leader offsets, a smaller label face" per F2(a)'s brief. Dropping
+ * the label entirely (this document renders nothing for that node) is the
+ * last resort, tried only once none of these eight fit. */
+function labelCandidates(r: number): LabelCandidate[] {
+  const big = 9.5
+  const small = 7.5
+  return [
+    { dx: r + 6, dy: 4, anchor: 'start', fontSize: big },
+    { dx: r + 6, dy: -5, anchor: 'start', fontSize: big },
+    { dx: r + 6, dy: 13, anchor: 'start', fontSize: big },
+    { dx: -(r + 6), dy: 4, anchor: 'end', fontSize: big },
+    { dx: 0, dy: -(r + 7), anchor: 'middle', fontSize: big },
+    { dx: 0, dy: r + 14, anchor: 'middle', fontSize: big },
+    { dx: r + 5, dy: 4, anchor: 'start', fontSize: small },
+    { dx: -(r + 5), dy: 4, anchor: 'end', fontSize: small },
+  ]
+}
+
+function labelRect(pos: { x: number; y: number }, label: string, c: LabelCandidate): Rect {
+  const width = estimateTextWidth(label, c.fontSize)
+  const ascent = c.fontSize * 0.78
+  const descent = c.fontSize * 0.24
+  const anchorX = pos.x + c.dx
+  const x0 = c.anchor === 'start' ? anchorX : c.anchor === 'end' ? anchorX - width : anchorX - width / 2
+  const y0 = pos.y + c.dy - ascent
+  return {
+    x0: x0 - LABEL_PAD,
+    y0: y0 - LABEL_PAD,
+    x1: x0 + width + LABEL_PAD,
+    y1: pos.y + c.dy + descent + LABEL_PAD,
+  }
+}
+
+interface PlannedLabel {
+  label: string
+  candidate: LabelCandidate
+}
+
+/** F2(a)'s fix: the on-screen plate thins its labels below a zoom threshold
+ * (GraphView's `topRadiusIds`/zoom gate) so the screen is never asked to fit
+ * more text than it has pixels for — the print path used to LIFT that
+ * thinning (every node labels, full stop) without adding anything back in
+ * its place, which is what produced the measured 13 label-label and 23
+ * label-over-cell collisions across the four real topics on this machine.
+ * This keeps "every node is worth a label on paper" but adds the placement
+ * pass the screen's thinning made unnecessary: each node, in priority order,
+ * tries `labelCandidates` until one clears every already-placed label and
+ * every cell body; if none do, the label is dropped rather than stamped on
+ * top of a higher-priority neighbor. Priority mirrors the plate's own
+ * importance signal (capstone > threshold > frontier, then radius — the same
+ * `r` GraphView's `topRadiusIds` already ranks screen labels by) rather than
+ * an arbitrary one. */
+function planLabels(
+  graph: TopicGraph,
+  plate: Map<string, PlateNode>,
+  frontierIds: Set<string>,
+  annotations: MapAnnotations | null,
+  /** Fixed obstacles no per-node label may land on, beyond cells and other
+   * labels — the territory washes' faint italic root captions, currently
+   * (see the call site's own comment for why these earned a dedicated
+   * parameter rather than being folded into `cellObstacles`). */
+  extraObstacles: Rect[] = [],
+): Map<string, PlannedLabel> {
+  const cellObstacles = new Map<string, Rect>()
+  for (const id of graph.order) {
+    const node = graph.nodes[id]
+    const pos = plate.get(id)
+    if (!node || !pos) continue
+    const pad = 2
+    cellObstacles.set(id, { x0: pos.x - pos.r - pad, y0: pos.y - pos.r - pad, x1: pos.x + pos.r + pad, y1: pos.y + pos.r + pad })
+  }
+
+  const order = graph.order
+    .map((id, idx) => ({ id, idx, pos: plate.get(id) }))
+    .filter((e): e is { id: string; idx: number; pos: PlateNode } => !!e.pos && !!graph.nodes[e.id])
+    .sort((a, b) => {
+      const na = graph.nodes[a.id]
+      const nb = graph.nodes[b.id]
+      const scoreOf = (id: string, n: typeof na, pos: PlateNode) =>
+        (n?.capstone ? 300 : 0) + (n?.threshold ? 200 : 0) + (frontierIds.has(id) ? 100 : 0) + pos.r
+      const sa = scoreOf(a.id, na, a.pos)
+      const sb = scoreOf(b.id, nb, b.pos)
+      return sb !== sa ? sb - sa : a.idx - b.idx
+    })
+
+  const placed = new Map<string, PlannedLabel>()
+  const placedRects: Rect[] = []
+  for (const { id, pos } of order) {
+    const latexLabel = annotations?.[id]?.latexLabel
+    const label = latexLabel ? stripMathDelimiters(latexLabel) : humanizeNodeId(id)
+    for (const candidate of labelCandidates(pos.r)) {
+      const rect = labelRect(pos, label, candidate)
+      if (rect.x0 < 0 || rect.y0 < 0 || rect.x1 > PLATE_W || rect.y1 > PLATE_H) continue
+      let blocked = false
+      for (const [oid, orect] of cellObstacles) {
+        if (oid === id) continue
+        if (rectsOverlap(rect, orect)) {
+          blocked = true
+          break
+        }
+      }
+      if (!blocked) {
+        for (const orect of extraObstacles) {
+          if (rectsOverlap(rect, orect)) {
+            blocked = true
+            break
+          }
+        }
+      }
+      if (!blocked) {
+        for (const prect of placedRects) {
+          if (rectsOverlap(rect, prect)) {
+            blocked = true
+            break
+          }
+        }
+      }
+      if (!blocked) {
+        placed.set(id, { label, candidate })
+        placedRects.push(rect)
+        break
+      }
+    }
+    // No candidate cleared every obstacle: dropped, per F2(a)'s brief —
+    // never stamped over a higher-priority neighbor.
+  }
+  return placed
+}
+
 /** Small filled glyph + label row for the printed key, built from the exact
  * same `cellBodyPath` the plate itself uses — never a hand-drawn stand-in
  * shape that could drift from what the plate actually draws. */
@@ -183,14 +416,23 @@ export function mapToPrintHtml(
   }
 
   // Territory labels — always shown (the due lens that hides these on screen
-  // is resolved OFF for print; see the header comment).
+  // is resolved OFF for print; see the header comment). Their rects are also
+  // fed to `planLabels` below as fixed obstacles — one of the two real
+  // collisions this document shipped with (F2(a)'s own quoted example,
+  // "GeneralizedCapstone Coordinates Dof") was a per-node label landing on
+  // top of one of THESE faint italic captions, not on another per-node
+  // label or a cell — so a placement pass that only knew about cells and
+  // other labels still missed it.
+  const territoryLabelRects: Rect[] = []
   for (const [root, members] of territories.entries()) {
     const pts = members.map((id) => plate.get(id)).filter((p): p is PlateNode => !!p)
     const centroid = hullCentroid(pts)
     if (!centroid) continue
+    const territoryLabel = humanizeNodeId(root)
     svg.push(
-      `<text x="${centroid.x.toFixed(2)}" y="${centroid.y.toFixed(2)}" text-anchor="middle" font-family="var(--font-serif)" font-style="italic" font-size="11" fill="var(--color-text-dim)" opacity="0.45">${escapeXml(humanizeNodeId(root))}</text>`,
+      `<text x="${centroid.x.toFixed(2)}" y="${centroid.y.toFixed(2)}" text-anchor="middle" font-family="var(--font-serif)" font-style="italic" font-size="11" fill="var(--color-text-dim)" opacity="0.45">${escapeXml(territoryLabel)}</text>`,
     )
+    territoryLabelRects.push(labelRect(centroid, territoryLabel, { dx: 0, dy: 0, anchor: 'middle', fontSize: 11 }))
   }
 
   // Edges — flat opacity: no hover/selection trail to promote or dim on paper.
@@ -296,16 +538,19 @@ export function mapToPrintHtml(
     svg.push(`</g>`)
   }
 
-  // Labels — EVERY node, not just the zoom-gated top-N the screen shows (see
-  // header comment: paper has no reason to withhold a label to save pixels).
+  // Labels — EVERY node gets a placement attempt, not just the zoom-gated
+  // top-N the screen shows (paper has no reason to withhold a label to save
+  // pixels) — but WHERE each one lands (or whether it lands at all) is now a
+  // collision-checked plan, not an unconditional `r + 6`; see `planLabels`'s
+  // own header comment for F2(a)'s full reasoning.
+  const labelPlan = planLabels(graph, plate, frontierIds, annotations, territoryLabelRects)
   for (const id of graph.order) {
-    const node = graph.nodes[id]
     const pos = plate.get(id)
-    if (!node || !pos) continue
-    const latexLabel = annotations?.[id]?.latexLabel
-    const label = latexLabel ? stripMathDelimiters(latexLabel) : humanizeNodeId(id)
+    const planned = labelPlan.get(id)
+    if (!pos || !planned) continue
+    const { label, candidate } = planned
     svg.push(
-      `<g transform="translate(${pos.x.toFixed(2)} ${pos.y.toFixed(2)})"><text x="${pos.r + 6}" y="4" font-size="9.5" fill="var(--color-text-dim)" font-family="var(--font-body)">${escapeXml(label)}</text></g>`,
+      `<g transform="translate(${pos.x.toFixed(2)} ${pos.y.toFixed(2)})"><text x="${candidate.dx.toFixed(2)}" y="${candidate.dy.toFixed(2)}" text-anchor="${candidate.anchor}" font-size="${candidate.fontSize}" fill="var(--color-text-dim)" font-family="var(--font-body)">${escapeXml(label)}</text></g>`,
     )
   }
 
@@ -319,16 +564,34 @@ export function mapToPrintHtml(
   for (const d of cornerTicks(PLATE_W, PLATE_H)) {
     svg.push(`<path d="${d}" fill="none" stroke="var(--color-ink-warm-dim)" stroke-width="1.2"/>`)
   }
+  // Masthead — F2(b): a topic's `title` is free text with no length cap
+  // (grad-classical-mechanics' real title is 295 characters), so this used
+  // to be one un-wrapped, un-truncated `<text>` that the viewBox clipped mid-
+  // word. `wrapText` bounds it to MASTHEAD_MAX_LINES honestly — wrapping
+  // what fits, truncating with an ellipsis whatever doesn't — and the
+  // subtitle line is pushed down by however many lines the title actually
+  // took, so it never lands on top of a two-line title.
+  const MASTHEAD_X = 16
+  const MASTHEAD_Y0 = 26
+  const MASTHEAD_FONT_SIZE = 15
+  const MASTHEAD_LINE_HEIGHT = 17
+  const MASTHEAD_MAX_LINES = 2
+  const MASTHEAD_SUBTITLE_GAP = 16 // matches the original single-line 42 − 26 baseline gap
+  const mastheadLines = wrapText(`Fig. — ${graph.title}`, PLATE_W - MASTHEAD_X * 2, MASTHEAD_FONT_SIZE, MASTHEAD_MAX_LINES)
+  mastheadLines.forEach((line, i) => {
+    svg.push(
+      `<text x="${MASTHEAD_X}" y="${MASTHEAD_Y0 + i * MASTHEAD_LINE_HEIGHT}" font-family="var(--font-serif)" font-size="${MASTHEAD_FONT_SIZE}" fill="var(--color-text-primary)">${escapeXml(line)}</text>`,
+    )
+  })
+  const subtitleY = MASTHEAD_Y0 + (mastheadLines.length - 1) * MASTHEAD_LINE_HEIGHT + MASTHEAD_SUBTITLE_GAP
   svg.push(
-    `<text x="16" y="26" font-family="var(--font-serif)" font-size="15" fill="var(--color-text-primary)">${escapeXml(`Fig. — ${graph.title}`)}</text>`,
-  )
-  svg.push(
-    `<text x="16" y="42" font-family="var(--font-data)" font-size="10" letter-spacing="0.4" fill="var(--color-text-dim)">${escapeXml(`${stats.total} cells · ${stats.consolidated} consolidated`)}</text>`,
+    `<text x="${MASTHEAD_X}" y="${subtitleY}" font-family="var(--font-data)" font-size="10" letter-spacing="0.4" fill="var(--color-text-dim)">${escapeXml(`${stats.total} cells · ${stats.consolidated} consolidated`)}</text>`,
   )
 
   // Legend — reuses the exact glyph vocabulary the on-screen Key panel uses
-  // (same cellBodyPath calls, same seeded ids), placed bottom-left as an
-  // inset panel over the plate, mirroring TopicMapView's floating Key.
+  // (same cellBodyPath calls, same seeded ids), placed bottom-RIGHT as an
+  // inset panel over the plate (`legendX = PLATE_W - 168`), mirroring
+  // TopicMapView's floating Key.
   const legendX = PLATE_W - 168
   const legendY = PLATE_H - 176
   const legendRows: string[] = []

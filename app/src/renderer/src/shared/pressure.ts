@@ -70,11 +70,17 @@ export const MIN_ACTIVE_DAYS_FOR_PACE = 3
 export const PACE_WINDOW_DAYS = 30
 
 export interface ObservedPace {
-  /** encodes per calendar day, averaged over `windowDays`. */
+  /** distinct nodes advanced per calendar day, averaged over `windowDays`. */
   perDay: number
-  /** total `encode` receipts for this topic across the whole window. */
-  totalEncodes: number
-  /** distinct calendar days that carried >=1 encode, within the window. */
+  /** distinct nodes whose first-ever receipt (whatever kind it carries —
+   * `encode`, `pretest`, or a capstone's first `transfer`; see the F3 note
+   * on `computePressure` below) landed within the window — NOT a raw receipt
+   * count, and NOT `kind === 'encode'` alone. This is what makes it
+   * comparable to `nodesRemaining` (also a node count, not a receipt count)
+   * in the "Pace needed" figure beside it. */
+  nodesAdvanced: number
+  /** distinct calendar days that carried >=1 node advancing, within the
+   * window. */
   activeDays: number
   /** calendar days in the window, INCLUDING days with zero activity — the
    * denominator `perDay` actually divides by. This is the number the copy
@@ -140,6 +146,23 @@ export interface PressureFigures {
  * lifetime activity is 1 active day, so it stays gated at every "today"
  * simulated from the day of the burst through months later (see the P4 Task
  * 1 fix-wave report for the swept dates).
+ *
+ * Node vs. receipt count (P4/P5 closing fix wave, finding F3): the numerator
+ * used to be raw `kind === 'encode'` RECEIPTS, while `nodesRemaining` right
+ * beside it (and `requiredPace`'s own denominator) counts NODES — two
+ * different units rendered side by side as if comparable. Two ways that
+ * diverges on this machine's own receipts: a node re-encoded (a lapse,
+ * re-taught) contributes a second `encode` receipt for the SAME node
+ * (`grad-classical-mechanics`: 19 `encode` receipts, only 18 distinct
+ * encode-kind nodes); and a node can leave `new` via a `pretest` receipt
+ * instead of an `encode` one (same topic: 2 nodes), which the old
+ * `kind === 'encode'` filter never saw at all — so only 18 of the 20 nodes
+ * that actually left `new` were counted. The fix: `nodesAdvanced` groups
+ * ALL of a topic's receipts by node (mirroring shared/topicMetrics.ts's
+ * `groupByNode` — "a node's FIRST receipt is its encoding event, whatever
+ * kind it happens to carry") and counts each node once, on the calendar day
+ * of its OWN first-ever receipt — the day it left `new`, full stop, whatever
+ * kind fired that transition.
  */
 export function computePressure(
   graph: TopicGraph,
@@ -154,18 +177,23 @@ export function computePressure(
   const daysRemaining = Math.round((localMidnight(targetDate) - todayMs) / MS_PER_DAY)
   const requiredPace = nodesRemaining > 0 && daysRemaining > 0 ? nodesRemaining / daysRemaining : null
 
-  const allEncodeDates = receipts
-    .filter((r) => r.topic === graph.topic && r.kind === 'encode')
-    .map((r) => r.ts)
-    .sort()
+  // Each node's OWN first-ever receipt (any kind) is the day it left `new` —
+  // see the F3 doc note above. Sorting first means the loop below keeps only
+  // the earliest `ts` per node without a second pass.
+  const topicReceipts = [...receipts].filter((r) => r.topic === graph.topic).sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0))
+  const firstReceiptDateByNode = new Map<string, string>()
+  for (const r of topicReceipts) {
+    if (!firstReceiptDateByNode.has(r.node)) firstReceiptDateByNode.set(r.node, r.ts)
+  }
+  const allAdvanceDates = [...firstReceiptDateByNode.values()].sort()
 
   let observedPace: ObservedPace | null = null
-  if (allEncodeDates.length > 0) {
+  if (allAdvanceDates.length > 0) {
     // Trailing PACE_WINDOW_DAYS window ending today — clipped forward to the
-    // topic's real first encode when the topic is younger than the window,
-    // so the denominator never counts days before the topic existed.
-    const windowStartMs = Math.max(daysAgoMidnight(PACE_WINDOW_DAYS - 1, today), localMidnight(allEncodeDates[0]))
-    const inWindow = allEncodeDates.filter((d) => localMidnight(d) >= windowStartMs)
+    // topic's real first-ever advance when the topic is younger than the
+    // window, so the denominator never counts days before the topic existed.
+    const windowStartMs = Math.max(daysAgoMidnight(PACE_WINDOW_DAYS - 1, today), localMidnight(allAdvanceDates[0]))
+    const inWindow = allAdvanceDates.filter((d) => localMidnight(d) >= windowStartMs)
     const activeDays = new Set(inWindow).size
 
     if (activeDays >= MIN_ACTIVE_DAYS_FOR_PACE) {
@@ -177,7 +205,7 @@ export function computePressure(
       const windowDays = Math.round((todayMs - windowStartMs) / MS_PER_DAY) + 1
       observedPace = {
         perDay: inWindow.length / windowDays,
-        totalEncodes: inWindow.length,
+        nodesAdvanced: inWindow.length,
         activeDays,
         windowDays,
         windowStart: todayDateString(new Date(windowStartMs)),
