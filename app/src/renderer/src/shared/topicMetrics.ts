@@ -444,6 +444,25 @@ export function topicDayActivity(days: DayActivity[], topic?: string): DayActivi
   })
 }
 
+/** Mirrors receiptsHistory.ts's own WEEKS_BACK (main process) — that file's
+ * `weeks` is exactly the most recent WEEKS_BACK Mondays counting back from
+ * today, generated on its own regardless of how many calendar days happen to
+ * be in `days`. `topicWeekRetention` below derives its week list FROM `days`
+ * instead (so it can be range/topic-filtered), which is a different
+ * algorithm at the edges: DAYS_BACK (180, receiptsHistory.ts) isn't a whole
+ * multiple of 7, so the OLDEST few days of an unranged `days` array land in
+ * a Monday-bucket receiptsHistory.ts's own fixed-count walk never reaches —
+ * a real, measured divergence (27 weeks vs. 26, an extra leading week at
+ * total 0 dated 2026-01-26 on this machine's own data; see
+ * scripts/checkTopicMetricsAgreement.ts's week-rollup check, added
+ * specifically to pin this). Capping the OUTPUT to the most recent
+ * WEEKS_BACK entries fixes exactly that edge without touching the
+ * ranged/topic-filtered cases at all: 7d/30d/90d never produce more than
+ * ~14 weeks in the first place, so `.slice(-WEEKS_BACK)` is a no-op for
+ * every one of them — this only ever trims the unranged 'all' case's stray
+ * leading fragment. */
+const WEEKS_BACK = 26
+
 /** Re-derives weekly recall-rate (RetentionCurve's shape) from topic-filtered
  * day items, grouped by the SAME Monday-of-week rule receiptsHistory.ts's own
  * week aggregation uses (imported from weekDigest.ts, not a third copy). One
@@ -458,11 +477,15 @@ export function topicDayActivity(days: DayActivity[], topic?: string): DayActivi
  * date-range control filter the global weekly trend at all — `weeks` is
  * pre-aggregated server-side with no range parameter, but `days` (already
  * fetched, per-day) can be range-sliced in the renderer and re-rolled up
- * here. Verified once against real data that this produces byte-identical
- * per-week totals/recalled to `receiptsHistory().weeks` when given the full,
- * unfiltered `days` (see task-4-report.md) — this is not a second algorithm,
- * it is the SAME one `receiptsHistory.ts`'s main-process aggregation uses,
- * now also reachable from the renderer with an optional slice. */
+ * here. This is not a second algorithm, it is the SAME one
+ * `receiptsHistory.ts`'s main-process aggregation uses, now also reachable
+ * from the renderer with an optional slice — but NOT byte-identical to
+ * `receiptsHistory().weeks` on `days` alone: task-4-report.md claimed that,
+ * and it was false (measured on real data: 27 weeks vs. 26, see WEEKS_BACK's
+ * doc comment above). The final `.slice(-WEEKS_BACK)` below is what actually
+ * makes the two agree — pinned by
+ * scripts/checkTopicMetricsAgreement.ts's week-rollup check so this can't
+ * silently drift apart again. */
 export function topicWeekRetention(days: DayActivity[], topic?: string): WeekRetention[] {
   const totals = new Map<string, { total: number; recalled: number }>()
   for (const d of days) {
@@ -489,5 +512,9 @@ export function topicWeekRetention(days: DayActivity[], topic?: string): WeekRet
       rate: bucket && bucket.total > 0 ? bucket.recalled / bucket.total : null,
     })
   }
-  return weeks
+  // Trim to the most recent WEEKS_BACK entries — see WEEKS_BACK's own doc
+  // comment. `weeks` is oldest-first, so this drops the oldest boundary
+  // fragment(s), never anything from the recent/current end. A no-op for
+  // every ranged or topic-filtered caller (none of them reach 26 weeks).
+  return weeks.length > WEEKS_BACK ? weeks.slice(-WEEKS_BACK) : weeks
 }

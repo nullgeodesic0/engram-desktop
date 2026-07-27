@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { EngramStats, ReceiptsHistory, ReceiptItem, TopicGraph, TopicListEntry, ActiveExperiment } from '../../../shared/types'
 import { CoachSessionPanel } from '../components/CoachSessionPanel'
 import { SkeletonBar, SkeletonGrid } from '../components/Skeleton'
@@ -21,6 +21,7 @@ import { ExperimentBanner } from '../components/ExperimentBanner'
 import { TopicDrilldownView } from './TopicDrilldownView'
 import {
   RANGE_OPTIONS,
+  CALIBRATION_MIN_N,
   computeCalibration,
   filterDaysByRange,
   rangeBounds,
@@ -77,9 +78,20 @@ interface DashboardViewProps {
    * to the full gallery tab. Threaded down to TopicDrilldownView, never used
    * directly here. */
   onGoArtifacts?: () => void
+  /** Bumped by App.tsx every time Coach is navigated to from OUTSIDE this
+   * view (rail nav, Home's "Coach →", the command palette, ⌘4, a tray deep
+   * link) — closes any open topic drilldown so "go to Coach" always lands on
+   * the overview, matching every other nav item. This view is `KeepMounted`
+   * (App.tsx), so `openTopic` below otherwise survives a tab switch away and
+   * back; the drilldown's own "back" button is the only OTHER thing that
+   * clears it, and that's deliberate — an internal transition inside this
+   * view must never trip this reset. Same base-0-ref idiom as
+   * LearnSessionView's `openNewTopicSignal`: acts only on a change from the
+   * previous value, never on mount. */
+  coachHomeSignal?: number
 }
 
-export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts }: DashboardViewProps = {}) {
+export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts, coachHomeSignal }: DashboardViewProps = {}) {
   const [stats, setStats] = useState<EngramStats | null>(null)
   const [history, setHistory] = useState<ReceiptsHistory | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -102,6 +114,18 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts }: Dashboard
   // drilldown's own "Coach" button clears it.
   const [openTopic, setOpenTopic] = useState<string | null>(null)
 
+  // See coachHomeSignal's own doc comment. Baseline 0, NOT the incoming prop —
+  // mirrors LearnSessionView's openNewTopicSignalRef exactly: act on a change
+  // from the ref's own last-seen value, never on mount (a fresh signal of 0
+  // must not close a drilldown that was never open).
+  const coachHomeSignalRef = useRef(0)
+  useEffect(() => {
+    if (coachHomeSignal !== undefined && coachHomeSignal !== coachHomeSignalRef.current) {
+      setOpenTopic(null)
+    }
+    coachHomeSignalRef.current = coachHomeSignal ?? coachHomeSignalRef.current
+  }, [coachHomeSignal])
+
   // Task 4: ONE range control for this whole surface. Governs Activity,
   // weekly trend, and Calibration below (all receipt-derived) — never the
   // Retention/Momentum StatCards above, which read `stats.retention`/
@@ -116,9 +140,26 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts }: Dashboard
   // Weekly rollup re-derived from the (possibly range-sliced) days, through
   // the SAME function TopicDrilldownView already uses for its own weekly
   // chart — not `history.weeks` (the main process's own pre-aggregation),
-  // which has no range parameter. Verified once against real data that this
-  // reproduces `history.weeks` exactly when unfiltered (task-4-report.md).
+  // which has no range parameter. `topicWeekRetention` reproduces
+  // `history.weeks` exactly when unfiltered (see its own WEEKS_BACK doc
+  // comment for the boundary bug that fix closed, and
+  // scripts/checkTopicMetricsAgreement.ts for the check that pins it).
   const weeksInRange = useMemo(() => topicWeekRetention(daysInRange), [daysInRange])
+
+  // The detail panel (below) shows one calendar day's or one week's items,
+  // opened by clicking a specific cell in StreakCalendar/RetentionTrend —
+  // both charts redraw for the new range the moment `rangeKey` changes, so
+  // whatever was open is a snapshot of the PREVIOUS chart, not the one on
+  // screen now. Simplest correct rule: any range change closes it, full stop
+  // — rather than checking whether `detail`'s own date/week still falls
+  // inside the new bounds (which would need its own local-date logic for two
+  // different label shapes, "<date>" and "Week of <date>", for a panel that's
+  // just as easy to reopen with one click). Without this, picking Jul 20 in
+  // 'all' and then switching to 7d left the header reading "Range — 7d — Jul
+  // 21–27" above a panel still listing Jul 20's items.
+  useEffect(() => {
+    setDetail(null)
+  }, [rangeKey])
 
   useEffect(() => {
     window.engram
@@ -454,6 +495,18 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts }: Dashboard
           <SkeletonBar width="60%" height={14} />
         ) : cal.total === 0 ? (
           <div className="fig-caption">no paired picks yet ({rangeText})</div>
+        ) : cal.total < CALIBRATION_MIN_N ? (
+          // Same floor TopicDrilldownView already gates its own identical
+          // block behind (CALIBRATION_MIN_N's own doc comment: a verdict off
+          // fewer picks than this is noise, not a diagnosis). Global `cal.total`
+          // used to look large by construction — pooled across every topic —
+          // but Task 4's range control made a small n reachable here too: a
+          // narrow range (7d) can leave as few as 1-2 paired picks, and
+          // CalibrationScatter's verdict sentence doesn't know the difference.
+          // One constant, both scopes.
+          <div className="fig-caption">
+            too few paired picks to rate yet (n={cal.total}, need {CALIBRATION_MIN_N}) — {rangeText}
+          </div>
         ) : (
           <>
             <div className="fig-caption">Reflects: {rangeText}</div>
