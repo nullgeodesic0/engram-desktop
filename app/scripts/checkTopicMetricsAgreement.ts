@@ -7,6 +7,16 @@
  * file's only job is to be a faithful topic-scoped port of the SAME algorithm,
  * never a second implementation that can quietly drift.
  *
+ * Also pins `topicWeekRetention(history.days)` (no topic filter) against
+ * `history.weeks` — receiptsHistory.ts's OWN pre-aggregation, not engram.py
+ * this time (no CLI subcommand reports a weekly rollup at all; see that
+ * file's header comment). A P3 fix-wave report claimed these two were
+ * byte-identical without ever running this check; they weren't (27 weeks vs.
+ * 26 on real data, an extra leading week at total 0 — see topicMetrics.ts's
+ * `WEEKS_BACK` doc comment for the boundary-alignment bug and its fix). This
+ * check is what makes sure that claim stays true from here on rather than
+ * going stale again unnoticed.
+ *
  * Runs against REAL data on this machine — this install's own
  * ~/.claude/learning/receipts/*.jsonl and graphs/*.json, via the exact same
  * main-process code paths the app itself uses (readReceiptsHistory,
@@ -26,7 +36,7 @@
  */
 import { readReceiptsHistory } from '../src/main/engramCli/receiptsHistory'
 import { engramRead, readTopicGraph } from '../src/main/engramCli/readOnly'
-import { computeMomentum, computeRetentionBuckets } from '../src/renderer/src/shared/topicMetrics'
+import { computeMomentum, computeRetentionBuckets, topicWeekRetention } from '../src/renderer/src/shared/topicMetrics'
 import type { EngramStats, TopicGraph, TopicListEntry } from '../src/shared/types'
 
 /** Engine `round(x, N)` is banker's rounding; the port's is round-half-up
@@ -113,17 +123,37 @@ async function main(): Promise<void> {
     }
   }
 
+  // ---- weekly rollup (F6) ----
+  // `topicWeekRetention` derives its week list FROM `days`; `history.weeks`
+  // is receiptsHistory.ts's own independent fixed-count rollup. Both must
+  // report the identical set of weeks when unfiltered — length first (a
+  // length mismatch would otherwise misalign every indexed comparison below
+  // into a wall of spurious per-field failures for one real bug).
+  const portWeeks = topicWeekRetention(history.days)
+  if (portWeeks.length !== history.weeks.length) {
+    failures.push(`weeks.length: engine=${history.weeks.length} port=${portWeeks.length}`)
+  } else {
+    for (let i = 0; i < portWeeks.length; i++) {
+      const pw = portWeeks[i]
+      const ew = history.weeks[i]
+      if (pw.weekStart !== ew.weekStart) failures.push(`weeks[${i}].weekStart: engine=${ew.weekStart} port=${pw.weekStart}`)
+      if (pw.total !== ew.total) failures.push(`weeks[${i}].total: engine=${ew.total} port=${pw.total}`)
+      if (pw.recalled !== ew.recalled) failures.push(`weeks[${i}].recalled: engine=${ew.recalled} port=${pw.recalled}`)
+      if (!closeEnough(pw.rate, ew.rate, 3)) failures.push(`weeks[${i}].rate: engine=${ew.rate} port=${pw.rate}`)
+    }
+  }
+
   if (failures.length > 0) {
-    console.error(`FAIL — computeRetentionBuckets/computeMomentum (unfiltered) diverge from engram.py stats (${failures.length} mismatch(es)):`)
+    console.error(`FAIL — computeRetentionBuckets/computeMomentum/topicWeekRetention (unfiltered) diverge from the engine (${failures.length} mismatch(es)):`)
     for (const f of failures) console.error(`  - ${f}`)
     process.exitCode = 1
     return
   }
 
-  console.log('OK — computeRetentionBuckets/computeMomentum (unfiltered) agree with engram.py stats exactly.')
+  console.log('OK — computeRetentionBuckets/computeMomentum/topicWeekRetention (unfiltered) agree with the engine exactly.')
   console.log(
     `  receipts=${history.receipts.length} topics=${topicsList.length} graphs=${Object.keys(graphs).length} ` +
-      `reviews_bucketed=${Object.values(stats.retention.buckets).reduce((n, b) => n + b.n, 0)}`,
+      `reviews_bucketed=${Object.values(stats.retention.buckets).reduce((n, b) => n + b.n, 0)} weeks=${portWeeks.length}`,
   )
 }
 

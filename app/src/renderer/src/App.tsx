@@ -126,6 +126,18 @@ export default function App() {
   // "New Topic" modal open on the Learn view — LearnSessionView watches for
   // this to change, not any particular number.
   const [newTopicRequest, setNewTopicRequest] = useState(0)
+  // Bumped (never read for its value, same idiom as newTopicRequest above)
+  // every time Coach is navigated to from OUTSIDE the dashboard itself — the
+  // rail nav item, Home's "Coach →", the command palette, ⌘4, a tray/
+  // notification deep link. DashboardView is `KeepMounted`, so its own
+  // `openTopic` drilldown state otherwise survives switching away and back —
+  // meaning the rail's "Coach" item, clicked while a drilldown was left open,
+  // silently reopened the drilldown instead of Coach's own overview, with the
+  // drilldown's in-page "back" as the only way out. Every external "go to
+  // Coach" trigger goes through `goToView` below, which bumps this on every
+  // click (not gated on `view` actually changing — clicking Coach while
+  // already ON Coach, mid-drilldown, must still jump back to the overview).
+  const [coachHomeSignal, setCoachHomeSignal] = useState(0)
 
   useEffect(() => {
     const onResize = () => setNarrow(window.innerWidth < COLLAPSE_WIDTH)
@@ -147,7 +159,7 @@ export default function App() {
         return
       }
       if (v === 'home' || v === 'topics' || v === 'dashboard' || v === 'artifacts' || v === 'review' || v === 'learn' || v === 'settings') {
-        setView(v)
+        goToView(v)
       }
     })
   }, [])
@@ -163,12 +175,22 @@ export default function App() {
       const n = NAV.find((item) => item.hint === e.key)
       if (n) {
         e.preventDefault()
-        setView(n.id)
+        goToView(n.id)
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
+
+  // Every external trigger that can land on a nav tab goes through here —
+  // never a bare `setView` — so "go to Coach" always bumps coachHomeSignal
+  // (see that state's own doc comment) regardless of which trigger fired it.
+  // Plain pass-through for every other view; `setView` itself already bails
+  // out on a no-op value, so calling this with the CURRENT view is harmless.
+  function goToView(v: View) {
+    if (v === 'dashboard') setCoachHomeSignal((n) => n + 1)
+    setView(v)
+  }
 
   function goToTopic(topicId: string) {
     setDeepLinkTopic(topicId)
@@ -220,7 +242,7 @@ export default function App() {
                 aria-label={n.label}
                 aria-current={active ? 'page' : undefined}
                 onClick={() => {
-                  setView(n.id)
+                  goToView(n.id)
                   if (narrow) setPinnedOpen(false)
                 }}
                 className={`focus-ring group relative flex items-center gap-2.5 text-left px-3 py-2 rounded-lg text-sm transition-colors duration-[var(--dur-fast)] ${
@@ -307,8 +329,8 @@ export default function App() {
           {view === 'home' && (
             <div key="home" className="view-transition h-full">
               <HomeView
-                onGoReview={() => setView('review')}
-                onGoCoach={() => setView('dashboard')}
+                onGoReview={() => goToView('review')}
+                onGoCoach={() => goToView('dashboard')}
                 onGoTopic={goToTopic}
                 onNewTopic={() => setView('learn')}
                 onGoNode={goToNode}
@@ -353,6 +375,7 @@ export default function App() {
                 onNewTopic={() => setView('learn')}
                 onGoNode={goToNode}
                 onGoArtifacts={() => setView('artifacts')}
+                coachHomeSignal={coachHomeSignal}
               />
             </KeepMounted>
           )}
@@ -378,7 +401,7 @@ export default function App() {
         onGoNode={goToNode}
         onGoSitting={goToSitting}
         navCommands={[
-          ...NAV.map((n) => ({ id: `nav:${n.id}`, label: n.label, hint: `⌘${n.hint}`, action: () => setView(n.id) })),
+          ...NAV.map((n) => ({ id: `nav:${n.id}`, label: n.label, hint: `⌘${n.hint}`, action: () => goToView(n.id) })),
           { id: 'nav:history', label: 'Session History', hint: '⇧⌘H', action: () => setAllHistoryOpen(true) },
         ]}
       />

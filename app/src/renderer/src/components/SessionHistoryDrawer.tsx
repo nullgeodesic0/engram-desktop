@@ -325,6 +325,15 @@ export function SessionHistoryDrawer({
 }) {
   const [entries, setEntries] = useState<HistoryRow[] | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  // True exactly when the caller asked for a specific sitting (`initialSessionId`)
+  // and it wasn't in the fetched list — a stale/CLI-run/pruned sessionId, most
+  // often a sitting `nodeProvenance`'s disk sweep attributed from a transcript
+  // this app's own session index never recorded (see ArtifactTile/TopicMapView's
+  // ProvenanceBlock, the two callers that pass a real `initialSessionId`). The
+  // drawer still opens (on `list[0]`, same as any other unmatched/absent
+  // request) — it just says so instead of silently substituting a different
+  // transcript for the one the reader actually asked to see.
+  const [requestedNotFound, setRequestedNotFound] = useState(false)
   const [timeline, setTimeline] = useState<{
     messages: ChatMessage[]
     grades: GradeBatch[]
@@ -345,6 +354,7 @@ export function SessionHistoryDrawer({
     setEntries(null)
     setSelectedId(null)
     setTimeline(null)
+    setRequestedNotFound(false)
     anchorAppliedRef.current = false
     // The per-topic/review branches dedupe here (fetchAllHistory does its own,
     // see dedupeBySessionId's doc) — without it a resumed sitting's repeat
@@ -362,6 +372,7 @@ export function SessionHistoryDrawer({
       // convenience as any other history browser. Nothing here touches the
       // live session that opened the drawer.
       const matchedInitial = Boolean(initialSessionId) && list.some((e) => e.sessionId === initialSessionId)
+      setRequestedNotFound(Boolean(initialSessionId) && !matchedInitial)
       const target = matchedInitial ? initialSessionId : (list[0]?.sessionId ?? null)
       // Only a genuine deep link (matchedInitial) is something the learner
       // actually chose to look at — the plain "land on most-recent" default,
@@ -512,6 +523,21 @@ export function SessionHistoryDrawer({
         </div>
 
         <div className="flex-1 min-w-0 flex flex-col gap-3">
+          {/* The requested sitting (a provenance/artifact deep link's own
+              sessionId) isn't one this drawer's list actually contains — say
+              so instead of quietly opening a different transcript in its
+              place. Real today for CLI-run sittings `nodeProvenance`'s disk
+              sweep attributes a node to, that this app's own session index
+              never recorded (see ArtifactTile's "Encoded …" link and
+              TopicMapView's ProvenanceBlock — both route through here). */}
+          {requestedNotFound && (
+            <div className="shrink-0 panel border-[var(--color-ink-cool-dim)] px-4 py-2 text-xs text-[var(--color-ink-cool)]">
+              The sitting this points to isn’t in the app’s recorded history
+              {entries && entries.length > 0
+                ? ' — showing the most recent one instead. Pick any entry on the left to browse what is here.'
+                : '.'}
+            </div>
+          )}
           {selectedEntry && (
             <div className="shrink-0 panel border-[var(--color-ink-cool-dim)] px-4 py-2 flex items-center justify-between gap-3">
               <span className="text-xs text-[var(--color-ink-cool)]">

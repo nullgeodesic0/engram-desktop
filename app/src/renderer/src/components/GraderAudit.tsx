@@ -31,6 +31,28 @@ function humanizeCaseType(id: string): string {
   return id.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
+// engram.py writes `reasons`/`stamp`/`direction.note` for its own CLI
+// audience, which already knows what `direction.graded_up` or a
+// `(docs/07 §3)` pointer means. This app's reader doesn't — those are the
+// exact shape of wrapper tell the cold-start copy below is written to avoid
+// (see the `!health.audited` branch), so anything rendered from the engine's
+// own prose is run through here first rather than shown verbatim.
+// Known dotted/underscored identifiers get a plain-English gloss (traced to
+// the SAME number this app already labels elsewhere — "the graded-up count"
+// is exactly the Direction panel's own "graded up" stat just below); anything
+// else just loses its backticks rather than reading as a code span dropped
+// into a sentence. Doc citations point into a docs tree this app's reader
+// has never seen and can't open, so they're dropped outright, not glossed.
+const KNOWN_FIELD_GLOSSES: Record<string, string> = {
+  'direction.graded_up': 'the graded-up count',
+  graded_up: 'the graded-up count',
+}
+
+function sanitizeAuditProse(text: string): string {
+  const withoutDocRefs = text.replace(/\s*\(docs\/\d+[^)]*\)/gi, '')
+  return withoutDocRefs.replace(/`([^`]+)`/g, (_, id: string) => KNOWN_FIELD_GLOSSES[id] ?? id)
+}
+
 const VERDICT_LABEL: Record<string, string> = {
   pass: 'Passed',
   warn: 'Passed, under target',
@@ -178,13 +200,31 @@ export function GraderAudit() {
   // No audit has ever run, or the newest one on disk is corrupt — say so
   // plainly, and stop there. This implies nothing about the grader's
   // quality either way, so no verdict badge, no numbers, nothing else.
+  //
+  // `health.stamp`/`health.read` are engram.py's own CLI-audience copy —
+  // "run /coach audit", "audits/<file> is unreadable" — a command that
+  // doesn't exist in this GUI and a path this reader has no use for (spec
+  // 2026-07-26-coach-artifacts-design.md §"Night Atlas vocabulary": never
+  // name a CLI flag or an internal path in user-visible text). Both cold
+  // states keep the engine's MEANING — "nobody has run this yet" reads
+  // nothing like "the last result is corrupt and can't be trusted as-is" —
+  // just written in this app's own voice, pointing at the thing a learner
+  // can actually click (the "Audit grader" quick action in the Coach panel
+  // this section sits under).
   if (!health.audited) {
+    const unreadable = health.verdict === 'unreadable'
     return (
       <div className="panel px-4 py-3 flex items-start gap-3">
         <span className="text-[var(--color-text-faint)]">?</span>
         <div className="flex-1 min-w-0">
-          <div className="text-sm text-[var(--color-text-primary)]">{health.stamp}</div>
-          <p className="text-xs text-[var(--color-text-dim)] mt-1 leading-snug">{health.read}</p>
+          <div className="text-sm text-[var(--color-text-primary)]">
+            {unreadable ? 'Grader audit record unreadable' : 'Grader not yet audited'}
+          </div>
+          <p className="text-xs text-[var(--color-text-dim)] mt-1 leading-snug">
+            {unreadable
+              ? 'The most recent audit file couldn’t be read, so the grader is back to unconfirmed rather than resting on a result that might be stale or corrupted. Choose “Audit grader” in the Coach panel above to run a fresh one.'
+              : 'Nobody has checked how well the grader agrees with human judgment yet, so every number it produces is unproven — not wrong, just unconfirmed. Choose “Audit grader” in the Coach panel above to check it; it takes about four minutes.'}
+          </p>
         </div>
       </div>
     )
@@ -232,7 +272,7 @@ export function GraderAudit() {
             {health.ts ? formatTs(health.ts) : 'date unknown'} · {health.n ?? '—'} items ·{' '}
             {health.runs ?? '—'} run{health.runs === 1 ? '' : 's'}
           </div>
-          {health.stamp && <div className="text-xs text-[var(--color-text-dim)] mt-1.5">{health.stamp}</div>}
+          {health.stamp && <div className="text-xs text-[var(--color-text-dim)] mt-1.5">{sanitizeAuditProse(health.stamp)}</div>}
         </div>
       </div>
 
@@ -273,10 +313,10 @@ export function GraderAudit() {
           </div>
           {health.reasons.map((r, i) => (
             <p key={i} className="text-sm text-[var(--color-text-primary)] leading-snug">
-              {r}
+              {sanitizeAuditProse(r)}
             </p>
           ))}
-          {biasNote && <p className="text-xs text-[var(--color-text-dim)] leading-snug">{biasNote}</p>}
+          {biasNote && <p className="text-xs text-[var(--color-text-dim)] leading-snug">{sanitizeAuditProse(biasNote)}</p>}
         </div>
       )}
 
@@ -297,7 +337,7 @@ export function GraderAudit() {
               <div className="text-xs text-[var(--color-text-faint)]">exact</div>
             </div>
           </div>
-          <p className="fig-caption">{health.direction.note}</p>
+          <p className="fig-caption">{sanitizeAuditProse(health.direction.note)}</p>
         </div>
       )}
 

@@ -86,18 +86,26 @@ export function ArtifactTile({
           {a.mtimeMs != null && (
             <div className="text-[10px] label-data text-[var(--color-text-faint)]">Built {formatMtime(a.mtimeMs)}</div>
           )}
+          {/* Was "From the sitting on <date>" — but `firstEncoded.date` is the
+              encode/pretest EVENT's own date, not the sitting's start (a
+              resumed sitting can span days, so "Built Jul 13" above and "From
+              the sitting on Jul 15" below were both true and read as a
+              contradiction: a Jul-13 build "from" a Jul-15 sitting). Naming
+              the event instead of the sitting states exactly what this field
+              knows — when the node was encoded/pretested — without implying
+              anything about which day the sitting itself began. */}
           {firstEncoded &&
             (onOpenSitting ? (
               <button
                 onClick={() => onOpenSitting(a, firstEncoded)}
-                aria-label={`Open the sitting from ${formatProvenanceDate(firstEncoded.date)}`}
+                aria-label={`Open the transcript where this was ${firstEncoded.kind === 'pretest' ? 'pretested' : 'encoded'}, ${formatProvenanceDate(firstEncoded.date)}`}
                 className="focus-ring text-[10px] label-data text-[var(--color-text-faint)] hover:text-[var(--color-text-dim)] text-left"
               >
-                From the sitting on {formatProvenanceDate(firstEncoded.date)} →
+                {firstEncoded.kind === 'pretest' ? 'Pretested' : 'Encoded'} {formatProvenanceDate(firstEncoded.date)} →
               </button>
             ) : (
               <div className="text-[10px] label-data text-[var(--color-text-faint)]">
-                From the sitting on {formatProvenanceDate(firstEncoded.date)}
+                {firstEncoded.kind === 'pretest' ? 'Pretested' : 'Encoded'} {formatProvenanceDate(firstEncoded.date)}
               </div>
             ))}
         </div>
