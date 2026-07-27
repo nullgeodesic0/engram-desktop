@@ -15,6 +15,7 @@ import { MathRenderer } from '../components/MathRenderer'
 import { SessionHistoryDrawer } from '../components/SessionHistoryDrawer'
 import { ExplorableViewer } from '../components/ExplorableViewer'
 import { friendlyErrorText } from '../shared/friendlyError'
+import { recordView } from '../shared/recentlyViewed'
 
 function stateLabel(state: string): string {
   if (state === 'new') return 'not started'
@@ -463,6 +464,23 @@ export function TopicMapView({
     onSpotlightConsumed?.()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spotlightNode, graph])
+
+  // Recently-viewed recording — a quiet convenience for Home/the palette, not
+  // app state. selectedNode/openNode are the two choke points every path that
+  // opens a node already funnels through (the plate's own click/dblclick, the
+  // node table's row click, NodeStructure's requires/unlocks buttons, the
+  // deep-link/spotlight effects above), so one effect per state covers all of
+  // them rather than a recordView() sprinkled at each call site. Never fires
+  // on a clear (selectedNode/openNode going back to null).
+  useEffect(() => {
+    if (!selectedTopic || !selectedNode || !graph) return
+    recordView({ kind: 'node', topic: selectedTopic, node: selectedNode, label: humanizeNodeId(selectedNode), topicTitle: graph.title })
+  }, [selectedTopic, selectedNode, graph])
+
+  useEffect(() => {
+    if (!selectedTopic || !openNode || !graph) return
+    recordView({ kind: 'node', topic: selectedTopic, node: openNode, label: humanizeNodeId(openNode), topicTitle: graph.title })
+  }, [selectedTopic, openNode, graph])
 
   const node = graph && selectedNode ? graph.nodes[selectedNode] : null
   const opened = graph && openNode ? graph.nodes[openNode] : null

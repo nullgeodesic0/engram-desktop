@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useFocusTrap } from './useFocusTrap'
 import { buildSearchIndex, fetchTopicEntries, searchEntries, type SearchEntry } from '../shared/searchIndex'
+import { recentViews, type RecentView } from '../shared/recentlyViewed'
 import { InkNode } from './ui/InkNode'
 
 interface Command {
@@ -8,7 +9,7 @@ interface Command {
   label: string
   hint?: string
   action: () => void
-  group?: 'Topics' | 'Nodes' | 'Receipts' | 'Artifacts'
+  group?: 'Topics' | 'Nodes' | 'Receipts' | 'Artifacts' | 'Recently viewed'
   glyphId?: string
 }
 
@@ -18,6 +19,7 @@ interface CommandPaletteProps {
   navCommands: Command[]
   onGoTopic: (topicId: string) => void
   onGoNode: (topicId: string, nodeId: string) => void
+  onGoSitting: (sessionId: string) => void
 }
 
 const GROUP_BY_KIND: Record<'node' | 'receipt' | 'artifact', Command['group']> = {
@@ -58,6 +60,33 @@ function topicEntryToCommand(e: SearchEntry, onGoTopic: (topicId: string) => voi
   }
 }
 
+/** A recently-viewed node or sitting (see shared/recentlyViewed.ts), turned
+ * into a palette row exactly like any other command. Reuses the same
+ * onGoNode/onGoSitting navigation App.tsx already wires everywhere else — a
+ * recent row is just a shortcut into the ordinary deep-link path, not a new one. */
+function recentEntryToCommand(
+  v: RecentView,
+  onGoNode: (topicId: string, nodeId: string) => void,
+  onGoSitting: (sessionId: string) => void,
+): Command {
+  if (v.kind === 'node') {
+    return {
+      id: `recent:node:${v.topic}:${v.node}`,
+      label: v.label,
+      hint: v.topicTitle,
+      group: 'Recently viewed',
+      glyphId: v.node,
+      action: () => onGoNode(v.topic, v.node),
+    }
+  }
+  return {
+    id: `recent:sitting:${v.sessionId}`,
+    label: v.label,
+    group: 'Recently viewed',
+    action: () => onGoSitting(v.sessionId),
+  }
+}
+
 /** ⌘K — jump to any view, in-progress topic, specific node, past receipt, or
  * artifact by typing, building on the ⌘1–⌘6 shortcuts already in App.tsx.
  * Loads in two phases so the palette doesn't sit blank while the heavy part
@@ -67,7 +96,7 @@ function topicEntryToCommand(e: SearchEntry, onGoTopic: (topicId: string) => voi
  * (see `invalidateSearchIndex`, called from `refreshTopics` in
  * LearnSessionView wherever a topic/node actually changes). Until the full
  * index resolves, `fastTopics` is all `combinedIndex` has to offer. */
-export function CommandPalette({ open, onClose, navCommands, onGoTopic, onGoNode }: CommandPaletteProps) {
+export function CommandPalette({ open, onClose, navCommands, onGoTopic, onGoNode, onGoSitting }: CommandPaletteProps) {
   const [query, setQuery] = useState('')
   const [fastTopics, setFastTopics] = useState<SearchEntry[]>([])
   const [fullIndex, setFullIndex] = useState<SearchEntry[] | null>(null)
@@ -126,9 +155,16 @@ export function CommandPalette({ open, onClose, navCommands, onGoTopic, onGoNode
   const searchCommands: Command[] =
     q.length < 2 ? [] : ranked.filter((e) => e.kind !== 'topic').map((e) => entryToCommand(e, onGoNode))
 
+  // Recently viewed — empty-query only, and slotted right under the nav
+  // commands (before Topics/Nodes/…) rather than mixed into the search ranking,
+  // so it never displaces the nav commands and never touches the two-phase
+  // index load above. A plain localStorage read (see recentlyViewed.ts), not
+  // state — cheap enough to recompute per render, and it needs no loading phase.
+  const recentCommands: Command[] = q ? [] : recentViews().map((v) => recentEntryToCommand(v, onGoNode, onGoSitting))
+
   const filtered = q
     ? [...navCommands.filter((c) => c.label.toLowerCase().includes(q)), ...topicCommands, ...searchCommands]
-    : [...navCommands, ...topicCommands, ...searchCommands]
+    : [...navCommands, ...recentCommands, ...topicCommands, ...searchCommands]
 
   function run(cmd: Command) {
     cmd.action()
@@ -187,7 +223,7 @@ export function CommandPalette({ open, onClose, navCommands, onGoTopic, onGoNode
                 >
                   <span className="flex items-center gap-2 min-w-0 truncate">
                     {cmd.glyphId &&
-                      (cmd.group === 'Nodes' || cmd.group === 'Receipts' || cmd.group === 'Artifacts' ? (
+                      (cmd.group === 'Nodes' || cmd.group === 'Receipts' || cmd.group === 'Artifacts' || cmd.group === 'Recently viewed' ? (
                         <InkNode id={cmd.glyphId} variant="outlined" color="var(--color-ink-cool)" size={12} />
                       ) : (
                         <InkNode id={cmd.glyphId} variant="filled" size={12} />

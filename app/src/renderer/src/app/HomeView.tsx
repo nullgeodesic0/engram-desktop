@@ -14,6 +14,7 @@ import { Button } from '../components/ui/Button'
 import { EnvironmentSteps } from '../components/EnvironmentSteps'
 import { ExperimentBanner } from '../components/ExperimentBanner'
 import { computeDueBuckets } from '../shared/dueBuckets'
+import { recentViews, type RecentView } from '../shared/recentlyViewed'
 
 const LAST_SEEN_STREAK_KEY = 'engram-desktop:last-seen-streak-days'
 const LAST_SEEN_DUE_KEY = 'engram-desktop:last-seen-due-now'
@@ -47,14 +48,24 @@ interface HomeViewProps {
   onGoCoach: () => void
   onGoTopic: (topicId: string) => void
   onNewTopic: () => void
+  /** Deep-link targets for the "Recently viewed" row below — same
+   * goToNode/goToSitting plumbing App.tsx already hands the Topic Map,
+   * DashboardView, and the command palette. */
+  onGoNode: (topicId: string, nodeId: string) => void
+  onGoSitting: (sessionId: string) => void
 }
 
 /** The app's actual landing screen — streak, what's due, and quick entry points —
  * replacing "always opens on Review" with something that answers "where am I"
  * before asking you to do anything. Also the natural click-through target for a
  * background review-due notification down the line. */
-export function HomeView({ onGoReview, onGoCoach, onGoTopic, onNewTopic }: HomeViewProps) {
+export function HomeView({ onGoReview, onGoCoach, onGoTopic, onNewTopic, onGoNode, onGoSitting }: HomeViewProps) {
   const [stats, setStats] = useState<EngramStats | null>(null)
+  // Snapshot at mount, not a subscription — this view fully remounts on every
+  // visit to Home (see App.tsx's `view === 'home'` branch, not KeepMounted),
+  // so a fresh localStorage read here already picks up anything recorded
+  // while the user was elsewhere. See shared/recentlyViewed.ts.
+  const [recent] = useState<RecentView[]>(() => recentViews())
   const [topics, setTopics] = useState<TopicSummary[] | null>(null)
   // Only consulted for the empty-topics guided card below — EnvironmentGate
   // already blocks the app on a broken environment, but its "Continue anyway"
@@ -283,6 +294,33 @@ export function HomeView({ onGoReview, onGoCoach, onGoTopic, onNewTopic }: HomeV
           ))}
         </div>
       </section>
+
+      {/* Quiet row of the last few nodes/sittings opened elsewhere in the app —
+          hidden entirely when there's nothing yet (no empty chrome, same
+          discipline as the rest of Home). See shared/recentlyViewed.ts;
+          selecting one reuses the exact goToNode/goToSitting paths the Topic
+          Map and the command palette already use. */}
+      {recent.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <DendriteDivider className="mb-1" />
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[10px] label-data uppercase tracking-wide text-[var(--color-text-faint)] shrink-0">
+              Recently viewed
+            </span>
+            {recent.map((v) => (
+              <button
+                key={v.kind === 'node' ? `n:${v.topic}:${v.node}` : `s:${v.sessionId}`}
+                onClick={() => (v.kind === 'node' ? onGoNode(v.topic, v.node) : onGoSitting(v.sessionId))}
+                title={v.kind === 'node' ? `${v.label} — ${v.topicTitle}` : v.label}
+                className="focus-ring flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs text-[var(--color-text-dim)] bg-[var(--color-surface-2)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-primary)] transition-colors duration-[var(--dur-fast)]"
+              >
+                {v.kind === 'node' && <InkNode id={v.node} variant="outlined" color="var(--color-ink-cool)" size={10} />}
+                <span className="truncate max-w-[9rem]">{v.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {stats && (
         <div className="flex flex-col gap-0">
