@@ -15,7 +15,13 @@ import { parseTranscriptToMessages, type ChatMessage } from '../../../shared/cha
 import { extractLastUsageFromTranscript } from '../../../shared/sessionUsage'
 import { humanizeNodeId } from '../../../shared/humanizeId'
 import { emitPulse } from '../../../shared/neuralFieldBus'
-import { parseGradeResult, lapseReturnDate, type GradeResult } from '../../../shared/gradeResult'
+import {
+  parseGradeResult,
+  lapseReturnDate,
+  isStabilityMilestone,
+  type GradeResult,
+  type StabilityMilestoneScale,
+} from '../../../shared/gradeResult'
 import { GradeResultCard } from '../components/GradeResultCard'
 import { SkeletonBar } from '../components/Skeleton'
 import { SessionCeremony } from '../components/ritual/Bookends'
@@ -37,7 +43,12 @@ import { MarkView, type RitualMark } from '../components/ritual/Marks'
 import type { ReviewDocketItem } from '../components/ritual/ReviewDocket'
 import { deriveRitualMarks } from '../../../shared/ritualFromTranscript'
 import { parseAuditNotification } from '../../../shared/taskNotification'
-import { isReviewRateCommand, isAssessorAuditSpawnEvent } from '../../../shared/signals/tutorSignals'
+import {
+  isReviewRateCommand,
+  isAssessorAuditSpawnEvent,
+  classifyEngramBashFailure,
+  type ToolFailureKind,
+} from '../../../shared/signals/tutorSignals'
 import { QueueRail } from '../components/ritual/QueueRail'
 
 type Phase = 'loading' | 'empty' | 'ready' | 'in-session' | 'done' | 'closed-unexpectedly'
@@ -222,11 +233,38 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
   // state) because it's pure bookkeeping the render never reads directly —
   // only `marks` state itself is rendered.
   const pendingAuditsRef = useRef<Array<{ toolUseId: string; markId: string }>>([])
+  // Task 7's claimed-tool-use registry — same discipline as LearnSessionView's
+  // own ref: every Bash tool_use `classifyEngramBashFailure` recognizes (here,
+  // in practice, almost always Review's own `rate --rating` call, or the
+  // generic `engram-bash` bucket for anything else engram.py-shaped) gets its
+  // id claimed at dispatch time, so a later `isError` tool_result can push
+  // the matching specific `tool-failure` mark.
+  const toolFailureRegistry = useRef<Map<string, ToolFailureKind>>(new Map())
 
   function pushLapseMark(node: string, returnDate: string | null) {
     setMarks((prev) => [
       ...prev,
       { id: `mark-${markSeq.current++}`, atIndex: messagesRef.current.length, kind: 'lapse', node, returnDate },
+    ])
+  }
+
+  // Task 6 — same shared `isStabilityMilestone` predicate LearnSessionView and
+  // deriveRitualMarks use; Review only ever grades one node per `rate` call,
+  // so this fires at most once per tool_result (unlike Learn's per-batch loop).
+  function pushMilestoneMark(node: string, scale: StabilityMilestoneScale, sBefore: number, sAfter: number) {
+    setMarks((prev) => [
+      ...prev,
+      { id: `mark-${markSeq.current++}`, atIndex: messagesRef.current.length, kind: 'milestone', node, scale, sBefore, sAfter },
+    ])
+  }
+
+  // Task 7 — same claimed-tool-use-registry discipline as LearnSessionView's
+  // own pushMark-adjacent helper; pushes the specific tool-failure card for
+  // whichever engram call classifyEngramBashFailure recognized.
+  function pushToolFailureMark(failureKind: ToolFailureKind) {
+    setMarks((prev) => [
+      ...prev,
+      { id: `mark-${markSeq.current++}`, atIndex: messagesRef.current.length, kind: 'tool-failure', failureKind },
     ])
   }
 
@@ -316,6 +354,13 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
         break
       case 'tool_use':
         appendLog(`→ ${event.name}(${JSON.stringify(event.input).slice(0, 80)})`)
+        // Task 7 — claim this Bash call's id for tool-failure purposes before
+        // the rate-specific branch below (same registry, same classifier
+        // LearnSessionView and deriveRitualMarks share).
+        if (event.name === 'Bash') {
+          const failureKind = classifyEngramBashFailure(String((event.input as { command?: unknown }).command ?? ''))
+          if (failureKind) toolFailureRegistry.current.set(event.id, failureKind)
+        }
         if (event.name === 'Bash' && isReviewRateCommand(String((event.input as { command?: unknown }).command ?? ''))) {
           pendingRateToolUseId.current = event.id
           // Read the topic off the rate command's own `--topic` flag rather
@@ -348,8 +393,17 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
           pendingAuditsRef.current.push({ toolUseId: event.id, markId })
         }
         break
-      case 'tool_result':
+      case 'tool_result': {
         appendLog(`← ${event.isError ? 'error' : 'ok'}`)
+        // Task 7 — resolve any claimed tool-failure. Order relative to the
+        // rate-specific branch below doesn't affect correctness (that branch
+        // already gates on `!event.isError` itself), only render order
+        // within the same atIndex.
+        const failureKind = toolFailureRegistry.current.get(event.toolUseId)
+        if (failureKind !== undefined) {
+          toolFailureRegistry.current.delete(event.toolUseId)
+          if (event.isError) pushToolFailureMark(failureKind)
+        }
         if (event.toolUseId === pendingRateToolUseId.current) {
           pendingRateToolUseId.current = null
           if (!event.isError) {
@@ -377,6 +431,11 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
               if (result.grade === 'lapsed') {
                 pushLapseMark(result.node, lapseReturnDate(result.intervalDays))
               }
+              // Task 6 — same shared predicate; a lapse and a milestone can
+              // never co-occur (isStabilityMilestone excludes grade==='lapsed'),
+              // so these two marks never both fire for the same result.
+              const scale = isStabilityMilestone(result)
+              if (scale) pushMilestoneMark(result.node, scale, result.sBefore as number, result.sAfter as number)
             }
           }
           refreshQueue().then((items) => {
@@ -390,6 +449,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
           })
         }
         break
+      }
       case 'task_notification': {
         // Resolve a pending audit spawn's verdict in place, live — see
         // pendingAuditsRef's doctrine comment above and the module-level

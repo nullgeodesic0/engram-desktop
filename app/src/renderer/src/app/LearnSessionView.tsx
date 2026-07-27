@@ -35,8 +35,12 @@ import {
   isSubagentSpawnTool,
   explorableTitleFromDescription,
   explorableNodeFromPrompt,
+  isReceiptCommand,
+  isStashCommand,
+  classifyEngramBashFailure,
+  type ToolFailureKind,
 } from '../../../shared/signals/tutorSignals'
-import { parsePretestGradeResults, verdictFromGrade } from '../../../shared/gradeResult'
+import { parsePretestGradeResults, verdictFromGrade, isStabilityMilestone } from '../../../shared/gradeResult'
 import { invalidateSearchIndex } from '../shared/searchIndex'
 import { humanizeNodeId } from '../../../shared/humanizeId'
 import { emitPulse, setAmbientLevel } from '../../../shared/neuralFieldBus'
@@ -71,16 +75,14 @@ import { paperSlide, warmTone } from '../shared/soundscape'
 // the batch-grade call — the one place /learn's tool_result carries an ARRAY of
 // per-node grade results (cmd_receipt in engram.py), unlike the single-item
 // shape a bare `rate` call would return.
+// (Task 7) Delegates to shared/signals/tutorSignals.ts's `isReceiptCommand` —
+// the same predicate `classifyEngramBashFailure` uses to recognize a receipt
+// call's FAILURE, so success and failure detection can never quietly drift
+// off two separately-maintained copies of the same substring check.
 function looksLikeReceiptCall(input: Record<string, unknown>): boolean {
-  const command = String(input.command ?? '')
-  return command.includes('receipt') && command.includes('--file')
+  return isReceiptCommand(String(input.command ?? ''))
 }
 
-// Stash is the "production filed for later grading" moment (spike/FINDINGS.md
-// Finding 5.2) — a Bash call containing `stash` that isn't actually the next/
-// rate/receipt call (those also happen to run through Bash and could contain
-// the literal substring in a path, so the exclusions matter more than they
-// would for a narrower regex).
 // `add-topic --file <tmp>` is the architect's curriculum-save moment — the one
 // call that mints a topic. Its success output carries {ok, topic, nodes}.
 function looksLikeAddTopicCall(input: Record<string, unknown>): boolean {
@@ -88,13 +90,11 @@ function looksLikeAddTopicCall(input: Record<string, unknown>): boolean {
   return command.includes('add-topic')
 }
 
+// Stash is the "production filed for later grading" moment (spike/FINDINGS.md
+// Finding 5.2). (Task 7) Delegates to shared/signals/tutorSignals.ts's
+// `isStashCommand` — same reason as `looksLikeReceiptCall` above.
 function looksLikeStashCall(input: Record<string, unknown>): boolean {
-  const command = String(input.command ?? '')
-  if (!/\bstash\b/.test(command)) return false
-  if (isNextNodeCommand(command)) return false
-  if (looksLikeReceiptCall(input)) return false
-  if (pretestRateNode(command) !== null) return false
-  return true
+  return isStashCommand(String(input.command ?? ''))
 }
 
 // Plain Omit<Union, K> collapses a discriminated union to its common fields
@@ -415,6 +415,15 @@ export function LearnSessionView({
   const pendingPretestToolUseIds = useRef<Set<string>>(new Set())
   const pretestItemsRef = useRef<DiagnosticItem[]>([])
   const diagnosticGateRef = useRef<DiagnosticGate>(createDiagnosticGate())
+  // Task 7's claimed-tool-use registry: every Bash tool_use
+  // `classifyEngramBashFailure` (shared/signals/tutorSignals.ts) recognizes —
+  // the six specifically-named calls, plus the generic `engram-bash` bucket —
+  // gets its id claimed here at dispatch time, so a later `tool_result` with
+  // `isError` can push the matching specific `tool-failure` mark. A Bash call
+  // the classifier returns `null` for (a build step, `ls`, a one-off debug
+  // script) is never claimed, so its failure renders nothing — deliberate
+  // scope, see ToolFailureCard's doctrine comment.
+  const toolFailureRegistry = useRef<Map<string, ToolFailureKind>>(new Map())
   // Mirrors currentBeat synchronously (unlike the state itself, which only
   // settles after a render) so onBridgeBeat can read "the beat we're leaving"
   // as a plain value in the handler body instead of reaching for it inside a
@@ -478,6 +487,7 @@ export function LearnSessionView({
     pretestItemsRef.current = []
     diagnosticGateRef.current = createDiagnosticGate()
     pendingExplorableByNode.current.clear()
+    toolFailureRegistry.current.clear()
     setWalkNumber(null)
     setCommitment(null)
     setClosedUnexpectedly(false)
@@ -717,6 +727,14 @@ export function LearnSessionView({
         })
         break
       case 'tool_use':
+        // Task 7 — claim this Bash call's id for tool-failure purposes BEFORE
+        // any of the specific-signal branches below run, so the registry is
+        // populated no matter which (if any) of them also fires for the same
+        // command.
+        if (event.name === 'Bash') {
+          const failureKind = classifyEngramBashFailure(String((event.input as { command?: unknown }).command ?? ''))
+          if (failureKind) toolFailureRegistry.current.set(event.id, failureKind)
+        }
         if (event.name === 'Bash' && isNextNodeCommand(String((event.input as { command?: unknown }).command ?? ''))) {
           pendingNextToolUseId.current = event.id
           // Fallback diagnostic-plate trigger (shared/ritualFromTranscript.ts's
@@ -825,7 +843,16 @@ export function LearnSessionView({
           }
         }
         break
-      case 'tool_result':
+      case 'tool_result': {
+        // Task 7 — resolve any claimed tool-failure BEFORE the specific
+        // success-side branches below (which already no-op on error content
+        // themselves; this ordering only affects render order within the
+        // same atIndex, not correctness).
+        const failureKind = toolFailureRegistry.current.get(event.toolUseId)
+        if (failureKind !== undefined) {
+          toolFailureRegistry.current.delete(event.toolUseId)
+          if (event.isError) pushMark({ kind: 'tool-failure', failureKind })
+        }
         if (event.toolUseId === pendingNextToolUseId.current) {
           pendingNextToolUseId.current = null
           nextCallsSeen.current += 1
@@ -897,6 +924,13 @@ export function LearnSessionView({
               return next
             })
             window.engram.stats().then((s) => setStreakDays(s.streak_days))
+            // Task 6 — the same shared predicate ReviewSessionView and
+            // deriveRitualMarks use, checked per-node since one receipt batch
+            // can carry several independently-milestone-worthy nodes.
+            for (const r of results) {
+              const scale = isStabilityMilestone(r)
+              if (scale) pushMark({ kind: 'milestone', node: r.node, scale, sBefore: r.sBefore as number, sAfter: r.sAfter as number })
+            }
           }
         }
         if (pendingStashToolUseIds.current.has(event.toolUseId)) {
@@ -907,6 +941,12 @@ export function LearnSessionView({
           pendingPretestToolUseIds.current.delete(event.toolUseId)
           for (const r of parsePretestGradeResults(event.content)) {
             pretestItemsRef.current.push({ node: r.node, verdict: verdictFromGrade(r.grade) })
+            // Task 6 — a pretest result's sBefore is always null on a fresh
+            // cold probe (nothing to grow FROM yet), so this never fires in
+            // practice; checked anyway for the same-predicate-everywhere
+            // discipline rather than special-casing pretest as exempt.
+            const scale = isStabilityMilestone(r)
+            if (scale) pushMark({ kind: 'milestone', node: r.node, scale, sBefore: r.sBefore as number, sAfter: r.sAfter as number })
           }
         }
         setJobs((prev) =>
@@ -917,6 +957,7 @@ export function LearnSessionView({
           ),
         )
         break
+      }
       case 'rate_limit':
         setRateLimit(event.status === 'allowed' ? null : { status: event.status, resetsAt: event.resetsAt })
         break

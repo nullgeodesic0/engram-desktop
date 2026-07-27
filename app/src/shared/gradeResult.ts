@@ -230,6 +230,62 @@ export function lapseReturnDate(intervalDays: number | null, anchor: Date = new 
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+/** The scale of stability a `rate`/`receipt` result just crossed for the first
+ * time — 'month' takes priority over 'week' when a single result's jump
+ * crosses both at once (the tutor's own prose narrates growth this way: "that
+ * went from ~4 days to ~17" reads as one story, not two). */
+export type StabilityMilestoneScale = 'week' | 'month'
+
+// Absolute day-thresholds, not a multiplicative jump — a ratio ("2x growth")
+// is noisy on the small bases FSRS starts every node at (s_before often sits
+// under 2 days right after first encode, where even a routine `good` rating
+// can double it), which would make the mark fire on ordinary early reviews
+// instead of a genuine milestone. week/month instead mirror the two scales
+// the tutor's own prose already narrates growth in ("that went from ~4 days
+// to ~17", "holding for weeks now") — crossing INTO calendar-week-scale
+// retention, then INTO calendar-month-scale retention, are the two moments
+// worth a card. Checked chronologically first, largest first, against
+// ~/.claude/learning/receipts/*.jsonl (81 real grade events across 4 topics,
+// 46 of them carrying both s_before/s_after — the rest are first encodes with
+// no prior stability to grow FROM, correctly excluded below): 18/81 events
+// (22%) cross one of these two thresholds, landing in 13/27 real session
+// batches (48%) — frequent enough to not be dead code, but well under "every
+// session" (worth noting per-session can still show it more than once if
+// several nodes cross in the same batch — that's real, not manufactured:
+// e.g. `tsarist-autocracy-context` and `second-international-orthodoxy-
+// kautsky` both crossed month-scale in the same lenin-what-is-to-be-done
+// receipt batch on 2026-07-xx because both nodes happened to get an `easy`
+// rating in the same sitting). A narrower multiplicative-jump-only rule was
+// tried first and rejected: it fired on some of the SAME small `hard`-rated
+// partial jumps (e.g. 0.4872->0.9269, nearly 2x) that never once crossed
+// either calendar threshold in the real data — exactly the "noisy on small
+// bases" failure mode the task brief warned about.
+const MILESTONE_THRESHOLDS: Array<{ scale: StabilityMilestoneScale; days: number }> = [
+  { scale: 'month', days: 30 },
+  { scale: 'week', days: 7 },
+]
+
+/** True iff `result` is the FIRST time this node's stability crossed into
+ * week-scale or month-scale retention — a pure function of this one result's
+ * own `sBefore`/`sAfter` (no external history needed: `sBefore` IS the node's
+ * prior stability, so "crossed for the first time" falls straight out of
+ * "was below the threshold, is now at or above it"). Never fires on a lapse
+ * (stability only drops there, so sBefore<th<=sAfter can't hold anyway — the
+ * explicit grade check just makes the invariant readable) or on a fresh
+ * encode (`sBefore` is null — nothing to grow FROM yet, not a milestone,
+ * just a starting point). The ONE definition — both session views' live
+ * handlers and `ritualFromTranscript.ts`'s replay call this verbatim, so a
+ * resumed sitting can never disagree with the live sitting about which
+ * results were milestones. */
+export function isStabilityMilestone(result: GradeResult): StabilityMilestoneScale | null {
+  if (result.sBefore == null || result.sAfter == null) return null
+  if (result.grade === 'lapsed') return null
+  for (const { scale, days } of MILESTONE_THRESHOLDS) {
+    if (result.sBefore < days && result.sAfter >= days) return scale
+  }
+  return null
+}
+
 /** Trailing consecutive `recalled` count — the sitting's current "flow"
  * (FlowChain renders it from 2 up). Walks backward until the streak breaks. */
 export function trailingRecalled(results: GradeResult[]): number {
