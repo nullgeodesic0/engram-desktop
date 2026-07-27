@@ -702,17 +702,17 @@ export function SettingsView() {
         <div className="fig-caption">
           Fig. — standing aims the tutor mines for examples and relevance, same as interests above.
         </div>
-        <div className="text-xs text-[var(--color-text-faint)]">
-          Read-only here — the engine only ever appends a goal (<span className="label-data">--add-goal</span>), and
-          no control in this app reaches that yet; today these are set from the intake conversation.
-        </div>
-        {model.goals.length > 0 && (
+        {model.goals.length > 0 ? (
           <div className="flex flex-wrap gap-2">
             {model.goals.map((g) => (
               <span key={g} className="text-xs px-2 py-1 rounded-lg bg-[var(--color-surface-2)] text-[var(--color-text-dim)]">
                 {g}
               </span>
             ))}
+          </div>
+        ) : (
+          <div className="text-xs text-[var(--color-text-faint)]">
+            None declared yet — the tutor records these when you tell it what you're working toward.
           </div>
         )}
       </div>
@@ -724,17 +724,17 @@ export function SettingsView() {
           Fig. — declared needs (dyslexia, ADHD, color vision, and the like) the tutor always honors as dials — a
           need, never a “learning style” guess.
         </div>
-        <div className="text-xs text-[var(--color-text-faint)]">
-          Read-only here — nothing in engram.py’s <span className="label-data">model</span> command adds to or
-          clears this list; it’s declared through the intake conversation (or by hand-editing the model file).
-        </div>
-        {model.accessibility.length > 0 && (
+        {model.accessibility.length > 0 ? (
           <div className="flex flex-wrap gap-2">
             {model.accessibility.map((a) => (
               <span key={a} className="text-xs px-2 py-1 rounded-lg bg-[var(--color-surface-2)] text-[var(--color-text-dim)]">
                 {a}
               </span>
             ))}
+          </div>
+        ) : (
+          <div className="text-xs text-[var(--color-text-faint)]">
+            None declared yet — tell the tutor what you need and it records it here.
           </div>
         )}
       </div>
@@ -903,7 +903,7 @@ export function SettingsView() {
         <div>
           <div className="text-sm text-[var(--color-text-primary)]">Diagnostics</div>
           <div className="text-xs text-[var(--color-text-faint)] mt-0.5">
-            Runs engram.py’s own health check — state-dir writability, the learner model, and every topic graph on
+            Runs the engine's own health check — state-dir writability, the learner model, and every topic graph on
             disk. Nothing runs until you ask for it below.
           </div>
         </div>
