@@ -1,15 +1,16 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ExportSittingFormat, ExportSittingResult, SessionIndexEntry } from '../../../shared/types'
 import type { ChatMessage } from '../../../shared/chatMessages'
 import { parseGradeResult, parseGradeResults, type GradeResult } from '../../../shared/gradeResult'
 import { deriveRitualMarks, type DerivedRitualMark } from '../../../shared/ritualFromTranscript'
+import { deriveReviewCrossings, nextProbeHeaderAt } from '../../../shared/reviewCrossing'
 import { isTaskNotificationContent } from '../../../shared/taskNotification'
 import { sittingToMarkdown, sittingToPrintHtml, type SittingMeta } from '../shared/sittingToMarkdown'
 import { recordView } from '../shared/recentlyViewed'
 import { Modal } from './ui/Modal'
 import { ChatMessageView } from './ChatMessageView'
 import { GradeResultCard } from './GradeResultCard'
-import { MarkView } from './ritual/Marks'
+import { MarkView, NodeCrossingDivider } from './ritual/Marks'
 
 interface TranscriptLine {
   type?: string
@@ -502,6 +503,31 @@ export function SessionHistoryDrawer({
   // single topic for the whole drawer — it follows whichever sitting is
   // currently selected, same as its `kind`/`topicTitle` tag.
   const ladderTopic = historyKey === ALL_HISTORY_KEY ? selectedEntry?.topicId : historyKey !== 'review' ? historyKey : undefined
+  // Review-only: the same probe-header-derived grade-card anchoring and node
+  // crossing ReviewSessionView uses live (see shared/reviewCrossing.ts's
+  // doctrine comment) — a reopened sitting must show the identical corrected
+  // ordering a live one would have. Learn's `kind` never takes this branch:
+  // its own crossings already come from `timeline.marks` (RENDER_BEAT,
+  // reliable structured data, not text parsing) and its grades render as a
+  // stack/tally outside the transcript rather than per-message, so it never
+  // had this bug to begin with — see LearnSessionView's doctrine comment.
+  const isReviewSitting = selectedEntry?.kind === 'review'
+  const reviewCrossings = useMemo(
+    () => (isReviewSitting && timeline ? deriveReviewCrossings(timeline.messages) : []),
+    [isReviewSitting, timeline],
+  )
+  const resolvedGrades = useMemo(() => {
+    if (!timeline) return []
+    if (!isReviewSitting) return timeline.grades.map((g) => ({ batch: g, resolvedIndex: g.atIndex }))
+    return timeline.grades.map((g) => ({ batch: g, resolvedIndex: nextProbeHeaderAt(timeline.messages, g.atIndex) }))
+  }, [timeline, isReviewSitting])
+  function renderGradeBatch(g: GradeBatch) {
+    return g.results.map((r, j) => (
+      <div key={`${g.id}-${j}`} className="contents" data-anchor-index={g.sourceIndex}>
+        <GradeResultCard result={r} topic={ladderTopic} asOfDate={g.date ?? undefined} />
+      </div>
+    ))
+  }
 
   return (
     <Modal open={open} onClose={onClose} title="Session history" wide>
@@ -582,15 +608,10 @@ export function SessionHistoryDrawer({
             {loadingTranscript && <div className="fig-caption px-1">reading transcript…</div>}
             {timeline && (
               <>
-                {timeline.grades
-                  .filter((g) => g.atIndex === 0)
-                  .map((g) => (
-                    <div key={g.id} className="contents" data-anchor-index={g.sourceIndex}>
-                      {g.results.map((r, j) => (
-                        <GradeResultCard key={`${g.id}-${j}`} result={r} topic={ladderTopic} asOfDate={g.date ?? undefined} />
-                      ))}
-                    </div>
-                  ))}
+                {!isReviewSitting &&
+                  resolvedGrades
+                    .filter((g) => g.resolvedIndex === 0)
+                    .flatMap((g) => renderGradeBatch(g.batch))}
                 {timeline.marks
                   .filter((k) => k.atIndex === 0)
                   .map((k) => (
@@ -599,17 +620,34 @@ export function SessionHistoryDrawer({
                 {timeline.messages.map((m, i) => (
                   <div key={m.id} className="contents">
                     <div className="contents" data-anchor-index={timeline.messageSourceIndex[i]}>
-                      <ChatMessageView message={m} />
+                      <ChatMessageView
+                        message={m}
+                        // Review only: the grade card(s) + crossing divider that
+                        // belong INSIDE this message's own render, immediately
+                        // before its probe header — see ReviewSessionView's
+                        // identical `beforeProbeHeader` wiring and
+                        // shared/reviewCrossing.ts's doctrine comment. Learn
+                        // never sets this prop, so its rendering is untouched.
+                        beforeProbeHeader={
+                          isReviewSitting ? (
+                            <>
+                              {resolvedGrades
+                                .filter((g) => g.resolvedIndex === i)
+                                .flatMap((g) => renderGradeBatch(g.batch))}
+                              {reviewCrossings
+                                .filter((c) => c.atMessageIndex === i)
+                                .map((c) => (
+                                  <NodeCrossingDivider key={`${c.fromNode}-${c.header.node}-${i}`} nodeId={c.header.node} verb="moving to" />
+                                ))}
+                            </>
+                          ) : undefined
+                        }
+                      />
                     </div>
-                    {timeline.grades
-                      .filter((g) => g.atIndex === i + 1)
-                      .map((g) => (
-                        <div key={g.id} className="contents" data-anchor-index={g.sourceIndex}>
-                          {g.results.map((r, j) => (
-                            <GradeResultCard key={`${g.id}-${j}`} result={r} topic={ladderTopic} asOfDate={g.date ?? undefined} />
-                          ))}
-                        </div>
-                      ))}
+                    {!isReviewSitting &&
+                      resolvedGrades
+                        .filter((g) => g.resolvedIndex === i + 1)
+                        .flatMap((g) => renderGradeBatch(g.batch))}
                     {timeline.marks
                       .filter((k) => k.atIndex === i + 1 || (i === timeline.messages.length - 1 && k.atIndex > timeline.messages.length))
                       .map((k) => (
@@ -617,6 +655,13 @@ export function SessionHistoryDrawer({
                       ))}
                   </div>
                 ))}
+                {/* Review only: grade batches whose next probe header never
+                    arrived — the sitting's last graded item, or one that
+                    closed before producing its next probe. */}
+                {isReviewSitting &&
+                  resolvedGrades
+                    .filter((g) => g.resolvedIndex === null)
+                    .flatMap((g) => renderGradeBatch(g.batch))}
                 {timeline.messages.length === 0 && !loadingTranscript && (
                   <div className="text-sm text-[var(--color-text-faint)] px-1">Empty transcript.</div>
                 )}
