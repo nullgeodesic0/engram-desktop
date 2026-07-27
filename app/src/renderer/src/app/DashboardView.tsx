@@ -17,6 +17,14 @@ import { computeWeekDigest } from '../shared/weekDigest'
 import { friendlyErrorText } from '../shared/friendlyError'
 import { MisconceptionLedger } from '../components/MisconceptionLedger'
 import { ExperimentBanner } from '../components/ExperimentBanner'
+import { TopicDrilldownView } from './TopicDrilldownView'
+import {
+  RETENTION_BUCKETS,
+  bucketDisplay,
+  computeCalibration,
+  computeMomentum,
+  computeRetentionBuckets,
+} from '../shared/topicMetrics'
 
 function gradeColor(grade: string | null): string {
   if (grade === 'recalled') return 'var(--color-ink-warm)'
@@ -61,9 +69,13 @@ interface DashboardViewProps {
    * same goToNode plumbing App.tsx wires from the command palette, threaded
    * through here rather than the ledger inventing its own navigation. */
   onGoNode?: (topicId: string, nodeId: string) => void
+  /** "See all in Artifacts" from a topic drilldown's artifact tiles — routes
+   * to the full gallery tab. Threaded down to TopicDrilldownView, never used
+   * directly here. */
+  onGoArtifacts?: () => void
 }
 
-export function DashboardView({ onNewTopic, onGoNode }: DashboardViewProps = {}) {
+export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts }: DashboardViewProps = {}) {
   const [stats, setStats] = useState<EngramStats | null>(null)
   const [history, setHistory] = useState<ReceiptsHistory | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -71,6 +83,11 @@ export function DashboardView({ onNewTopic, onGoNode }: DashboardViewProps = {})
   const [graphs, setGraphs] = useState<Record<string, TopicGraph> | null>(null)
   const [ledgerOpen, setLedgerOpen] = useState(false)
   const [activeExperiment, setActiveExperiment] = useState<ActiveExperiment | null>(null)
+  // Which topic's drilldown is open, if any — a view swap within this same
+  // tab (KeepMounted in App.tsx keeps this state alive across tab switches),
+  // never a route of its own. Clicking a Topics row sets this; the
+  // drilldown's own "Coach" button clears it.
+  const [openTopic, setOpenTopic] = useState<string | null>(null)
 
   useEffect(() => {
     window.engram
@@ -153,11 +170,41 @@ export function DashboardView({ onNewTopic, onGoNode }: DashboardViewProps = {})
     )
   }
 
+  // A topic's own page — swaps in for the whole tab (a view, not a modal;
+  // "Coach" in the sidebar stays active throughout). `history`/`graphs` load
+  // slightly after `stats`, so a topic clicked in that gap gets a lightweight
+  // loading state with the same "back" affordance rather than the drilldown
+  // demanding data it can't have yet.
+  if (openTopic) {
+    const topicSummary = stats.topics.find((t) => t.topic === openTopic)
+    if (history && graphs && topicSummary) {
+      return (
+        <TopicDrilldownView
+          topic={openTopic}
+          topicSummary={topicSummary}
+          history={history}
+          graphs={graphs}
+          onBack={() => setOpenTopic(null)}
+          onGoNode={onGoNode}
+          onGoArtifacts={onGoArtifacts}
+        />
+      )
+    }
+    return (
+      <div className="p-8 flex flex-col gap-4 w-full h-full overflow-y-auto">
+        <Button variant="ghost" onClick={() => setOpenTopic(null)} className="self-start">
+          ← Coach
+        </Button>
+        <SkeletonBar width={200} height={26} />
+        <SkeletonGrid count={3} />
+      </div>
+    )
+  }
+
   // Narration order mirrors /coach: loop-closure gate first, then grader-health,
   // retention, transfer, calibration, momentum, misconceptions, backlog.
   const loopClosure = stats.adherence.loop_closure
   const grader = stats.grader_health
-  const momentum = stats.momentum
 
   return (
     <div className="p-8 flex flex-col gap-8 w-full h-full overflow-y-auto">
@@ -281,17 +328,27 @@ export function DashboardView({ onNewTopic, onGoNode }: DashboardViewProps = {})
       </Section>
 
       <Section title="Retention">
-        <div className="grid grid-cols-5 gap-2">
-          {Object.entries(stats.retention.buckets).map(([bucket, b]) => (
-            <StatCard
-              key={bucket}
-              label={bucket}
-              value={b.rate != null ? `${Math.round(b.rate * 100)}%` : '—'}
-              sub={`n=${b.n}`}
-              tone={b.rate == null ? 'dim' : b.rate >= 0.85 ? 'warm' : b.rate < 0.6 ? 'danger' : 'default'}
-            />
-          ))}
-        </div>
+        {history === null ? (
+          <div className="grid grid-cols-5 gap-2">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <SkeletonBar key={i} height={64} />
+            ))}
+          </div>
+        ) : (() => {
+          // Same helper the drilldown calls, no topic filter — see
+          // shared/topicMetrics.ts's header comment: this is what makes
+          // "global numbers restricted to one topic" a guarantee instead of
+          // a hope. Computed once for all five cards, not once per card.
+          const buckets = computeRetentionBuckets(history.receipts)
+          return (
+            <div className="grid grid-cols-5 gap-2">
+              {RETENTION_BUCKETS.map(([name]) => {
+                const { value, caption, tone } = bucketDisplay(buckets[name])
+                return <StatCard key={name} label={name} value={value} sub={caption} tone={tone} />
+              })}
+            </div>
+          )
+        })()}
         {history === null ? (
           <div className="panel px-4 py-4 flex flex-col gap-4 mt-1">
             <SkeletonBar width="45%" height={12} />
@@ -308,66 +365,50 @@ export function DashboardView({ onNewTopic, onGoNode }: DashboardViewProps = {})
       </Section>
 
       <Section title="Momentum">
-        <div className="grid grid-cols-3 gap-3">
-          <StatBlock label="Reviews (7d)" value={String(momentum.reviews_7d)} />
-          <StatBlock label="Stability gained" value={`+${momentum.stability_gained_7d.toFixed(0)}d`} tone="warm" />
-          <StatBlock
-            label="Most durable"
-            value={momentum.most_durable ? `${momentum.most_durable.stability_days.toFixed(0)}d` : '—'}
-            caption={momentum.most_durable?.node}
-          />
-        </div>
+        {history === null || graphs === null ? (
+          <div className="grid grid-cols-3 gap-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <SkeletonBar key={i} height={52} />
+            ))}
+          </div>
+        ) : (() => {
+          const momentum = computeMomentum(history.receipts, graphs)
+          return (
+            <div className="grid grid-cols-3 gap-3">
+              <StatBlock label={`Reviews (${momentum.windowDays}d)`} value={String(momentum.reviewsWindow)} />
+              <StatBlock label="Stability gained" value={`+${momentum.stabilityGainedWindow.toFixed(0)}d`} tone="warm" />
+              <StatBlock
+                label="Most durable"
+                value={momentum.mostDurable ? `${momentum.mostDurable.stabilityDays.toFixed(0)}d` : '—'}
+                caption={momentum.mostDurable ? humanizeNodeId(momentum.mostDurable.node) : undefined}
+              />
+            </div>
+          )
+        })()}
       </Section>
 
       <Section title="Calibration">
         {history == null ? (
           <SkeletonBar width="60%" height={14} />
         ) : (() => {
-          // Join local confidence picks (calibrationStore) against the assessor's
-          // own grade history (receiptsHistory) by topic+node+day — the pick's own
-          // module never sees a grade, so this join is the only place "felt vs.
-          // graded" comes together. Picks store an option INDEX, not a label
-          // string, because the four band labels live in the skill's dialogue
-          // grammar (not this app) and could drift — see task-8-brief.md's
-          // deviation note. Index 2-3 (the picker's upper half) = "felt sure";
-          // 0-1 = "felt shaky". Picks with no index (persisted before this field
-          // existed) can't be classified and are skipped.
-          const itemsByDay = new Map(history?.days.map((d) => [d.date, d.items]) ?? [])
-          const picks = allPicks()
-          let overconfident = 0
-          let underconfident = 0
-          let calibrated = 0
-          for (const pick of picks) {
-            if (pick.index === undefined) continue
-            // Receipts are keyed by the engine's LOCAL calendar date (engram.py's
-            // `date.today()`, written verbatim into the JSONL) — toISOString() (UTC)
-            // would silently mis-bucket evening picks for any non-UTC user.
-            const d = new Date(pick.ts)
-            const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-            const items = itemsByDay.get(day)
-            if (!items) continue
-            const match = items.find((it) => it.topic === pick.topic && it.node === pick.node)
-            if (!match) continue
-            const feltSure = pick.index >= 2
-            const recalled = match.grade === 'recalled'
-            if (feltSure && !recalled) overconfident++
-            else if (!feltSure && recalled) underconfident++
-            else calibrated++
-          }
-          const total = overconfident + underconfident + calibrated
-          if (total === 0) {
+          // Extracted to shared/topicMetrics.ts's computeCalibration — the
+          // drilldown calls the identical function with a topic filter, so
+          // "felt vs. graded" can never read two different answers depending
+          // on which scope asked.
+          const cal = computeCalibration(history.days, allPicks())
+          if (cal.total === 0) {
             return <div className="fig-caption">no paired picks yet</div>
           }
           return (
             <>
               <div className="grid grid-cols-3 gap-3">
-                <StatBlock label="Overconfident" value={String(overconfident)} tone="warm" />
-                <StatBlock label="Underconfident" value={String(underconfident)} tone="cool" />
-                <StatBlock label="Calibrated" value={String(calibrated)} tone="neutral" />
+                <StatBlock label="Overconfident" value={String(cal.overconfident)} tone="warm" />
+                <StatBlock label="Underconfident" value={String(cal.underconfident)} tone="cool" />
+                <StatBlock label="Calibrated" value={String(cal.calibrated)} tone="neutral" />
               </div>
               <div className="fig-caption">Fig. — how your felt-sense tracks the assessor</div>
               <div className="panel px-4 py-4 mt-1">
-                <CalibrationScatter data={{ picks, days: history?.days ?? [] }} />
+                <CalibrationScatter data={{ picks: cal.picks, days: history.days }} />
               </div>
             </>
           )
@@ -377,7 +418,11 @@ export function DashboardView({ onNewTopic, onGoNode }: DashboardViewProps = {})
       <Section title="Topics">
         <div className="flex flex-col gap-2">
           {stats.topics.map((t) => (
-            <div key={t.topic} className="panel px-4 py-3 flex items-center justify-between">
+            <button
+              key={t.topic}
+              onClick={() => setOpenTopic(t.topic)}
+              className="focus-ring panel px-4 py-3 flex items-center justify-between text-left w-full hover:border-[var(--color-text-faint)] transition-colors"
+            >
               <div>
                 <div className="text-sm text-[var(--color-text-primary)]">{t.title}</div>
                 <div className="label-data text-xs text-[var(--color-text-faint)]">{t.topic}</div>
@@ -387,7 +432,7 @@ export function DashboardView({ onNewTopic, onGoNode }: DashboardViewProps = {})
                 <span className="text-[var(--color-ink-cool)]">{t.states.new} new</span>
                 {t.due > 0 && <span className="text-[var(--color-ink-danger)]">{t.due} due</span>}
               </div>
-            </div>
+            </button>
           ))}
         </div>
       </Section>

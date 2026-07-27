@@ -3,10 +3,15 @@ import { join } from 'node:path'
 import { engramLearningHome } from './readOnly'
 
 interface ReceiptLine {
+  id?: string
   ts?: string
   grade?: string
   topic?: string
   node?: string
+  kind?: string
+  rating?: string
+  s_before?: number
+  s_after?: number
 }
 
 export interface ReceiptItem {
@@ -28,9 +33,38 @@ export interface WeekRetention {
   rate: number | null
 }
 
+/**
+ * A receipt line carrying every field the retention-bucket / momentum
+ * computations need (`shared/topicMetrics.ts`) — `kind`/`id`/`rating`/
+ * `sBefore`/`sAfter` on top of the day/week aggregator's own `topic`/`node`/
+ * `grade`/`ts`. Named fields, not `unknown`, so a hand-edited receipt with
+ * the wrong JSON type degrades to `null` here rather than reaching the
+ * renderer's grouping logic as a live grenade (same discipline engram.py's
+ * own `as_number`/`safe_date` apply on the read side).
+ */
+export interface RawReceipt {
+  id: string | null
+  ts: string
+  topic: string
+  node: string
+  kind: string | null
+  grade: string | null
+  rating: string | null
+  sBefore: number | null
+  sAfter: number | null
+}
+
 export interface ReceiptsHistory {
   days: DayActivity[] // last ~180 days, every day present (0 if no activity)
   weeks: WeekRetention[] // last ~26 weeks
+  // EVERY receipt ever written, across every topic — deliberately NOT windowed
+  // to DAYS_BACK like `days`/`weeks` above. Retention buckets need a node's
+  // FIRST-ever receipt as its day-0 anchor (engram.py's compute_retention()
+  // reads collect_receipts(), which has no window either); truncating this to
+  // the last 180 days would silently mis-anchor any node whose encoding
+  // predates the window, corrupting every bucket downstream. See
+  // `shared/topicMetrics.ts` for the one place this is consumed.
+  receipts: RawReceipt[]
 }
 
 const DAYS_BACK = 180
@@ -66,11 +100,12 @@ export async function readReceiptsHistory(): Promise<ReceiptsHistory> {
   try {
     files = (await readdir(receiptsDir)).filter((f) => f.endsWith('.jsonl'))
   } catch {
-    return { days: [], weeks: [] }
+    return { days: [], weeks: [], receipts: [] }
   }
 
   const dayItems = new Map<string, ReceiptItem[]>()
   const weekTotals = new Map<string, { total: number; recalled: number }>()
+  const rawReceipts: RawReceipt[] = []
 
   const cutoff = new Date()
   cutoff.setUTCDate(cutoff.getUTCDate() - DAYS_BACK)
@@ -92,6 +127,21 @@ export async function readReceiptsHistory(): Promise<ReceiptsHistory> {
           continue
         }
         if (!entry.ts || !entry.topic || !entry.node) continue
+
+        // Unwindowed, unlike the day/week aggregation below — see the
+        // `receipts` field's own doc comment on ReceiptsHistory.
+        rawReceipts.push({
+          id: typeof entry.id === 'string' ? entry.id : null,
+          ts: entry.ts,
+          topic: entry.topic,
+          node: entry.node,
+          kind: typeof entry.kind === 'string' ? entry.kind : null,
+          grade: entry.grade ?? null,
+          rating: typeof entry.rating === 'string' ? entry.rating : null,
+          sBefore: typeof entry.s_before === 'number' ? entry.s_before : null,
+          sAfter: typeof entry.s_after === 'number' ? entry.s_after : null,
+        })
+
         const entryDate = new Date(`${entry.ts}T00:00:00Z`)
         if (entryDate < cutoff) continue
 
@@ -135,5 +185,5 @@ export async function readReceiptsHistory(): Promise<ReceiptsHistory> {
   const seen = new Set<string>()
   const dedupedWeeks = weeks.filter((w) => (seen.has(w.weekStart) ? false : (seen.add(w.weekStart), true)))
 
-  return { days, weeks: dedupedWeeks }
+  return { days, weeks: dedupedWeeks, receipts: rawReceipts }
 }

@@ -8,8 +8,10 @@ import { humanizeNodeId } from '../../../shared/humanizeId'
  * same week receiptsHistory already bucketed items into. Receipt dates are
  * the engine's LOCAL calendar date written verbatim (engram.py's
  * date.today()), so this arithmetic is calendar-only — no timezone
- * conversion happens here or in the source. */
-function mondayOf(dateStr: string): string {
+ * conversion happens here or in the source. Exported so shared/topicMetrics.ts's
+ * topic-scoped week regrouping uses this SAME definition of "which week is
+ * this day in" rather than growing a third copy. */
+export function mondayOf(dateStr: string): string {
   const d = new Date(`${dateStr}T00:00:00Z`)
   const day = d.getUTCDay() // 0 = Sunday
   const diff = (day + 6) % 7 // days since Monday
