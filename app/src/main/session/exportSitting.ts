@@ -16,9 +16,19 @@ export function sanitizeFilename(title: string): string {
 }
 
 /** Exported for the same reason as sanitizeFilename — exportMap.ts's default
- * filename uses the identical date stamp convention. */
+ * filename uses the identical date stamp convention.
+ *
+ * F8: local calendar date, NOT `toISOString().slice(0, 10)` — that reads the
+ * date in UTC, so after ~17:00 PDT (UTC-7) it stamps TOMORROW's date on a
+ * file exported today. Every other date stamp in this app follows the same
+ * local-date discipline (see main/session/backup.ts's `localStamp`,
+ * shared/pressure.ts's `todayDateString`, nodeDisplay.ts's `formatMonthDay`)
+ * — this was the one exception, promoted from a single sitting-export
+ * filename to a shared helper `exportMap.ts` now also calls. */
 export function todayStamp(): string {
-  return new Date().toISOString().slice(0, 10)
+  const d = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
 /** THE hidden-window print pipeline, factored out so exportMap.ts (the print

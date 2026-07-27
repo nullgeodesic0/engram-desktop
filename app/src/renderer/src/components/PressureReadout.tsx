@@ -93,14 +93,19 @@ export function PressureReadout({
           caption={
             p.observedPace
               ? // Tightened from a ~82-char version that spelled out the full
-                // date range ("19 encoded over 16 calendar days, Jul 12,
+                // date range ("20 nodes over 16 calendar days, Jul 12,
                 // 2026–Jul 27, 2026, including days with none") — too long for
                 // this compact StatBlock's ~88px cell inside a w-52 panel.
                 // Keeps the one disclosure that matters (the denominator
                 // counts idle days too, so this isn't an active-days rate)
                 // and drops the exact date span, which the window length
-                // already implies.
-                `${p.observedPace.totalEncodes} over last ${p.observedPace.windowDays}d, incl. idle days`
+                // already implies. F3: "nodes", not a bare count — this used
+                // to read e.g. "19 over last 16d" (raw `encode` receipts),
+                // which a reader parses as 19 concepts; it's now the actual
+                // count of distinct nodes that left `new` in the window (see
+                // pressure.ts's own F3 note), matching what "Unencoded"
+                // above counts in.
+                `${p.observedPace.nodesAdvanced} nodes over last ${p.observedPace.windowDays}d, incl. idle days`
               : `fewer than 3 distinct days of encoding in the last ${PACE_WINDOW_DAYS} days`
           }
         />

@@ -30,6 +30,16 @@ export function Modal({
   if (!open) return null
   return (
     <div
+      // `data-app-modal` marks every instance of THIS shell (Help, the
+      // confidence/menu picker, session history, …) so App.tsx's global
+      // keydown listener can tell "a modal is up" from a DOM query, without
+      // every view lifting its own dialog's open-state into App — see that
+      // handler's own comment for why (F9: `?`/`⌘0`-`⌘6` used to fire behind
+      // an open dialog, since App had no way to know one was there).
+      // CommandPalette is a deliberately separate, hand-rolled overlay (not
+      // this component) and is NOT marked, so its own `⌘K` toggle and the
+      // nav shortcuts still work while it's open, exactly as before.
+      data-app-modal="true"
       className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-8"
       onClick={onClose}
       onKeyDown={(e) => {

@@ -15,10 +15,21 @@
  *   - Arrow Up/Down and Enter-to-run are CommandPalette.tsx's own `onKeyDown`,
  *     scoped to the palette's result list.
  *   - Escape-closes-the-open-dialog is Modal.tsx's shell behavior, shared by
- *     every modal in the app including this one.
- *   - `?` itself is new: App.tsx's global listener, gated on
+ *     every modal in the app EXCEPT AskDialog's confidence/menu picker
+ *     (`AskDialog.tsx` passes `onClose={() => {}}` deliberately — a bridge
+ *     `ask` is answered, never dismissed, so Escape does nothing there; see
+ *     the Esc row's `context` below).
+ *   - `?` itself: App.tsx's global listener, gated on
  *     `!isTypingTarget(document.activeElement)` so it never fires while the
- *     composer, a settings field, or the palette's search box has focus.
+ *     composer, a settings field, or the palette's search box has focus —
+ *     and, separately, while any `ui/Modal` instance (Help itself, the
+ *     confidence picker, session history) is already open, so it can never
+ *     stack a second dialog on top of a live one. `⌘0`–`⌘6` get the same
+ *     modal guard for the same reason.
+ *   - ⌃⌘F (View ▸ Enter Full Screen) is Electron's built-in `togglefullscreen`
+ *     role in `main/appMenu.ts` — the one OS-role accelerator listed here,
+ *     as an exception, because it's a real item on this app's own View menu
+ *     rather than a system-wide convention like Cmd+C/Cmd+Q.
  *
  * Deliberately NOT listed: SettingsView's per-field "Enter adds this tag"
  * behavior (addInterest/addRhythm) and CoachSessionPanel's "Enter sends this
@@ -51,6 +62,7 @@ export const SHORTCUT_GROUPS: { heading: string; rows: ShortcutRow[] }[] = [
       { keys: ['⌘6', '⌘,'], action: 'Settings' },
       { keys: ['⇧⌘H'], action: 'Session history' },
       { keys: ['⌘K'], action: 'Command palette — jump to a topic, node, or receipt by typing' },
+      { keys: ['⌃⌘F'], action: 'Toggle full screen' },
     ],
   },
   {
@@ -67,7 +79,11 @@ export const SHORTCUT_GROUPS: { heading: string; rows: ShortcutRow[] }[] = [
   {
     heading: 'Elsewhere',
     rows: [
-      { keys: ['Esc'], action: 'Close the open dialog' },
+      {
+        keys: ['Esc'],
+        action: 'Close the open dialog',
+        context: 'except the confidence picker, which is answered, not dismissed',
+      },
       { keys: ['↑', '↓'], action: 'Move through the list', context: 'command palette' },
       { keys: ['⏎'], action: 'Confirm the field, or run the highlighted result', context: 'contextual' },
       { keys: ['?'], action: 'Open this sheet', context: 'not while a field has focus' },
@@ -92,7 +108,7 @@ export const GLOSSARY: GlossaryTerm[] = [
   {
     term: 'Threshold',
     definition:
-      "One of a topic's 1–3 portal concepts — the ideas that reorganize everything after them once you actually have them. These get an interactive explorable and extra relearning if they lapse.",
+      "One of a topic's 1–3 portal concepts — the ideas that reorganize everything after them once you actually have them. By default they're the ones that get an interactive explorable, though the visuals setting (Settings) can widen that to every node or turn it off entirely — a lapse on a threshold node is scheduled exactly like a lapse anywhere else.",
     seenIn: 'The † mark on a node in the Topic Map.',
   },
   {
@@ -110,7 +126,7 @@ export const GLOSSARY: GlossaryTerm[] = [
   {
     term: 'Lapse',
     definition:
-      'An honest "I couldn\'t produce that" — not a failure. Stability drops (see above) and the node returns to encoding. The app never frames a lapse as bad news, because a lapse caught here is cheaper than one on the day it actually mattered.',
+      'An honest "I couldn\'t produce that" — not a failure. For an ordinary probe, stability drops (see above) and the node returns to encoding. The one exception: a lapsed transfer probe (applying the idea somewhere new) leaves the memory itself untouched — the concept is still remembered, the new application of it just didn\'t land yet. Either way, the app never frames a lapse as bad news: one caught here is cheaper than one on the day it actually mattered.',
     seenIn: 'The "Lapsed" badge on a graded result.',
   },
   {
@@ -123,12 +139,13 @@ export const GLOSSARY: GlossaryTerm[] = [
     term: 'Encode',
     definition:
       "A concept's first honest production from memory — the moment it stops being untouched and starts being held, even loosely.",
-    seenIn: 'The "encoding" count on a topic card, once a node has left "not started".',
+    seenIn:
+      'The "encoding" count on a topic card — but only while a node is mid-encoding; one that goes straight from "not started" to consolidated on a single confident recall shows up in the review count instead, never here.',
   },
   {
     term: 'Consolidate',
     definition:
-      "A concept that has survived long enough, across enough successful recalls, to be held by review alone rather than active study. This app's own word for a node that has cleared encoding — a lapse can still return it there.",
+      "This app's own word for a node the engine has moved onto the spaced-review schedule instead of active teaching — which can happen after a single confident recall, even the very first time you see it. Read it as scheduled, not proven: it means the schedule trusts the memory enough to space it out, not that it's survived any particular test of time. A lapse can still send it back to encoding.",
     seenIn: 'The "consolidated" group on Home, and a node reading "consolidated" in the Topic Map.',
   },
   {

@@ -177,6 +177,19 @@ export default function App() {
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
+      // F9: none of this global nav/help wiring should fire while a
+      // `ui/Modal` instance (Help itself, the confidence/menu picker, session
+      // history, …) is already open — `?` used to stack a second HelpSheet
+      // at the same z-50 over a live confidence prompt, and `⌘0`-`⌘6` used to
+      // switch the view behind it. A DOM query, not lifted state: the
+      // confidence picker lives deep inside whatever Learn/Review session
+      // happens to be live, well below anything App itself tracks, and a
+      // query against Modal.tsx's own `data-app-modal` marker needs no new
+      // plumbing through every view that can open one. CommandPalette is a
+      // deliberately separate, hand-rolled overlay (not `ui/Modal`) and is
+      // NOT marked, so its own `⌘K` toggle and nav-while-searching are
+      // untouched by this guard.
+      if (document.querySelector('[data-app-modal="true"]')) return
       // `?` opens Help — but never while the learner is typing. A bare
       // `e.key === '?'` check alone would fire on every "?" typed into the
       // composer, a settings field, or the palette's search box, so this is
