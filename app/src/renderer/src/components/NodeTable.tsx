@@ -1,26 +1,8 @@
 import { useMemo, useState } from 'react'
 import type { EngramNode, NodeState, TopicGraph } from '../../../shared/types'
 import { humanizeNodeId } from '../../../shared/humanizeId'
+import { stateLabel, formatMonthDay } from '../shared/nodeDisplay'
 import { DUE_LENS_COLOR, STATE_COLOR, dueStatusFor } from './GraphView'
-
-/** Mirrors TopicMapView's own stateLabel() verbatim so the table and the map
- * never disagree about state vocabulary. Not imported — TopicMapView already
- * imports NodeTable to render it, so importing back would be a circular
- * dependency between app/ and components/; this file is small and self-
- * contained enough that a literal copy is the safer call. */
-function stateLabel(state: string): string {
-  if (state === 'new') return 'not started'
-  if (state === 'learning') return 'encoding'
-  return 'consolidated'
-}
-
-/** Local YYYY-MM-DD → "Mon d", same local-parse discipline as every other
- * date display in this app (see TopicMapView's formatMonthDay) — parsed
- * without a `Z` suffix so it reads as local midnight rather than shifting a
- * day at UTC-negative offsets. */
-function formatDue(due: string): string {
-  return new Date(`${due}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-}
 
 type SortKey = 'node' | 'state' | 'stability' | 'due' | 'reps' | 'threshold'
 type SortDir = 'asc' | 'desc'
@@ -203,10 +185,14 @@ export function NodeTable({
               {COLUMNS.map((col) => {
                 const active = sortKey === col.key
                 return (
-                  <th key={col.key} scope="col" className="text-left font-normal py-1.5 pr-3 first:pl-0">
+                  <th
+                    key={col.key}
+                    scope="col"
+                    aria-sort={active ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+                    className="text-left font-normal py-1.5 pr-3 first:pl-0"
+                  >
                     <button
                       onClick={() => toggleSort(col.key)}
-                      aria-sort={active ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
                       className={`focus-ring label-data text-[10px] uppercase tracking-wide flex items-center gap-1 whitespace-nowrap ${
                         active ? 'text-[var(--color-ink-warm)]' : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-dim)]'
                       }`}
@@ -255,7 +241,7 @@ export function NodeTable({
                     style={{ color: dueStatus ? DUE_LENS_COLOR[dueStatus] : 'var(--color-text-faint)' }}
                     title={node.fsrs.due ?? undefined}
                   >
-                    {node.fsrs.due ? formatDue(node.fsrs.due) : '—'}
+                    {node.fsrs.due ? formatMonthDay(node.fsrs.due) : '—'}
                   </td>
                   <td className="label-data py-1.5 pr-3 text-[var(--color-text-dim)]">
                     {node.fsrs.reps} / {node.fsrs.lapses}
