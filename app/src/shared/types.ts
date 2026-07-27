@@ -195,6 +195,14 @@ export interface ArtifactEntry {
   node: string
   artifact: string
   exists: boolean
+  /** File mtime in epoch ms, stat'd (main-side) from the RESOLVED path —
+   * `engramArtifactList` already resolves engram.py's mixed absolute/
+   * learning-home-relative paths (see readOnly.ts's doc comment). The engine
+   * itself records no build date at all (`artifact list` returns only
+   * `{topic, node, artifact, exists}`), and a failed stat (exists: false, or
+   * a resolved path that still doesn't read) leaves this null rather than
+   * guessing a date. */
+  mtimeMs: number | null
 }
 
 export interface LearnerModelSettings {

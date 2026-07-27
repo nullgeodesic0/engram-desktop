@@ -1,11 +1,13 @@
-import { useEffect, useState } from 'react'
-import type { ArtifactEntry } from '../../../shared/types'
-import { humanizeNodeId } from '../../../shared/humanizeId'
+import { useEffect, useMemo, useState } from 'react'
+import type { ArtifactEntry, NodeProvenance, ProvenanceEvent, TopicListEntry } from '../../../shared/types'
 import { SkeletonCard } from '../components/Skeleton'
-import { InkNode } from '../components/ui/InkNode'
+import { ArtifactTile } from '../components/ArtifactTile'
 import { Button } from '../components/ui/Button'
 import { friendlyErrorText } from '../shared/friendlyError'
 import { ExplorableViewer } from '../components/ExplorableViewer'
+import { SessionHistoryDrawer } from '../components/SessionHistoryDrawer'
+import { humanizeNodeId } from '../../../shared/humanizeId'
+import { scoreEntry, type SearchEntry } from '../shared/searchIndex'
 
 interface ArtifactGalleryViewProps {
   /** Routes the empty state's one action to Learn — explorables are only ever
@@ -17,10 +19,37 @@ interface ArtifactGalleryViewProps {
   onOpenNode?: (topicId: string, nodeId: string) => void
 }
 
+/** True if `a` matches the (already-lowercased) query — reuses
+ * searchIndex.ts's exported `scoreEntry` (the same matcher the command
+ * palette scores nodes/topics/receipts/artifacts with) rather than a second
+ * matching function. Only the match/no-match boundary is used here, not the
+ * relevance ordering `scoreEntry` also returns: this page's display order is
+ * governed by the recency sort below, in both the searched and unsearched
+ * case, so a filtered result never reorders relative to an unfiltered one. */
+function matchesQuery(a: ArtifactEntry, q: string): boolean {
+  const entry: SearchEntry = {
+    kind: 'artifact',
+    title: humanizeNodeId(a.node),
+    subtitle: a.topic,
+    topic: a.topic,
+    node: a.node,
+    artifactPath: a.artifact,
+  }
+  return scoreEntry(entry, q) !== -1
+}
+
 export function ArtifactGalleryView({ onGoLearn, onOpenNode }: ArtifactGalleryViewProps = {}) {
   const [artifacts, setArtifacts] = useState<ArtifactEntry[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [viewing, setViewing] = useState<ArtifactEntry | null>(null)
+  const [query, setQuery] = useState('')
+  const [topicsList, setTopicsList] = useState<TopicListEntry[]>([])
+  // topic -> node -> provenance. Fetched per distinct topic present in the
+  // artifact list (nodeProvenance is topic-scoped — see sessionScan.ts) once
+  // artifacts arrive, reusing the same IPC TopicDrilldownView already calls
+  // for its own Provenance section rather than a second scan.
+  const [provenanceByTopic, setProvenanceByTopic] = useState<Record<string, Record<string, NodeProvenance>>>({})
+  const [historyDrawer, setHistoryDrawer] = useState<{ topic: string; sessionId: string; anchorIndex: number } | null>(null)
 
   useEffect(() => {
     window.engram
@@ -29,13 +58,84 @@ export function ArtifactGalleryView({ onGoLearn, onOpenNode }: ArtifactGalleryVi
       .catch((e: Error) => setError(e.message))
   }, [])
 
+  useEffect(() => {
+    window.engram.topics().then(setTopicsList).catch(() => setTopicsList([]))
+  }, [])
+
+  useEffect(() => {
+    if (!artifacts || artifacts.length === 0) return
+    let cancelled = false
+    const topics = Array.from(new Set(artifacts.map((a) => a.topic)))
+    Promise.all(
+      topics.map((t) =>
+        window.engram
+          .nodeProvenance(t)
+          .then((p): [string, Record<string, NodeProvenance>] => [t, p])
+          .catch((): [string, Record<string, NodeProvenance>] => [t, {}]),
+      ),
+    ).then((pairs) => {
+      if (!cancelled) setProvenanceByTopic(Object.fromEntries(pairs))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [artifacts])
+
+  function topicTitle(topic: string): string {
+    return topicsList.find((t) => t.topic === topic)?.title ?? topic
+  }
+
+  function openSitting(a: ArtifactEntry, ev: ProvenanceEvent): void {
+    setHistoryDrawer({ topic: a.topic, sessionId: ev.sessionId, anchorIndex: ev.anchor })
+  }
+
+  // Filter (search), then group by topic, then sort — recency within a
+  // group (newest mtime first; artifacts with no mtime sort last, not
+  // first, so a broken or unstattable file never reads as "most recent"),
+  // and groups themselves ordered by their own most-recent artifact so the
+  // topic with the freshest activity surfaces first.
+  const groups = useMemo(() => {
+    if (!artifacts) return []
+    const q = query.trim().toLowerCase()
+    const filtered = q ? artifacts.filter((a) => matchesQuery(a, q)) : artifacts
+
+    const byTopic = new Map<string, ArtifactEntry[]>()
+    for (const a of filtered) {
+      const arr = byTopic.get(a.topic) ?? []
+      arr.push(a)
+      byTopic.set(a.topic, arr)
+    }
+
+    return Array.from(byTopic.entries())
+      .map(([topic, items]) => ({
+        topic,
+        items: [...items].sort((x, y) => (y.mtimeMs ?? -Infinity) - (x.mtimeMs ?? -Infinity)),
+      }))
+      .sort((g1, g2) => (g2.items[0]?.mtimeMs ?? -Infinity) - (g1.items[0]?.mtimeMs ?? -Infinity))
+  }, [artifacts, query])
+
+  const totalCount = artifacts?.length ?? 0
+  const visibleCount = groups.reduce((n, g) => n + g.items.length, 0)
+
   return (
     <div className="p-8 flex flex-col gap-6 h-full overflow-y-auto">
-      <header>
-        <h1 className="font-[var(--font-display)] text-2xl text-[var(--color-text-primary)]">Artifacts</h1>
-        <p className="text-sm text-[var(--color-text-dim)] mt-1">
-          Interactive explorables the artifact-smith has built for threshold concepts.
-        </p>
+      <header className="flex flex-col gap-3">
+        <div>
+          <h1 className="font-[var(--font-display)] text-2xl text-[var(--color-text-primary)]">Artifacts</h1>
+          <p className="text-sm text-[var(--color-text-dim)] mt-1">
+            Interactive explorables the artifact-smith has built for threshold concepts.
+          </p>
+        </div>
+        {totalCount > 0 && (
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search artifacts…"
+            aria-label="Search artifacts"
+            className="w-full max-w-sm px-3 py-2 text-sm bg-transparent border border-[var(--color-hairline)] rounded-lg text-[var(--color-text-primary)] placeholder:text-[var(--color-text-faint)] focus-ring"
+          />
+        )}
       </header>
 
       {error && (() => {
@@ -71,31 +171,33 @@ export function ArtifactGalleryView({ onGoLearn, onOpenNode }: ArtifactGalleryVi
         </div>
       )}
 
-      <div className="grid grid-cols-3 gap-4">
-        {artifacts?.map((a) => (
-          <button
-            key={`${a.topic}:${a.node}`}
-            onClick={() => a.exists && setViewing(a)}
-            disabled={!a.exists}
-            className={`focus-ring group panel text-left px-4 py-3 flex flex-col gap-2 transition-colors duration-[var(--dur-base)] ${
-              a.exists ? 'hover:bg-[var(--color-surface-2)] hover:border-[var(--color-ink-warm-dim)]' : 'opacity-40 cursor-not-allowed'
-            }`}
-          >
-            <div className="text-xs label-data text-[var(--color-text-faint)]">{a.topic}</div>
-            <div className="flex items-center gap-2">
-              <InkNode id={`${a.topic}:${a.node}`} variant="filled" color="var(--color-ink-violet)" size={14} />
-              <div className="text-sm text-[var(--color-text-primary)]" title={a.node}>{humanizeNodeId(a.node)}</div>
-            </div>
-            {a.exists ? (
-              <span className="self-start rounded-lg px-3 py-1.5 text-sm border border-[var(--color-hairline)] text-[var(--color-text-dim)] group-hover:text-[var(--color-text-primary)]">
-                Open explorable →
-              </span>
-            ) : (
-              <div className="text-xs text-[var(--color-ink-danger)]">File missing on disk</div>
-            )}
-          </button>
-        ))}
-      </div>
+      {totalCount > 0 && visibleCount === 0 && (
+        <div className="flex flex-col items-start gap-2">
+          <div className="text-sm text-[var(--color-text-dim)]">No artifacts match “{query}”.</div>
+          <Button variant="ghost" onClick={() => setQuery('')}>Clear search</Button>
+        </div>
+      )}
+
+      {groups.map(({ topic, items }) => (
+        <section key={topic} className="flex flex-col gap-3">
+          <div className="flex items-baseline gap-2">
+            <h2 className="font-[var(--font-serif)] text-lg text-[var(--color-text-primary)]">{topicTitle(topic)}</h2>
+            <span className="label-data text-[10px] text-[var(--color-text-faint)]">{topic}</span>
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            {items.map((a) => (
+              <ArtifactTile
+                key={`${a.topic}:${a.node}`}
+                artifact={a}
+                provenance={provenanceByTopic[a.topic]?.[a.node]}
+                showTopic={false}
+                onOpen={setViewing}
+                onOpenSitting={openSitting}
+              />
+            ))}
+          </div>
+        </section>
+      ))}
 
       {viewing && (
         <ExplorableViewer
@@ -105,6 +207,15 @@ export function ArtifactGalleryView({ onGoLearn, onOpenNode }: ArtifactGalleryVi
           onJumpToNode={onOpenNode ? (nodeId) => onOpenNode(viewing.topic, nodeId) : undefined}
         />
       )}
+
+      <SessionHistoryDrawer
+        historyKey={historyDrawer?.topic ?? ''}
+        title={historyDrawer ? topicTitle(historyDrawer.topic) : undefined}
+        open={historyDrawer !== null}
+        onClose={() => setHistoryDrawer(null)}
+        initialSessionId={historyDrawer?.sessionId}
+        anchorIndex={historyDrawer?.anchorIndex}
+      />
     </div>
   )
 }
