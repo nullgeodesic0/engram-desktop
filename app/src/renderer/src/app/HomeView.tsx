@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { EngramStats, TopicSummary, TopicGraph, EnvironmentCheckResult, ActiveExperiment } from '../../../shared/types'
+import type { EngramStats, TopicListEntry, TopicGraph, EnvironmentCheckResult, ActiveExperiment } from '../../../shared/types'
 import { SkeletonBar, SkeletonGrid } from '../components/Skeleton'
 import { emitPulse } from '../../../shared/neuralFieldBus'
 import { humanizeNodeId } from '../../../shared/humanizeId'
@@ -66,7 +66,7 @@ export function HomeView({ onGoReview, onGoCoach, onGoTopic, onNewTopic, onGoNod
   // so a fresh localStorage read here already picks up anything recorded
   // while the user was elsewhere. See shared/recentlyViewed.ts.
   const [recent] = useState<RecentView[]>(() => recentViews())
-  const [topics, setTopics] = useState<TopicSummary[] | null>(null)
+  const [topics, setTopics] = useState<TopicListEntry[] | null>(null)
   // Only consulted for the empty-topics guided card below — EnvironmentGate
   // already blocks the app on a broken environment, but its "Continue anyway"
   // escape hatch (or the environment breaking again later) can land you here

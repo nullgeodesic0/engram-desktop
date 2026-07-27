@@ -12,6 +12,7 @@ interface ReceiptLine {
   rating?: string
   s_before?: number
   s_after?: number
+  capstone?: boolean
 }
 
 export interface ReceiptItem {
@@ -41,6 +42,12 @@ export interface WeekRetention {
  * the wrong JSON type degrades to `null` here rather than reaching the
  * renderer's grouping logic as a live grenade (same discipline engram.py's
  * own `as_number`/`safe_date` apply on the read side).
+ *
+ * `capstone` is carried through verbatim (coerced to a strict boolean, never
+ * left `undefined`) — engram.py stamps `capstone: true` on a capstone node's
+ * own receipts, and shared/topicMetrics.ts's `groupByNode` depends on it to
+ * recognize a capstone's first receipt (always `kind: transfer`) as a real
+ * retrieval instead of silently dropping it. Mirrored in shared/types.ts.
  */
 export interface RawReceipt {
   id: string | null
@@ -52,6 +59,7 @@ export interface RawReceipt {
   rating: string | null
   sBefore: number | null
   sAfter: number | null
+  capstone: boolean
 }
 
 export interface ReceiptsHistory {
@@ -140,6 +148,7 @@ export async function readReceiptsHistory(): Promise<ReceiptsHistory> {
           rating: typeof entry.rating === 'string' ? entry.rating : null,
           sBefore: typeof entry.s_before === 'number' ? entry.s_before : null,
           sAfter: typeof entry.s_after === 'number' ? entry.s_after : null,
+          capstone: entry.capstone === true,
         })
 
         const entryDate = new Date(`${entry.ts}T00:00:00Z`)

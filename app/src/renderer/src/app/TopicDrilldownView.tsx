@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ArtifactEntry, NodeProvenance, ReceiptsHistory, TopicGraph, TopicSummary } from '../../../shared/types'
 import { RetentionCurve } from '../components/charts/RetentionCurve'
 import { ActivityStrip } from '../components/charts/ActivityStrip'
@@ -14,6 +14,7 @@ import { humanizeNodeId } from '../../../shared/humanizeId'
 import { allPicks } from '../shared/calibrationStore'
 import { friendlyErrorText } from '../shared/friendlyError'
 import {
+  CALIBRATION_MIN_N,
   RETENTION_BUCKETS,
   bucketDisplay,
   computeCalibration,
@@ -92,6 +93,11 @@ function provenanceSummary(provenance: Record<string, NodeProvenance>): {
 interface TopicDrilldownViewProps {
   topic: string
   topicSummary: TopicSummary
+  /** This topic's due-now count — from `engram.py topics` (DashboardView's
+   * `dueByTopic`), NOT `topicSummary.due`: `topicSummary` comes from
+   * `stats.topics[]` (compute_stats), which only ever sends
+   * `{topic, title, states}` — no `due` field exists there to read. */
+  due: number
   /** Already fetched by DashboardView (one `receiptsHistory()` call powers
    * both scopes) — see shared/topicMetrics.ts's header comment. */
   history: ReceiptsHistory
@@ -117,7 +123,7 @@ interface TopicDrilldownViewProps {
  * file supplies the filter, never a second implementation. A view, not a
  * modal: reached by clicking a topic row in Coach, left by the button below,
  * with no route of its own in App.tsx. */
-export function TopicDrilldownView({ topic, topicSummary, history, graphs, onBack, onGoNode, onGoArtifacts }: TopicDrilldownViewProps) {
+export function TopicDrilldownView({ topic, topicSummary, due, history, graphs, onBack, onGoNode, onGoArtifacts }: TopicDrilldownViewProps) {
   const [provenance, setProvenance] = useState<Record<string, NodeProvenance> | null>(null)
   const [artifacts, setArtifacts] = useState<ArtifactEntry[] | null>(null)
   const [artifactsError, setArtifactsError] = useState<string | null>(null)
@@ -157,12 +163,28 @@ export function TopicDrilldownView({ topic, topicSummary, history, graphs, onBac
   const graph = graphs[topic]
   const [selectedNode, setSelectedNode] = useState<string | null>(null)
 
-  const buckets = computeRetentionBuckets(history.receipts, topic)
-  const momentum = computeMomentum(history.receipts, graphs, topic)
-  const cal = computeCalibration(history.days, allPicks(), topic)
-  const days = topicDayActivity(history.days, topic)
-  const weeks = topicWeekRetention(history.days, topic)
-  const hasActivity = days.some((d) => d.count > 0)
+  // Each of these sorts/re-groups `history.receipts` (every receipt this
+  // install has ever written, unfiltered — see ReceiptsHistory's own doc
+  // comment) down to one topic on every call; memoized so a re-render that
+  // doesn't touch `history`/`graphs`/`topic` (opening the node table,
+  // toggling an artifact viewer) doesn't redo that work.
+  const buckets = useMemo(() => computeRetentionBuckets(history.receipts, topic), [history, topic])
+  const momentum = useMemo(() => computeMomentum(history.receipts, graphs, topic), [history, graphs, topic])
+  const cal = useMemo(() => computeCalibration(history.days, allPicks(), topic), [history, topic])
+  const days = useMemo(() => topicDayActivity(history.days, topic), [history, topic])
+  const weeks = useMemo(() => topicWeekRetention(history.days, topic), [history, topic])
+  // Whether this topic has EVER had a review/retrieval — deliberately the
+  // same unwindowed population `buckets` is computed over (every receipt
+  // ever written), not `days` (windowed to the last 180 days, like
+  // ReceiptsHistory.days always is). A topic whose only activity predates
+  // that window has n>0 buckets but zero windowed `days`; deriving this from
+  // `days` made the caption ("no reviews yet") lie under real numbers. Also
+  // gates the whole Momentum section, not just the Retention chart panel —
+  // a topic with no reviews at all has nothing real to report in either
+  // section, and rendering five "— / no reviews yet" cards plus an all-zero
+  // Momentum grid is exactly the empty chrome this app's hidden-when-empty
+  // discipline exists to avoid.
+  const hasActivity = useMemo(() => Object.values(buckets).some((b) => b.n > 0), [buckets])
 
   return (
     <div className="p-8 flex flex-col gap-8 w-full h-full overflow-y-auto">
@@ -180,43 +202,53 @@ export function TopicDrilldownView({ topic, topicSummary, history, graphs, onBac
           <div className="flex gap-4 text-xs label-data">
             <span className="text-[var(--color-ink-warm)]">{topicSummary.states.review} review</span>
             <span className="text-[var(--color-ink-cool)]">{topicSummary.states.new} new</span>
-            {topicSummary.due > 0 && <span className="text-[var(--color-ink-danger)]">{topicSummary.due} due</span>}
+            {due > 0 && <span className="text-[var(--color-ink-danger)]">{due} due</span>}
           </div>
         </div>
       </header>
 
       <Section title="Retention">
-        <div className="grid grid-cols-5 gap-2">
-          {RETENTION_BUCKETS.map(([name]) => {
-            const { value, caption, tone } = bucketDisplay(buckets[name])
-            return <StatCard key={name} label={name} value={value} sub={caption} tone={tone} />
-          })}
-        </div>
         {!hasActivity ? (
           <div className="fig-caption">no reviews yet for this topic</div>
         ) : (
-          <div className="panel px-4 py-4 flex flex-col gap-5 mt-1">
-            <RetentionCurve data={weeks} />
-            <ActivityStrip data={days} />
-          </div>
+          <>
+            <div className="grid grid-cols-5 gap-2">
+              {RETENTION_BUCKETS.map(([name]) => {
+                const { value, caption, tone } = bucketDisplay(buckets[name])
+                return <StatCard key={name} label={name} value={value} sub={caption} tone={tone} />
+              })}
+            </div>
+            <div className="panel px-4 py-4 flex flex-col gap-5 mt-1">
+              <RetentionCurve data={weeks} />
+              <ActivityStrip data={days} />
+            </div>
+          </>
         )}
       </Section>
 
       <Section title="Momentum">
-        <div className="grid grid-cols-3 gap-3">
-          <StatBlock label={`Reviews (${momentum.windowDays}d)`} value={String(momentum.reviewsWindow)} />
-          <StatBlock label="Stability gained" value={`+${momentum.stabilityGainedWindow.toFixed(0)}d`} tone="warm" />
-          <StatBlock
-            label="Most durable"
-            value={momentum.mostDurable ? `${momentum.mostDurable.stabilityDays.toFixed(0)}d` : '—'}
-            caption={momentum.mostDurable ? humanizeNodeId(momentum.mostDurable.node) : undefined}
-          />
-        </div>
+        {!hasActivity ? (
+          <div className="fig-caption">no reviews yet for this topic</div>
+        ) : (
+          <div className="grid grid-cols-3 gap-3">
+            <StatBlock label={`Reviews (${momentum.windowDays}d)`} value={String(momentum.reviewsWindow)} />
+            <StatBlock label="Stability gained" value={`+${momentum.stabilityGainedWindow.toFixed(0)}d`} tone="warm" />
+            <StatBlock
+              label="Most durable"
+              value={momentum.mostDurable ? `${momentum.mostDurable.stabilityDays.toFixed(0)}d` : '—'}
+              caption={momentum.mostDurable ? humanizeNodeId(momentum.mostDurable.node) : undefined}
+            />
+          </div>
+        )}
       </Section>
 
       <Section title="Calibration">
         {cal.total === 0 ? (
           <div className="fig-caption">no paired picks yet for this topic</div>
+        ) : cal.total < CALIBRATION_MIN_N ? (
+          <div className="fig-caption">
+            too few paired picks to rate yet (n={cal.total}, need {CALIBRATION_MIN_N})
+          </div>
         ) : (
           <>
             <div className="grid grid-cols-3 gap-3">

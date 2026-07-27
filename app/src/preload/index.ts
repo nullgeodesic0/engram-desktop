@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type {
-  TopicSummary,
+  TopicListEntry,
   EngramStats,
   DueItem,
   ArtifactEntry,
@@ -30,7 +30,7 @@ import type { SessionEvent } from '../shared/sessionEvents'
 import type { BridgeAskRequest, BridgeAskResponse, BridgeBeatRequest, BridgeUiRequest } from '../shared/bridgeProtocol'
 
 const engramApi = {
-  topics: (): Promise<TopicSummary[]> => ipcRenderer.invoke('engram:topics'),
+  topics: (): Promise<TopicListEntry[]> => ipcRenderer.invoke('engram:topics'),
   stats: (): Promise<EngramStats> => ipcRenderer.invoke('engram:stats'),
   due: (limit?: number, topic?: string): Promise<DueItem[]> => ipcRenderer.invoke('engram:due', limit, topic),
   decay: (topic?: string, horizon?: number): Promise<DecayResult> => ipcRenderer.invoke('engram:decay', topic, horizon),

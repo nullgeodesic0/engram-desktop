@@ -2,7 +2,7 @@ import { readdir, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { engramRead } from './readOnly'
-import type { TopicSummary } from '../../shared/types'
+import type { TopicListEntry } from '../../shared/types'
 
 // Matches readTopicGraph's existing convention (see readOnly.ts) — not
 // ENGRAM_HOME-aware, same as the rest of this module today.
@@ -10,7 +10,7 @@ const GRAPHS_DIR = join(homedir(), '.claude', 'learning', 'graphs')
 
 interface CacheEntry {
   signature: string
-  topics: TopicSummary[]
+  topics: TopicListEntry[]
 }
 
 let cache: CacheEntry | null = null
@@ -38,10 +38,10 @@ async function computeSignature(): Promise<string> {
  * a topic is always fresh, but repeated calls with nothing changed skip the
  * python subprocess entirely.
  */
-export async function getTopicsCached(): Promise<TopicSummary[]> {
+export async function getTopicsCached(): Promise<TopicListEntry[]> {
   const signature = await computeSignature()
   if (cache && cache.signature === signature) return cache.topics
-  const topics = await engramRead<TopicSummary[]>('topics')
+  const topics = await engramRead<TopicListEntry[]>('topics')
   cache = { signature, topics }
   return topics
 }

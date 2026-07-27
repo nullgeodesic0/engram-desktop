@@ -1,4 +1,4 @@
-import type { ArtifactEntry, ReceiptsHistory, TopicGraph, TopicSummary } from '../../../shared/types'
+import type { ArtifactEntry, ReceiptsHistory, TopicGraph, TopicListEntry } from '../../../shared/types'
 import { humanizeNodeId } from '../../../shared/humanizeId'
 
 export type SearchEntryKind = 'view' | 'topic' | 'node' | 'receipt' | 'artifact'
@@ -16,7 +16,7 @@ export interface SearchEntry {
  * don't have to know about `window.engram` — matches the shape of `window.engram`
  * closely enough that its methods can be passed straight through. */
 export interface SearchIndexDeps {
-  topics: () => Promise<TopicSummary[]>
+  topics: () => Promise<TopicListEntry[]>
   topicGraph: (topic: string) => Promise<unknown>
   receiptsHistory: () => Promise<ReceiptsHistory>
   artifactList: () => Promise<ArtifactEntry[]>
