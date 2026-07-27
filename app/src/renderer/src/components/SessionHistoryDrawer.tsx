@@ -325,9 +325,13 @@ export function SessionHistoryDrawer({
       // sitting is selected by default — same "land on the latest"
       // convenience as any other history browser. Nothing here touches the
       // live session that opened the drawer.
-      const target =
-        initialSessionId && list.some((e) => e.sessionId === initialSessionId) ? initialSessionId : (list[0]?.sessionId ?? null)
-      if (target) selectEntry(target, list)
+      const matchedInitial = Boolean(initialSessionId) && list.some((e) => e.sessionId === initialSessionId)
+      const target = matchedInitial ? initialSessionId : (list[0]?.sessionId ?? null)
+      // Only a genuine deep link (matchedInitial) is something the learner
+      // actually chose to look at — the plain "land on most-recent" default,
+      // and the fallback when a requested id isn't found, are the drawer's
+      // own pick, not the learner's, so neither should get recorded.
+      if (target) selectEntry(target, list, matchedInitial)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, historyKey, initialSessionId])
@@ -350,22 +354,30 @@ export function SessionHistoryDrawer({
   // still the PREVIOUS value at that point — state updates aren't visible
   // until the next render. Without the explicit list, recording would
   // silently never fire for a default/anchored open, only for real clicks.
-  function selectEntry(id: string, rows: HistoryRow[] | null = entries) {
+  // `shouldRecord` keeps this the single transcript-loading path while still
+  // letting callers say whether landing here was something the learner
+  // actually chose. The list is a jump-back convenience, not a log of
+  // everywhere the drawer happened to land — so a row click and a genuine
+  // `initialSessionId` deep link record, but the plain "nothing was
+  // requested, default to list[0]" landing and the "requested id wasn't
+  // found, fall back to list[0]" landing don't: neither is a sitting the
+  // learner asked to see, and the effect that drives them fires before
+  // `getTranscript` has even resolved.
+  function selectEntry(id: string, rows: HistoryRow[] | null = entries, shouldRecord: boolean = true) {
     setSelectedId(id)
     setLoadingTranscript(true)
     setTimeline(null)
     setExportStatus(null)
-    // Recently-viewed recording — the single choke point for "a sitting was
-    // opened", whether the user clicked a row or this fired from the
-    // auto-select-most-recent path in the effect above; both are a real view
-    // of this sitting's transcript. Label mirrors historyRowTag's "Learn ·
-    // <topic>" / "Review" shape so it reads the same later in Home/the
-    // palette, outside this drawer's own historyKey context.
-    const entry = rows?.find((e) => e.sessionId === id)
-    if (entry) {
-      const label =
-        historyKey === ALL_HISTORY_KEY ? historyRowTag(entry) : historyKey === 'review' ? 'Review' : `Learn · ${title ?? historyKey}`
-      recordView({ kind: 'sitting', sessionId: id, label })
+    if (shouldRecord) {
+      // Label mirrors historyRowTag's "Learn · <topic>" / "Review" shape so
+      // it reads the same later in Home/the palette, outside this drawer's
+      // own historyKey context.
+      const entry = rows?.find((e) => e.sessionId === id)
+      if (entry) {
+        const label =
+          historyKey === ALL_HISTORY_KEY ? historyRowTag(entry) : historyKey === 'review' ? 'Review' : `Learn · ${title ?? historyKey}`
+        recordView({ kind: 'sitting', sessionId: id, label })
+      }
     }
     window.engram.getTranscript(id).then((lines) => {
       setTimeline(buildHistoryTimeline(lines))
