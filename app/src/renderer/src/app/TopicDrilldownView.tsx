@@ -6,7 +6,7 @@ import { CalibrationScatter } from '../components/charts/CalibrationScatter'
 import { NodeTable } from '../components/NodeTable'
 import { StatBlock } from '../components/ui/StatBlock'
 import { Button } from '../components/ui/Button'
-import { InkNode } from '../components/ui/InkNode'
+import { ArtifactTile } from '../components/ArtifactTile'
 import { DendriteDivider } from '../components/ui/DendriteDivider'
 import { SkeletonBar, SkeletonGrid } from '../components/Skeleton'
 import { ExplorableViewer } from '../components/ExplorableViewer'
@@ -308,26 +308,13 @@ export function TopicDrilldownView({ topic, topicSummary, due, history, graphs, 
         <Section title="Artifacts">
           <div className="grid grid-cols-3 gap-4">
             {artifacts.map((a) => (
-              <button
+              <ArtifactTile
                 key={`${a.topic}:${a.node}`}
-                onClick={() => a.exists && setViewing(a)}
-                disabled={!a.exists}
-                className={`focus-ring group panel text-left px-4 py-3 flex flex-col gap-2 transition-colors duration-[var(--dur-base)] ${
-                  a.exists ? 'hover:bg-[var(--color-surface-2)] hover:border-[var(--color-ink-warm-dim)]' : 'opacity-40 cursor-not-allowed'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <InkNode id={`${a.topic}:${a.node}`} variant="filled" color="var(--color-ink-violet)" size={14} />
-                  <div className="text-sm text-[var(--color-text-primary)]" title={a.node}>{humanizeNodeId(a.node)}</div>
-                </div>
-                {a.exists ? (
-                  <span className="self-start rounded-lg px-3 py-1.5 text-sm border border-[var(--color-hairline)] text-[var(--color-text-dim)] group-hover:text-[var(--color-text-primary)]">
-                    Open explorable →
-                  </span>
-                ) : (
-                  <div className="text-xs text-[var(--color-ink-danger)]">File missing on disk</div>
-                )}
-              </button>
+                artifact={a}
+                provenance={provenance?.[a.node]}
+                showTopic={false}
+                onOpen={setViewing}
+              />
             ))}
           </div>
           {onGoArtifacts && (

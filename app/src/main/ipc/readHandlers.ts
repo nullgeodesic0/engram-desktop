@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron'
+import { stat } from 'node:fs/promises'
 import {
   engramRead,
   engramTopicStatusText,
@@ -18,6 +19,7 @@ import type {
   ActiveExperiment,
   GraderHealthResult,
   GraderAuditFile,
+  ArtifactEntry,
 } from '../../shared/types'
 
 // misconceptions.json is engine-written but hand-editable — shape-guard each
@@ -54,6 +56,29 @@ function isActiveExperiment(row: unknown): row is ActiveExperiment {
   )
 }
 
+// `engramArtifactList()` already resolves engram.py's mixed absolute/
+// learning-home-relative paths against the learning home (see readOnly.ts's
+// doc comment) — this stats that RESOLVED path for a build date, since the
+// engine itself records none (`artifact list` returns only
+// `{topic, node, artifact, exists}`). Lives here, not in readOnly.ts, which
+// stays a pure engram.py passthrough this project doesn't touch. A stat
+// failure (exists: false, or a resolved path that still doesn't read) leaves
+// `mtimeMs` null — absent, not guessed.
+async function artifactListWithMtime(): Promise<ArtifactEntry[]> {
+  const raw = (await engramArtifactList()) as Omit<ArtifactEntry, 'mtimeMs'>[]
+  return Promise.all(
+    raw.map(async (e) => {
+      let mtimeMs: number | null = null
+      try {
+        mtimeMs = (await stat(e.artifact)).mtimeMs
+      } catch {
+        // not on disk, or the resolved path is otherwise unreadable
+      }
+      return { ...e, mtimeMs }
+    }),
+  )
+}
+
 export function registerReadHandlers(): void {
   ipcMain.handle('engram:topics', () => getTopicsCached())
   ipcMain.handle('engram:stats', () => engramRead('stats'))
@@ -85,7 +110,7 @@ export function registerReadHandlers(): void {
   ipcMain.handle('engram:graderAuditHistory', (): Promise<GraderAuditFile[]> => readGraderAuditHistory())
   ipcMain.handle('engram:topicStatusText', (_e, topic: string) => engramTopicStatusText(topic))
   ipcMain.handle('engram:topicGraph', (_e, topic: string) => readTopicGraph(topic))
-  ipcMain.handle('engram:artifactList', () => engramArtifactList())
+  ipcMain.handle('engram:artifactList', (): Promise<ArtifactEntry[]> => artifactListWithMtime())
   ipcMain.handle('engram:receiptsHistory', () => readReceiptsHistory())
   ipcMain.handle('engram:misconceptions', async (): Promise<Misconception[]> => {
     const rows = await engramRead<unknown[]>('misconception', ['list'])

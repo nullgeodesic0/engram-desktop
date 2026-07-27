@@ -144,7 +144,15 @@ function isSubsequence(q: string, text: string): boolean {
   return qi === q.length
 }
 
-function scoreEntry(entry: SearchEntry, q: string): number {
+/** The one matcher: exact-prefix beats word-boundary substring beats
+ * mid-word substring beats subsequence fuzzy, over an entry's
+ * title/node/subtitle. Exported so ArtifactGalleryView's page-level search
+ * can reuse it directly (see that file's `matchesQuery`) instead of writing
+ * a second matching function — `searchEntries` below stays the command
+ * palette's own aggregator (multi-kind cap included), which a dedicated,
+ * single-kind search page has no use for. `q` must already be lowercased,
+ * same as every call site in this file. */
+export function scoreEntry(entry: SearchEntry, q: string): number {
   const fields = [entry.title, entry.node, entry.subtitle].filter((v): v is string => Boolean(v))
   let best = -1
   for (const field of fields) {
