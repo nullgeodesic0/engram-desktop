@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { TopicSummary, TopicGraph, MapAnnotations, NodeProvenance, ProvenanceEvent, Misconception } from '../../../shared/types'
+import type { TopicListEntry, TopicGraph, MapAnnotations, NodeProvenance, ProvenanceEvent, Misconception } from '../../../shared/types'
 import { RetentionCurve } from '../components/RetentionCurve'
 import { GraphView, EDGE_STYLE } from '../components/GraphView'
 import { NodeTable } from '../components/NodeTable'
@@ -300,7 +300,7 @@ export function TopicMapView({
   spotlightNode,
   onSpotlightConsumed,
 }: TopicMapViewProps = {}) {
-  const [topics, setTopics] = useState<TopicSummary[]>([])
+  const [topics, setTopics] = useState<TopicListEntry[]>([])
   const [topicsLoaded, setTopicsLoaded] = useState(false)
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null)
   const [graph, setGraph] = useState<TopicGraph | null>(null)

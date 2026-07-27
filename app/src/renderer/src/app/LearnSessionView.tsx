@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import type { SessionEvent } from '../../../shared/sessionEvents'
 import type { BridgeAskRequest } from '../../../shared/bridgeProtocol'
-import type { TopicSummary, ArtifactEntry, TopicGraph, ExportSittingFormat } from '../../../shared/types'
+import type { TopicListEntry, ArtifactEntry, TopicGraph, ExportSittingFormat } from '../../../shared/types'
 import { AskDialog } from '../components/AskDialog'
 import { RateLimitBanner } from '../components/RateLimitBanner'
 import { isBlockingRateLimitStatus } from '../../../shared/rateLimit'
@@ -236,7 +236,7 @@ function TopicCard({
   onSettings,
   onStartFresh,
 }: {
-  topic: TopicSummary
+  topic: TopicListEntry
   resumable: boolean
   onOpen: () => void
   onSettings: () => void
@@ -336,15 +336,15 @@ export function LearnSessionView({
   openNewTopicSignal,
 }: LearnSessionViewProps = {}) {
   // Topic-list state
-  const [topics, setTopics] = useState<TopicSummary[] | null>(null)
-  const [settingsFor, setSettingsFor] = useState<TopicSummary | null>(null)
+  const [topics, setTopics] = useState<TopicListEntry[] | null>(null)
+  const [settingsFor, setSettingsFor] = useState<TopicListEntry | null>(null)
   const [newTopicOpen, setNewTopicOpen] = useState(false)
   // Which topics have a resumable session — shown as a hint on each TopicCard so opening
   // a topic's "continue vs. fresh start" behavior (see openTopic) isn't a surprise.
   const [resumableTopics, setResumableTopics] = useState<Set<string>>(new Set())
 
   // Session state
-  const [activeTopic, setActiveTopic] = useState<TopicSummary | null>(null)
+  const [activeTopic, setActiveTopic] = useState<TopicListEntry | null>(null)
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [started, setStarted] = useState(false)
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -1084,7 +1084,7 @@ export function LearnSessionView({
   // (session:resume looks it up by topic id — see sessionIndex.ts), or starts fresh
   // if not. The message is safe to resend either way — the skill's own re-anchor
   // discipline always re-checks state from disk rather than trusting prior turns.
-  async function openTopic(topic: TopicSummary) {
+  async function openTopic(topic: TopicListEntry) {
     setActiveTopic(topic)
     setStarted(true)
     resetSessionEphemera()
@@ -1156,7 +1156,7 @@ export function LearnSessionView({
   // Deliberately bypasses the resume-if-exists behavior in openTopic — for when you
   // want to abandon a topic's in-progress thread and begin that same topic over from
   // scratch, rather than continuing where you left off.
-  async function startFreshForTopic(topic: TopicSummary) {
+  async function startFreshForTopic(topic: TopicListEntry) {
     setActiveTopic(topic)
     setStarted(true)
     // Same full-ephemera reset openTopic uses (see its comment above) — a fresh

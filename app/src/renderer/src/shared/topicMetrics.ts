@@ -93,9 +93,12 @@ interface NodeSlot {
  * to retain yet. The one exception (engram.py's own): a capstone's first
  * receipt is a `kind: transfer` — capstones have no encoding phase at all —
  * so that specific case is filed as a transfer, not swallowed as an encode.
- * No real receipt in this app's own data exercises that branch yet (no
- * capstone/transfer receipts exist today), but the port stays faithful to
- * the source rather than dropping a case that has none. */
+ * `r.capstone` is carried all the way from the receipt JSONL through
+ * `RawReceipt` (main/engramCli/receiptsHistory.ts) — it used to be dropped at
+ * that IPC boundary, which made this branch dead code even on a real
+ * capstone-first-receipt: momentum silently under-reported (0 reviews
+ * instead of 1) for exactly the population — a capstone whose only receipt
+ * is a transfer — this branch exists to handle. */
 function groupByNode(receipts: RawReceipt[], topic?: string): Map<string, NodeSlot> {
   const pool = topic ? receipts.filter((r) => r.topic === topic) : receipts
   const ordered = [...pool].sort(compareReceipts)
@@ -105,7 +108,7 @@ function groupByNode(receipts: RawReceipt[], topic?: string): Map<string, NodeSl
     const key = `${r.topic}\x00${r.node}`
     if (!out.has(key)) {
       out.set(key, { first: r, reviews: [], transfers: [] })
-      const capstoneTransfer = (r as { capstone?: boolean }).capstone === true && r.kind === 'transfer' && !!r.rating
+      const capstoneTransfer = r.capstone === true && r.kind === 'transfer' && !!r.rating
       if (capstoneTransfer) out.get(key)!.transfers.push(r)
       continue
     }
@@ -175,6 +178,14 @@ export function computeRetentionBuckets(receipts: RawReceipt[], topic?: string):
     }
   }
   for (const b of Object.values(buckets)) {
+    // NOT bit-identical to engram.py's `round(x, 3)` here: Python's round()
+    // is banker's (round-half-to-even), this is round-half-up. The two
+    // disagree only when the unrounded value sits exactly on a .0005
+    // boundary, and by at most one unit in the 3rd decimal (e.g. 0.813 vs
+    // 0.812) — invisible once rendered at percent granularity (bucketDisplay
+    // below multiplies by 100 and rounds again). Left as-is; the agreement
+    // check (scripts/checkTopicMetricsAgreement.ts) tolerates exactly this
+    // one-ULP gap on `rate` rather than papering over a real divergence.
     if (b.n) b.rate = Math.round(((b.recalled + b.partial) / b.n) * 1000) / 1000
   }
   return buckets
@@ -280,6 +291,25 @@ export function computeMomentum(
 }
 
 // --------------------------------------------------------------- calibration
+
+/** Below this many paired picks, a calibration verdict (overconfident /
+ * underconfident / calibrated split) is noise, not a diagnosis — the same
+ * small-n honesty rule RETENTION_BUCKET_MIN_N applies to retention buckets,
+ * now applied to calibration too (a per-topic slice made this bite: a
+ * one-pick topic was rendering a confident-looking verdict off n=1).
+ *
+ * Deliberately NOT engram.py's own CAL_MIN_N (10): that floor gates a
+ * different, denser population — every review receipt that happens to carry
+ * a `confidence` field, pooled globally. This population is local
+ * confidence-picker picks (calibrationStore, recorded only when that widget
+ * is shown) sliced down to one topic — sparser by construction, and a floor
+ * of 10 would silently empty the calibration section for most topics that
+ * otherwise have real signal. RETENTION_BUCKET_MIN_N is this app's own
+ * already-chosen "a rate under fewer than five probes is noise" floor (see
+ * that constant's doc comment); reusing it here — rather than either
+ * inventing a third number or importing the engine's — keeps one deliberate
+ * small-n threshold across both metrics this app renders per topic. */
+export const CALIBRATION_MIN_N = RETENTION_BUCKET_MIN_N
 
 export interface CalibrationCounts {
   overconfident: number

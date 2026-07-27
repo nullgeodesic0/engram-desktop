@@ -2,12 +2,27 @@
 // fields) since the engine, not this app, owns the schema — see
 // engram/1.0.x/scripts/engram.py and skills/_shared/dialogue-grammar.md.
 
+/** One row of `engram.py stats`'s `topics` array (compute_stats) — the ONLY
+ * three fields that subcommand actually emits per topic. Do not add
+ * `due`/`goal`/`nodes` here: a prior version of this type declared all three
+ * as required while `compute_stats` never sent them, so every read silently
+ * evaluated to `undefined` and every `topic.due > 0` gate was permanently
+ * false. Code that needs due count, goal text, or node count wants
+ * `TopicListEntry` (`engram.py topics`) instead. */
 export interface TopicSummary {
   topic: string
   title: string
+  states: { review: number; learning: number; new: number }
+}
+
+/** One row of `engram.py topics`'s output (cmd_topics) — TopicSummary's
+ * fields plus the three `compute_stats` never sends: `goal`, `nodes`
+ * (its total node count), and `due` (computed fresh against today's date,
+ * server-side, at call time). Fetched via `window.engram.topics()` /
+ * `getTopicsCached`, never via `stats().topics`. */
+export interface TopicListEntry extends TopicSummary {
   goal: string
   nodes: number
-  states: { review: number; learning: number; new: number }
   due: number
 }
 
@@ -294,6 +309,13 @@ export interface RawReceipt {
   rating: string | null
   sBefore: number | null
   sAfter: number | null
+  /** engram.py stamps this `true` only on a capstone node's own receipts
+   * (cmd_learn's extra = {**extra, "capstone": True}) — never present, so
+   * never `true`, on any other receipt. shared/topicMetrics.ts's
+   * `groupByNode` needs it to recognize a capstone's first receipt (always
+   * `kind: transfer`, never an encode) as a genuine retrieval rather than
+   * silently swallowing it. */
+  capstone: boolean
 }
 
 export interface ReceiptsHistory {
