@@ -1,6 +1,6 @@
 import { memo } from 'react'
 import type { ProseBeat } from '../../../shared/beatEvents'
-import { MathRenderer } from './MathRenderer'
+import { ProseMarkdown } from './ProseMarkdown'
 import { splitAroundTicket } from '../shared/ticketParser'
 import { TicketCard } from './ritual/TicketCard'
 import { CopyButton } from './ui/CopyButton'
@@ -34,7 +34,7 @@ export const BeatCard = memo(function BeatCard({
         </div>
         <CopyButton text={text} />
       </div>
-      <MathRenderer text={text} className="voice-serif text-[var(--color-text-primary)]" />
+      <ProseMarkdown text={text} className="voice-serif text-[var(--color-text-primary)]" />
       {trailingCaret && <span className="streaming-caret" aria-hidden="true" />}
     </div>
   )
@@ -69,7 +69,7 @@ export const PlainDialogueBlock = memo(function PlainDialogueBlock({
       <div className="absolute top-3 right-3">
         <CopyButton text={text} />
       </div>
-      <MathRenderer text={text} className="voice-serif text-[var(--color-text-primary)] pr-5" />
+      <ProseMarkdown text={text} className="voice-serif text-[var(--color-text-primary)] pr-5" />
       {trailingCaret && <span className="streaming-caret" aria-hidden="true" />}
     </div>
   )
