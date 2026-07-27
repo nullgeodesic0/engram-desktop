@@ -192,6 +192,11 @@ export class SessionManager extends EventEmitter {
 
   private handleClose(code: number | null): void {
     this.ended = true
+    // The process behind any still-open bridge:ask for this session just
+    // died (abort, crash, or natural exit — this IS that one path); its
+    // pendingAsks entry now holds a resolver for an HTTP response nothing
+    // will ever answer. See bridgeServer.dropSession's own doctrine comment.
+    bridgeServer.dropSession(this.sessionId)
     this.emitEvent({ type: 'closed', exitCode: code })
     void this.permissions?.cleanup()
   }

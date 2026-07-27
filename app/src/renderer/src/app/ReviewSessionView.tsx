@@ -515,6 +515,20 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
         if (event.isError && event.resultText) setError(event.resultText)
         break
       case 'closed':
+        // The process behind any still-open live ask just died — a deliberate
+        // stop, a crash, or a natural exit all route through here (this is the
+        // child process's own 'close' event, SessionManager.ts's only call to
+        // handleClose). Its bridge request died with it (bridgeServer.ts's
+        // `pendingAsks` entry for it is now stale), so the mark must stop
+        // rendering as a live, clickable, pulsing question. Flip `live` to
+        // false and leave `answer: null` — that's the exact shape
+        // deriveRitualMarks already produces for a replayed dead ask, and
+        // AskCard already renders it honestly ("no answer was given"); see
+        // that doctrine comment in shared/ritualFromTranscript.ts. Never
+        // touches an already-answered ask (`answer !== null`).
+        setMarks((prev) =>
+          prev.map((m) => (m.kind === 'ask' && m.live && m.answer === null ? { ...m, live: false } : m)),
+        )
         if (abortedRef.current) {
           abortedRef.current = false
           setBusy(false)
@@ -574,6 +588,19 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
         // "only when empty" guard Learn uses, so a live session's marks are never
         // clobbered by a stray re-hydration. The opening docket never replays here
         // (it's one-time — see deriveRitualMarks's doctrine comment).
+        //
+        // This guard is deliberately per-mount, not per-transcript-content: within
+        // one mounted view, Stop→Resume calls startSession(true) again with `marks`
+        // already holding this same sitting's live-accumulated cards (grades, beats,
+        // the now-orphaned ask fixed above) — those are already correct, so skipping
+        // a fresh disk replay here is intentional, not a bug. It used to be the thing
+        // that let a stale `live:true` ask leak across Stop→Resume; that's fixed at
+        // the source now (the `closed` handler above orphans it the moment the
+        // process dies), so this guard preserving leftover marks is safe again. It
+        // does mean a genuinely different resumed sitting mounted fresh (marks === [])
+        // still gets the real replay, which is the only case that matters for
+        // correctness — a re-resume of the SAME still-mounted sitting has nothing
+        // fresher on disk than what's already in `marks`.
         setMarks((prev) => (prev.length === 0 ? deriveRitualMarks(lines) : prev))
         // Rebuild every verdict this sitting already produced, from the same
         // receipt tool_results the history drawer reads — so reopening shows

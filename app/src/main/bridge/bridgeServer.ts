@@ -16,7 +16,10 @@ import { sanitizeAnnotatePayload, setNodeAnnotation } from '../session/mapAnnota
 export class BridgeServer {
   private server: Server | null = null
   private port = 0
-  private pendingAsks = new Map<string, (res: BridgeAskResponse) => void>()
+  // Keyed by requestId; carries the owning sessionId alongside the HTTP
+  // resolver so a dead session's entries can be found and dropped without
+  // scanning by anything other than a Map lookup — see `dropSession` below.
+  private pendingAsks = new Map<string, { sessionId: string; resolve: (res: BridgeAskResponse) => void }>()
   private window: BrowserWindow | null = null
 
   setWindow(win: BrowserWindow): void {
@@ -55,7 +58,7 @@ export class BridgeServer {
       const request: BridgeAskRequest = { ...payload, sessionId, requestId }
 
       const answer = await new Promise<BridgeAskResponse>((resolve) => {
-        this.pendingAsks.set(requestId, resolve)
+        this.pendingAsks.set(requestId, { sessionId, resolve })
         this.window?.webContents.send('bridge:ask', request)
       })
 
@@ -98,10 +101,31 @@ export class BridgeServer {
 
   /** Called by the renderer (via IPC) when the user answers a bridge:ask prompt. */
   answer(requestId: string, response: BridgeAskResponse): void {
-    const resolve = this.pendingAsks.get(requestId)
-    if (!resolve) return
+    const pending = this.pendingAsks.get(requestId)
+    if (!pending) return
     this.pendingAsks.delete(requestId)
-    resolve(response)
+    pending.resolve(response)
+  }
+
+  /**
+   * Called by SessionManager when a session's process dies (abort, crash, or
+   * natural exit — the one `handleClose` path). Any ask still pending for
+   * that session has a dead `res` behind it (the mcpBridgeWorker process that
+   * opened the HTTP connection died with the session), and the renderer-side
+   * ask mark is now orphaned too (see ReviewSessionView.tsx/LearnSessionView.tsx's
+   * `closed` handling) — nothing will ever call `answer()` for it again.
+   * Deliberately does NOT call `resolve()`: the underlying HTTP socket is
+   * already gone, and writing to it from here would risk an unhandled
+   * rejection out of `handleRequest`'s still-suspended `await`. Dropping the
+   * map entry just releases the reference so it can't accumulate across
+   * repeated session aborts; the suspended request handler is left to be
+   * garbage-collected with its dead socket, exactly as it would be if this
+   * method didn't exist.
+   */
+  dropSession(sessionId: string): void {
+    for (const [requestId, pending] of this.pendingAsks) {
+      if (pending.sessionId === sessionId) this.pendingAsks.delete(requestId)
+    }
   }
 
   get portNumber(): number {
