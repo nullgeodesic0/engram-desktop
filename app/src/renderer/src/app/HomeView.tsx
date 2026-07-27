@@ -19,6 +19,28 @@ import { recentViews, type RecentView } from '../shared/recentlyViewed'
 const LAST_SEEN_STREAK_KEY = 'engram-desktop:last-seen-streak-days'
 const LAST_SEEN_DUE_KEY = 'engram-desktop:last-seen-due-now'
 const FLASHBACK_MIN_DAYS_AGO = 3
+/**
+ * A flashback prints a node's canonical `claim` — the exact text `/review`
+ * reveals only AFTER the learner has produced an answer and it has been
+ * graded (review SKILL.md §2: "Show the probe only … Reveal: canonical
+ * `claim`"). Printing it unprompted on the landing screen for a node whose
+ * next retrieval is imminent converts that retrieval into recognition: the
+ * learner reads the answer here, clicks "Clear today's reviews", produces it
+ * minutes later, and the receipt records a memory that was really reading.
+ * That is the one thing the blind assessor cannot detect, and it inflates
+ * the schedule the learner is trusting with their memory.
+ *
+ * So a candidate is eligible only if its own `fsrs.due` sits further out
+ * than this window (or it carries no scheduled retrieval at all). Measured
+ * on real data at the time this gate was added: 45 of 76 eligible-by-age
+ * flashback candidates were for nodes due within 7 days, several already
+ * overdue. See .superpowers/sdd/doctrine-audit.md (V-1).
+ */
+const FLASHBACK_SAFE_DUE_DAYS = 7
+/** Bound on how many past items the eligibility walk will inspect before
+ * giving up and showing no flashback — the card is decoration; it never
+ * costs an unbounded number of graph reads to find one. */
+const FLASHBACK_MAX_PROBES = 40
 
 interface Flashback {
   daysAgo: number
@@ -33,6 +55,35 @@ function daysAgo(dateStr: string): number {
   const now = new Date()
   const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
   return Math.round((today - then) / 86_400_000)
+}
+
+/**
+ * True when a node's canonical claim may be printed on Home — i.e. its next
+ * scheduled retrieval is far enough out (or absent) that reading the answer
+ * here cannot contaminate it. Local-calendar arithmetic on engram.py's own
+ * local `YYYY-MM-DD` due string (getFullYear/Month/Date, never toISOString —
+ * same discipline as shared/dueBuckets.ts). A malformed date fails CLOSED:
+ * unknown due means not safe.
+ */
+function safeToReveal(due: string | null): boolean {
+  if (!due) return true // never scheduled — nothing to contaminate
+  const d = new Date(`${due}T00:00:00`)
+  if (Number.isNaN(d.getTime())) return false
+  const now = new Date()
+  const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const daysUntilDue = Math.floor((d.getTime() - dayStart.getTime()) / 86_400_000)
+  return daysUntilDue > FLASHBACK_SAFE_DUE_DAYS
+}
+
+/** Fisher-Yates copy — the flashback picks at random among eligible items,
+ * and the gate above means several may have to be tried before one lands. */
+function shuffled<T>(items: readonly T[]): T[] {
+  const out = [...items]
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[out[i], out[j]] = [out[j], out[i]]
+  }
+  return out
 }
 
 function greeting(): string {
@@ -121,22 +172,41 @@ export function HomeView({ onGoReview, onGoCoach, onGoTopic, onNewTopic, onGoNod
     // anniversary would usually be empty this early in real usage).
     window.engram.receiptsHistory().then(async (history) => {
       const candidateDays = [...history.days].reverse().filter((d) => d.items.length > 0 && daysAgo(d.date) >= FLASHBACK_MIN_DAYS_AGO)
-      const day = candidateDays[0]
-      if (!day) return
-      const item = day.items[Math.floor(Math.random() * day.items.length)]
-      try {
-        const graph = (await window.engram.topicGraph(item.topic)) as TopicGraph
-        const node = graph.nodes[item.node]
-        if (!node) return
-        setFlashback({
-          daysAgo: daysAgo(day.date),
-          topic: item.topic,
-          topicTitle: graph.title,
-          node: item.node,
-          claim: node.claim,
-        })
-      } catch {
-        // Topic graph unreadable (deleted topic, etc.) — flashback just doesn't show.
+      // One graph read per topic, reused across candidates — the walk below can
+      // touch several items before finding one whose answer is safe to print.
+      const graphCache = new Map<string, TopicGraph | null>()
+      const graphFor = async (topic: string): Promise<TopicGraph | null> => {
+        if (graphCache.has(topic)) return graphCache.get(topic) ?? null
+        let g: TopicGraph | null = null
+        try {
+          g = (await window.engram.topicGraph(topic)) as TopicGraph
+        } catch {
+          // Topic graph unreadable (deleted topic, etc.) — that topic just
+          // can't supply a flashback.
+        }
+        graphCache.set(topic, g)
+        return g
+      }
+
+      let probes = 0
+      for (const day of candidateDays) {
+        for (const item of shuffled(day.items)) {
+          if (probes++ >= FLASHBACK_MAX_PROBES) return
+          const graph = await graphFor(item.topic)
+          const node = graph?.nodes[item.node]
+          if (!graph || !node) continue
+          // The doctrine gate — see FLASHBACK_SAFE_DUE_DAYS. A node with a
+          // retrieval coming up keeps its answer to itself.
+          if (!safeToReveal(node.fsrs?.due ?? null)) continue
+          setFlashback({
+            daysAgo: daysAgo(day.date),
+            topic: item.topic,
+            topicTitle: graph.title,
+            node: item.node,
+            claim: node.claim,
+          })
+          return
+        }
       }
     })
   }, [])
