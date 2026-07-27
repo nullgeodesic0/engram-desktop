@@ -17,19 +17,30 @@
  * live path's `pushMark`, which stamps `atIndex: messagesRef.current.length`
  * synchronously when the bridge event arrives. */
 
-import { parsePretestGradeResults, parseGradeResult, verdictFromGrade, lapseReturnDate } from './gradeResult'
+import {
+  parsePretestGradeResults,
+  parseGradeResult,
+  parseGradeResults,
+  verdictFromGrade,
+  lapseReturnDate,
+  isStabilityMilestone,
+  type StabilityMilestoneScale,
+} from './gradeResult'
 import { humanizeNodeId } from './humanizeId'
 import { parseAuditNotification, isTaskNotificationContent } from './taskNotification'
 import {
   isPretestRateCommand,
   isNextNodeCommand,
   isReviewRateCommand,
+  isReceiptCommand,
   parseMisconceptionAdds,
   looksLikeArtifactSetCommand,
   isArtifactSmithSpawnEvent,
   isAssessorAuditSpawnEvent,
   explorableTitleFromDescription,
   explorableNodeFromPrompt,
+  classifyEngramBashFailure,
+  type ToolFailureKind,
 } from './signals/tutorSignals'
 
 interface TranscriptLine {
@@ -53,6 +64,7 @@ interface ContentBlock {
   id?: string
   tool_use_id?: string
   content?: unknown
+  is_error?: boolean
 }
 
 export const RENDER_BEAT = 'mcp__engram-ui-bridge__render_beat'
@@ -69,7 +81,7 @@ type WalkEvent =
   | { kind: 'user_message' }
   | { kind: 'assistant_text' }
   | { kind: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
-  | { kind: 'tool_result'; toolUseId: string; content: unknown; timestamp?: string }
+  | { kind: 'tool_result'; toolUseId: string; content: unknown; timestamp?: string; isError: boolean }
   | { kind: 'task_notification'; content: string }
 
 /** Single ordered pass over the transcript, block by block, yielding one
@@ -115,7 +127,13 @@ function* walkTranscript(rawLines: unknown[]): Generator<WalkEvent> {
     if (line?.type === 'user' && Array.isArray(line.message?.content)) {
       for (const block of line.message.content) {
         if (block?.type === 'tool_result' && typeof block.tool_use_id === 'string') {
-          yield { kind: 'tool_result', toolUseId: block.tool_use_id, content: block.content, timestamp: line.timestamp }
+          yield {
+            kind: 'tool_result',
+            toolUseId: block.tool_use_id,
+            content: block.content,
+            timestamp: line.timestamp,
+            isError: block.is_error === true,
+          }
         }
       }
       continue
@@ -366,6 +384,8 @@ export type DerivedRitualMark =
       verdict: 'pending' | 'agreed' | 'disputed'
       disputedNodes: string[]
     }
+  | { id: string; atIndex: number; kind: 'milestone'; node: string; scale: StabilityMilestoneScale; sBefore: number; sAfter: number }
+  | { id: string; atIndex: number; kind: 'tool-failure'; failureKind: ToolFailureKind }
 
 /** Rebuilds the durable subset of ritual marks (beat cards, node crossings,
  * phase frontispieces, the pretest diagnostic plate) from a transcript.
@@ -406,6 +426,22 @@ export type DerivedRitualMark =
  *    real-transcript shape) — pushed `pending` at the spawn, resolved to
  *    `agreed`/`disputed` if and only if a matching `<task-notification>` with
  *    `<status>completed</status>` later parses cleanly; never fabricated.
+ *  - `milestone` marks (Task 6) come from ANY `rate`/`receipt` result (Learn's
+ *    pretest, Learn's batch receipt, or Review's per-item rate — every place
+ *    a `GradeResult` is parsed) whose `isStabilityMilestone` (gradeResult.ts)
+ *    reads non-null — mirrors both live pushes exactly, same shared
+ *    predicate, so a resumed sitting can never show a different set of
+ *    milestones than the live sitting showed.
+ *  - `tool-failure` marks (Task 7) come from any Bash tool_use this transcript
+ *    classifies via `classifyEngramBashFailure` (the six specifically-named
+ *    calls, Review's own `rate` call, or the generic `engram-bash` bucket)
+ *    whose `tool_result` came back `isError` — mirrors both live wirings
+ *    exactly, same shared classifier. A Bash call classifyEngramBashFailure
+ *    returns `null` for (a build step, `ls`, an ad hoc debug one-liner, a
+ *    non-Bash tool like Read/Write/Edit) is deliberately never claimed into
+ *    the registry below, so its failure renders nothing — see the doctrine
+ *    comment on `tool-failure` in Marks.tsx for why that's scope, not an
+ *    oversight.
  * Figure/atlas/stash/docket marks are NOT derived here — they're one-time
  * signals with no durable record in the transcript to replay from (see the
  * doctrine comment on `RitualMark` in Marks.tsx). */
@@ -422,6 +458,18 @@ export function deriveRitualMarks(entries: unknown[]): DerivedRitualMark[] {
   // the same shape as pendingPretestToolUseIds so its tool_result can be
   // matched back to the call that produced it.
   const pendingReviewRateToolUseIds = new Set<string>()
+  // Learn's batch-grade `receipt --file` call (Task 6) — its tool_result
+  // carries an ARRAY of GradeResults (parseGradeResults, not the single-item
+  // parseGradeResult the pretest/review-rate paths above use), each of which
+  // can independently earn a milestone mark.
+  const pendingReceiptToolUseIds = new Set<string>()
+  // Task 7's claimed-tool-use registry — every Bash tool_use
+  // `classifyEngramBashFailure` recognizes (the six named calls, Review's own
+  // rate call, or the generic engram-bash bucket) gets its id claimed here at
+  // dispatch time, exactly like LearnSessionView's/ReviewSessionView's own
+  // per-view `toolFailureRegistry` ref — so a later `tool_result` with
+  // `isError` can push the SAME specific card a live sitting would have shown.
+  const pendingToolFailureKind = new Map<string, ToolFailureKind>()
   // Explorable marks pushed by an artifact-smith spawn (no path yet), keyed by
   // node id, so a later `artifact set` call for the same node fills the path
   // in rather than duplicating the mark — mirrors LearnSessionView's JobsRail
@@ -479,10 +527,37 @@ export function deriveRitualMarks(entries: unknown[]): DerivedRitualMark[] {
       continue
     }
     if (event.kind === 'tool_result') {
+      // Task 7 — pushed first so a failure reads above whatever (possibly
+      // stale/optimistic) mark the matching success-side branch below might
+      // also push for the same event; order within one atIndex, not a
+      // correctness dependency (the branches below already no-op on
+      // unparseable/error content on their own).
+      const failureKind = pendingToolFailureKind.get(event.toolUseId)
+      if (failureKind !== undefined) {
+        pendingToolFailureKind.delete(event.toolUseId)
+        if (event.isError) {
+          marks.push({ id: `dmark-${seq++}`, atIndex: messageCount, kind: 'tool-failure', failureKind })
+        }
+      }
       if (pendingPretestToolUseIds.has(event.toolUseId)) {
         pendingPretestToolUseIds.delete(event.toolUseId)
         for (const r of parsePretestGradeResults(event.content)) {
           pretestItems.push({ node: r.node, verdict: verdictFromGrade(r.grade) })
+          const scale = isStabilityMilestone(r)
+          if (scale) {
+            marks.push({ id: `dmark-${seq++}`, atIndex: messageCount, kind: 'milestone', node: r.node, scale, sBefore: r.sBefore as number, sAfter: r.sAfter as number })
+          }
+        }
+      }
+      if (pendingReceiptToolUseIds.has(event.toolUseId)) {
+        pendingReceiptToolUseIds.delete(event.toolUseId)
+        if (!event.isError) {
+          for (const r of parseGradeResults(event.content)) {
+            const scale = isStabilityMilestone(r)
+            if (scale) {
+              marks.push({ id: `dmark-${seq++}`, atIndex: messageCount, kind: 'milestone', node: r.node, scale, sBefore: r.sBefore as number, sAfter: r.sAfter as number })
+            }
+          }
         }
       }
       if (pendingReviewRateToolUseIds.has(event.toolUseId)) {
@@ -505,13 +580,22 @@ export function deriveRitualMarks(entries: unknown[]): DerivedRitualMark[] {
             returnDate: anchor ? lapseReturnDate(result.intervalDays, anchor) : null,
           })
         }
+        if (result) {
+          const scale = isStabilityMilestone(result)
+          if (scale) {
+            marks.push({ id: `dmark-${seq++}`, atIndex: messageCount, kind: 'milestone', node: result.node, scale, sBefore: result.sBefore as number, sAfter: result.sAfter as number })
+          }
+        }
       }
       continue
     }
     // tool_use
     if (event.name === 'Bash') {
       const command = String((event.input as { command?: unknown }).command ?? '')
+      const failureKind = classifyEngramBashFailure(command)
+      if (failureKind) pendingToolFailureKind.set(event.id, failureKind)
       if (isPretestRateCommand(command)) pendingPretestToolUseIds.add(event.id)
+      if (isReceiptCommand(command)) pendingReceiptToolUseIds.add(event.id)
       if (isReviewRateCommand(command)) pendingReviewRateToolUseIds.add(event.id)
       if (isNextNodeCommand(command) && diagnosticGateOnNextNode(gate, pretestItems.length)) {
         marks.push({ id: `dmark-${seq++}`, atIndex: messageCount, kind: 'diagnostic', items: [...pretestItems] })

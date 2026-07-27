@@ -102,6 +102,74 @@ export function looksLikeArtifactSetCommand(
   return { node: nodeMatch ? nodeMatch[1] : undefined, path: pathMatch ? pathMatch[1] : undefined }
 }
 
+/** `python3 "$ENGRAM" receipt --file <assessor-output.json>` (SKILL.md step 4)
+ * — /learn's batch-grade call, the one place a Bash tool_result carries an
+ * ARRAY of per-node grade results (`cmd_receipt` in engram.py) rather than a
+ * single item. Promoted here (Task 7) from LearnSessionView's own
+ * `looksLikeReceiptCall` so a receipt call's FAILURE can be recognized
+ * identically live and in replay — see `classifyEngramBashFailure` below. */
+export function isReceiptCommand(command: string): boolean {
+  return command.includes('receipt') && command.includes('--file')
+}
+
+/** The "production filed for later grading" moment (spike/FINDINGS.md Finding
+ * 5.2) — a Bash call containing the word `stash` that isn't actually the
+ * next/pretest-rate/receipt call (those also happen to run through Bash and
+ * could mention "stash" incidentally, so the exclusions matter more than they
+ * would for a narrower regex). Promoted here (Task 7) from
+ * LearnSessionView's own `looksLikeStashCall`, same reason as
+ * `isReceiptCommand` above. */
+export function isStashCommand(command: string): boolean {
+  if (!/\bstash\b/.test(command)) return false
+  if (isNextNodeCommand(command)) return false
+  if (isReceiptCommand(command)) return false
+  if (isPretestRateCommand(command)) return false
+  return true
+}
+
+/** The tool-failure card's vocabulary (Task 7, `components/ritual/
+ * ToolFailureCard.tsx`) — the six calls the brief names by name (pretest
+ * rate, receipt, stash, next, artifact set, misconception add), Review's own
+ * per-item `rate` call (the seventh — not literally named in the six above,
+ * but the same class of thing: a call whose SUCCESS already produces UI
+ * elsewhere, so its failure rendering nothing today is the exact bug being
+ * fixed), and a generic bucket for any other Bash call that's plainly
+ * talking to the engine (`engram.py` appears in the command) but isn't one of
+ * the specifically-handled seven. Anything else (a build step, an `ls`, a
+ * one-off `python3 -c` debug script, a `Read`/`Write`/`Edit`) returns `null` —
+ * deliberately out of scope, see the doctrine comment on `tool-failure` in
+ * Marks.tsx for why. */
+export type ToolFailureKind =
+  | 'pretest'
+  | 'receipt'
+  | 'stash'
+  | 'next'
+  | 'artifact-set'
+  | 'misconception'
+  | 'review-rate'
+  | 'engram-bash'
+
+/** Classifies a Bash tool_use's command for tool-failure purposes — the ONE
+ * function both session views' live `tool_use` dispatch and
+ * `ritualFromTranscript.ts`'s replay walk call to decide which ids get
+ * claimed into their (separate, per-surface) pending-failure registries, so
+ * live and replay can never disagree about which calls are "specifically
+ * handled" vs. generic vs. out of scope. Order matters: pretest/receipt/
+ * review-rate/next/artifact-set/misconception are each checked before the
+ * looser `isStashCommand`/`engram.py` fallbacks, mirroring the exclusions
+ * `isStashCommand` itself already encodes. */
+export function classifyEngramBashFailure(command: string): ToolFailureKind | null {
+  if (isPretestRateCommand(command)) return 'pretest'
+  if (isReceiptCommand(command)) return 'receipt'
+  if (isReviewRateCommand(command)) return 'review-rate'
+  if (isNextNodeCommand(command)) return 'next'
+  if (looksLikeArtifactSetCommand(command)) return 'artifact-set'
+  if (command.includes('misconception add')) return 'misconception'
+  if (isStashCommand(command)) return 'stash'
+  if (command.includes('engram.py')) return 'engram-bash'
+  return null
+}
+
 // ---------------------------------------------------------------------------
 // Subagent-spawn signals (Task/Agent tool_use blocks).
 // ---------------------------------------------------------------------------

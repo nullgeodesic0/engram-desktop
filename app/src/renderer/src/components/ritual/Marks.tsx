@@ -10,6 +10,10 @@ import { ExplorableForged } from './ExplorableForged'
 import { ReviewDocket, type ReviewDocketItem } from './ReviewDocket'
 import { LapseRite } from './LapseRite'
 import { AuditCard, type AuditVerdict } from './AuditCard'
+import { MilestoneCard } from './MilestoneCard'
+import { ToolFailureCard } from './ToolFailureCard'
+import type { ToolFailureKind } from '../../../../shared/signals/tutorSignals'
+import type { StabilityMilestoneScale } from '../../../../shared/gradeResult'
 
 /** Abbreviate to ~cap chars on a word boundary WITHOUT cutting inside a math
  * span — a dangling delimiter would make KaTeX render the tail as garbled
@@ -56,11 +60,18 @@ function abbreviateOutsideMath(text: string, cap: number): string {
  * and/or `artifact set` Bash call), `verify-seal` (a `beat_outcome`
  * bridge:ui call naming beat `verify` with outcome `confirmed`), `lapse`
  * (Review's own rite: a `rate --rating again` call whose result grades
- * 'lapsed'), and `audit` (Review's own honesty check: an engram-assessor
+ * 'lapsed'), `audit` (Review's own honesty check: an engram-assessor
  * spawn auditing the tutor's self-grading, `pending` until a matching
  * `<task-notification>` resolves it — replay-only, see the AUDIT doctrine
  * comment in shared/ritualFromTranscript.ts for why a live sitting never
- * sees a resolved verdict) — see
+ * sees a resolved verdict), `milestone` (Task 6: the FIRST time a `rate`/
+ * `receipt` result's stability crosses week- or month-scale retention —
+ * `isStabilityMilestone` in shared/gradeResult.ts is the one shared
+ * predicate; see its doctrine comment for the real-receipt tuning behind the
+ * two thresholds), and `tool-failure` (Task 7: an engram call's `tool_result`
+ * came back `isError` — `classifyEngramBashFailure` in
+ * shared/signals/tutorSignals.ts is the one shared classifier deciding which
+ * calls are specifically named vs. generic vs. out of scope entirely) — see
  * `shared/ritualFromTranscript.ts`'s
  * `deriveRitualMarks`, which walks a reopened session's transcript to rebuild
  * them instead of leaving a resumed sitting's history bare. The rest are
@@ -84,6 +95,8 @@ export type RitualMark = { id: string; atIndex: number } & (
   | { kind: 'lapse'; node: string; returnDate: string | null }
   | { kind: 'docket'; items: ReviewDocketItem[] }
   | { kind: 'audit'; itemCount: number | null; verdict: AuditVerdict; disputedNodes: string[] }
+  | { kind: 'milestone'; node: string; scale: StabilityMilestoneScale; sBefore: number; sAfter: number }
+  | { kind: 'tool-failure'; failureKind: ToolFailureKind }
 )
 
 /** Small hand-drawn glyphs, one per dialogue-grammar beat. 16x16 viewBox,
@@ -210,6 +223,8 @@ export function MarkView({ mark }: { mark: RitualMark }) {
   if (mark.kind === 'lapse') return <LapseRite node={mark.node} returnDate={mark.returnDate} />
   if (mark.kind === 'docket') return <ReviewDocket items={mark.items} />
   if (mark.kind === 'audit') return <AuditCard itemCount={mark.itemCount} verdict={mark.verdict} disputedNodes={mark.disputedNodes} />
+  if (mark.kind === 'milestone') return <MilestoneCard node={mark.node} scale={mark.scale} sBefore={mark.sBefore} sAfter={mark.sAfter} />
+  if (mark.kind === 'tool-failure') return <ToolFailureCard failureKind={mark.failureKind} />
   return <StashStamp />
 }
 
