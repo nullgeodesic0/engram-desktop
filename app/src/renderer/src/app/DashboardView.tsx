@@ -16,6 +16,7 @@ import { allPicks } from '../shared/calibrationStore'
 import { computeWeekDigest } from '../shared/weekDigest'
 import { friendlyErrorText } from '../shared/friendlyError'
 import { MisconceptionLedger } from '../components/MisconceptionLedger'
+import { GraderAudit } from '../components/GraderAudit'
 import { ExperimentBanner } from '../components/ExperimentBanner'
 import { TopicDrilldownView } from './TopicDrilldownView'
 import { computeCalibration } from '../shared/topicMetrics'
@@ -225,7 +226,6 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts }: Dashboard
   // Narration order mirrors /coach: loop-closure gate first, then grader-health,
   // retention, transfer, calibration, momentum, misconceptions, backlog.
   const loopClosure = stats.adherence.loop_closure
-  const grader = stats.grader_health
 
   return (
     <div className="p-8 flex flex-col gap-8 w-full h-full overflow-y-auto">
@@ -335,13 +335,7 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts }: Dashboard
       </Section>
 
       <Section title="Grader health">
-        <div className="panel px-4 py-3 text-sm">
-          <span
-            className={grader.audited ? 'text-[var(--color-ink-warm)]' : 'text-[var(--color-text-dim)]'}
-          >
-            {grader.stamp}
-          </span>
-        </div>
+        <GraderAudit />
       </Section>
 
       <Section title="This week">

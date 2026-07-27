@@ -324,6 +324,106 @@ export interface ReceiptsHistory {
   receipts: RawReceipt[]
 }
 
+/** `direction` on both `grader-health` and a raw audit file — how often the
+ * grader's judgment moved AWAY from the gold rating, split by which way it
+ * moved. `graded_up` is the only direction that can flatter a learner out of
+ * a review they need, which is why GraderAudit.tsx renders it first. */
+export interface GraderDirection {
+  graded_up: number
+  graded_down: number
+  exact: number
+  judgments: number
+  note: string
+}
+
+/** One `by_case_type` entry — a trap category from the adversarial gold set
+ * (e.g. `partial-credit-boundary`), not a topic. This is the field that
+ * names *where* grading is least reliable. */
+export interface GraderCaseTypeStats {
+  items: number
+  judgments: number
+  agreement: number
+  leniency_bias: number
+}
+
+/** engram.py `grader-health` when no audit has ever run, or the newest audit
+ * file on disk is corrupt. This shape is never guessed — read directly from
+ * `compute_grader_health`'s own source (engram.py, both early-return
+ * branches): exactly these five keys, nothing else. Real audits exist on
+ * this machine, so the branch itself isn't exercised live here, but the
+ * source is unambiguous and this app must never move or delete
+ * `~/.claude/learning/audits/*.json` to force it. `grader_unvalidated` is
+ * always `true` here — an unaudited oracle makes every number downstream
+ * unearned. */
+export interface GraderHealthUnaudited {
+  audited: false
+  verdict: 'unaudited' | 'unreadable'
+  grader_unvalidated: true
+  stamp: string
+  read: string
+}
+
+/** engram.py `grader-health` once at least one readable audit exists — the
+ * latest audit's full body, field-checked and with `grader_unvalidated`
+ * DERIVED from `verdict` (never trusted from the file). Verified live
+ * against both real audits on disk (2026-07-19-01.json, 2026-07-23-01.json)
+ * via `python3 engram.py grader-health`, 2026-07-27. Note what this does
+ * NOT carry: `thresholds` and `bias_note` are written to every audit file
+ * but omitted from this payload — see main/engramCli/graderAuditHistory.ts,
+ * which reads them directly from the newest file on disk. */
+export interface GraderHealthAudited {
+  audited: true
+  ts: string | null
+  grader: string | null
+  n: number | null
+  runs: number | null
+  qwk: number | null
+  exact_agreement: number | null
+  leniency_bias: number | null
+  test_retest: number | null
+  direction: GraderDirection | null
+  by_case_type: Record<string, GraderCaseTypeStats>
+  gold_source: string | null
+  /** Both real audits are `"authored"`, never `"human"` — the gold set was
+   * written, not independently adjudicated, and GraderAudit.tsx must render
+   * its caveat at the same weight as the numbers whenever this isn't
+   * `"human"`. */
+  gold_adjudication: string
+  gold_modified: boolean
+  identical_runs: boolean
+  /** The engine's own caveats, verbatim — never paraphrased into something
+   * softer. Both real audits carry the "GOLD SET IS AUTHORED..." reason. */
+  reasons: string[]
+  verdict: string
+  grader_unvalidated: boolean
+  stamp: string | null
+  read: string
+}
+
+export type GraderHealthResult = GraderHealthUnaudited | GraderHealthAudited
+
+/** Mirrors main/engramCli/graderAuditHistory.ts's GraderAuditFile — see that
+ * file for why only these fields are read directly from disk rather than via
+ * `grader-health` (which omits `thresholds`/`bias_note` entirely). */
+export interface GraderAuditThresholds {
+  qwk_floor: number
+  qwk_target: number
+  bias_max: number
+  min_n: number
+  min_runs: number
+  paradox_retest: number
+}
+
+export interface GraderAuditFile {
+  ts: string
+  verdict: string
+  qwk: number | null
+  n: number | null
+  runs: number | null
+  thresholds: GraderAuditThresholds | null
+  bias_note: string | null
+}
+
 export interface UpdateCheckResult {
   state: 'current' | 'behind' | 'unknown'
   buildCommit: string
