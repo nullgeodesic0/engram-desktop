@@ -19,6 +19,7 @@
 
 import { parsePretestGradeResults, parseGradeResult, verdictFromGrade, lapseReturnDate } from './gradeResult'
 import { humanizeNodeId } from './humanizeId'
+import { parseAuditNotification } from './taskNotification'
 
 interface TranscriptLine {
   type?: string
@@ -370,40 +371,19 @@ function auditItemCountFromPrompt(prompt: unknown): number | null {
   return Number.isFinite(n) && n > 0 ? n : null
 }
 
-/** Resolves a pending audit's verdict from a `<task-notification>` string —
- * see the AUDIT doctrine comment above for the exact real shape this reads.
- * Returns null on ANY mismatch or parse failure (wrong tool-use-id, not yet
- * `completed`, no fenced json, an item missing the documented `node`/
- * `audit.agree` fields): a mark stuck at `pending` forever is honest; a
- * fabricated verdict is not. */
-function parseAuditNotification(content: string, expectedToolUseId: string): { itemCount: number; disputedNodes: string[] } | null {
-  const toolUseId = content.match(/<tool-use-id>([^<]*)<\/tool-use-id>/)?.[1]
-  if (toolUseId !== expectedToolUseId) return null
-  const status = content.match(/<status>([^<]*)<\/status>/)?.[1]
-  if (status !== 'completed') return null
-  const result = content.match(/<result>([\s\S]*?)<\/result>/)?.[1]
-  if (!result) return null
-  const fence = result.match(/```json\s*([\s\S]*?)```/)
-  if (!fence) return null
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(fence[1])
-  } catch {
-    return null
-  }
-  if (!Array.isArray(parsed) || parsed.length === 0) return null
-  const disputedNodes: string[] = []
-  for (const item of parsed) {
-    if (typeof item !== 'object' || item === null) return null
-    const node = (item as Record<string, unknown>).node
-    const audit = (item as Record<string, unknown>).audit
-    if (typeof node !== 'string' || typeof audit !== 'object' || audit === null) return null
-    const agree = (audit as Record<string, unknown>).agree
-    if (typeof agree !== 'boolean') return null
-    if (!agree) disputedNodes.push(node)
-  }
-  return { itemCount: parsed.length, disputedNodes }
-}
+// `parseAuditNotification` (resolves a pending audit's verdict from a
+// `<task-notification>` string — see the AUDIT doctrine comment above for the
+// exact real shape it reads) now lives in `shared/taskNotification.ts`,
+// composed from that module's `parseTaskNotificationEnvelope` (tag
+// extraction) and `parseAssessorAuditVerdict` (the one function allowed to
+// parse the assessor's JSON body) — imported above. This is a PURE
+// extraction: same signature, same behavior, verified empty-diff against
+// every real transcript on this machine via `npm run check:ritual-snapshot
+// -- --diff` before this change was committed. Shared here (rather than only
+// in taskNotification.ts) because SessionManager.ts's live wire and
+// ReviewSessionView.tsx/LearnSessionView.tsx's live resolution need the exact
+// same parser this replay path uses, so replay and live can never disagree
+// about the same bytes.
 
 /** Structurally a subset of the `RitualMark` union (components/ritual/Marks.tsx)
  * — only the kinds this module can derive after the fact. Kept as a local

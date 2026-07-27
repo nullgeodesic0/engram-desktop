@@ -7,6 +7,7 @@ import { prepareSessionPermissions, type SessionPermissionSetup } from './permis
 import { NdjsonLineSplitter } from './streamParser'
 import { bridgeServer } from '../bridge/bridgeServer'
 import type { SessionEvent } from '../../shared/sessionEvents'
+import { isTaskNotificationContent } from '../../shared/taskNotification'
 import { homedir } from 'node:os'
 
 interface RawToolUseBlock {
@@ -128,16 +129,35 @@ export class SessionManager extends EventEmitter {
     }
 
     if (type === 'user') {
-      const message = d.message as { content?: unknown[] } | undefined
-      for (const block of message?.content ?? []) {
-        const b = block as { type?: string; tool_use_id?: string; is_error?: boolean; content?: unknown }
-        if (b?.type === 'tool_result') {
-          this.emitEvent({
-            type: 'tool_result',
-            toolUseId: b.tool_use_id ?? '',
-            isError: Boolean(b.is_error),
-            content: b.content,
-          })
+      const message = d.message as { content?: unknown } | undefined
+      const content = message?.content
+
+      // A background-agent completion (e.g. the assessor audit — see
+      // ritualFromTranscript.ts's AUDIT doctrine comment) arrives as a bare
+      // STRING here, not the tool_result ARRAY shape below — the two never
+      // overlap, so they're handled as fully separate branches rather than
+      // one loop assuming an array. A genuine learner turn is also a bare
+      // string but never starts with the notification envelope's tag, so it
+      // correctly falls through to "no event" (chatMessages.ts renders it as
+      // a real chat bubble; this handler has nothing live to add for it).
+      if (typeof content === 'string') {
+        if (isTaskNotificationContent(content)) {
+          this.emitEvent({ type: 'task_notification', content })
+        }
+        return
+      }
+
+      if (Array.isArray(content)) {
+        for (const block of content) {
+          const b = block as { type?: string; tool_use_id?: string; is_error?: boolean; content?: unknown }
+          if (b?.type === 'tool_result') {
+            this.emitEvent({
+              type: 'tool_result',
+              toolUseId: b.tool_use_id ?? '',
+              isError: Boolean(b.is_error),
+              content: b.content,
+            })
+          }
         }
       }
       return
