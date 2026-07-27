@@ -70,6 +70,7 @@ interface ContentBlock {
 export const RENDER_BEAT = 'mcp__engram-ui-bridge__render_beat'
 export const BEAT_OUTCOME = 'mcp__engram-ui-bridge__beat_outcome'
 export const SESSION_PHASE = 'mcp__engram-ui-bridge__session_phase'
+export const ASK_USER_QUESTION = 'mcp__engram-ui-bridge__ask_user_question'
 
 /** One bridge `tool_use` block, in true transcript emission order. */
 export interface BridgeToolUse {
@@ -348,6 +349,80 @@ function auditItemCountFromPrompt(prompt: unknown): number | null {
   return Number.isFinite(n) && n > 0 ? n : null
 }
 
+// ASK (Wave E, Task 11) — grep-verified against a real transcript before
+// writing any of this: `~/.claude/projects/-Users-tylerhadsell/
+// 87baada2-728b-42de-99ee-b9b2e2b36919.jsonl` contains two live Confidence
+// asks. The tool_use's `input` matches BridgeAskRequest's own shape minus
+// `sessionId`/`requestId` (`question`, `header`, `options: {label,
+// description?}[]`, `multiSelect`) — literally the same payload
+// mcpBridgeWorker.mjs forwards to bridgeServer.ts's `/bridge/:id/ask`, just
+// without the two fields the server itself stamps on. Its `tool_result`
+// content is an array of `{type:'text', text:string}` blocks whose text is
+// the bare JSON `{"chosen":[...]}`/`{"chosen":null}` bridgeServer.ts's
+// `BridgeAskResponse` defines — confirmed against both real results in that
+// transcript (`{"chosen":["Pretty sure"]}`, `{"chosen":["Certain"]}`).
+interface AskUserQuestionInput {
+  question: string
+  header: string
+  options: { label: string; description?: string }[]
+  multiSelect: boolean
+}
+
+/** Shape-guards a `ask_user_question` tool_use's `input` — never fabricates a
+ * question the model didn't actually send. Any structural mismatch (missing
+ * `question`/`header`, a non-array `options`, an option missing its
+ * `label`) returns null and the spawn is simply not turned into a mark. */
+function parseAskUserQuestionInput(input: Record<string, unknown>): AskUserQuestionInput | null {
+  if (typeof input.question !== 'string' || typeof input.header !== 'string') return null
+  if (!Array.isArray(input.options)) return null
+  const options: { label: string; description?: string }[] = []
+  for (const raw of input.options) {
+    if (!raw || typeof raw !== 'object') return null
+    const label = (raw as Record<string, unknown>).label
+    if (typeof label !== 'string') return null
+    const description = (raw as Record<string, unknown>).description
+    options.push(typeof description === 'string' ? { label, description } : { label })
+  }
+  return { question: input.question, header: input.header, options, multiSelect: input.multiSelect === true }
+}
+
+/** Same string-or-blocks normalization as gradeResult.ts's own (unexported)
+ * `contentToText` — kept as a small local copy rather than exporting that
+ * one, since the two call sites read genuinely different payloads (a
+ * GradeResult vs. `{chosen}`) and this module already keeps its own
+ * `walkTranscript`/parsing pieces self-contained. */
+function contentAsText(content: unknown): string | null {
+  if (typeof content === 'string') return content
+  if (Array.isArray(content)) {
+    const first = content.find((b) => b && typeof b === 'object' && 'text' in b) as { text?: unknown } | undefined
+    if (first && typeof first.text === 'string') return first.text
+  }
+  return null
+}
+
+/** Resolves an `ask_user_question` tool_result into the mark's own `answer`
+ * vocabulary — `string[]` for a real pick, `[]` for an explicit skip
+ * (`{"chosen":null}` on the wire; see RitualMark's doctrine comment in
+ * Marks.tsx for exactly why a skip is never stored as `null` here), or
+ * `undefined` when the content can't be parsed as `{chosen: ...}` at all —
+ * meaning the caller should leave the mark's `answer` at `null` (still open,
+ * or orphaned) rather than guess. Never fabricated. */
+function askAnswerFromToolResult(content: unknown): string[] | null | undefined {
+  const text = contentAsText(content)
+  if (text === null) return undefined
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    return undefined
+  }
+  if (!parsed || typeof parsed !== 'object') return undefined
+  const chosen = (parsed as Record<string, unknown>).chosen
+  if (chosen === null) return []
+  if (Array.isArray(chosen) && chosen.every((c) => typeof c === 'string')) return chosen as string[]
+  return undefined
+}
+
 // `parseAuditNotification` (resolves a pending audit's verdict from a
 // `<task-notification>` string — see the AUDIT doctrine comment above for the
 // exact real shape it reads) now lives in `shared/taskNotification.ts`,
@@ -386,8 +461,39 @@ export type DerivedRitualMark =
     }
   | { id: string; atIndex: number; kind: 'milestone'; node: string; scale: StabilityMilestoneScale; sBefore: number; sAfter: number }
   | { id: string; atIndex: number; kind: 'tool-failure'; failureKind: ToolFailureKind }
+  | {
+      id: string
+      atIndex: number
+      kind: 'ask'
+      // The transcript's own tool_use id — there is no real bridge
+      // `requestId` to recover in a replay (that value is minted fresh,
+      // server-side, per live HTTP call; see bridgeServer.ts). It only ever
+      // needs to be a stable, unique key to match this mark's tool_result
+      // within this one derive walk, and a React key at render time — the
+      // tool_use id satisfies both without inventing anything.
+      requestId: string
+      header: string
+      question: string
+      options: { label: string; description?: string }[]
+      multiSelect: boolean
+      answer: string[] | null
+      live: false
+    }
 
 /** Rebuilds the durable subset of ritual marks (beat cards, node crossings,
+ *  - `ask` marks (Wave E, Task 11) come from any `ask_user_question` bridge
+ *    tool_use — pushed `answer: null, live: false` at the spawn, resolved to
+ *    a real `answer` if and only if a matching tool_result parses cleanly
+ *    (see `askAnswerFromToolResult`'s doctrine comment above). Unlike
+ *    `audit`, this one CAN resolve within a single live sitting too (the
+ *    tool_result lands as an ordinary array-content `type:"user"` line, not
+ *    a background-agent `<task-notification>`) — but the live views resolve
+ *    their own open ask marks directly at answer time, never through this
+ *    replay path; this function only ever produces `live: false` marks,
+ *    which read correctly either way (already-answered renders identically
+ *    regardless of `live`; never-answered renders as the honest orphaned
+ *    state, which is exactly right for anything only reconstructable after
+ *    the fact).
  * phase frontispieces, the pretest diagnostic plate) from a transcript.
  * Mirrors the live paths exactly:
  *  - `crossToNode` in LearnSessionView only logs a crossing when a node was
@@ -494,6 +600,11 @@ export function deriveRitualMarks(entries: unknown[]): DerivedRitualMark[] {
   // own `<tool-use-id>` is the real match key, this queue just bounds the
   // search to spawns not yet resolved).
   const pendingAudits: Array<{ toolUseId: string; markIndex: number }> = []
+  // ask_user_question spawns awaiting their own tool_result — keyed by
+  // toolUseId directly (not a FIFO queue like pendingAudits/
+  // pendingExplorableByNode above), since the tool_result event already
+  // carries the exact tool_use id it answers.
+  const pendingAsks = new Map<string, number>()
 
   for (const event of walkTranscript(entries)) {
     if (event.kind === 'task_notification') {
@@ -537,6 +648,19 @@ export function deriveRitualMarks(entries: unknown[]): DerivedRitualMark[] {
         pendingToolFailureKind.delete(event.toolUseId)
         if (event.isError) {
           marks.push({ id: `dmark-${seq++}`, atIndex: messageCount, kind: 'tool-failure', failureKind })
+        }
+      }
+      const askMarkIndex = pendingAsks.get(event.toolUseId)
+      if (askMarkIndex !== undefined) {
+        pendingAsks.delete(event.toolUseId)
+        const answer = askAnswerFromToolResult(event.content)
+        // `undefined` means "couldn't parse a {chosen:...} shape" — leave the
+        // mark exactly as pushed (`answer: null, live: false`), which is the
+        // orphaned-replay rendering anyway, same "never fabricate" discipline
+        // as parseAuditNotification above.
+        if (answer !== undefined) {
+          const existing = marks[askMarkIndex] as Extract<DerivedRitualMark, { kind: 'ask' }>
+          marks[askMarkIndex] = { ...existing, answer }
         }
       }
       if (pendingPretestToolUseIds.has(event.toolUseId)) {
@@ -633,6 +757,25 @@ export function deriveRitualMarks(entries: unknown[]): DerivedRitualMark[] {
         const queue = pendingExplorableByNode.get(node)
         if (queue) queue.push(marks.length - 1)
         else pendingExplorableByNode.set(node, [marks.length - 1])
+      }
+      continue
+    }
+    if (event.name === ASK_USER_QUESTION) {
+      const parsedInput = parseAskUserQuestionInput(event.input)
+      if (parsedInput) {
+        marks.push({
+          id: `dmark-${seq++}`,
+          atIndex: messageCount,
+          kind: 'ask',
+          requestId: event.id,
+          header: parsedInput.header,
+          question: parsedInput.question,
+          options: parsedInput.options,
+          multiSelect: parsedInput.multiSelect,
+          answer: null,
+          live: false,
+        })
+        pendingAsks.set(event.id, marks.length - 1)
       }
       continue
     }

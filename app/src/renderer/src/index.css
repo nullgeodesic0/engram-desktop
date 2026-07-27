@@ -639,6 +639,32 @@
   animation: audit-ink-in calc(var(--dur-base) * 3) var(--ease-out-soft);
 }
 
+/* AskCard (ritual/AskCard.tsx) — Wave E, Task 11. An OPEN ask genuinely blocks
+ * the tutor's turn (bridgeServer.ts holds the HTTP response open), so it
+ * should read as a held breath rather than an ordinary card: a slow,
+ * low-opacity warm border pulse, never a hard color swap. Already covered by
+ * the global `prefers-reduced-motion` kill-switch above (zeros every
+ * animation duration app-wide), so no separate matchMedia guard is needed —
+ * same discipline Wave D's streaming caret and label crossfade followed. */
+@keyframes ask-pending-pulse {
+  0%, 100% { border-color: var(--color-hairline); }
+  50% { border-color: var(--color-ink-warm-dim); }
+}
+.ask-card-pending {
+  animation: ask-pending-pulse 2.6s ease-in-out infinite;
+}
+/* Once answered (or, in replay, once found never-answered) the held breath
+ * lets go: a single warm ink-wash, same family as AuditCard's own entrance
+ * above, just warm-toned since this is the tutor's own accent color rather
+ * than a neutral audit. */
+@keyframes ask-settle-in {
+  0% { background-color: color-mix(in srgb, var(--color-ink-warm) 14%, transparent); }
+  100% { background-color: transparent; }
+}
+.ask-card-settle {
+  animation: ask-settle-in calc(var(--dur-base) * 3) var(--ease-out-soft);
+}
+
 /* VerifySeal (Marks.tsx) — a single subtle settle-in, once, on arrival: the
  * seal itself is the payoff, so no repeating pulse or wash, just a quiet
  * press like StashStamp's but smaller-scale and warm-toned. */

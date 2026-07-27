@@ -1,8 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import type { SessionEvent } from '../../../shared/sessionEvents'
-import type { BridgeAskRequest } from '../../../shared/bridgeProtocol'
 import type { TopicListEntry, ArtifactEntry, TopicGraph, ExportSittingFormat } from '../../../shared/types'
-import { AskDialog } from '../components/AskDialog'
 import { RateLimitBanner } from '../components/RateLimitBanner'
 import { isBlockingRateLimitStatus } from '../../../shared/rateLimit'
 import { ChatMessageView } from '../components/ChatMessageView'
@@ -260,7 +258,6 @@ export function LearnSessionView({
   const [production, setProduction] = useState('')
   const [attachedFiles, setAttachedFiles] = useState<string[]>([])
   const [markdownPreview, setMarkdownPreview] = useState(false)
-  const [askRequest, setAskRequest] = useState<BridgeAskRequest | null>(null)
   const [rateLimit, setRateLimit] = useState<{ status: string; resetsAt: number | null } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [jobs, setJobs] = useState<Job[]>([])
@@ -546,7 +543,21 @@ export function LearnSessionView({
     })
     const offAsk = window.engram.onBridgeAsk((req) => {
       if (req.sessionId !== sessionIdRef.current) return
-      setAskRequest(req)
+      // Wave E, Task 11 — the ask lands as an inline transcript mark instead
+      // of opening the AskDialog modal. Pinned at the current transcript end
+      // (`pushMark` stamps `atIndex: messagesRef.current.length`), same
+      // convention every other live mark uses. `answerAsk` below resolves it
+      // in place by `requestId` once the learner picks.
+      pushMark({
+        kind: 'ask',
+        requestId: req.requestId,
+        header: req.header,
+        question: req.question,
+        options: req.options,
+        multiSelect: req.multiSelect,
+        answer: null,
+        live: true,
+      })
       tutorActivity.dispatchAskOpened()
     })
     // The model reliably calls the render_beat MCP tool with the real current
@@ -1217,16 +1228,21 @@ export function LearnSessionView({
     await window.engram.sendMessage(sessionId, sentText)
   }
 
-  async function answerAsk(chosen: string[] | null) {
-    if (!askRequest) return
+  async function answerAsk(requestId: string, chosen: string[] | null) {
+    const mark = marks.find((m): m is Extract<RitualMark, { kind: 'ask' }> => m.kind === 'ask' && m.requestId === requestId)
+    if (!mark) return
     // Mirror the confidence pick locally before forwarding — best-effort, never
     // blocks the real answer even if the topic/node aren't known yet.
-    if (askRequest.header === 'Confidence' && chosen && chosen[0] && activeTopic?.topic && currentNodeId) {
-      const index = askRequest.options.findIndex((o) => o.label === chosen[0])
+    if (mark.header === 'Confidence' && chosen && chosen[0] && activeTopic?.topic && currentNodeId) {
+      const index = mark.options.findIndex((o) => o.label === chosen[0])
       recordConfidence(activeTopic.topic, currentNodeId, chosen[0], index >= 0 ? index : undefined)
     }
-    await window.engram.answerBridgeQuestion(askRequest.requestId, { chosen })
-    setAskRequest(null)
+    await window.engram.answerBridgeQuestion(requestId, { chosen })
+    // `chosen ?? []` — an explicit Skip (`chosen: null` on the wire) becomes
+    // an empty array here, never `null`: this mark's `answer: null` means
+    // "still open," so a real skip must land on the non-null side of that
+    // distinction (see RitualMark's doctrine comment in Marks.tsx).
+    setMarks((prev) => prev.map((m) => (m.kind === 'ask' && m.requestId === requestId ? { ...m, answer: chosen ?? [] } : m)))
     tutorActivity.dispatchAskAnswered()
   }
 
@@ -1619,13 +1635,13 @@ export function LearnSessionView({
                 </>
               )
             })()}
-            <ChatScrollRegion deps={[messages, busy]}>
+            <ChatScrollRegion deps={[messages, busy, marks]}>
               <div className="transcript-measure flex flex-col gap-5">
                 {activeTopic != null && sessionPhase !== 'intake' && (
                   <SessionOpenPlate walkNumber={walkNumber} date={new Date()} recap={lastWalk} />
                 )}
                 {marks.filter((k) => k.atIndex === 0).map((k) => (
-                  <MarkView key={k.id} mark={k} />
+                  <MarkView key={k.id} mark={k} onAnswerAsk={answerAsk} />
                 ))}
                 {messages.map((m, i) => (
                   <Fragment key={m.id}>
@@ -1640,7 +1656,7 @@ export function LearnSessionView({
                     {marks
                       .filter((k) => k.atIndex === i + 1 || (i === messages.length - 1 && k.atIndex > messages.length))
                       .map((k) => (
-                        <MarkView key={k.id} mark={k} />
+                        <MarkView key={k.id} mark={k} onAnswerAsk={answerAsk} />
                       ))}
                   </Fragment>
                 ))}
@@ -1684,7 +1700,13 @@ export function LearnSessionView({
             <div className="shrink-0 fig-caption px-1">this sitting has closed · session history holds the record</div>
           )}
 
-          {!busy && (
+          {/* Chat Presence Wave E, Task 11 — the composer stays mounted (just
+              disabled, via disabledReason below) while an ask is open, so
+              the inline AskCard sits alongside a visibly-locked composer
+              rather than the composer vanishing outright the way it did
+              under the old modal. Every other `busy` reason still hides it
+              exactly as before. */}
+          {(!busy || tutorActivity.activity.kind === 'awaiting-ask') && (
             <MessageComposer
               production={production}
               onProductionChange={setProduction}
@@ -1703,7 +1725,6 @@ export function LearnSessionView({
         </div>
       )}
 
-      {askRequest && <AskDialog request={askRequest} onAnswer={answerAsk} />}
       {activeTopic && (
         <SessionHistoryDrawer
           historyKey={activeTopic.topic}
