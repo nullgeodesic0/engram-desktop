@@ -4,6 +4,7 @@ import { humanizeNodeId } from '../../../shared/humanizeId'
 import { Modal } from './ui/Modal'
 import { SkeletonBar } from './Skeleton'
 import { friendlyErrorText } from '../shared/friendlyError'
+import { MathRenderer } from './MathRenderer'
 
 /** `ts` is a local YYYY-MM-DD string (engram.py's own `date.today()`) — parsed
  * without a `Z` suffix so it reads as local midnight, same discipline every
@@ -44,7 +45,7 @@ function Row({ row, onGoNode }: { row: Misconception; onGoNode?: (topicId: strin
         <span className="text-sm text-[var(--color-text-primary)]">{humanizeNodeId(row.node)}</span>
         <span className="label-data text-[10px] text-[var(--color-text-faint)]">{formatTs(row.ts)}</span>
       </div>
-      <p className="text-xs text-[var(--color-text-dim)] leading-snug">{row.description}</p>
+      <MathRenderer text={row.description} className="text-xs text-[var(--color-text-dim)] leading-snug" />
     </div>
   )
   if (!onGoNode) {

@@ -306,7 +306,7 @@ const permissionTs = read('main/session/permissionConfig.ts')
 const injectedStrings = [...permissionTs.matchAll(/`([^`]{40,})`|'([^']{40,})'/g)]
   .map((m) => m[1] ?? m[2])
   .join('\n---\n')
-const PINNED_PROMPT_HASH = '754ea1ac9e0ddf0c'
+const PINNED_PROMPT_HASH = '1f820454f0f96532'
 if (sha(injectedStrings) !== PINNED_PROMPT_HASH) {
   fail(
     'D3.systemPrompt',

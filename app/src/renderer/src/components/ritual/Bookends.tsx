@@ -3,6 +3,7 @@ import { GradeTally } from '../GradeTally'
 import type { GradeResult } from '../../../../shared/gradeResult'
 import { humanizeNodeId } from '../../../../shared/humanizeId'
 import { StabilityMovement } from '../charts/StabilityMovement'
+import { MathRenderer } from '../MathRenderer'
 
 /** Ceremonial first element of a Learn session's transcript. */
 /** A single ceremonial opener line — the topic title and frontier node live
@@ -70,8 +71,11 @@ export const SessionCeremony = memo(function SessionCeremony({
         </div>
       )}
       {commitment && (
-        <div className="border-t border-[var(--color-hairline)] pt-2.5 font-[var(--font-serif)] italic text-xs text-[var(--color-text-dim)]">
-          “{commitment}” <span className="not-italic label-data text-[10px] text-[var(--color-text-faint)]">— signed</span>
+        <div className="border-t border-[var(--color-hairline)] pt-2.5 font-[var(--font-serif)] italic text-xs text-[var(--color-text-dim)] flex items-baseline gap-1 flex-wrap">
+          <span>“</span>
+          <MathRenderer text={commitment} inlineOnly />
+          <span>”</span>
+          <span className="not-italic label-data text-[10px] text-[var(--color-text-faint)]">— signed</span>
         </div>
       )}
     </div>

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { BridgeAskRequest } from '../../../shared/bridgeProtocol'
 import { Modal } from './ui/Modal'
+import { MathRenderer } from './MathRenderer'
 
 interface AskDialogProps {
   request: BridgeAskRequest
@@ -39,7 +40,7 @@ export function AskDialog({ request, onAnswer }: AskDialogProps) {
     >
       <div className="flex flex-col gap-4">
         <div>
-          <div className="text-base text-[var(--color-text-primary)] mt-1">{request.question}</div>
+          <MathRenderer text={request.question} inlineOnly className="text-base text-[var(--color-text-primary)] mt-1" />
         </div>
 
         {!showOther ? (
@@ -70,8 +71,10 @@ export function AskDialog({ request, onAnswer }: AskDialogProps) {
                   onClick={() => onAnswer([opt.label])}
                   className="focus-ring panel px-4 py-2.5 text-left hover:bg-[var(--color-surface-3)] hover:border-[var(--color-ink-warm-dim)] transition-colors duration-[var(--dur-base)]"
                 >
-                  <div className="text-sm text-[var(--color-text-primary)]">{opt.label}</div>
-                  {opt.description && <div className="text-xs text-[var(--color-text-dim)] mt-0.5">{opt.description}</div>}
+                  <MathRenderer text={opt.label} inlineOnly className="text-sm text-[var(--color-text-primary)]" />
+                  {opt.description && (
+                    <MathRenderer text={opt.description} inlineOnly className="text-xs text-[var(--color-text-dim)] mt-0.5" />
+                  )}
                 </button>
               ))}
               <button

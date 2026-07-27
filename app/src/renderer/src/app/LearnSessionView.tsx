@@ -4,6 +4,7 @@ import type { TopicListEntry, ArtifactEntry, TopicGraph, ExportSittingFormat } f
 import { RateLimitBanner } from '../components/RateLimitBanner'
 import { isBlockingRateLimitStatus } from '../../../shared/rateLimit'
 import { ChatMessageView } from '../components/ChatMessageView'
+import { MathRenderer } from '../components/MathRenderer'
 import { MessageComposer } from '../components/MessageComposer'
 import { JobsRail, type Job } from '../components/JobsRail'
 import { TopicSettingsModal } from '../components/TopicSettingsModal'
@@ -1513,7 +1514,9 @@ export function LearnSessionView({
               <span className="label-data text-xs text-[var(--color-text-faint)] shrink-0">node {nodePosition}</span>
             )}
             <BeatStepper current={currentBeat} trail={beatTrail} />
-            {progressNote && <span className="ml-auto fig-caption truncate min-w-0">{progressNote}</span>}
+            {progressNote && (
+              <MathRenderer text={progressNote} inlineOnly className="ml-auto fig-caption truncate min-w-0" />
+            )}
           </div>
         )}
         {started && whyChainOpen && whyChain.length > 0 && (

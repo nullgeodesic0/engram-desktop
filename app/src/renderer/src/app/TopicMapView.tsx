@@ -141,9 +141,7 @@ function NodeMisconceptions({
       </div>
       <div className="flex flex-col gap-1.5">
         {items.map((m) => (
-          <p key={m.id} className="leading-snug">
-            {m.description}
-          </p>
+          <MathRenderer key={m.id} text={m.description} className="leading-snug" />
         ))}
       </div>
     </div>

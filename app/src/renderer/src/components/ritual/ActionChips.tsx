@@ -1,3 +1,5 @@
+import { MathRenderer } from '../MathRenderer'
+
 /** A model-suggested next step surfaced via the suggest_action bridge:ui tool —
  * ghost chips above the composer. Acting on one never sends anything by itself;
  * at most it prefills the composer (see LearnSessionView's handleSuggestedAction) —
@@ -25,7 +27,7 @@ export function ActionChips({
           onClick={() => onAct(a)}
           className="focus-ring rounded-full border border-[var(--color-hairline)] px-3 py-1 text-xs text-[var(--color-text-dim)] hover:text-[var(--color-ink-warm)] hover:border-[var(--color-ink-warm-dim)]"
         >
-          {a.label}
+          <MathRenderer text={a.label} inlineOnly />
         </button>
       ))}
     </div>
