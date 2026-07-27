@@ -4,6 +4,7 @@ import type { ChatMessage } from '../../../shared/chatMessages'
 import { parseGradeResult, parseGradeResults, type GradeResult } from '../../../shared/gradeResult'
 import { deriveRitualMarks, type DerivedRitualMark } from '../../../shared/ritualFromTranscript'
 import { sittingToMarkdown, sittingToPrintHtml, type SittingMeta } from '../shared/sittingToMarkdown'
+import { recordView } from '../shared/recentlyViewed'
 import { Modal } from './ui/Modal'
 import { ChatMessageView } from './ChatMessageView'
 import { GradeResultCard } from './GradeResultCard'
@@ -326,7 +327,7 @@ export function SessionHistoryDrawer({
       // live session that opened the drawer.
       const target =
         initialSessionId && list.some((e) => e.sessionId === initialSessionId) ? initialSessionId : (list[0]?.sessionId ?? null)
-      if (target) selectEntry(target)
+      if (target) selectEntry(target, list)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, historyKey, initialSessionId])
@@ -341,11 +342,31 @@ export function SessionHistoryDrawer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [`${initialSessionId}:${anchorIndex}`])
 
-  function selectEntry(id: string) {
+  // `rows` defaults to the current `entries` state for the ordinary click
+  // path, but the auto-select-most-recent call in the effect above must pass
+  // the freshly-fetched list explicitly: it fires synchronously inside the
+  // same fetchEntries.then() that calls setEntries(list), so the component's
+  // `entries` state (and this function's default-param closure over it) is
+  // still the PREVIOUS value at that point — state updates aren't visible
+  // until the next render. Without the explicit list, recording would
+  // silently never fire for a default/anchored open, only for real clicks.
+  function selectEntry(id: string, rows: HistoryRow[] | null = entries) {
     setSelectedId(id)
     setLoadingTranscript(true)
     setTimeline(null)
     setExportStatus(null)
+    // Recently-viewed recording — the single choke point for "a sitting was
+    // opened", whether the user clicked a row or this fired from the
+    // auto-select-most-recent path in the effect above; both are a real view
+    // of this sitting's transcript. Label mirrors historyRowTag's "Learn ·
+    // <topic>" / "Review" shape so it reads the same later in Home/the
+    // palette, outside this drawer's own historyKey context.
+    const entry = rows?.find((e) => e.sessionId === id)
+    if (entry) {
+      const label =
+        historyKey === ALL_HISTORY_KEY ? historyRowTag(entry) : historyKey === 'review' ? 'Review' : `Learn · ${title ?? historyKey}`
+      recordView({ kind: 'sitting', sessionId: id, label })
+    }
     window.engram.getTranscript(id).then((lines) => {
       setTimeline(buildHistoryTimeline(lines))
       setLoadingTranscript(false)

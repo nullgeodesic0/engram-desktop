@@ -112,6 +112,11 @@ export default function App() {
   // every topic and both loops, so it isn't scoped to whichever view is
   // active. Reachable from the Session menu and the command palette.
   const [allHistoryOpen, setAllHistoryOpen] = useState(false)
+  // Deep-link into the "All Sessions" drawer from a recently-viewed sitting
+  // (Home's quiet row, the palette's empty-query state) — cleared on close so
+  // a later plain open (Session menu, ⇧⌘H) always falls back to the drawer's
+  // own default "most recent" behavior instead of re-landing on a stale sitting.
+  const [historyDeepLinkSession, setHistoryDeepLinkSession] = useState<string | null>(null)
   const [deepLinkTopic, setDeepLinkTopic] = useState<string | null>(null)
   const [deepLinkNode, setDeepLinkNode] = useState<{ topicId: string; nodeId: string } | null>(null)
   // Tutor-initiated nudge to a specific node — pans the map if we're already
@@ -173,6 +178,11 @@ export default function App() {
   function goToNode(topicId: string, nodeId: string) {
     setDeepLinkNode({ topicId, nodeId })
     setView('topics')
+  }
+
+  function goToSitting(sessionId: string) {
+    setHistoryDeepLinkSession(sessionId)
+    setAllHistoryOpen(true)
   }
 
   const collapsed = narrow && !pinnedOpen
@@ -301,6 +311,8 @@ export default function App() {
                 onGoCoach={() => setView('dashboard')}
                 onGoTopic={goToTopic}
                 onNewTopic={() => setView('learn')}
+                onGoNode={goToNode}
+                onGoSitting={goToSitting}
               />
             </div>
           )}
@@ -360,6 +372,7 @@ export default function App() {
         onClose={() => setPaletteOpen(false)}
         onGoTopic={goToTopic}
         onGoNode={goToNode}
+        onGoSitting={goToSitting}
         navCommands={[
           ...NAV.map((n) => ({ id: `nav:${n.id}`, label: n.label, hint: `⌘${n.hint}`, action: () => setView(n.id) })),
           { id: 'nav:history', label: 'Session History', hint: '⇧⌘H', action: () => setAllHistoryOpen(true) },
@@ -369,7 +382,11 @@ export default function App() {
         historyKey={ALL_HISTORY_KEY}
         title="All Sessions"
         open={allHistoryOpen}
-        onClose={() => setAllHistoryOpen(false)}
+        onClose={() => {
+          setAllHistoryOpen(false)
+          setHistoryDeepLinkSession(null)
+        }}
+        initialSessionId={historyDeepLinkSession ?? undefined}
       />
       </div>
     </div>
