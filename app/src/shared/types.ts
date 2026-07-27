@@ -188,6 +188,13 @@ export interface ActiveExperiment {
 export interface TopicSettings {
   systemPromptExtra: string
   contextFiles: string[]
+  /** Local YYYY-MM-DD deadline the learner set for this topic, or null/absent
+   * if none — mirrors main/session/topicSettings.ts's own TopicSettings (see
+   * that file's doc comment for why this app keeps two structurally-matched
+   * declarations rather than a shared import across the main/renderer
+   * boundary). Optional for the same reason `contextFiles` predates some
+   * saved settings on disk. */
+  targetDate?: string | null
 }
 
 export interface ArtifactEntry {
