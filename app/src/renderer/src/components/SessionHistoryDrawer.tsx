@@ -521,6 +521,20 @@ export function SessionHistoryDrawer({
     if (!isReviewSitting) return timeline.grades.map((g) => ({ batch: g, resolvedIndex: g.atIndex }))
     return timeline.grades.map((g) => ({ batch: g, resolvedIndex: nextProbeHeaderAt(timeline.messages, g.atIndex) }))
   }, [timeline, isReviewSitting])
+  /** Carried-over fix (chat-ordering-fix-report.md's follow-up list) — Review
+   * only: `lapse`/`milestone` marks re-anchored through the identical
+   * `nextProbeHeaderAt` resolution `resolvedGrades` already gets, so a
+   * reopened sitting shows them after the verdict commentary that names
+   * them, immediately before the next probe — matching ReviewSessionView's
+   * live rendering exactly. Learn's `kind !== 'review'` path is untouched:
+   * its `atIndex` boundary convention never had this bug (see the
+   * `isReviewSitting` doctrine comment above). */
+  const resolvedOtherMarks = useMemo(() => {
+    if (!timeline || !isReviewSitting) return []
+    return timeline.marks
+      .filter((m) => m.kind === 'lapse' || m.kind === 'milestone')
+      .map((m) => ({ mark: m, resolvedIndex: nextProbeHeaderAt(timeline.messages, m.atIndex) }))
+  }, [timeline, isReviewSitting])
   function renderGradeBatch(g: GradeBatch) {
     return g.results.map((r, j) => (
       <div key={`${g.id}-${j}`} className="contents" data-anchor-index={g.sourceIndex}>
@@ -613,7 +627,7 @@ export function SessionHistoryDrawer({
                     .filter((g) => g.resolvedIndex === 0)
                     .flatMap((g) => renderGradeBatch(g.batch))}
                 {timeline.marks
-                  .filter((k) => k.atIndex === 0)
+                  .filter((k) => k.atIndex === 0 && k.kind !== 'lapse' && k.kind !== 'milestone')
                   .map((k) => (
                     <MarkView key={k.id} mark={k} />
                   ))}
@@ -634,6 +648,11 @@ export function SessionHistoryDrawer({
                               {resolvedGrades
                                 .filter((g) => g.resolvedIndex === i)
                                 .flatMap((g) => renderGradeBatch(g.batch))}
+                              {resolvedOtherMarks
+                                .filter((g) => g.resolvedIndex === i)
+                                .map((g) => (
+                                  <MarkView key={g.mark.id} mark={g.mark} />
+                                ))}
                               {reviewCrossings
                                 .filter((c) => c.atMessageIndex === i)
                                 .map((c) => (
@@ -649,19 +668,29 @@ export function SessionHistoryDrawer({
                         .filter((g) => g.resolvedIndex === i + 1)
                         .flatMap((g) => renderGradeBatch(g.batch))}
                     {timeline.marks
-                      .filter((k) => k.atIndex === i + 1 || (i === timeline.messages.length - 1 && k.atIndex > timeline.messages.length))
+                      .filter(
+                        (k) =>
+                          (k.atIndex === i + 1 || (i === timeline.messages.length - 1 && k.atIndex > timeline.messages.length)) &&
+                          k.kind !== 'lapse' &&
+                          k.kind !== 'milestone',
+                      )
                       .map((k) => (
                         <MarkView key={k.id} mark={k} />
                       ))}
                   </div>
                 ))}
-                {/* Review only: grade batches whose next probe header never
-                    arrived — the sitting's last graded item, or one that
-                    closed before producing its next probe. */}
+                {/* Review only: grade batches, and the re-anchored lapse/
+                    milestone marks, whose next probe header never arrived —
+                    the sitting's last graded item, or one that closed before
+                    producing its next probe. */}
                 {isReviewSitting &&
                   resolvedGrades
                     .filter((g) => g.resolvedIndex === null)
                     .flatMap((g) => renderGradeBatch(g.batch))}
+                {isReviewSitting &&
+                  resolvedOtherMarks
+                    .filter((g) => g.resolvedIndex === null)
+                    .map((g) => <MarkView key={g.mark.id} mark={g.mark} />)}
                 {timeline.messages.length === 0 && !loadingTranscript && (
                   <div className="text-sm text-[var(--color-text-faint)] px-1">Empty transcript.</div>
                 )}

@@ -190,6 +190,20 @@ export function isArtifactSmithSpawnEvent(name: string, input: Record<string, un
   return JSON.stringify(input).includes('engram-artifact-smith')
 }
 
+/** True iff this spawn is the engram-assessor at all — audit (`/review`'s
+ * honesty check) or verification (`/learn`'s batch-grade), undifferentiated.
+ * Chat Presence's `tutorActivity.ts` (renderer-local, live-only) uses this
+ * looser check for its `grading: 'assessing'` activity: it needs to know
+ * "the assessor is working," full stop, the instant the spawn tool_use
+ * fires — the narrower `isAssessorAuditSpawnEvent` below (which also
+ * requires the word "audit") exists for a different purpose (Review's
+ * `AuditCard`/`pending` mark, which must specifically NOT fire for a /learn
+ * verification spawn of the same subagent) and would under-fire here. */
+export function isAssessorSpawnEvent(name: string, input: Record<string, unknown>): boolean {
+  if (!isSubagentSpawnTool(name)) return false
+  return JSON.stringify(input).toLowerCase().includes('engram-assessor')
+}
+
 /** True iff this spawn is the assessor auditing a /review sitting's own
  * self-graded items (SKILL.md §3's honesty check) — differentiated from a
  * /learn verification spawn of the SAME subagent by the literal word "audit"
