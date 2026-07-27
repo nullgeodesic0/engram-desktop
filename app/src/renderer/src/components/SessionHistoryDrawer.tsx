@@ -5,6 +5,7 @@ import { parseGradeResult, parseGradeResults, type GradeResult } from '../../../
 import { deriveRitualMarks, type DerivedRitualMark } from '../../../shared/ritualFromTranscript'
 import { deriveReviewCrossings, nextProbeHeaderAt } from '../../../shared/reviewCrossing'
 import { isTaskNotificationContent } from '../../../shared/taskNotification'
+import { isMarkBoundaryToolUse } from '../../../shared/signals/tutorSignals'
 import { sittingToMarkdown, sittingToPrintHtml, type SittingMeta } from '../shared/sittingToMarkdown'
 import { recordView } from '../shared/recentlyViewed'
 import { Modal } from './ui/Modal'
@@ -21,7 +22,7 @@ interface TranscriptLine {
    * instead of reading receipts up through today. */
   timestamp?: string
   message?: {
-    content?: string | { type?: string; text?: string; content?: unknown }[]
+    content?: string | { type?: string; text?: string; content?: unknown; name?: string; input?: Record<string, unknown> }[]
   }
 }
 
@@ -85,6 +86,10 @@ export function buildHistoryTimeline(
   let seenFirstUser = false
   let idCounter = 0
   let gradeSeq = 0
+  // The bubble-split boundary (the interleave fix) — same flag, same shared
+  // predicate as `parseTranscriptToMessages`; see that function's SPLIT RULE
+  // doctrine comment in shared/chatMessages.ts.
+  let boundarySinceLastText = false
 
   for (let idx = 0; idx < lines.length; idx++) {
     const line = lines[idx]
@@ -107,14 +112,25 @@ export function buildHistoryTimeline(
 
     if (line.type === 'assistant' && Array.isArray(line.message?.content)) {
       for (const block of line.message.content) {
+        if (
+          block.type === 'tool_use' &&
+          typeof block.name === 'string' &&
+          typeof block.input === 'object' &&
+          block.input !== null &&
+          isMarkBoundaryToolUse(block.name, block.input)
+        ) {
+          boundarySinceLastText = true
+          continue
+        }
         if (block.type !== 'text' || !block.text) continue
         const last = messages[messages.length - 1]
-        if (last && last.role === 'assistant') {
+        if (last && last.role === 'assistant' && !boundarySinceLastText) {
           last.text += block.text
         } else {
           messages.push({ id: `t${idCounter++}`, role: 'assistant', text: block.text })
           messageSourceIndex.push(idx)
         }
+        boundarySinceLastText = false
       }
       continue
     }
@@ -629,7 +645,7 @@ export function SessionHistoryDrawer({
                 {timeline.marks
                   .filter((k) => k.atIndex === 0 && k.kind !== 'lapse' && k.kind !== 'milestone')
                   .map((k) => (
-                    <MarkView key={k.id} mark={k} />
+                    <MarkView key={k.id} mark={k} suppressBeatExcerpt={timeline.messages[k.atIndex]?.role === 'assistant'} />
                   ))}
                 {timeline.messages.map((m, i) => (
                   <div key={m.id} className="contents">
@@ -675,7 +691,12 @@ export function SessionHistoryDrawer({
                           k.kind !== 'milestone',
                       )
                       .map((k) => (
-                        <MarkView key={k.id} mark={k} />
+                        // suppressBeatExcerpt — same rule as the live views:
+                        // the message this mark renders immediately before is
+                        // the beat's own prose, so the marker's one-line
+                        // excerpt would repeat it (see MarkView's prop
+                        // doctrine comment in ritual/Marks.tsx).
+                        <MarkView key={k.id} mark={k} suppressBeatExcerpt={timeline.messages[k.atIndex]?.role === 'assistant'} />
                       ))}
                   </div>
                 ))}

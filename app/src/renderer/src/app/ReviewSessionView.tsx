@@ -46,6 +46,7 @@ import {
   isReviewRateCommand,
   isAssessorAuditSpawnEvent,
   classifyEngramBashFailure,
+  isMarkBoundaryToolUse,
   type ToolFailureKind,
 } from '../../../shared/signals/tutorSignals'
 import { QueueRail } from '../components/ritual/QueueRail'
@@ -244,6 +245,18 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
   // id claimed at dispatch time, so a later `isError` tool_result can push
   // the matching specific `tool-failure` mark.
   const toolFailureRegistry = useRef<Map<string, ToolFailureKind>>(new Map())
+  // The bubble-split boundary (the interleave fix) — identical wiring to
+  // LearnSessionView's own assistantBoundaryRef; see that ref's doctrine
+  // comment and isMarkBoundaryToolUse in shared/signals/tutorSignals.ts.
+  // Review's probe-header mechanism (beforeProbeHeader + nextProbeHeaderAt,
+  // shared/reviewCrossing.ts) is untouched: it resolves grade cards INSIDE a
+  // message at a parsed text anchor, which the split can only make more
+  // precise (a mid-turn rate call now also ends the bubble, so commentary
+  // and next-probe prose separated by the call become separate messages —
+  // the header resolution walks the same messages array either way). Mid-
+  // turn asks/phases here had the exact same disease Learn did; the same
+  // split fixes both.
+  const assistantBoundaryRef = useRef(false)
 
   function pushLapseMark(node: string, returnDate: string | null) {
     setMarks((prev) => [
@@ -365,17 +378,28 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
     // function, this one is live-only and has no replay counterpart.
     tutorActivity.dispatchSessionEvent(event)
     switch (event.type) {
-      case 'text':
+      case 'text': {
+        // The interleave fix — a mark-producing tool_use since the last delta
+        // ends the growing bubble, so the mark pinned at that boundary renders
+        // between the prose that preceded it and the prose now arriving.
+        const breakBubble = assistantBoundaryRef.current
+        assistantBoundaryRef.current = false
         setMessages((prev) => {
           const last = prev[prev.length - 1]
-          if (last && last.role === 'assistant') {
+          if (last && last.role === 'assistant' && !breakBubble) {
             return [...prev.slice(0, -1), { ...last, text: last.text + event.text }]
           }
           return [...prev, { id: crypto.randomUUID(), role: 'assistant', text: event.text }]
         })
         break
+      }
       case 'tool_use':
         appendLog(`→ ${event.name}(${JSON.stringify(event.input).slice(0, 80)})`)
+        // The interleave fix — flag the bubble split FIRST, before any of the
+        // specific-signal branches below; same shared predicate replay uses.
+        if (isMarkBoundaryToolUse(event.name, event.input)) {
+          assistantBoundaryRef.current = true
+        }
         // Task 7 — claim this Bash call's id for tool-failure purposes before
         // the rate-specific branch below (same registry, same classifier
         // LearnSessionView and deriveRitualMarks share).
@@ -550,6 +574,9 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
     // one, regardless of how much history the transcript hydration below
     // rebuilds. See shared/tutorActivity.ts's doctrine comment.
     tutorActivity.reset()
+    // A fresh spawn's first text delta always starts its own bubble — never
+    // inherit a stale split flag from a previous sitting's last tool call.
+    assistantBoundaryRef.current = false
     setPhase('in-session')
     // A resume keeps its already-earned grades (below), so the total has to
     // stay session-absolute or the queue rail mixes a fragment denominator
@@ -1095,7 +1122,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
                 {marks
                   .filter((k) => k.atIndex === 0 && k.kind !== 'lapse' && k.kind !== 'milestone')
                   .map((k) => (
-                    <MarkView key={k.id} mark={k} onAnswerAsk={answerAsk} />
+                    <MarkView key={k.id} mark={k} onAnswerAsk={answerAsk} suppressBeatExcerpt={messages[k.atIndex]?.role === 'assistant'} />
                   ))}
                 {messages.map((m, i) => (
                   <Fragment key={m.id}>
@@ -1122,7 +1149,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
                           k.kind !== 'milestone',
                       )
                       .map((k) => (
-                        <MarkView key={k.id} mark={k} onAnswerAsk={answerAsk} />
+                        <MarkView key={k.id} mark={k} onAnswerAsk={answerAsk} suppressBeatExcerpt={messages[k.atIndex]?.role === 'assistant'} />
                       ))}
                   </Fragment>
                 ))}

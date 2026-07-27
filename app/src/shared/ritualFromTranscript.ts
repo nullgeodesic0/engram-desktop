@@ -10,7 +10,10 @@
  * (chatMessages.ts) would assign, since LearnSessionView interleaves marks
  * against that message list by `atIndex`. `walkTranscript` replays
  * chatMessages.ts's skip-first-user / merge-consecutive-assistant-text rules
- * block-by-block (kept in careful sync with that file — it stays the source
+ * block-by-block — INCLUDING the bubble-split at mark-producing tool_use
+ * boundaries (`isMarkBoundaryToolUse`, signals/tutorSignals.ts — the
+ * interleave fix; see `deriveRitualMarks`'s own boundary comment below) —
+ * (kept in careful sync with that file — it stays the source
  * of truth for actual message text; this only needs the running COUNT) so a
  * mark's `atIndex` always equals "how many chat messages exist so far" at the
  * exact point in the transcript the underlying tool call landed, matching the
@@ -37,6 +40,7 @@ import {
   looksLikeArtifactSetCommand,
   isArtifactSmithSpawnEvent,
   isAssessorAuditSpawnEvent,
+  isMarkBoundaryToolUse,
   explorableTitleFromDescription,
   explorableNodeFromPrompt,
   classifyEngramBashFailure,
@@ -713,7 +717,17 @@ export function deriveRitualMarks(entries: unknown[]): DerivedRitualMark[] {
       }
       continue
     }
-    // tool_use
+    // tool_use — FIRST, the bubble-split boundary (the interleave fix): a
+    // mark-producing tool_use ends the current assistant bubble, so the next
+    // assistant_text event increments messageCount instead of merging. This
+    // MUST mirror `parseTranscriptToMessages`/`buildHistoryTimeline`'s own
+    // split (same shared predicate — see isMarkBoundaryToolUse's doctrine
+    // comment in signals/tutorSignals.ts), or every mark pushed below with
+    // `atIndex: messageCount` would disagree with the rendered message list
+    // about where "between the preceding and following prose" actually is.
+    if (isMarkBoundaryToolUse(event.name, event.input)) {
+      lastWasAssistantText = false
+    }
     if (event.name === 'Bash') {
       const command = String((event.input as { command?: unknown }).command ?? '')
       const failureKind = classifyEngramBashFailure(command)

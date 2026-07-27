@@ -216,6 +216,83 @@ export function isAssessorAuditSpawnEvent(name: string, input: Record<string, un
   return s.includes('engram-assessor') && s.includes('audit')
 }
 
+// ---------------------------------------------------------------------------
+// The bubble-split boundary (the LEARN interleave fix — see
+// .superpowers/sdd/chat-interleave-fix-report.md).
+// ---------------------------------------------------------------------------
+
+/** The engram-ui-bridge MCP tools as they appear in a transcript's (and the
+ * live stream's) `tool_use` blocks. Kept here rather than imported from
+ * ritualFromTranscript.ts (which exports the same four constants) because
+ * that module already imports THIS one — the values are protocol constants,
+ * not derived state, so the duplication can't drift without the bridge
+ * itself changing names. */
+const BRIDGE_TOOL_PREFIX = 'mcp__engram-ui-bridge__'
+
+/** THE shared definition of "this tool_use pins a ritual mark between two
+ * stretches of assistant prose" — the single predicate that decides where an
+ * assistant bubble must SPLIT so that mark `atIndex` ordering is
+ * chronologically correct by construction.
+ *
+ * Why a split is needed at all: assistant text deltas merge into one growing
+ * ChatMessage (the append-if-last-was-assistant rule, present identically in
+ * the live views' 'text' handlers, `parseTranscriptToMessages`, and
+ * `buildHistoryTimeline`), while ritual marks are pinned BETWEEN messages by
+ * `atIndex`. Without a split, text arriving AFTER a mid-turn signal is
+ * appended into the same bubble that renders BEFORE the mark — intra-turn
+ * order becomes unrepresentable, and every ask/frontispiece/beat card dumps
+ * after the whole turn's prose (the exact mis-ordering reported from the
+ * 2026-07-27 hamilton-jacobi-theory sprint sitting).
+ *
+ * Every caller that segments assistant prose MUST consult this same
+ * predicate — the live 'text'/'tool_use' handlers in LearnSessionView and
+ * ReviewSessionView, `parseTranscriptToMessages` (chatMessages.ts),
+ * `buildHistoryTimeline` (SessionHistoryDrawer.tsx), and `deriveRitualMarks`'s
+ * message counting (ritualFromTranscript.ts) — so live and replay can never
+ * disagree about which message index a given stretch of prose lands on.
+ *
+ * True iff this tool_use can produce a ritual mark, at dispatch OR at its
+ * eventual tool_result (a result can't be seen at split time, and no
+ * assistant text can ever arrive between a tool_use and its own result, so
+ * splitting at the tool_use covers both cases deterministically):
+ *  - bridge calls that pin marks: `render_beat` (beat card + possible
+ *    crossing), `session_phase` (frontispiece + possible diagnostic plate),
+ *    `ask_user_question` (inline AskCard), `show_figure` (figure card,
+ *    live-only), and a `beat_outcome` naming beat `verify` with outcome
+ *    `confirmed` (the verify seal — the only outcome that marks; the input
+ *    is available here, so other outcomes deliberately do NOT split);
+ *  - any Bash call `classifyEngramBashFailure` recognizes — the exact set
+ *    whose results can pin diagnostic/misconception/explorable/stamp/lapse/
+ *    milestone/atlas/tool-failure marks (its generic `engram-bash` bucket is
+ *    included on purpose: ANY engram.py call's failure pins a card);
+ *  - the mark-producing subagent spawns: artifact-smith (explorable),
+ *    assessor audit (audit card), curriculum-architect (atlas).
+ * Everything else (Read/Write/Edit, non-engram Bash, progress_note,
+ * suggest_action, spotlight_node, annotate_node, a generic assessor
+ * verification spawn) produces no mark and does NOT split — adjacent prose
+ * around those keeps merging exactly as before. */
+export function isMarkBoundaryToolUse(name: string, input: Record<string, unknown>): boolean {
+  if (name.startsWith(BRIDGE_TOOL_PREFIX)) {
+    const tool = name.slice(BRIDGE_TOOL_PREFIX.length)
+    if (tool === 'render_beat' || tool === 'session_phase' || tool === 'ask_user_question' || tool === 'show_figure') {
+      return true
+    }
+    if (tool === 'beat_outcome') {
+      return input.beat === 'verify' && input.outcome === 'confirmed'
+    }
+    return false
+  }
+  if (name === 'Bash') {
+    const command = String((input as { command?: unknown }).command ?? '')
+    return classifyEngramBashFailure(command) !== null
+  }
+  if (isSubagentSpawnTool(name)) {
+    const s = JSON.stringify(input).toLowerCase()
+    return s.includes('engram-artifact-smith') || s.includes('curriculum-architect') || (s.includes('engram-assessor') && s.includes('audit'))
+  }
+  return false
+}
+
 /** "Build Schrödinger unitary-evolution explorable" -> "Schrödinger
  * unitary-evolution" — every real artifact-smith spawn's `description`
  * observed (a dozen+ across several sessions) follows this "Build <X>

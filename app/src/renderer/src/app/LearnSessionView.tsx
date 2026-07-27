@@ -37,6 +37,7 @@ import {
   isReceiptCommand,
   isStashCommand,
   classifyEngramBashFailure,
+  isMarkBoundaryToolUse,
   type ToolFailureKind,
 } from '../../../shared/signals/tutorSignals'
 import { parsePretestGradeResults, verdictFromGrade, isStabilityMilestone } from '../../../shared/gradeResult'
@@ -439,6 +440,18 @@ export function LearnSessionView({
   // as a plain value in the handler body instead of reaching for it inside a
   // setState updater — see setBeat below.
   const currentBeatRef = useRef<string | null>(null)
+  // The bubble-split boundary (the interleave fix — see isMarkBoundaryToolUse's
+  // doctrine comment in shared/signals/tutorSignals.ts): set by the 'tool_use'
+  // handler the instant a mark-producing call fires, consumed by the very next
+  // 'text' event, which then STARTS A NEW ChatMessage instead of appending to
+  // the growing one. Marks pin between messages by atIndex, so without this
+  // split, prose streamed AFTER a mid-turn ask/phase/beat signal merged into
+  // the same bubble that renders BEFORE the mark — the exact mis-ordering the
+  // 2026-07-27 hamilton-jacobi-theory sprint sitting surfaced. Replay applies
+  // the identical split via the same shared predicate (chatMessages.ts /
+  // buildHistoryTimeline / deriveRitualMarks), so live and replayed
+  // segmentation agree by construction.
+  const assistantBoundaryRef = useRef(false)
 
   function pushMark(m: DistributiveOmit<RitualMark, 'id' | 'atIndex'>) {
     setMarks((prev) => [
@@ -492,6 +505,7 @@ export function LearnSessionView({
     setLastWalk(null)
     pendingAddTopic.current = null
     lastNodeIdRef.current = null
+    assistantBoundaryRef.current = false
     pendingPretestToolUseIds.current.clear()
     pretestItemsRef.current = []
     diagnosticGateRef.current = createDiagnosticGate()
@@ -741,13 +755,19 @@ export function LearnSessionView({
     // function, this one is live-only and has no replay counterpart.
     tutorActivity.dispatchSessionEvent(event)
     switch (event.type) {
-      case 'text':
+      case 'text': {
         // Append to the running assistant message if we're mid-turn (deltas arrive as
         // several small 'text' events); start a fresh bubble the moment the last message
-        // was the user's — that's the actual turn boundary in a real conversation.
+        // was the user's — that's the actual turn boundary in a real conversation — OR
+        // the moment a mark-producing tool_use fired since the last delta (the
+        // interleave fix — see assistantBoundaryRef's doctrine comment above): the
+        // mark pinned at that boundary must render between the prose that preceded
+        // the signal and the prose now arriving after it.
+        const breakBubble = assistantBoundaryRef.current
+        assistantBoundaryRef.current = false
         setMessages((prev) => {
           const last = prev[prev.length - 1]
-          if (last && last.role === 'assistant') {
+          if (last && last.role === 'assistant' && !breakBubble) {
             const text = last.text + event.text
             // Best-effort fallback only: the bolded-label convention rarely
             // appears in real prose, so a null here means "no signal", not
@@ -763,7 +783,15 @@ export function LearnSessionView({
           return [...prev, { id: crypto.randomUUID(), role: 'assistant', text: event.text }]
         })
         break
+      }
       case 'tool_use':
+        // The interleave fix — flag the bubble split FIRST, before any of the
+        // specific-signal branches (see assistantBoundaryRef's doctrine
+        // comment above). Same shared predicate replay uses, applied at the
+        // same point in the event order.
+        if (isMarkBoundaryToolUse(event.name, event.input)) {
+          assistantBoundaryRef.current = true
+        }
         // Task 7 — claim this Bash call's id for tool-failure purposes BEFORE
         // any of the specific-signal branches below run, so the registry is
         // populated no matter which (if any) of them also fires for the same
@@ -1641,7 +1669,7 @@ export function LearnSessionView({
                   <SessionOpenPlate walkNumber={walkNumber} date={new Date()} recap={lastWalk} />
                 )}
                 {marks.filter((k) => k.atIndex === 0).map((k) => (
-                  <MarkView key={k.id} mark={k} onAnswerAsk={answerAsk} />
+                  <MarkView key={k.id} mark={k} onAnswerAsk={answerAsk} suppressBeatExcerpt={messages[k.atIndex]?.role === 'assistant'} />
                 ))}
                 {messages.map((m, i) => (
                   <Fragment key={m.id}>
@@ -1656,7 +1684,12 @@ export function LearnSessionView({
                     {marks
                       .filter((k) => k.atIndex === i + 1 || (i === messages.length - 1 && k.atIndex > messages.length))
                       .map((k) => (
-                        <MarkView key={k.id} mark={k} onAnswerAsk={answerAsk} />
+                        // suppressBeatExcerpt: `messages[k.atIndex]` is the very
+                        // message this mark renders immediately before — when
+                        // it's assistant prose (the beat's own full text, since
+                        // the interleave fix), the marker drops its redundant
+                        // excerpt; a tail mark (atIndex past the end) keeps it.
+                        <MarkView key={k.id} mark={k} onAnswerAsk={answerAsk} suppressBeatExcerpt={messages[k.atIndex]?.role === 'assistant'} />
                       ))}
                   </Fragment>
                 ))}
