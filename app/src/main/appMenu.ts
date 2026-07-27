@@ -34,6 +34,8 @@ export function installAppMenu(focusOrCreateWindow: (navigateTo?: string) => voi
         { label: 'New Topic', accelerator: 'Cmd+N', click: () => focusOrCreateWindow('learn:new-topic') },
         { label: 'Resume Last Learn', accelerator: 'Cmd+L', click: () => focusOrCreateWindow('learn') },
         { label: 'Review Now', accelerator: 'Shift+Cmd+R', click: () => focusOrCreateWindow('review') },
+        { type: 'separator' },
+        { label: 'Session History…', accelerator: 'Shift+Cmd+H', click: () => focusOrCreateWindow('history:all') },
       ],
     },
     {

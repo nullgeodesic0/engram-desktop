@@ -5,6 +5,7 @@ import { ReviewSessionView } from './app/ReviewSessionView'
 import { LearnSessionView } from './app/LearnSessionView'
 import { SettingsView } from './app/SettingsView'
 import { CommandPalette } from './components/CommandPalette'
+import { SessionHistoryDrawer, ALL_HISTORY_KEY } from './components/SessionHistoryDrawer'
 import { TitleBar } from './components/TitleBar'
 import { SkeletonBar, SkeletonGrid } from './components/Skeleton'
 
@@ -107,6 +108,10 @@ export default function App() {
   const [narrow, setNarrow] = useState(window.innerWidth < COLLAPSE_WIDTH)
   const [pinnedOpen, setPinnedOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
+  // Owned at the App level, not any one view — the drawer it opens spans
+  // every topic and both loops, so it isn't scoped to whichever view is
+  // active. Reachable from the Session menu and the command palette.
+  const [allHistoryOpen, setAllHistoryOpen] = useState(false)
   const [deepLinkTopic, setDeepLinkTopic] = useState<string | null>(null)
   const [deepLinkNode, setDeepLinkNode] = useState<{ topicId: string; nodeId: string } | null>(null)
   // Tutor-initiated nudge to a specific node — pans the map if we're already
@@ -130,6 +135,10 @@ export default function App() {
       if (v === 'learn:new-topic') {
         setView('learn')
         setNewTopicRequest((n) => n + 1)
+        return
+      }
+      if (v === 'history:all') {
+        setAllHistoryOpen(true)
         return
       }
       if (v === 'home' || v === 'topics' || v === 'dashboard' || v === 'artifacts' || v === 'review' || v === 'learn' || v === 'settings') {
@@ -351,7 +360,16 @@ export default function App() {
         onClose={() => setPaletteOpen(false)}
         onGoTopic={goToTopic}
         onGoNode={goToNode}
-        navCommands={NAV.map((n) => ({ id: `nav:${n.id}`, label: n.label, hint: `⌘${n.hint}`, action: () => setView(n.id) }))}
+        navCommands={[
+          ...NAV.map((n) => ({ id: `nav:${n.id}`, label: n.label, hint: `⌘${n.hint}`, action: () => setView(n.id) })),
+          { id: 'nav:history', label: 'Session History', hint: '⇧⌘H', action: () => setAllHistoryOpen(true) },
+        ]}
+      />
+      <SessionHistoryDrawer
+        historyKey={ALL_HISTORY_KEY}
+        title="All Sessions"
+        open={allHistoryOpen}
+        onClose={() => setAllHistoryOpen(false)}
       />
       </div>
     </div>
