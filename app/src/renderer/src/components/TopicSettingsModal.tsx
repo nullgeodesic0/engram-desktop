@@ -16,6 +16,7 @@ function fileName(path: string): string {
 export function TopicSettingsModal({ topicId, topicTitle, onClose }: TopicSettingsModalProps) {
   const [value, setValue] = useState('')
   const [contextFiles, setContextFiles] = useState<string[]>([])
+  const [targetDate, setTargetDate] = useState<string | null>(null)
   const [loaded, setLoaded] = useState(false)
   const [saving, setSaving] = useState(false)
 
@@ -23,6 +24,7 @@ export function TopicSettingsModal({ topicId, topicTitle, onClose }: TopicSettin
     window.engram.getTopicSettings(topicId).then((s) => {
       setValue(s.systemPromptExtra)
       setContextFiles(s.contextFiles)
+      setTargetDate(s.targetDate ?? null)
       setLoaded(true)
     })
   }, [topicId])
@@ -38,7 +40,7 @@ export function TopicSettingsModal({ topicId, topicTitle, onClose }: TopicSettin
 
   async function save() {
     setSaving(true)
-    await window.engram.setTopicSettings(topicId, { systemPromptExtra: value.trim(), contextFiles })
+    await window.engram.setTopicSettings(topicId, { systemPromptExtra: value.trim(), contextFiles, targetDate })
     setSaving(false)
     onClose()
   }
@@ -97,6 +99,33 @@ export function TopicSettingsModal({ topicId, topicTitle, onClose }: TopicSettin
           >
             + Add file…
           </button>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <label className="text-sm text-[var(--color-text-primary)]">Target date</label>
+          <p className="text-xs text-[var(--color-text-faint)]">
+            An optional deadline for this topic. While set, the Topic Map shows nodes remaining, days left, the pace
+            that would close the gap, and the pace you've actually kept — arithmetic only, never a reminder or a
+            notification. Clearing it removes the figure.
+          </p>
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={targetDate ?? ''}
+              onChange={(e) => setTargetDate(e.target.value || null)}
+              disabled={!loaded}
+              aria-label="Target date"
+              className="focus-ring panel px-3 py-1.5 text-sm bg-[var(--color-surface-2)] text-[var(--color-text-primary)] disabled:opacity-50"
+            />
+            {targetDate && (
+              <button
+                onClick={() => setTargetDate(null)}
+                className="focus-ring text-xs text-[var(--color-text-faint)] hover:text-[var(--color-ink-danger)]"
+              >
+                Clear
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="flex justify-end gap-2">

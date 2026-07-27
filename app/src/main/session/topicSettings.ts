@@ -15,9 +15,18 @@ export interface TopicSettings {
   /** Absolute paths the model is told to Read at the start of every fresh session for
    * this topic (a syllabus, reference PDF, etc.) — see sessionHandlers.ts's spawn(). */
   contextFiles: string[]
+  /** Local YYYY-MM-DD an optional per-topic deadline the learner set for
+   * themselves — "exam mode" (see renderer/src/shared/pressure.ts). Never
+   * read by, or written from, anything under `~/.claude/learning`: it drives
+   * no scheduling and the engine never sees it. Optional so settings saved
+   * before this field existed (and any settings literal that predates it,
+   * e.g. LearnSessionView's pending-new-topic write) still satisfy this
+   * type — same precedent as `contextFiles` above; `getTopicSettings`'s
+   * defensive merge below fills it with `null` on read. */
+  targetDate?: string | null
 }
 
-const EMPTY: TopicSettings = { systemPromptExtra: '', contextFiles: [] }
+const EMPTY: TopicSettings = { systemPromptExtra: '', contextFiles: [], targetDate: null }
 
 function settingsPath(): string {
   return join(app.getPath('userData'), 'topic-settings.json')

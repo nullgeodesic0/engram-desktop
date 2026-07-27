@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { TopicListEntry, TopicGraph, MapAnnotations, NodeProvenance, ProvenanceEvent, Misconception } from '../../../shared/types'
+import type { TopicListEntry, TopicGraph, MapAnnotations, NodeProvenance, ProvenanceEvent, Misconception, RawReceipt } from '../../../shared/types'
 import { RetentionCurve } from '../components/RetentionCurve'
 import { GraphView, EDGE_STYLE } from '../components/GraphView'
 import { NodeTable } from '../components/NodeTable'
 import { GrowthScrubber } from '../components/GrowthScrubber'
+import { PressureReadout } from '../components/PressureReadout'
 import { cellBodyPath, plateStats, ancestorClosure, descendantPath } from '../components/graph2d/plate'
 import { layersOf, computeHubNodeIds } from '../components/graph3d/layout'
 import { humanizeNodeId } from '../../../shared/humanizeId'
@@ -355,6 +356,13 @@ export function TopicMapView({
   // the drawer/modal render a quiet inline message rather than losing the whole map.
   const [misconceptions, setMisconceptions] = useState<Misconception[] | null>(null)
   const [misconceptionsError, setMisconceptionsError] = useState(false)
+  // Exam mode (P4 Task 1): the selected topic's own deadline (null if unset)
+  // plus every raw receipt ever written — receiptsHistory()'s `receipts`
+  // field is deliberately unwindowed (see that file's doc comment), which is
+  // exactly what pressure.ts needs to find a topic's FIRST encode regardless
+  // of how long ago it was.
+  const [targetDate, setTargetDate] = useState<string | null>(null)
+  const [receipts, setReceipts] = useState<RawReceipt[]>([])
 
   function openProvenanceEvent(ev: ProvenanceEvent, topicId: string) {
     setHistoryDrawer({ historyKey: ev.kind === 'review' ? 'review' : topicId, sessionId: ev.sessionId, anchorIndex: ev.anchor })
@@ -382,6 +390,13 @@ export function TopicMapView({
   }, [])
 
   useEffect(() => {
+    window.engram
+      .receiptsHistory()
+      .then((h) => setReceipts(h.receipts))
+      .catch(() => setReceipts([]))
+  }, [])
+
+  useEffect(() => {
     if (!deepLinkNode) return
     setSelectedTopic(deepLinkNode.topicId)
   }, [deepLinkNode])
@@ -401,10 +416,15 @@ export function TopicMapView({
     setProvenance(null)
     setReplayActive(false)
     setReplayT(0)
+    setTargetDate(null)
     window.engram
       .topicGraph(selectedTopic)
       .then((g) => setGraph(g as TopicGraph))
       .catch((e: Error) => setError(e.message))
+    window.engram
+      .getTopicSettings(selectedTopic)
+      .then((s) => setTargetDate(s.targetDate ?? null))
+      .catch(() => setTargetDate(null))
     window.engram
       .decay(selectedTopic)
       .then((result) => {
@@ -697,26 +717,34 @@ export function TopicMapView({
               />
             </div>
 
-            {/* Progress readout — where Graph Settings used to sit. */}
+            {/* Progress readout — where Graph Settings used to sit — plus the
+                exam-mode pressure figure stacked beneath it. The latter is
+                only ever present when this topic has a targetDate set;
+                PressureReadout itself renders null otherwise, so the stack
+                collapses to just the territory readout with no gap or empty
+                chrome left behind. */}
             {stats && (
-              <div className="panel absolute top-4 right-4 z-10 p-3 w-52 flex flex-col gap-2 bg-[var(--color-surface)]/90 backdrop-blur">
-                <div className="fig-caption">Fig. — state of the territory</div>
-                <div className="grid grid-cols-2 gap-2">
-                  <StatBlock compact label="Encoded" value={`${stats.encoded}/${stats.total}`} tone="cool" />
-                  <StatBlock
-                    compact
-                    label="Consolidated"
-                    value={`${Math.round((stats.consolidated / Math.max(1, stats.total)) * 100)}%`}
-                    tone="warm"
-                  />
-                  <StatBlock compact label="Decaying" value={String(stats.decaying)} tone={stats.decaying > 0 ? 'violet' : 'neutral'} />
-                  <StatBlock
-                    compact
-                    label="Thresholds"
-                    value={`${stats.thresholdsMet}/${stats.thresholdsTotal}`}
-                    tone={stats.thresholdsTotal > 0 && stats.thresholdsMet === stats.thresholdsTotal ? 'warm' : 'neutral'}
-                  />
+              <div className="absolute top-4 right-4 z-10 w-52 flex flex-col gap-3">
+                <div className="panel p-3 flex flex-col gap-2 bg-[var(--color-surface)]/90 backdrop-blur">
+                  <div className="fig-caption">Fig. — state of the territory</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <StatBlock compact label="Encoded" value={`${stats.encoded}/${stats.total}`} tone="cool" />
+                    <StatBlock
+                      compact
+                      label="Consolidated"
+                      value={`${Math.round((stats.consolidated / Math.max(1, stats.total)) * 100)}%`}
+                      tone="warm"
+                    />
+                    <StatBlock compact label="Decaying" value={String(stats.decaying)} tone={stats.decaying > 0 ? 'violet' : 'neutral'} />
+                    <StatBlock
+                      compact
+                      label="Thresholds"
+                      value={`${stats.thresholdsMet}/${stats.thresholdsTotal}`}
+                      tone={stats.thresholdsTotal > 0 && stats.thresholdsMet === stats.thresholdsTotal ? 'warm' : 'neutral'}
+                    />
+                  </div>
                 </div>
+                {graph && <PressureReadout graph={graph} receipts={receipts} targetDate={targetDate} />}
               </div>
             )}
 
