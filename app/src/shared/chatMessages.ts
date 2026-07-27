@@ -1,3 +1,5 @@
+import { isTaskNotificationContent } from './taskNotification'
+
 export interface ChatMessage {
   id: string
   role: 'assistant' | 'user'
@@ -41,6 +43,13 @@ export function parseTranscriptToMessages(rawLines: unknown[]): ChatMessage[] {
         seenFirstUser = true
         continue // the app's own synthetic kickoff — not a real human message
       }
+      // A background-agent completion (e.g. the assessor audit — see
+      // shared/taskNotification.ts's doctrine comment) also lands as an
+      // ordinary `type: "user"` string-content line, but it is NOT a genuine
+      // learner turn — it's the assessor's raw envelope, quoting the very
+      // rubric the sitting is being graded against. Never render it as a
+      // chat bubble.
+      if (isTaskNotificationContent(line.message.content)) continue
       messages.push({ id: `t${idCounter++}`, role: 'user', text: line.message.content })
       continue
     }
