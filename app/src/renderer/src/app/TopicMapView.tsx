@@ -182,18 +182,24 @@ function computeNodeStructure(
 
 /** The node's place in the graph's shape — shown in both the node drawer and
  * the full-node modal, alongside Provenance and Filed-here. Built on
- * `ancestorClosure`/`descendantPath` (plate.ts), NOT the node's own direct
- * `edges.requires` (that's the compact inline chip row shown higher up this
- * same panel) — those two walks already stop at hub boundaries, so a node
- * sitting right next to the capstone (or a capstone-like synthesis node)
- * still gets a real, bounded trail instead of the whole topic. Violet is
- * this app's synthesis/structure accent: warm is provenance/history, cool is
+ * `ancestorClosure`/`descendantPath` (plate.ts) rather than the node's own
+ * direct `edges.requires` — those two walks already stop at hub boundaries,
+ * so a node sitting right next to the capstone (or a capstone-like synthesis
+ * node) still gets a real, bounded trail instead of the whole topic. This is
+ * the SINGLE place a node's requires relationships render: the drawer's old
+ * direct-`edges.requires` chip row and the modal's `requires` case in the
+ * EDGE_STYLE loop were both removed in favor of this block, since a node's
+ * ancestor closure is non-empty exactly when its direct requires is (the
+ * closure always includes the direct edges as its final, nearest layer) —
+ * two labels both reading "REQUIRES" over overlapping node sets read as a
+ * rendering bug, not two different things. `derives_from`/`contrasts_with`/
+ * `analogous_to` have no closure equivalent, so they still render via their
+ * own EDGE_STYLE loop elsewhere in the modal. Violet is this app's
+ * synthesis/structure accent: warm is provenance/history, cool is
  * misconceptions, violet is the shape of the graph itself — hence the outer
- * "Structure" label, with "Requires"/"Unlocks" as sub-captions rather than
- * reusing "Requires" as the block's own header (which already names the
- * direct-edges row above). Renders nothing for a node with neither (roots
- * have no requires, leaves have no unlocks) — no empty chrome, same
- * discipline as NodeMisconceptions. */
+ * "Structure" label, with "Requires"/"Unlocks" as sub-captions. Renders
+ * nothing for a node with neither (roots have no requires, leaves have no
+ * unlocks) — no empty chrome, same discipline as NodeMisconceptions. */
 function NodeStructure({
   requires,
   unlocks,
@@ -895,24 +901,6 @@ export function TopicMapView({
                 </div>
               )}
 
-              {(node.edges.requires ?? []).length > 0 && (
-                <div className="text-xs">
-                  <div className="label-data uppercase tracking-wide text-[10px] text-[var(--color-text-faint)] mb-1">Requires</div>
-                  <div className="flex flex-wrap gap-1">
-                    {(node.edges.requires ?? []).map((r) => (
-                      <button
-                        key={r}
-                        onClick={() => setSelectedNode(r)}
-                        title={r}
-                        className="focus-ring text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-surface-3)] text-[var(--color-ink-cool)] hover:text-[var(--color-text-primary)]"
-                      >
-                        {humanizeNodeId(r)}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
               <NodeMisconceptions
                 items={openMisconceptionsFor(selectedTopic, selectedNode)}
                 loaded={misconceptions !== null}
@@ -1068,7 +1056,11 @@ export function TopicMapView({
               </div>
             )}
 
-            {(['requires', 'derives_from', 'contrasts_with', 'analogous_to'] as const).map(
+            {/* 'requires' excluded here — Structure (below, alongside Provenance)
+                covers it with the full root-first closure instead of just the
+                direct edges, so this loop would otherwise duplicate it under
+                an identically-worded "REQUIRES" header. */}
+            {(['derives_from', 'contrasts_with', 'analogous_to'] as const).map(
               (kind) =>
                 (opened.edges[kind] ?? []).length > 0 && (
                   <div key={kind} className="text-sm">
