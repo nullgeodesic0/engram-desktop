@@ -94,6 +94,93 @@ function greeting(): string {
   return 'Good evening'
 }
 
+/**
+ * A topic's node counts sort it into exactly one of three states — never
+ * zero, never two. `notStarted` and `consolidated` are the two extremes
+ * (all-new, all-review); `active` is everything between, which includes a
+ * topic that is only mid-encoding with no review nodes yet. Written as an
+ * if/else-if/else specifically so the three predicates can never overlap
+ * or leave a topic uncategorized, which is what let the old single
+ * `states.new > 0 || states.learning > 0` filter silently drop an
+ * all-review topic in the first place.
+ */
+type TopicBucket = 'notStarted' | 'consolidated' | 'active'
+
+function topicBucket(t: TopicListEntry): TopicBucket {
+  if (t.states.review === 0 && t.states.learning === 0) return 'notStarted'
+  if (t.states.new === 0 && t.states.learning === 0) return 'consolidated'
+  return 'active'
+}
+
+/** Only the node states actually present, review-first — so a fully-encoded
+ * topic reads as "16 review" instead of a padded "16 review · 0 new", and an
+ * actively-encoding one shows its mid-flight `learning` count instead of
+ * hiding it (the original card never rendered `states.learning` at all). */
+function topicChips(t: TopicListEntry): { label: string; className: string }[] {
+  const chips: { label: string; className: string }[] = []
+  if (t.states.review > 0) chips.push({ label: `${t.states.review} review`, className: 'text-[var(--color-ink-warm)]' })
+  if (t.states.learning > 0) chips.push({ label: `${t.states.learning} encoding`, className: 'text-[var(--color-ink-cool)]' })
+  if (t.states.new > 0) chips.push({ label: `${t.states.new} new`, className: 'text-[var(--color-ink-cool-dim)]' })
+  return chips
+}
+
+/** One topic tile, shared by all three groups below — same card, different
+ * bucket, different chips. */
+function TopicTile({ t, onGoTopic }: { t: TopicListEntry; onGoTopic: (topicId: string) => void }) {
+  return (
+    <button
+      onClick={() => onGoTopic(t.topic)}
+      className="focus-ring panel text-left px-4 py-3 flex flex-col gap-2 hover:bg-[var(--color-surface-2)] hover:border-[var(--color-ink-warm-dim)] transition-colors duration-[var(--dur-base)]"
+    >
+      <div className="flex items-center gap-2 text-sm text-[var(--color-text-primary)]">
+        <InkNode id={t.topic} variant={t.states.review > 0 ? 'filled' : 'outlined'} size={16} />
+        <HealthRing
+          consolidated={t.states.review}
+          total={t.states.new + t.states.learning + t.states.review}
+          due={t.due}
+          size={18}
+        />
+        <span className="line-clamp-1">{t.title}</span>
+      </div>
+      <div className="flex gap-3 text-xs label-data">
+        {topicChips(t).map((c) => (
+          <span key={c.label} className={c.className}>{c.label}</span>
+        ))}
+      </div>
+    </button>
+  )
+}
+
+/** A group of topic tiles under a small subheading — hidden entirely (no
+ * heading, no empty grid) when the bucket is empty, same discipline as the
+ * rest of Home. */
+function TopicGroup({
+  heading,
+  caption,
+  topics,
+  onGoTopic,
+}: {
+  heading: string
+  caption?: string
+  topics: TopicListEntry[]
+  onGoTopic: (topicId: string) => void
+}) {
+  if (topics.length === 0) return null
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-baseline gap-2">
+        <span className="text-[10px] label-data uppercase tracking-wide text-[var(--color-text-faint)]">{heading}</span>
+        {caption && <span className="text-xs text-[var(--color-text-faint)]">{caption}</span>}
+      </div>
+      <div className="grid grid-cols-3 gap-3">
+        {topics.map((t) => (
+          <TopicTile key={t.topic} t={t} onGoTopic={onGoTopic} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
 interface HomeViewProps {
   onGoReview: () => void
   onGoCoach: () => void
@@ -219,7 +306,11 @@ export function HomeView({ onGoReview, onGoCoach, onGoTopic, onNewTopic, onGoNod
     computeDueBuckets(7).then(({ buckets }) => setForecast(buckets))
   }, [])
 
-  const inProgress = topics?.filter((t) => t.states.new > 0 || t.states.learning > 0) ?? []
+  // See topicBucket()'s doc comment — these three groups partition `topics`
+  // exhaustively, so a topic is never dropped and never double-counted.
+  const active = topics?.filter((t) => topicBucket(t) === 'active') ?? []
+  const consolidated = topics?.filter((t) => topicBucket(t) === 'consolidated') ?? []
+  const notStarted = topics?.filter((t) => topicBucket(t) === 'notStarted') ?? []
   const envBroken = envCheck !== null && !(envCheck.claudeOk && envCheck.pluginOk)
 
   return (
@@ -291,7 +382,7 @@ export function HomeView({ onGoReview, onGoCoach, onGoTopic, onNewTopic, onGoNod
       )}
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-medium text-[var(--color-text-dim)] uppercase tracking-wide">Continue learning</h2>
+        <h2 className="text-sm font-medium text-[var(--color-text-dim)] uppercase tracking-wide">Your topics</h2>
         <DendriteDivider className="mb-3" />
         {topics === null && <SkeletonGrid count={3} />}
         {/* The empty-state decision itself (guided card vs. plain invitation) must wait on
@@ -329,39 +420,26 @@ export function HomeView({ onGoReview, onGoCoach, onGoTopic, onNewTopic, onGoNod
             <Button variant="primary" onClick={onNewTopic}>Start your first topic</Button>
           </div>
         )}
-        {topics !== null && topics.length > 0 && inProgress.length === 0 && (
-          <Button
-            variant="ghost"
-            onClick={onNewTopic}
-            className="!px-5 !py-4 w-full flex items-center gap-3 hover:text-[var(--color-ink-warm)]"
-          >
-            <span className="text-lg leading-none">+</span>
-            <span className="text-sm">Nothing in progress — start a new topic</span>
-          </Button>
-        )}
-        <div className="grid grid-cols-3 gap-3">
-          {inProgress.map((t) => (
-            <button
-              key={t.topic}
-              onClick={() => onGoTopic(t.topic)}
-              className="focus-ring panel text-left px-4 py-3 flex flex-col gap-2 hover:bg-[var(--color-surface-2)] hover:border-[var(--color-ink-warm-dim)] transition-colors duration-[var(--dur-base)]"
-            >
-              <div className="flex items-center gap-2 text-sm text-[var(--color-text-primary)]">
-                <InkNode id={t.topic} variant={t.states.review > 0 ? 'filled' : 'outlined'} size={16} />
-                <HealthRing
-                  consolidated={t.states.review}
-                  total={t.states.new + t.states.learning + t.states.review}
-                  due={t.due}
-                  size={18}
-                />
-                <span className="line-clamp-1">{t.title}</span>
-              </div>
-              <div className="flex gap-3 text-xs label-data">
-                <span className="text-[var(--color-ink-warm)]">{t.states.review} review</span>
-                <span className="text-[var(--color-ink-cool)]">{t.states.new} new</span>
-              </div>
-            </button>
-          ))}
+        {/* active/consolidated/notStarted partition `topics` exhaustively (see
+            topicBucket()), so whenever topics.length > 0 at least one of the
+            three groups below is non-empty — there is no remaining case where
+            a real topic exists but nothing renders. The old "Nothing in
+            progress — start a new topic" fallback lived here for exactly that
+            gap: it read `inProgress.length === 0`, which was true both when
+            there were genuinely no topics AND when every topic was all-review.
+            Grouping instead of filtering closes that gap structurally rather
+            than by special-casing review, so the fallback has no case left to
+            catch and is gone — a fully-encoded-only library now shows its
+            "Consolidated" group instead of a false "start a new topic" nudge. */}
+        <div className="flex flex-col gap-6">
+          <TopicGroup heading="Continue learning" topics={active} onGoTopic={onGoTopic} />
+          <TopicGroup
+            heading="Consolidated"
+            caption="fully encoded — held by review alone"
+            topics={consolidated}
+            onGoTopic={onGoTopic}
+          />
+          <TopicGroup heading="Not started" topics={notStarted} onGoTopic={onGoTopic} />
         </div>
       </section>
 
