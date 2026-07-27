@@ -1,4 +1,4 @@
-import { Fragment, memo, useMemo } from 'react'
+import { Fragment, memo, useMemo, type ReactNode } from 'react'
 import type { ChatMessage } from '../../../shared/chatMessages'
 import { parseBeatSegments } from '../../../shared/beatLabelParser'
 import { BeatCard, PlainDialogueBlock } from './BeatCard'
@@ -17,6 +17,16 @@ interface ChatMessageViewProps {
    * available on older turns, since it reads as editing history rather than
    * what it actually is (composing a follow-up, pre-filled). */
   onEditResend?: (text: string, attachments: string[]) => void
+  /** Rendered right before this message's own probe-header card, if it has
+   * one — Review's pending grade card(s) and node-crossing divider for the
+   * item that just finished (see shared/reviewCrossing.ts). A real /review
+   * reply often narrates the full verdict AND announces the next probe in
+   * one continuous turn, so those belong AFTER this message's own leading
+   * commentary (rendered by the `probe.before` block below) and immediately
+   * BEFORE the new probe — never before the message as a whole, which would
+   * land them ahead of the very commentary they're the receipt for. Ignored
+   * (and never rendered) when this message carries no header. */
+  beforeProbeHeader?: ReactNode
 }
 
 /** One turn, rendered like a normal chat exchange — a right-aligned bubble for
@@ -27,7 +37,7 @@ interface ChatMessageViewProps {
 /** Memoized — without this, every message in a session re-renders (and, pre-memo,
  * re-ran KaTeX / beat-segment parsing) on every unrelated re-render of the parent
  * session view, e.g. every keystroke in the composer textarea below the chat log. */
-export const ChatMessageView = memo(function ChatMessageView({ message, onEditResend }: ChatMessageViewProps) {
+export const ChatMessageView = memo(function ChatMessageView({ message, onEditResend, beforeProbeHeader }: ChatMessageViewProps) {
   const segments = useMemo(
     () => (message.role === 'user' ? [] : parseBeatSegments(message.text)),
     [message.role, message.text],
@@ -86,6 +96,7 @@ export const ChatMessageView = memo(function ChatMessageView({ message, onEditRe
             return (
               <Fragment key={i}>
                 {probe.before && <PlainDialogueBlock text={probe.before} />}
+                {beforeProbeHeader}
                 <ProbeCard header={probe.header} />
               </Fragment>
             )

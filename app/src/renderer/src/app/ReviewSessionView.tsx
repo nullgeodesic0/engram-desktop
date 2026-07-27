@@ -50,6 +50,8 @@ import {
   type ToolFailureKind,
 } from '../../../shared/signals/tutorSignals'
 import { QueueRail } from '../components/ritual/QueueRail'
+import { NodeCrossingDivider } from '../components/ritual/Marks'
+import { deriveReviewCrossings, latestProbeHeader, nextProbeHeaderAt } from '../../../shared/reviewCrossing'
 
 type Phase = 'loading' | 'empty' | 'ready' | 'in-session' | 'done' | 'closed-unexpectedly'
 
@@ -267,11 +269,6 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
       { id: `mark-${markSeq.current++}`, atIndex: messagesRef.current.length, kind: 'tool-failure', failureKind },
     ])
   }
-
-  /** The node under audit at the last crossing — so the sweep only marks a
-   * real change of item, never the first one (there's nothing to move FROM)
-   * and never a re-render that happens to recompute the same item. */
-  const lastReviewedNodeRef = useRef<string | null>(null)
 
   function refreshQueue(): Promise<DueItem[]> {
     return window.engram.due(12).then((items) => {
@@ -519,9 +516,6 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
     setChamber(false)
     setProbePinned(false)
     setProbePeek(false)
-    // A fresh sitting has nothing to move FROM; a resumed one shouldn't mark
-    // a crossing into the item it left off on either.
-    lastReviewedNodeRef.current = null
     // The queue was last read at mount (or after the previous grade) — a
     // resume especially can be minutes or days later, and a stale head makes
     // the probe card describe work that's already done. Re-read on every
@@ -664,76 +658,93 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
     }
   }
 
-  /** What the tutor is ACTUALLY probing right now.
-   *
-   * `queue[0]` is engram's most-overdue-first head, which is not the tutor's
-   * working order — a real sitting interleaves topics (verified against
-   * transcript 6130a05d: eight items rated in an order the due list never
-   * produces), so the head of the queue routinely names an item the tutor
-   * isn't asking, and a resumed sitting shows one it already finished.
-   *
-   * The tutor does, however, ask each probe verbatim (8/8 in that same
-   * sitting), so the last message carrying a due item's probe text is a
-   * direct, grounded read of the current item. Scanned newest-first; falls
-   * back to the queue head before the first probe has been asked. */
-  const currentAt = useMemo(() => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const m = messages[i]
-      if (m.role !== 'assistant') continue
-      const hay = m.text.toLowerCase()
-      // Long enough to be distinctive — a short probe could collide with
-      // ordinary prose, and a false match is worse than the queue fallback.
-      const hit = queue.find((it) => it.probe.length >= 24 && hay.includes(it.probe.slice(0, 38).toLowerCase()))
-      // `index` is the message that ASKED — the crossing anchors just above
-      // it, so the sweep divider lands after the outgoing item's verdict and
-      // its explanation, not after the new question has already been posed.
-      if (hit) return { item: hit, index: i }
+  /** What the tutor is ACTUALLY probing right now — read straight off its
+   * own most recent probe-header marker (shared/reviewCrossing.ts), never by
+   * matching probe TEXT against the due queue. `queue[0]` is engram's
+   * most-overdue-first head, which is not the tutor's working order (a real
+   * sitting interleaves topics), and the previous text-matching approach
+   * could — and, against a real 2026-07-27 sitting, DID — land on the WRONG
+   * queued item entirely (a crossing named "Legendre Transform Hamiltonian"
+   * while the tutor's own header, right there in the same message, named
+   * "economism-tendency"). The header is ground truth: it's the literal
+   * text of what got asked, so it can never disagree with itself. */
+  const latestProbe = useMemo(() => latestProbeHeader(messages), [messages])
+  /** Only the fields the probe card / QueueRail / confidence recording
+   * actually read — `id`, `topic`, `probe` — never the full `DueItem` shape,
+   * so this stays out of scripts/checkDoctrine.ts's D4 answer-leak scan
+   * (which flags any file spelling out `claim`/`rubric`/`transfer_probe`,
+   * the expected-answer fields Review must never surface before a
+   * production lands — this view has no legitimate reason to touch them and
+   * shouldn't need a pin here). Matched to the queue by node id (never by
+   * fuzzy probe-text substring, the previous approach) for the topic slug;
+   * falls back to the header's own body text when the queue (capped at 12,
+   * reshuffling every grade) no longer carries this node — so the probe card
+   * still shows the tutor's own words rather than going blank. */
+  const current = useMemo(() => {
+    if (!latestProbe) {
+      const head = queue[0]
+      return head ? { id: head.id, topic: head.topic, probe: head.probe } : null
     }
-    return { item: queue[0] ?? null, index: messages.length }
-  }, [messages, queue])
-  const current = currentAt.item
-  // The sweep between items — Review's counterpart to Learn's node crossing.
-  // Keyed on the probe-derived current item (above), so it fires when the
-  // tutor genuinely moves on, not when the due queue reshuffles under it.
-  // Live-session-only: the crossing's position comes from matching probes
-  // against the due list, which a transcript alone can't reproduce (see the
-  // one-time marks in Marks.tsx's doctrine comment).
-  //
-  // Anchored to the ASKING message's own index rather than the transcript's
-  // tail, so the sweep reads in the order the sitting actually happened:
-  // the outgoing item's verdict and the tutor's explanation of it land
-  // first, then "moving to …", then the new probe. Pinning to the tail put
-  // the divider after the next question had already been posed.
-  useEffect(() => {
-    if (phase !== 'in-session' || !current) return
-    const prev = lastReviewedNodeRef.current
-    lastReviewedNodeRef.current = current.id
-    if (prev === null || prev === current.id) return
-    setMarks((p) => [
-      ...p,
-      { id: `mark-${markSeq.current++}`, atIndex: currentAt.index, kind: 'crossing', nodeId: current.id, verb: 'moving to' },
-    ])
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [current?.id, phase])
+    const { header } = latestProbe
+    const queued = queue.find((it) => it.id === header.node)
+    return queued
+      ? { id: queued.id, topic: queued.topic, probe: queued.probe }
+      : { id: header.node, topic: header.topic ?? '', probe: header.body }
+  }, [latestProbe, queue])
+  // The sweep between items — Review's counterpart to Learn's node crossing —
+  // derived purely from the transcript's own probe headers (never an
+  // imperative "did current.id just change" effect keyed off queue-matched
+  // text). Each crossing's `atMessageIndex` is the header's OWN message, so it
+  // renders INLINE within that message (see ChatMessageView's
+  // `beforeProbeHeader` prop below) — after that message's own leading verdict
+  // commentary, immediately before its probe card — never before the message
+  // as a whole, which would land it ahead of the very commentary it follows.
+  const crossings = useMemo(() => deriveReviewCrossings(messages), [messages])
 
   const blocked = rateLimit !== null && isBlockingRateLimitStatus(rateLimit.status)
-  /** Cards for one message index, in landing order. `atIndex > messages.length`
-   * folds onto the last message so a verdict that arrived after the final turn
-   * still renders (mirrors the marks' own tail clause). */
-  const gradeCardsAt = (i: number) =>
-    gradeBatches
-      .filter((b) => b.atIndex === i || (i === messages.length - 1 && b.atIndex > messages.length))
-      .flatMap((b) =>
-        b.results.map((r, ri) => (
-          <GradeResultCard
-            key={`${b.id}-${ri}`}
-            result={r}
-            confidenceLabel={latestPickFor(r.node)?.label ?? null}
-            reveal={b.id === revealBatchId}
-            topic={b.id === revealBatchId ? lastGradeTopic ?? undefined : undefined}
-          />
-        )),
-      )
+  /** Every grade batch's resolved render position — the index of the next
+   * message (at or after where its `rate` tool_result landed) that carries a
+   * probe header, i.e. immediately before whatever the tutor asks next.
+   * `null` is the tail case: no later header exists yet (the sitting's last
+   * graded item, or a session that closed before producing its next probe).
+   * Recomputed from `messages` on every change (never baked in at
+   * tool_result time) so a batch's card always lands after the FULL verdict
+   * commentary that names it — live or replayed alike. See
+   * shared/reviewCrossing.ts's doctrine comment for why anchoring to
+   * "however many messages exist right now" was the bug. */
+  const resolvedGradeBatches = useMemo(
+    () => gradeBatches.map((b) => ({ batch: b, resolvedIndex: nextProbeHeaderAt(messages, b.atIndex) })),
+    [gradeBatches, messages],
+  )
+  function renderGradeBatch(b: GradeBatch) {
+    return b.results.map((r, ri) => (
+      <GradeResultCard
+        key={`${b.id}-${ri}`}
+        result={r}
+        confidenceLabel={latestPickFor(r.node)?.label ?? null}
+        reveal={b.id === revealBatchId}
+        topic={b.id === revealBatchId ? lastGradeTopic ?? undefined : undefined}
+      />
+    ))
+  }
+  /** Grade card(s) + crossing divider belonging INSIDE message `i`'s own
+   * render — passed as ChatMessageView's `beforeProbeHeader` prop. Null (no
+   * extra render) for the common case of a message resolving nothing. */
+  function inlineForMessage(i: number) {
+    const batches = resolvedGradeBatches.filter((g) => g.resolvedIndex === i)
+    const crossing = crossings.find((c) => c.atMessageIndex === i)
+    if (batches.length === 0 && !crossing) return null
+    return (
+      <Fragment>
+        {batches.flatMap((g) => renderGradeBatch(g.batch))}
+        {crossing && <NodeCrossingDivider nodeId={crossing.header.node} verb="moving to" />}
+      </Fragment>
+    )
+  }
+  /** Grade batches whose next probe header hasn't arrived (yet) — rendered
+   * once, after the whole transcript, same tail convention `marks` still
+   * uses for everything else. */
+  const tailGradeBatches = resolvedGradeBatches.filter((g) => g.resolvedIndex === null)
   const lastUserMessageId = useMemo(() => [...messages].reverse().find((m) => m.role === 'user')?.id ?? null, [messages])
   const latestTicket = useMemo(() => extractTicketFromMessages(messages), [messages])
 
@@ -999,11 +1010,14 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
                     <ChatMessageView
                       message={m}
                       onEditResend={m.role === 'user' && m.id === lastUserMessageId && !busy ? editResend : undefined}
+                      // The grade card(s) + crossing divider for whatever this
+                      // message's OWN probe header follows — rendered inline,
+                      // after this message's leading commentary and immediately
+                      // before its ProbeCard (see ChatMessageView's prop
+                      // doctrine comment). `undefined` for the common case of a
+                      // message that resolves nothing, which is most messages.
+                      beforeProbeHeader={inlineForMessage(i) ?? undefined}
                     />
-                    {/* Verdicts sit at the index they landed on, BEFORE any
-                        mark pinned to the same spot — you're graded on the item
-                        you just finished, and only then does the tutor move on. */}
-                    {gradeCardsAt(i + 1)}
                     {marks
                       .filter((k) => k.atIndex === i + 1 || (i === messages.length - 1 && k.atIndex > messages.length))
                       .map((k) => (
@@ -1011,8 +1025,10 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
                       ))}
                   </Fragment>
                 ))}
-                {/* Verdicts that landed before any message rendered. */}
-                {gradeCardsAt(0)}
+                {/* Grade batches whose next probe header never arrived — the
+                    tail case (the sitting's last graded item, or a session
+                    that closed before producing its next probe). */}
+                {tailGradeBatches.flatMap((g) => renderGradeBatch(g.batch))}
                 {busy && (
                   <div className="flex items-center gap-2">
                     <TypingIndicator />
