@@ -247,6 +247,7 @@ export const VerifySeal = memo(function VerifySeal() {
 export function MarkView({
   mark,
   onAnswerAsk,
+  suppressBeatExcerpt,
 }: {
   mark: RitualMark
   /** Only meaningful for `kind: 'ask'` marks — omit at any call site that
@@ -255,8 +256,21 @@ export function MarkView({
    * views pass this; AskCard itself only renders it as interactive when the
    * mark is BOTH `live` and still unanswered (see AskCard's own gating). */
   onAnswerAsk?: (requestId: string, chosen: string[] | null) => void
+  /** Only meaningful for `kind: 'beat'` marks — true when the message this
+   * mark renders immediately BEFORE (`messages[mark.atIndex]`) is assistant
+   * prose. Since the interleave fix (isMarkBoundaryToolUse's bubble split),
+   * a beat mark sits chronologically right where render_beat fired, and the
+   * very next assistant message IS that beat's own full prose — repeating
+   * the call's `content` excerpt on the marker line right above it would
+   * read the same text twice in a row. The marker keeps its glyph + beat
+   * label (the beat's heading in the transcript's margin language); only
+   * the redundant one-line excerpt is dropped. When nothing follows (the
+   * beat was announced but its prose never arrived — live tail, or a
+   * transcript that ends here), the excerpt stays: it's the only record of
+   * the beat's content. */
+  suppressBeatExcerpt?: boolean
 }) {
-  if (mark.kind === 'beat') return <BeatMarkCard beat={mark.beat} content={mark.content} />
+  if (mark.kind === 'beat') return <BeatMarkCard beat={mark.beat} content={suppressBeatExcerpt ? '' : mark.content} />
   if (mark.kind === 'crossing') return <NodeCrossingDivider nodeId={mark.nodeId} verb={mark.verb} />
   if (mark.kind === 'figure') return <FigureCard title={mark.title} body={mark.body} />
   if (mark.kind === 'atlas') return <AtlasBirth topic={mark.topic} />
