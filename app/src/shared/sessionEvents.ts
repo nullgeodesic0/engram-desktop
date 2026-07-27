@@ -26,6 +26,23 @@ export interface SessionRateLimitEvent {
   resetsAt: number | null
 }
 
+/** A background-agent completion envelope (`<task-notification>...
+ * </task-notification>`) arriving live on the wire — e.g. a `/review`
+ * sitting's assessor-audit spawn finishing in the background (see
+ * `ritualFromTranscript.ts`'s AUDIT doctrine comment for the full real-
+ * transcript shape this reads). `content` is RAW AND UNPARSED: this event
+ * carries the bytes exactly as `SessionManager` observed them on stdin, with
+ * no interpretation applied. Its meaning is extracted ONLY by
+ * `shared/taskNotification.ts` (`parseTaskNotificationEnvelope` /
+ * `parseAssessorAuditVerdict` / `parseAuditNotification`) — NEVER render this
+ * string verbatim anywhere; it is not a chat message, and its JSON body may
+ * carry the assessor's rubric/production text that the loop's own
+ * compartmentalization keeps off the learner's screen. */
+export interface SessionTaskNotificationEvent {
+  type: 'task_notification'
+  content: string
+}
+
 /** One `result` NDJSON line = end of the current conversational turn — the
  * process stays alive, ready for the next stdin message (that's the whole
  * point of stream-json input/output for a multi-turn headless session). */
@@ -59,6 +76,7 @@ export type SessionEvent =
   | SessionToolUseEvent
   | SessionToolResultEvent
   | SessionRateLimitEvent
+  | SessionTaskNotificationEvent
   | SessionTurnEndedEvent
   | SessionClosedEvent
   | SessionErrorEvent

@@ -36,6 +36,7 @@ import { computeDueBuckets } from '../shared/dueBuckets'
 import { MarkView, type RitualMark } from '../components/ritual/Marks'
 import type { ReviewDocketItem } from '../components/ritual/ReviewDocket'
 import { deriveRitualMarks } from '../../../shared/ritualFromTranscript'
+import { parseAuditNotification } from '../../../shared/taskNotification'
 import { QueueRail } from '../components/ritual/QueueRail'
 
 type Phase = 'loading' | 'empty' | 'ready' | 'in-session' | 'done' | 'closed-unexpectedly'
@@ -224,6 +225,13 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
   const messagesRef = useRef<ChatMessage[]>([])
   messagesRef.current = messages
   const markSeq = useRef(0)
+  // Live-session audit spawns awaiting their `<task-notification>` verdict —
+  // matched by tool-use-id, same FIFO-by-arrival-then-match discipline as
+  // deriveRitualMarks's own `pendingAudits` (shared/ritualFromTranscript.ts),
+  // so live and replay resolve the identical sitting identically. A ref (not
+  // state) because it's pure bookkeeping the render never reads directly —
+  // only `marks` state itself is rendered.
+  const pendingAuditsRef = useRef<Array<{ toolUseId: string; markId: string }>>([])
 
   function pushLapseMark(node: string, returnDate: string | null) {
     setMarks((prev) => [
@@ -333,18 +341,21 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
             /--topic\s+["']?([a-z0-9-]+)/.exec(cmd)?.[1] ?? queueRef.current[0]?.topic ?? null
         }
         if (looksLikeAssessorAuditSpawn(event.name, event.input)) {
-          // Live-session-only half of the audit mark: the spawn itself is a
-          // real SessionEvent, so it can push a `pending` mark immediately.
-          // Its verdict never resolves live — SessionManager.ts's live event
-          // parser doesn't forward the background agent's eventual
-          // `<task-notification>` completion at all (see the AUDIT doctrine
-          // comment in shared/ritualFromTranscript.ts) — only a transcript
-          // replay (deriveRitualMarks, the `resume` branch of startSession
-          // below) can ever resolve it to agreed/disputed.
+          // The spawn itself is a real SessionEvent, so it can push a
+          // `pending` mark immediately. Its verdict CAN now resolve live too
+          // (see the `task_notification` case below) — SessionManager.ts
+          // forwards the background agent's eventual `<task-notification>`
+          // completion as its own event, matched back to this spawn by
+          // tool-use-id via `pendingAuditsRef`. If that notification never
+          // arrives before the view unmounts, a transcript replay
+          // (deriveRitualMarks, the `resume` branch of startSession below)
+          // still resolves it the same way on next open.
+          const markId = `mark-${markSeq.current++}`
           setMarks((prev) => [
             ...prev,
-            { id: `mark-${markSeq.current++}`, atIndex: messagesRef.current.length, kind: 'audit', itemCount: null, verdict: 'pending', disputedNodes: [] },
+            { id: markId, atIndex: messagesRef.current.length, kind: 'audit', itemCount: null, verdict: 'pending', disputedNodes: [] },
           ])
+          pendingAuditsRef.current.push({ toolUseId: event.id, markId })
         }
         break
       case 'tool_result':
@@ -389,6 +400,38 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
           })
         }
         break
+      case 'task_notification': {
+        // Resolve a pending audit spawn's verdict in place, live — see
+        // pendingAuditsRef's doctrine comment above and the module-level
+        // `parseAuditNotification` doctrine comment in
+        // shared/taskNotification.ts. Never stores or renders `event.content`
+        // itself: it's parsed synchronously right here and only the closed
+        // verdict shape (itemCount/verdict/disputedNodes — identical to what
+        // deriveRitualMarks would derive for the same notification) ever
+        // reaches `marks` state.
+        const pending = pendingAuditsRef.current
+        for (let i = 0; i < pending.length; i++) {
+          const verdict = parseAuditNotification(event.content, pending[i].toolUseId)
+          if (verdict) {
+            const markId = pending[i].markId
+            setMarks((prev) =>
+              prev.map((m) =>
+                m.id === markId && m.kind === 'audit'
+                  ? {
+                      ...m,
+                      itemCount: verdict.itemCount,
+                      verdict: verdict.disputedNodes.length === 0 ? 'agreed' : 'disputed',
+                      disputedNodes: verdict.disputedNodes,
+                    }
+                  : m,
+              ),
+            )
+            pending.splice(i, 1)
+            break
+          }
+        }
+        break
+      }
       case 'rate_limit':
         setRateLimit(event.status === 'allowed' ? null : { status: event.status, resetsAt: event.resetsAt })
         break
