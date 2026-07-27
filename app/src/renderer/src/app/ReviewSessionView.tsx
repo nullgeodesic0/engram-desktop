@@ -9,8 +9,9 @@ import { isBlockingRateLimitStatus } from '../../../shared/rateLimit'
 import { ChatMessageView } from '../components/ChatMessageView'
 import { MessageComposer } from '../components/MessageComposer'
 import { ContextGauge } from '../components/ContextGauge'
-import { TypingIndicator } from '../components/TypingIndicator'
+import { ActivityLine } from '../components/ActivityLine'
 import { ChatScrollRegion } from '../components/ChatScrollRegion'
+import { useTutorActivity, composerDisabledReason } from '../shared/tutorActivity'
 import { parseTranscriptToMessages, type ChatMessage } from '../../../shared/chatMessages'
 import { extractLastUsageFromTranscript } from '../../../shared/sessionUsage'
 import { humanizeNodeId } from '../../../shared/humanizeId'
@@ -214,6 +215,10 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
   // (one-time, `kind: 'docket'`) and the lapse rite (derivable, `kind:
   // 'lapse'`) — see the doctrine comment on RitualMark in Marks.tsx.
   const [marks, setMarks] = useState<RitualMark[]>([])
+  // Chat Presence Wave D — renderer-local, live-only "what's the tutor doing
+  // right now" (shared/tutorActivity.ts's doctrine comment has the full
+  // rationale). Additive alongside `busy` above: nothing here replaces it.
+  const tutorActivity = useTutorActivity()
 
   const pendingRateToolUseId = useRef<string | null>(null)
   // The topic of the rate call currently in flight — read from `queueRef`
@@ -326,6 +331,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
     const offAsk = window.engram.onBridgeAsk((req) => {
       if (req.sessionId !== sessionIdRef.current) return
       setAskRequest(req)
+      tutorActivity.dispatchAskOpened()
     })
     return () => {
       offEvent()
@@ -339,6 +345,10 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
   }
 
   function handleSessionEvent(event: SessionEvent) {
+    // Chat Presence Wave D — fed every SessionEvent this handler sees, same
+    // as `deriveRitualMarks` gets every walked transcript event; unlike that
+    // function, this one is live-only and has no replay counterpart.
+    tutorActivity.dispatchSessionEvent(event)
     switch (event.type) {
       case 'text':
         setMessages((prev) => {
@@ -506,6 +516,11 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
   }
 
   async function startSession(resume: boolean) {
+    // Chat Presence Wave D — live-only, no replay obligation: a resumed
+    // session's activity starts fresh at `idle` here, same as a brand-new
+    // one, regardless of how much history the transcript hydration below
+    // rebuilds. See shared/tutorActivity.ts's doctrine comment.
+    tutorActivity.reset()
     setPhase('in-session')
     // A resume keeps its already-earned grades (below), so the total has to
     // stay session-absolute or the queue rail mixes a fragment denominator
@@ -624,6 +639,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
     }
     await window.engram.answerBridgeQuestion(askRequest.requestId, { chosen })
     setAskRequest(null)
+    tutorActivity.dispatchAskAnswered()
   }
 
   // Pulls a prior answer back into the composer to revise and send as a new follow-up —
@@ -638,6 +654,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
   function stopSession() {
     if (!sessionId) return
     abortedRef.current = true
+    tutorActivity.dispatchStopped()
     window.engram.abortSession(sessionId)
   }
 
@@ -716,6 +733,24 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
     () => gradeBatches.map((b) => ({ batch: b, resolvedIndex: nextProbeHeaderAt(messages, b.atIndex) })),
     [gradeBatches, messages],
   )
+  /** Carried-over fix (chat-ordering-fix-report.md's own follow-up list) —
+   * `lapse`/`milestone` marks shared the exact anchoring bug the grade card
+   * and crossing were fixed for: `pushLapseMark`/`pushMilestoneMark` still
+   * pin `atIndex` to "however many messages exist right now" at tool_result
+   * time (unchanged, same "landed at" bookkeeping `gradeBatches.atIndex`
+   * keeps), but rendering now resolves that through the SAME
+   * `nextProbeHeaderAt` used above, so a lapse rite or milestone card lands
+   * after the full verdict commentary that names it, immediately before the
+   * next probe — never ahead of it. Only these two kinds get pulled out of
+   * the generic `marks` bucket below; every other mark kind (`docket`,
+   * `audit`, `tool-failure`, …) keeps the old boundary convention untouched. */
+  const resolvedOtherMarks = useMemo(
+    () =>
+      marks
+        .filter((m) => m.kind === 'lapse' || m.kind === 'milestone')
+        .map((m) => ({ mark: m, resolvedIndex: nextProbeHeaderAt(messages, m.atIndex) })),
+    [marks, messages],
+  )
   function renderGradeBatch(b: GradeBatch) {
     return b.results.map((r, ri) => (
       <GradeResultCard
@@ -732,11 +767,15 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
    * extra render) for the common case of a message resolving nothing. */
   function inlineForMessage(i: number) {
     const batches = resolvedGradeBatches.filter((g) => g.resolvedIndex === i)
+    const otherMarks = resolvedOtherMarks.filter((g) => g.resolvedIndex === i)
     const crossing = crossings.find((c) => c.atMessageIndex === i)
-    if (batches.length === 0 && !crossing) return null
+    if (batches.length === 0 && otherMarks.length === 0 && !crossing) return null
     return (
       <Fragment>
         {batches.flatMap((g) => renderGradeBatch(g.batch))}
+        {otherMarks.map((g) => (
+          <MarkView key={g.mark.id} mark={g.mark} />
+        ))}
         {crossing && <NodeCrossingDivider nodeId={crossing.header.node} verb="moving to" />}
       </Fragment>
     )
@@ -745,6 +784,8 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
    * once, after the whole transcript, same tail convention `marks` still
    * uses for everything else. */
   const tailGradeBatches = resolvedGradeBatches.filter((g) => g.resolvedIndex === null)
+  /** Same tail case for the re-anchored lapse/milestone marks below. */
+  const tailOtherMarks = resolvedOtherMarks.filter((g) => g.resolvedIndex === null)
   const lastUserMessageId = useMemo(() => [...messages].reverse().find((m) => m.role === 'user')?.id ?? null, [messages])
   const latestTicket = useMemo(() => extractTicketFromMessages(messages), [messages])
 
@@ -1002,9 +1043,15 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
             })()}
             <ChatScrollRegion deps={[messages, busy]}>
               <div className="transcript-measure flex flex-col gap-5">
-                {marks.filter((k) => k.atIndex === 0).map((k) => (
-                  <MarkView key={k.id} mark={k} />
-                ))}
+                {/* lapse/milestone excluded here — re-anchored via
+                    inlineForMessage/tailOtherMarks below (the carried-over
+                    ordering fix); every other kind keeps this boundary
+                    convention untouched. */}
+                {marks
+                  .filter((k) => k.atIndex === 0 && k.kind !== 'lapse' && k.kind !== 'milestone')
+                  .map((k) => (
+                    <MarkView key={k.id} mark={k} />
+                  ))}
                 {messages.map((m, i) => (
                   <Fragment key={m.id}>
                     <ChatMessageView
@@ -1017,21 +1064,34 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
                       // doctrine comment). `undefined` for the common case of a
                       // message that resolves nothing, which is most messages.
                       beforeProbeHeader={inlineForMessage(i) ?? undefined}
+                      // Chat Presence Wave D Task 9 — only the transcript's
+                      // very last message, only while it's the live growing
+                      // assistant bubble.
+                      trailingCaret={busy && i === messages.length - 1 && m.role === 'assistant' && tutorActivity.activity.kind === 'streaming'}
                     />
                     {marks
-                      .filter((k) => k.atIndex === i + 1 || (i === messages.length - 1 && k.atIndex > messages.length))
+                      .filter(
+                        (k) =>
+                          (k.atIndex === i + 1 || (i === messages.length - 1 && k.atIndex > messages.length)) &&
+                          k.kind !== 'lapse' &&
+                          k.kind !== 'milestone',
+                      )
                       .map((k) => (
                         <MarkView key={k.id} mark={k} />
                       ))}
                   </Fragment>
                 ))}
-                {/* Grade batches whose next probe header never arrived — the
-                    tail case (the sitting's last graded item, or a session
-                    that closed before producing its next probe). */}
+                {/* Grade batches, and the re-anchored lapse/milestone marks,
+                    whose next probe header never arrived — the tail case
+                    (the sitting's last graded item, or a session that closed
+                    before producing its next probe). */}
                 {tailGradeBatches.flatMap((g) => renderGradeBatch(g.batch))}
+                {tailOtherMarks.map((g) => (
+                  <MarkView key={g.mark.id} mark={g.mark} />
+                ))}
                 {busy && (
                   <div className="flex items-center gap-2">
-                    <TypingIndicator />
+                    <ActivityLine activity={tutorActivity.activity} />
                     <button
                       onClick={stopSession}
                       className="focus-ring text-xs px-2.5 py-1 rounded-lg text-[var(--color-text-faint)] hover:text-[var(--color-ink-danger)] hover:bg-[var(--color-surface-3)]"
@@ -1054,6 +1114,22 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
             </ChatScrollRegion>
           </div>
 
+          {/* Chat Presence Wave D Task 10 — the generic 90s idle cue. Gated on
+              `!honestBlankReady` so it never double-fires alongside Review's
+              OWN, earlier (45s) honest-blank affordance below: that one is
+              already this view's "you've been quiet" signal, and this is the
+              barely-there GENERIC variant Learn also gets (no honest-blank
+              equivalent there). */}
+          {tutorActivity.activity.kind === 'awaiting-learner' && !busy && !honestBlankReady && (
+            <div className="shrink-0 fig-caption px-1">still here — whenever you're ready</div>
+          )}
+          {/* A persistent, factual end-of-sitting line — distinct from the
+              idle cue above (that one invites you back; this one states what
+              happened and where the record lives). */}
+          {tutorActivity.activity.kind === 'ended' && (
+            <div className="shrink-0 fig-caption px-1">this sitting has closed · session history holds the record</div>
+          )}
+
           {current && !busy && phase !== 'done' && (
             <MessageComposer
               production={production}
@@ -1073,6 +1149,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
                   ? { label: "I can't retrieve this", onUse: () => setProduction("I can't retrieve this one.") }
                   : null
               }
+              disabledReason={composerDisabledReason(tutorActivity.activity)}
             />
           )}
 

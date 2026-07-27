@@ -27,6 +27,14 @@ interface ChatMessageViewProps {
    * land them ahead of the very commentary they're the receipt for. Ignored
    * (and never rendered) when this message carries no header. */
   beforeProbeHeader?: ReactNode
+  /** Chat Presence Wave D Task 9 — a small pulsing ink caret at the end of
+   * this message's own last rendered segment, shown only while THIS message
+   * is the live growing assistant bubble (`activity.kind === 'streaming'`
+   * AND it's the latest message) — callers pass `true` only on that one
+   * message, never persisted, gone the instant streaming stops (the next
+   * render simply omits the prop). Ignored on user messages (the caret is a
+   * "the tutor is composing" signal, never shown on the learner's own turn). */
+  trailingCaret?: boolean
 }
 
 /** One turn, rendered like a normal chat exchange — a right-aligned bubble for
@@ -37,7 +45,12 @@ interface ChatMessageViewProps {
 /** Memoized — without this, every message in a session re-renders (and, pre-memo,
  * re-ran KaTeX / beat-segment parsing) on every unrelated re-render of the parent
  * session view, e.g. every keystroke in the composer textarea below the chat log. */
-export const ChatMessageView = memo(function ChatMessageView({ message, onEditResend, beforeProbeHeader }: ChatMessageViewProps) {
+export const ChatMessageView = memo(function ChatMessageView({
+  message,
+  onEditResend,
+  beforeProbeHeader,
+  trailingCaret,
+}: ChatMessageViewProps) {
   const segments = useMemo(
     () => (message.role === 'user' ? [] : parseBeatSegments(message.text)),
     [message.role, message.text],
@@ -85,7 +98,12 @@ export const ChatMessageView = memo(function ChatMessageView({ message, onEditRe
       </div>
       <div className="flex flex-col gap-3 flex-1 min-w-0">
         {segments.map((seg, i) => {
-          if (seg.beat) return <BeatCard key={i} beat={seg.beat} text={seg.text} />
+          // The caret only ever belongs on the LAST segment's own trailing
+          // edge — a growing message's earlier segments are already settled
+          // text, even mid-stream.
+          const isLastSegment = i === segments.length - 1
+          const caret = isLastSegment && trailingCaret
+          if (seg.beat) return <BeatCard key={i} beat={seg.beat} text={seg.text} trailingCaret={caret} />
           // A per-item progress marker means this is the moment of asking —
           // set it as a probe card. The marker doesn't have to open the
           // segment (a tutor often leads with a line of transition), so any
@@ -101,7 +119,7 @@ export const ChatMessageView = memo(function ChatMessageView({ message, onEditRe
               </Fragment>
             )
           }
-          return <PlainDialogueBlock key={i} text={seg.text} />
+          return <PlainDialogueBlock key={i} text={seg.text} trailingCaret={caret} />
         })}
       </div>
     </div>

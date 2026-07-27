@@ -94,6 +94,34 @@
   }
 }
 
+/* Chat Presence Wave D — Task 9's streaming caret + the ActivityLine/
+ * GradingShimmer/MessageComposer label crossfade. Both covered by the global
+ * prefers-reduced-motion kill-switch above (it zeros every animation/
+ * transition duration app-wide), so neither needs its own matchMedia guard. */
+@keyframes streaming-caret-pulse {
+  0%, 100% { opacity: 0.15; }
+  50% { opacity: 0.85; }
+}
+
+.streaming-caret {
+  display: inline-block;
+  width: 2px;
+  height: 0.95em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: var(--color-ink-warm);
+  animation: streaming-caret-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes activity-label-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.activity-label-in {
+  animation: activity-label-in var(--dur-base) var(--ease-out-soft);
+}
+
 @keyframes consolidate-ping {
   0% { transform: scale(1); opacity: 0.65; }
   75%, 100% { transform: scale(2.4); opacity: 0; }

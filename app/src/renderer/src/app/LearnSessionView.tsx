@@ -12,8 +12,9 @@ import { TopicSettingsModal } from '../components/TopicSettingsModal'
 import { NewTopicModal } from '../components/NewTopicModal'
 import { ContextGauge } from '../components/ContextGauge'
 import { BeatStepper, type BeatOutcome } from '../components/BeatStepper'
-import { TypingIndicator } from '../components/TypingIndicator'
+import { ActivityLine } from '../components/ActivityLine'
 import { ChatScrollRegion } from '../components/ChatScrollRegion'
+import { useTutorActivity, composerDisabledReason } from '../shared/tutorActivity'
 import { parseTranscriptToMessages, type ChatMessage } from '../../../shared/chatMessages'
 import { extractLastUsageFromTranscript } from '../../../shared/sessionUsage'
 import { latestBeatLabel } from '../../../shared/beatLabelParser'
@@ -47,7 +48,7 @@ import { emitPulse, setAmbientLevel } from '../../../shared/neuralFieldBus'
 import { recordConfidence } from '../shared/calibrationStore'
 import { SessionHistoryDrawer, exportSittingTranscript } from '../components/SessionHistoryDrawer'
 import { parseGradeResults, type GradeResult } from '../../../shared/gradeResult'
-import { MarkView, GradingShimmer, type RitualMark } from '../components/ritual/Marks'
+import { MarkView, type RitualMark } from '../components/ritual/Marks'
 import { ActionChips, type SuggestedAction } from '../components/ritual/ActionChips'
 import { SessionOpenPlate, SessionCeremony } from '../components/ritual/Bookends'
 import { Button } from '../components/ui/Button'
@@ -274,7 +275,19 @@ export function LearnSessionView({
   const [exportingFormat, setExportingFormat] = useState<ExportSittingFormat | null>(null)
   const [exportStatus, setExportStatus] = useState<{ text: string; failed: boolean } | null>(null)
   const [marks, setMarks] = useState<RitualMark[]>([])
-  const [gradingPending, setGradingPending] = useState(false)
+  // Chat Presence Wave D — renderer-local, live-only "what's the tutor doing
+  // right now" (shared/tutorActivity.ts's doctrine comment has the full
+  // rationale). Additive alongside `busy` above: nothing here replaces it.
+  // Retires the old `gradingPending` flag this state used to sit next to —
+  // that one toggled on the SOFT `session_phase: 'grading'` bridge signal and
+  // off at the `receipt` tool_result, so the shimmer only ever started once
+  // the assessor had ALREADY finished (see Task 8's doctrine comment in
+  // tutorActivity.ts). `activity`'s `grading:assessing` instead reacts to the
+  // assessor's own spawn tool_use — a hard signal, real for /learn too (its
+  // SKILL.md step 4 spawns `engram-assessor` exactly as /review's audit
+  // does; Wave A's finding was that no UI listened for it yet, not that the
+  // spawn doesn't happen).
+  const tutorActivity = useTutorActivity()
   const [walkNumber, setWalkNumber] = useState<number | null>(null)
   const [commitment, setCommitment] = useState<string | null>(null)
   const [momentumOn, setMomentumOn] = useState(true)
@@ -477,7 +490,6 @@ export function LearnSessionView({
     setAttachedFiles([])
     nextCallsSeen.current = 0
     setMarks([])
-    setGradingPending(false)
     pendingStashToolUseIds.current.clear()
     pendingNewTopicSettings.current = null
     setLastWalk(null)
@@ -504,6 +516,12 @@ export function LearnSessionView({
     // NeuralField is app-global and this view stays mounted — a new session must not
     // inherit the previous topic's leftover warmth.
     setAmbientLevel(0)
+    // Chat Presence Wave D — live-only, no replay obligation: every call site
+    // of this reset (fresh topic, resume, new-topic, deep-link switch) starts
+    // `activity` fresh at `idle`, regardless of how much history the rest of
+    // this reset (or the caller's own hydration) rebuilds. See
+    // shared/tutorActivity.ts's doctrine comment.
+    tutorActivity.reset()
   }
 
   function refreshTopics() {
@@ -529,6 +547,7 @@ export function LearnSessionView({
     const offAsk = window.engram.onBridgeAsk((req) => {
       if (req.sessionId !== sessionIdRef.current) return
       setAskRequest(req)
+      tutorActivity.dispatchAskOpened()
     })
     // The model reliably calls the render_beat MCP tool with the real current
     // beat (confirmed against a live transcript: 21/21 calls correctly
@@ -585,7 +604,10 @@ export function LearnSessionView({
           }
           if (prevPhase !== nextPhase) pushMark({ kind: 'phase', phase: nextPhase })
           setSessionPhase(nextPhase)
-          if (nextPhase === 'grading') setGradingPending(true)
+          // Chat Presence Wave D — the batch has moved into grading, ahead
+          // of the assessor's own spawn tool_use (which promotes this to
+          // `grading:assessing` — see tutorActivity.ts's doctrine comment).
+          if (nextPhase === 'grading') tutorActivity.dispatchGradingPhaseEntered()
           break
         }
         case 'beat_outcome': {
@@ -703,6 +725,10 @@ export function LearnSessionView({
   }, [openNewTopicSignal])
 
   function handleSessionEvent(event: SessionEvent) {
+    // Chat Presence Wave D — fed every SessionEvent this handler sees, same
+    // as `deriveRitualMarks` gets every walked transcript event; unlike that
+    // function, this one is live-only and has no replay counterpart.
+    tutorActivity.dispatchSessionEvent(event)
     switch (event.type) {
       case 'text':
         // Append to the running assistant message if we're mid-turn (deltas arrive as
@@ -757,7 +783,6 @@ export function LearnSessionView({
         }
         if (event.name === 'Bash' && looksLikeReceiptCall(event.input)) {
           pendingReceiptToolUseId.current = event.id
-          setGradingPending(true)
         }
         if (event.name === 'Bash' && looksLikeStashCall(event.input)) {
           pendingStashToolUseIds.current.add(event.id)
@@ -908,7 +933,6 @@ export function LearnSessionView({
         }
         if (event.toolUseId === pendingReceiptToolUseId.current) {
           pendingReceiptToolUseId.current = null
-          setGradingPending(false)
           const results = parseGradeResults(event.content)
           if (results.length > 0) {
             // A receipt just landed — the node's state (and the palette's
@@ -1203,6 +1227,7 @@ export function LearnSessionView({
     }
     await window.engram.answerBridgeQuestion(askRequest.requestId, { chosen })
     setAskRequest(null)
+    tutorActivity.dispatchAskAnswered()
   }
 
   // Pulls a prior answer back into the composer to revise and send as a new follow-up —
@@ -1255,6 +1280,7 @@ export function LearnSessionView({
   function stopSession() {
     if (!sessionId) return
     intentionalStopRef.current = true
+    tutorActivity.dispatchStopped()
     window.engram.abortSession(sessionId)
     setBusy(false)
   }
@@ -1606,6 +1632,10 @@ export function LearnSessionView({
                     <ChatMessageView
                       message={m}
                       onEditResend={m.role === 'user' && m.id === lastUserMessageId && !busy ? editResend : undefined}
+                      // Chat Presence Wave D Task 9 — only the transcript's
+                      // very last message, only while it's the live growing
+                      // assistant bubble.
+                      trailingCaret={busy && i === messages.length - 1 && m.role === 'assistant' && tutorActivity.activity.kind === 'streaming'}
                     />
                     {marks
                       .filter((k) => k.atIndex === i + 1 || (i === messages.length - 1 && k.atIndex > messages.length))
@@ -1616,7 +1646,7 @@ export function LearnSessionView({
                 ))}
                 {busy && (
                   <div className="flex items-center gap-2">
-                    {gradingPending ? <GradingShimmer /> : <TypingIndicator />}
+                    <ActivityLine activity={tutorActivity.activity} />
                     <button
                       onClick={stopSession}
                       className="focus-ring text-xs px-2.5 py-1 rounded-lg text-[var(--color-text-faint)] hover:text-[var(--color-ink-danger)] hover:bg-[var(--color-surface-3)]"
@@ -1644,6 +1674,16 @@ export function LearnSessionView({
             </div>
           )}
 
+          {/* Chat Presence Wave D Task 10 — the generic 90s idle cue (Review's
+              own, earlier 45s honest-blank affordance has no Learn
+              equivalent, so there's nothing here to double-fire alongside). */}
+          {tutorActivity.activity.kind === 'awaiting-learner' && !busy && (
+            <div className="shrink-0 fig-caption px-1">still here — whenever you're ready</div>
+          )}
+          {tutorActivity.activity.kind === 'ended' && (
+            <div className="shrink-0 fig-caption px-1">this sitting has closed · session history holds the record</div>
+          )}
+
           {!busy && (
             <MessageComposer
               production={production}
@@ -1657,6 +1697,7 @@ export function LearnSessionView({
               chamber={chamber}
               onChamberChange={setChamber}
               inviteChamber={currentBeat === 'verify'}
+              disabledReason={composerDisabledReason(tutorActivity.activity)}
             />
           )}
         </div>

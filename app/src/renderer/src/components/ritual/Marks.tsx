@@ -228,13 +228,17 @@ export function MarkView({ mark }: { mark: RitualMark }) {
   return <StashStamp />
 }
 
-/** Shown at the transcript foot while the assessor examines the stash. */
-export function GradingShimmer() {
+/** Shown at the transcript foot while the assessor examines the stash.
+ * `label` (Wave D's `ActivityLine`) names the specific stage in the app's own
+ * voice — "the assessor is examining your work" for `grading:assessing`, or
+ * a stashing-stage label — rather than the generic caption alone; defaults to
+ * the original text for any caller that predates that classification. */
+export function GradingShimmer({ label = 'specimen under examination' }: { label?: string } = {}) {
   return (
     <div className="panel px-4 py-3 max-w-[70%] flex items-center gap-3">
       <div className="skeleton h-2 w-2 rounded-full shrink-0" />
       <div className="flex flex-col gap-1 min-w-0">
-        <span className="fig-caption">specimen under examination</span>
+        <span key={label} className="fig-caption activity-label-in">{label}</span>
         <div className="skeleton h-1.5 w-40 rounded" />
       </div>
     </div>

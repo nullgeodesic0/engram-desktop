@@ -24,6 +24,15 @@ interface MessageComposerProps {
    * assessor handle absolution, not this button. Caller (ReviewSessionView) owns the
    * 45s timer and passes null when it shouldn't show; omit entirely to opt out. */
   assist?: { label: string; onUse: () => void } | null
+  /** Chat Presence Wave D Task 10 — a quiet, factual line naming why sending
+   * would be premature right now ("the tutor is mid-thought", "the assessor
+   * is examining your work", …), driven by `shared/tutorActivity.ts`'s
+   * `composerDisabledReason`. `null`/omitted renders nothing and changes no
+   * other behavior — this is additive labeling, never a new blocking gate of
+   * its own (both session views still decide separately whether the composer
+   * mounts at all). Never scolding: it names what's happening, not what the
+   * learner should or shouldn't do. */
+  disabledReason?: string | null
 }
 
 /** The response box shared by Learn and Review: attachment chips, a textarea that
@@ -43,6 +52,7 @@ export function MessageComposer({
   onChamberChange,
   inviteChamber,
   assist,
+  disabledReason,
 }: MessageComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -82,6 +92,11 @@ export function MessageComposer({
         </div>
       )}
       {chamber && <div className="fig-caption">recall chamber — nothing to look back at</div>}
+      {!chamber && disabledReason && (
+        <div key={disabledReason} className="fig-caption activity-label-in">
+          {disabledReason}
+        </div>
+      )}
       <div className={markdownPreview ? 'grid grid-cols-2 gap-3 w-full' : 'w-full'}>
         <textarea
           ref={textareaRef}
@@ -151,7 +166,7 @@ export function MessageComposer({
           <span className="text-[10px] label-data text-[var(--color-text-faint)]">⌘⏎</span>
           <button
             onClick={submit}
-            disabled={!production.trim()}
+            disabled={!production.trim() || !!disabledReason}
             className="focus-ring px-4 py-2 rounded-lg text-sm bg-[var(--color-surface-3)] text-[var(--color-ink-warm)] hover:bg-[var(--color-surface-2)] disabled:opacity-40"
           >
             Submit
