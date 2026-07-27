@@ -167,6 +167,88 @@ function formatWhen(iso: string): string {
   )
 }
 
+/** The `historyKey` sentinel for the drawer's "everything" mode — every
+ * sitting across every topic and both loops, newest first. Not a real topic
+ * id or session key (nothing is ever recorded under it in the session
+ * index), just a value `SessionHistoryDrawer` recognizes to switch into
+ * aggregate mode instead of a single-key fetch. */
+export const ALL_HISTORY_KEY = '*'
+
+/** A `SessionIndexEntry` as shown in the drawer's "everything" list, tagged
+ * with which loop it belongs to and (when known) which topic. Left
+ * unpopulated (all three fields `undefined`) for the ordinary per-topic/
+ * review modes — `HistoryRow` below is a strict superset of
+ * `SessionIndexEntry` so those modes can keep handing the drawer plain
+ * index entries, untouched. */
+export interface AllHistoryEntry extends SessionIndexEntry {
+  kind: 'learn' | 'review'
+  /** The topic this sitting belongs to, when attributable — absent for
+   * review sittings (the queue spans every topic, same as `ladderTopic`'s
+   * existing 'review' special-case below) and for sittings recorded under
+   * the legacy shared 'learn' key, from before per-topic keying existed
+   * (see sessionScan.ts's module doc) — those carry no topic at all. */
+  topicId?: string
+  topicTitle?: string
+}
+
+type HistoryRow = SessionIndexEntry & Partial<Pick<AllHistoryEntry, 'kind' | 'topicId' | 'topicTitle'>>
+
+/** The "everything" list's per-row tag — kind plus topic when attributable.
+ * A legacy-key 'learn' sitting (see `fetchAllHistory`'s doc below) has no
+ * topic to show, so it reads as plain "Learn" rather than fabricating an
+ * attribution. Unused for the ordinary per-topic/review modes, whose rows
+ * never carry a `kind`. */
+function historyRowTag(entry: HistoryRow): string {
+  if (entry.kind === 'review') return 'Review'
+  return entry.topicTitle ? `Learn · ${entry.topicTitle}` : 'Learn'
+}
+
+/** Every sitting across every topic and both loops, newest first — the data
+ * behind the drawer's `ALL_HISTORY_KEY` mode. Walks the same three source
+ * layers sessionScan.ts's `nodeProvenance` already established for
+ * provenance recovery: each topic's own 'learn' key, the shared 'review'
+ * key, and the legacy shared 'learn' key that early sittings (recorded
+ * before per-topic keying existed) still live under. A sessionId can
+ * legitimately turn up more than once across — or even within — those lists
+ * (a resumed session reappears in its own key once per resume, sharing one
+ * transcript — see sessionIndex.ts's `recordSession`), so this dedupes by
+ * sessionId across the whole combined set, same "first occurrence wins" rule
+ * `nodeProvenance`'s own `seenSessionIds` walk already uses. Because each
+ * source list already comes back newest-first (`sessionHistoryFor`'s own
+ * contract), "first occurrence" here also means "latest resume" wins the
+ * entry actually kept. Topic sittings are attributed before the legacy key,
+ * so a topic-tagged occurrence always wins over an untagged legacy one for
+ * the same sessionId. */
+export async function fetchAllHistory(): Promise<AllHistoryEntry[]> {
+  const topics = await window.engram.topics()
+  const [perTopicLists, reviewList, legacyList] = await Promise.all([
+    Promise.all(topics.map((t) => window.engram.sessionHistoryFor('learn', t.topic))),
+    window.engram.sessionHistoryFor('review'),
+    window.engram.sessionHistoryFor('learn'),
+  ])
+
+  const seen = new Set<string>()
+  const out: AllHistoryEntry[] = []
+  function take(list: SessionIndexEntry[], tag: (e: SessionIndexEntry) => AllHistoryEntry) {
+    for (const e of list) {
+      if (seen.has(e.sessionId)) continue
+      seen.add(e.sessionId)
+      out.push(tag(e))
+    }
+  }
+
+  topics.forEach((t, i) =>
+    take(perTopicLists[i], (e) => ({ ...e, kind: 'learn', topicId: t.topic, topicTitle: t.title })),
+  )
+  take(reviewList, (e) => ({ ...e, kind: 'review' }))
+  take(legacyList, (e) => ({ ...e, kind: 'learn' }))
+
+  // Newest first across the combined set — per-key ordering alone isn't
+  // enough once lists from different keys are interleaved.
+  out.sort((a, b) => b.startedAt.localeCompare(a.startedAt))
+  return out
+}
+
 /** Read-only browser for past sittings on a topic (Learn) or the review queue
  * (Review). Fully self-contained: its own list/selection/transcript state,
  * no reach into the live session view that opened it, and no path to
@@ -183,12 +265,16 @@ export function SessionHistoryDrawer({
   initialSessionId,
   anchorIndex,
 }: {
-  /** A topic id for Learn history, or the literal string 'review' for Review
-   * history — mirrors how `sessionHistoryFor`'s key space works server-side. */
+  /** A topic id for Learn history, the literal string 'review' for Review
+   * history — mirrors how `sessionHistoryFor`'s key space works server-side —
+   * or `ALL_HISTORY_KEY` for the "everything" mode (every sitting across
+   * every topic and both loops; see `fetchAllHistory`). */
   historyKey: string
   /** Display title for exported documents (a topic's real title for Learn,
    * "Review" for the review queue) — `historyKey` itself is a raw topic id,
-   * not fit for a document header. Falls back to `historyKey` if omitted. */
+   * not fit for a document header. Falls back to `historyKey` if omitted, or
+   * (for `ALL_HISTORY_KEY`) to the selected row's own kind/topic tag, since
+   * `historyKey` there is just the '*' sentinel. */
   title?: string
   open: boolean
   onClose: () => void
@@ -203,12 +289,7 @@ export function SessionHistoryDrawer({
    * this index) just leaves the view at the top of the sitting. */
   anchorIndex?: number
 }) {
-  // Learn history's `historyKey` is a real topic id; Review history's is the
-  // literal 'review' sentinel spanning every topic — only the former gives
-  // the interval ladder a single topic to filter receipts by (see
-  // GradeResultCard's optional `topic` prop).
-  const ladderTopic = historyKey !== 'review' ? historyKey : undefined
-  const [entries, setEntries] = useState<SessionIndexEntry[] | null>(null)
+  const [entries, setEntries] = useState<HistoryRow[] | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [timeline, setTimeline] = useState<{
     messages: ChatMessage[]
@@ -231,8 +312,12 @@ export function SessionHistoryDrawer({
     setSelectedId(null)
     setTimeline(null)
     anchorAppliedRef.current = false
-    const fetchEntries =
-      historyKey === 'review' ? window.engram.sessionHistoryFor('review') : window.engram.sessionHistoryFor('learn', historyKey)
+    const fetchEntries: Promise<HistoryRow[]> =
+      historyKey === ALL_HISTORY_KEY
+        ? fetchAllHistory()
+        : historyKey === 'review'
+          ? window.engram.sessionHistoryFor('review')
+          : window.engram.sessionHistoryFor('learn', historyKey)
     fetchEntries.then((list) => {
       setEntries(list)
       // Anchored open lands on the requested sitting; otherwise most-recent
@@ -273,7 +358,7 @@ export function SessionHistoryDrawer({
     setExportStatus(null)
     try {
       const result = await exportSittingTranscript(selectedEntry.sessionId, format, {
-        title: title ?? historyKey,
+        title: title ?? (historyKey === ALL_HISTORY_KEY ? historyRowTag(selectedEntry) : historyKey),
         startedAt: selectedEntry.startedAt,
       })
       if (result.ok) setExportStatus({ text: `Saved to ${result.path}`, failed: false })
@@ -322,6 +407,13 @@ export function SessionHistoryDrawer({
   }, [timeline, selectedId, initialSessionId, anchorIndex])
 
   const selectedEntry = entries?.find((e) => e.sessionId === selectedId) ?? null
+  // Learn history's `historyKey` is a real topic id; Review history's is the
+  // literal 'review' sentinel spanning every topic — only the former gives
+  // the interval ladder a single topic to filter receipts by (see
+  // GradeResultCard's optional `topic` prop). The "everything" mode has no
+  // single topic for the whole drawer — it follows whichever sitting is
+  // currently selected, same as its `kind`/`topicTitle` tag.
+  const ladderTopic = historyKey === ALL_HISTORY_KEY ? selectedEntry?.topicId : historyKey !== 'review' ? historyKey : undefined
 
   return (
     <Modal open={open} onClose={onClose} title="Session history" wide>
@@ -342,7 +434,9 @@ export function SessionHistoryDrawer({
                 entry.sessionId === selectedId ? 'bg-[var(--color-surface-3)]' : ''
               }`}
             >
-              <span className="text-sm text-[var(--color-text-primary)]">{i === 0 ? 'Most recent' : `${i + 1} sessions ago`}</span>
+              <span className="text-sm text-[var(--color-text-primary)] truncate max-w-full">
+                {historyKey === ALL_HISTORY_KEY ? historyRowTag(entry) : i === 0 ? 'Most recent' : `${i + 1} sessions ago`}
+              </span>
               <span className="text-xs text-[var(--color-text-faint)] label-data">{formatWhen(entry.startedAt)}</span>
             </button>
           ))}
@@ -351,7 +445,9 @@ export function SessionHistoryDrawer({
         <div className="flex-1 min-w-0 flex flex-col gap-3">
           {selectedEntry && (
             <div className="shrink-0 panel border-[var(--color-ink-cool-dim)] px-4 py-2 flex items-center justify-between gap-3">
-              <span className="text-xs text-[var(--color-ink-cool)]">read-only · sitting of {formatWhen(selectedEntry.startedAt)}</span>
+              <span className="text-xs text-[var(--color-ink-cool)]">
+                read-only · {historyKey === ALL_HISTORY_KEY && `${historyRowTag(selectedEntry)} · `}sitting of {formatWhen(selectedEntry.startedAt)}
+              </span>
               <div className="flex items-center gap-3 shrink-0">
                 {exportStatus && (
                   <span
