@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { TopicSummary, TopicGraph, MapAnnotations, NodeProvenance, ProvenanceEvent, Misconception } from '../../../shared/types'
 import { RetentionCurve } from '../components/RetentionCurve'
 import { GraphView, EDGE_STYLE } from '../components/GraphView'
+import { NodeTable } from '../components/NodeTable'
 import { GrowthScrubber } from '../components/GrowthScrubber'
 import { cellBodyPath, plateStats } from '../components/graph2d/plate'
 import { humanizeNodeId } from '../../../shared/humanizeId'
@@ -202,6 +203,10 @@ export function TopicMapView({
   // topics matches how a lens works (you don't re-pick it every time you
   // move your eyes).
   const [dueLens, setDueLens] = useState(false)
+  // Map/table toggle for the plate — view-local, default map, and
+  // deliberately NOT reset on topic switches (same reasoning as dueLens
+  // above: it's a viewing preference, not per-topic state).
+  const [plateView, setPlateView] = useState<'map' | 'table'>('map')
   // Tutor-authored LaTeX overrides for the selected topic's nodes (see
   // mapAnnotations.ts) — keyed by node id, refreshed on topic switch and on
   // every live annotate_node bridge:ui event for this topic.
@@ -442,6 +447,38 @@ export function TopicMapView({
               the map without touching the map's own ink — the plate reads as
               the thing in focus, everything else as depth. */}
           <div className="relative flex-1 min-w-0 flex flex-col rounded-xl overflow-hidden backdrop-blur-md bg-[var(--color-void)]/55">
+            {/* Plate header — map/table toggle. A real header bar rather than
+                another floating overlay: the table's own column headers need
+                the top-left/top-right corners the map's search box and stats
+                readout already occupy, so the toggle lives above both instead
+                of stacking on top of either. */}
+            <div className="shrink-0 flex items-center justify-end px-3 py-2 border-b border-[var(--color-hairline)]">
+              <div role="group" aria-label="Map or table view" className="flex items-center gap-0.5 panel p-0.5 bg-[var(--color-surface)]/90">
+                {(['map', 'table'] as const).map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => setPlateView(v)}
+                    aria-pressed={plateView === v}
+                    className={`focus-ring label-data text-[10px] uppercase tracking-wide px-2.5 py-1 rounded-md transition-colors ${
+                      plateView === v
+                        ? 'bg-[var(--color-surface-3)] text-[var(--color-ink-warm)]'
+                        : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]'
+                    }`}
+                  >
+                    {v === 'map' ? 'Map' : 'Table'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {plateView === 'table' && (
+              <div className="relative flex-1 min-h-0">
+                <NodeTable graph={graph} selectedNode={selectedNode} onSelectNode={setSelectedNode} />
+              </div>
+            )}
+
+            {plateView === 'map' && (
+            <div className="relative flex-1 min-h-0">
             <GraphView
               graph={graph}
               selected={selectedNode}
@@ -634,6 +671,8 @@ export function TopicMapView({
                 double-click to open
               </div>
             </div>
+            </div>
+            )}
           </div>
 
           {/* Node detail drawer — slides in on select, like Obsidian's file-properties pane. */}
