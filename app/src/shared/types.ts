@@ -281,9 +281,25 @@ export interface WeekRetention {
   rate: number | null
 }
 
+/** Mirrors main/engramCli/receiptsHistory.ts's RawReceipt — see that file for
+ * why this is unwindowed (unlike `days`/`weeks` below) and what each field
+ * is for. Consumed only by shared/topicMetrics.ts. */
+export interface RawReceipt {
+  id: string | null
+  ts: string
+  topic: string
+  node: string
+  kind: string | null
+  grade: string | null
+  rating: string | null
+  sBefore: number | null
+  sAfter: number | null
+}
+
 export interface ReceiptsHistory {
   days: DayActivity[]
   weeks: WeekRetention[]
+  receipts: RawReceipt[]
 }
 
 export interface UpdateCheckResult {

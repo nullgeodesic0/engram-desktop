@@ -83,7 +83,7 @@ async function build(deps: SearchIndexDeps): Promise<SearchEntry[]> {
   }
 
   const [receipts, artifacts] = await Promise.all([
-    deps.receiptsHistory().catch((): ReceiptsHistory => ({ days: [], weeks: [] })),
+    deps.receiptsHistory().catch((): ReceiptsHistory => ({ days: [], weeks: [], receipts: [] })),
     deps.artifactList().catch((): ArtifactEntry[] => []),
   ])
 
