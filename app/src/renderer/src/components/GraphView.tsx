@@ -29,7 +29,10 @@ export function stripMathDelimiters(text: string): string {
   return text.replace(/\$\$?/g, '')
 }
 
-const STATE_COLOR: Record<EngramNode['state'], string> = {
+// Exported so NodeTable can color its state/due cells with the exact same
+// vocabulary the plate uses — a table row and a map cell should never
+// disagree about what "consolidated" or "overdue" mean.
+export const STATE_COLOR: Record<EngramNode['state'], string> = {
   new: 'var(--color-ink-cool-dim)',
   learning: 'var(--color-ink-cool)',
   review: 'var(--color-ink-warm)',
@@ -39,9 +42,9 @@ function clamp(v: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, v))
 }
 
-type DueStatus = 'overdue' | 'today' | 'future'
+export type DueStatus = 'overdue' | 'today' | 'future'
 
-const DUE_LENS_COLOR: Record<DueStatus, string> = {
+export const DUE_LENS_COLOR: Record<DueStatus, string> = {
   overdue: 'var(--color-ink-danger)',
   today: 'var(--color-ink-warm)',
   future: 'var(--color-ink-cool-dim)',
@@ -52,8 +55,10 @@ const DUE_LENS_COLOR: Record<DueStatus, string> = {
  * ReviewSessionView's daysOverdueLocal and HomeView's due forecast already
  * use so "today" reads identically everywhere due dates get compared in this
  * app. `null` for a node with nothing to compare yet: state 'new' has no
- * schedule, and the due lens leaves those untouched per the brief. */
-function dueStatusFor(node: EngramNode): DueStatus | null {
+ * schedule, and the due lens leaves those untouched per the brief. Exported
+ * so NodeTable's "due" filter and due-column status use this exact
+ * definition rather than a parallel reimplementation. */
+export function dueStatusFor(node: EngramNode): DueStatus | null {
   if (node.state === 'new' || !node.fsrs.due) return null
   const today = new Date()
   const dayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate())
