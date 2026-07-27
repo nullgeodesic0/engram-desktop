@@ -38,7 +38,13 @@ export function renderMarkdownWithMath(source: string): string {
   const withoutMath = source
     .replace(/\$\$([\s\S]+?)\$\$/g, (_m, tex: string) => stash(renderMath(tex, true)))
     .replace(/\\\[([\s\S]+?)\\\]/g, (_m, tex: string) => stash(renderMath(tex, true)))
-    .replace(/\$([^$\n]+?)\$/g, (_m, tex: string) => stash(renderMath(tex, false)))
+    // Pandoc's inline-math delimiter rules, not "any two dollars on a line": the
+    // opening `$` must be followed by a non-space (and not a digit), the closing `$`
+    // must be preceded by a non-space (and not followed by a digit). This keeps `$x$`
+    // and `$f(x)=x^2$` working while leaving currency like "$5 … $2" as prose —
+    // otherwise the text between two stray dollars gets rendered in math mode, where
+    // whitespace is dropped, swallowing the spaces (notably after `?`/`:`).
+    .replace(/\$(?![\s\d])((?:[^$\n]|\\\$)*?)(?<!\s)\$(?!\d)/g, (_m, tex: string) => stash(renderMath(tex, false)))
     .replace(/\\\(([\s\S]+?)\\\)/g, (_m, tex: string) => stash(renderMath(tex, false)))
 
   // Synchronous parse (no async extensions configured) — `marked.parse` with default
