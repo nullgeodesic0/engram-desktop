@@ -227,6 +227,7 @@ const PINNED_WRITERS: Record<string, string> = {
   'main/session/updateCheck.ts': 'app userData — update-check cache',
   'main/session/permissionConfig.ts': 'os tmpdir — per-session MCP config',
   'main/session/exportSitting.ts': 'user-chosen export path (dialog) + os tmpdir',
+  'main/session/exportMap.ts': 'user-chosen export path (dialog) + os tmpdir — the map-as-PDF sibling of exportSitting.ts, reusing its renderPrintHtmlToPdf pipeline',
   'main/session/backup.ts': 'THE blessed exception: backup archives, and restore into the learning home (see D2.backupGate)',
 }
 

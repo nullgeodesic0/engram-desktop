@@ -7,8 +7,9 @@ import { recordSession, lastSessionFor, sessionHistoryFor } from '../session/ses
 import { getTopicSettings, setTopicSettings, type TopicSettings } from '../session/topicSettings'
 import { readTranscript } from '../session/transcriptReader'
 import { exportSitting } from '../session/exportSitting'
+import { exportMap } from '../session/exportMap'
 import { backupNow, describeArchive, restoreFromArchive, pickBackupArchivePath, getBackupInfo } from '../session/backup'
-import type { ExportSittingRequest, ExportSittingResult } from '../../shared/types'
+import type { ExportSittingRequest, ExportSittingResult, ExportMapRequest } from '../../shared/types'
 
 type SessionKind = 'learn' | 'review' | 'coach'
 
@@ -110,6 +111,12 @@ export function registerSessionHandlers(win: BrowserWindow): void {
   // `rebindWindow` above: the tray can recreate the window mid-lifetime.
   ipcMain.handle('session:export', (_e, req: ExportSittingRequest): Promise<ExportSittingResult> =>
     exportSitting(activeWindow, req),
+  )
+
+  // Map-as-plate export (see session/exportMap.ts) — same activeWindow
+  // rationale as session:export above.
+  ipcMain.handle('map:export', (_e, req: ExportMapRequest): Promise<ExportSittingResult> =>
+    exportMap(activeWindow, req),
   )
 
   // Backup & restore (see session/backup.ts) — the one destructive-capable

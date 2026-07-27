@@ -108,7 +108,7 @@ function edgeBezierControl(
  * Shared by the base edge layer (non-requires hairlines) and the
  * hover/selection trail overlay so trail edges sit exactly on top of their
  * base edge at every instant. */
-function stringEdgePath(
+export function stringEdgePath(
   source: string,
   target: string,
   a: { x: number; y: number },
@@ -155,7 +155,7 @@ const TAPER_SAMPLES = 12
  * the ink visibly "lifts" as it travels from what-you-need to what-it-
  * unlocks. Built from the identical edgeBezierControl the hairline spine
  * uses, so sway/drift are pixel-identical to stringEdgePath's output. */
-function calligraphicEdgePath(
+export function calligraphicEdgePath(
   source: string,
   target: string,
   a: { x: number; y: number },
@@ -185,7 +185,7 @@ function calligraphicEdgePath(
  * travels" — from prerequisite into dependent) and sized in screen space via
  * the caller-supplied inverse-zoom scale, so it reads the same size whether
  * the plate is zoomed to 0.35x or 4x. */
-function arrowheadTransform(
+export function arrowheadTransform(
   source: string,
   target: string,
   a: { x: number; y: number },
@@ -210,7 +210,7 @@ function arrowheadTransform(
   const tipY = b.y - (ty / tlen) * targetRadius
   return `translate(${tipX.toFixed(2)} ${tipY.toFixed(2)}) rotate(${angle.toFixed(2)}) scale(${invZoom.toFixed(4)})`
 }
-const ARROWHEAD_PATH = 'M -6 -3 L 0 0 L -6 3 Z'
+export const ARROWHEAD_PATH = 'M -6 -3 L 0 0 L -6 3 Z'
 
 /** Corner registration ticks — small printing-plate crop marks bracketing
  * each corner of the plate rect, inset `TICK` px along both edges. Pure
@@ -218,7 +218,7 @@ const ARROWHEAD_PATH = 'M -6 -3 L 0 0 L -6 3 Z'
  * called once per render from the (static, non-drifting) furniture layer,
  * never from inside the drift path. */
 const CORNER_TICK = 12
-function cornerTicks(w: number, h: number): string[] {
+export function cornerTicks(w: number, h: number): string[] {
   return [
     `M 0 ${CORNER_TICK} L 0 0 L ${CORNER_TICK} 0`,
     `M ${w - CORNER_TICK} 0 L ${w} 0 L ${w} ${CORNER_TICK}`,
@@ -233,7 +233,7 @@ function cornerTicks(w: number, h: number): string[] {
  * last step before mastery. Ported verbatim from the old three.js component's
  * predicate (with `showCapstoneLinks` permanently off, since that toggle is
  * gone from this props contract). */
-function isEdgeVisible(e: SimEdge, hubNodeIds: Set<string>, forwardAdjacency: Map<string, string[]>): boolean {
+export function isEdgeVisible(e: SimEdge, hubNodeIds: Set<string>, forwardAdjacency: Map<string, string[]>): boolean {
   if (hubNodeIds.size === 0) return true
   const touchesHub = hubNodeIds.has(e.source) || hubNodeIds.has(e.target)
   if (!touchesHub) return true
