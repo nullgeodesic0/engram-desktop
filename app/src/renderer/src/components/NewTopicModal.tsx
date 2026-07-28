@@ -25,8 +25,29 @@ export function NewTopicModal({ onClose, onStart }: NewTopicModalProps) {
   return (
     // Scrim/escape dismissal is a deliberate no-op — an accidental click or
     // Escape must not discard the goal text already typed; use the explicit
-    // Cancel/Start buttons below instead.
-    <Modal open onClose={() => {}} title="Start a new topic">
+    // Cancel/Start buttons in the footer instead.
+    <Modal
+      open
+      onClose={() => {}}
+      title="Start a new topic"
+      footer={
+        <>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="focus-ring text-xs text-[var(--color-text-faint)] px-3 py-1.5">
+              Cancel
+            </button>
+            <button
+              onClick={submit}
+              disabled={!goal.trim()}
+              className="focus-ring text-xs text-[var(--color-ink-warm)] px-3 py-1.5 disabled:opacity-40"
+            >
+              Start
+            </button>
+          </div>
+          <span className="kbd-hint">↵ start</span>
+        </>
+      }
+    >
       <div className="flex flex-col gap-4">
         <div>
           <div className="text-base text-[var(--color-text-primary)] mt-1">What do you want to learn?</div>
@@ -86,19 +107,6 @@ export function NewTopicModal({ onClose, onStart }: NewTopicModalProps) {
           )}
           <button onClick={attach} className="focus-ring self-start text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]">
             📎 Attach files
-          </button>
-        </div>
-
-        <div className="flex justify-end gap-2">
-          <button onClick={onClose} className="focus-ring text-xs text-[var(--color-text-faint)] px-3 py-1.5">
-            Cancel
-          </button>
-          <button
-            onClick={submit}
-            disabled={!goal.trim()}
-            className="focus-ring text-xs text-[var(--color-ink-warm)] px-3 py-1.5 disabled:opacity-40"
-          >
-            Start
           </button>
         </div>
       </div>

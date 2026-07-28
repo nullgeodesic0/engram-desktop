@@ -817,7 +817,54 @@ export function SessionHistoryDrawer({
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Session history" wide>
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Session history"
+      wide
+      // Guardian anatomy (T3): the "read-only · sitting of …" line moves
+      // in-band as the title's subtitle, and the export actions + their
+      // status message move to the hairline-topped footer — both were
+      // previously crammed into one `panel` row above the transcript.
+      subtitle={
+        selectedEntry && (
+          <>
+            read-only · {historyKey === ALL_HISTORY_KEY && `${historyRowTag(selectedEntry)} · `}
+            sitting of {formatWhen(selectedEntry.startedAt)}
+          </>
+        )
+      }
+      footer={
+        selectedEntry ? (
+          <>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => handleExport('md')}
+                disabled={exporting !== null}
+                className="focus-ring no-press text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] disabled:opacity-50"
+              >
+                {exporting === 'md' ? 'Exporting…' : 'Export .md'}
+              </button>
+              <button
+                onClick={() => handleExport('pdf')}
+                disabled={exporting !== null}
+                className="focus-ring no-press text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] disabled:opacity-50"
+              >
+                {exporting === 'pdf' ? 'Exporting…' : 'Export .pdf'}
+              </button>
+            </div>
+            {exportStatus && (
+              <span
+                className={`text-xs truncate max-w-[16rem] ${exportStatus.failed ? 'text-[var(--color-ink-danger)]' : 'text-[var(--color-text-faint)]'}`}
+                title={exportStatus.text}
+              >
+                {exportStatus.text}
+              </span>
+            )}
+          </>
+        ) : undefined
+      }
+    >
       {/* Modal itself has no entrance (see ui/Modal.tsx) — this fade-rise is the
        * drawer's own, and fires once per open since Modal unmounts the whole
        * subtree when `open` is false. */}
@@ -883,37 +930,6 @@ export function SessionHistoryDrawer({
               {entries && entries.length > 0
                 ? ' — showing the most recent one instead. Pick any entry on the left to browse what is here.'
                 : '.'}
-            </div>
-          )}
-          {selectedEntry && (
-            <div className="shrink-0 panel border-[var(--color-ink-cool-dim)] px-4 py-2 flex items-center justify-between gap-3">
-              <span className="text-xs text-[var(--color-ink-cool)]">
-                read-only · {historyKey === ALL_HISTORY_KEY && `${historyRowTag(selectedEntry)} · `}sitting of {formatWhen(selectedEntry.startedAt)}
-              </span>
-              <div className="flex items-center gap-3 shrink-0">
-                {exportStatus && (
-                  <span
-                    className={`text-xs truncate max-w-[16rem] ${exportStatus.failed ? 'text-[var(--color-ink-danger)]' : 'text-[var(--color-text-faint)]'}`}
-                    title={exportStatus.text}
-                  >
-                    {exportStatus.text}
-                  </span>
-                )}
-                <button
-                  onClick={() => handleExport('md')}
-                  disabled={exporting !== null}
-                  className="focus-ring no-press text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] disabled:opacity-50"
-                >
-                  {exporting === 'md' ? 'Exporting…' : 'Export .md'}
-                </button>
-                <button
-                  onClick={() => handleExport('pdf')}
-                  disabled={exporting !== null}
-                  className="focus-ring no-press text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] disabled:opacity-50"
-                >
-                  {exporting === 'pdf' ? 'Exporting…' : 'Export .pdf'}
-                </button>
-              </div>
             </div>
           )}
           {/* Chat Instruments Wave B — `relative` wrapper purely so the

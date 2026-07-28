@@ -1,9 +1,17 @@
+import { StatFraction } from './StatFraction'
+
 const TONE: Record<string, string> = {
   warm: 'text-[var(--color-ink-warm)]',
   cool: 'text-[var(--color-ink-cool)]',
   violet: 'text-[var(--color-ink-violet)]',
   neutral: 'text-[var(--color-text-primary)]',
 }
+
+/** Matches "n/m"-shaped values (e.g. "4/12") so existing StatBlock callers
+ * that already pass a fraction as a plain string (TopicMapView, TopicDrilldownView)
+ * upgrade to the Guardian `.stat-fraction` markup for free, with no call-site
+ * changes. Anything else renders as plain text, exactly as before. */
+const FRACTION_RE = /^(\d+)\s*\/\s*(\d+)$/
 
 export function StatBlock({
   label,
@@ -27,6 +35,7 @@ export function StatBlock({
   pulse?: boolean
   onPulseEnd?: () => void
 }) {
+  const fraction = FRACTION_RE.exec(value)
   return (
     <div className={`panel ${compact ? 'p-2 min-w-0' : 'p-3'}`}>
       <div
@@ -40,7 +49,7 @@ export function StatBlock({
         className={`label-data mt-0.5 ${compact ? 'text-sm' : 'text-lg'} ${TONE[tone]} ${pulse ? 'pulse-once' : ''}`}
         onAnimationEnd={pulse ? onPulseEnd : undefined}
       >
-        {value}
+        {fraction ? <StatFraction n={fraction[1]} d={fraction[2]} /> : value}
       </div>
       {caption && <div className="fig-caption mt-1">{caption}</div>}
     </div>
