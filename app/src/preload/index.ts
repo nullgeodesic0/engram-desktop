@@ -144,6 +144,15 @@ const engramApi = {
     ipcRenderer.on('app:navigate', handler)
     return () => ipcRenderer.removeListener('app:navigate', handler)
   },
+  // Sidebar due-badge push — see main/session/reviewNotifier.ts's 5-min poll
+  // (main/index.ts's `sendDueCount`). Freshness (window focus, a sitting
+  // ending) is a separate pull via `refreshDueCount` below.
+  onDueCount: (cb: (count: number) => void): (() => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, count: number) => cb(count)
+    ipcRenderer.on('engram:due-count', handler)
+    return () => ipcRenderer.removeListener('engram:due-count', handler)
+  },
+  refreshDueCount: (): Promise<{ dueCount: number }> => ipcRenderer.invoke('engram:refresh-due-count'),
 
   windowClose: (): Promise<void> => ipcRenderer.invoke('window:close'),
   windowMinimize: (): Promise<void> => ipcRenderer.invoke('window:minimize'),

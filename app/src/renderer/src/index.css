@@ -288,6 +288,23 @@
       radial-gradient(140% 50% at 50% 0%, color-mix(in srgb, var(--color-ink-lavender) 6%, transparent), transparent 62%),
       linear-gradient(to bottom, var(--color-nocturne-hi), var(--color-nocturne-lo));
   }
+  /* Sidebar nav item accent doctrine, tokenized (App.tsx used to carry these
+     as raw inline color-mix classes per button — one source now).
+     Lavender is brand-ambient: it's the sidebar's own gradient wash and the
+     constellation footer's family, so on a nav row it only ever means
+     "nearby" (hover). Warm means "you are here" — active text, the existing
+     accent bar (still inline in App.tsx, unchanged), and this background. */
+  .nav-item {
+    color: var(--color-text-dim);
+  }
+  .nav-item:hover {
+    color: var(--color-text-primary);
+    background-color: color-mix(in srgb, var(--color-ink-lavender) 8%, transparent);
+  }
+  .nav-item-active {
+    color: var(--color-ink-warm);
+    background-color: color-mix(in srgb, var(--color-ink-warm) 9%, transparent);
+  }
   .app-drag {
     -webkit-app-region: drag;
   }

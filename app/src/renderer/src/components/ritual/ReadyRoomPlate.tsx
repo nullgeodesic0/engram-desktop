@@ -79,12 +79,13 @@ export const ReadyRoomPlate = memo(function ReadyRoomPlate({
   return (
     <div className="panel px-6 py-6 flex flex-col gap-4">
       {/* ONE count, said once, big — the plate's signature. Deliberately
-          `dueItems.length` (what THIS sitting covers, the same capped queue
-          Start/Resume act on), not `totalDue` — the uncapped backlog gets its
-          own honest mention below instead of inflating the headline figure. */}
+          `totalDue` (the true, uncapped debt), never `dueItems.length` — the
+          headline must never understate what's actually owed. The sitting
+          still only covers a capped subset, most-overdue first; that's
+          explained by the caption below, not by shrinking this figure. */}
       <div className="flex items-baseline gap-3">
         <span className="font-[var(--font-serif)] text-[length:3.5rem] leading-none text-[var(--color-ink-warm)]">
-          {dueItems.length}
+          {totalDue}
         </span>
         <div className="flex flex-col gap-0.5 min-w-0">
           <span className="text-sm text-[var(--color-text-primary)]">

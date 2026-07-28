@@ -116,7 +116,7 @@ function TopicGroup({
         <span className="text-[10px] label-data uppercase tracking-wide text-[var(--color-text-faint)]">{heading}</span>
         {caption && <span className="text-xs text-[var(--color-text-faint)]">{caption}</span>}
       </div>
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 min-[760px]:grid-cols-2 min-[1080px]:grid-cols-3 gap-3">
         {topics.map((t) => (
           <TopicCard key={t.topic} variant="tile" topic={t} onOpen={() => onGoTopic(t.topic)} />
         ))}
@@ -259,75 +259,95 @@ export function HomeView({ onGoReview, onGoCoach, onGoTopic, onNewTopic, onGoNod
 
   return (
     <div className="p-8 flex flex-col gap-8 w-full h-full overflow-y-auto">
-      <header>
-        {stats ? (
-          <>
-            <h1 className="font-[var(--font-serif)] text-[length:var(--text-display)] text-[var(--color-text-primary)]">{greeting()}.</h1>
-            <div className="grid grid-cols-2 gap-3 max-w-xs mt-3">
-              <StatBlock
-                label="Streak"
-                value={String(stats.streak_days)}
-                tone="warm"
-                caption="Fig. 1 — days of uninterrupted recall"
-              />
-              <StatBlock
-                label="Due now"
-                value={String(stats.due_now)}
-                tone="cool"
-                caption="Fig. 2 — items awaiting free recall"
-                pulse={duePulse}
-                onPulseEnd={() => setDuePulse(false)}
-              />
+      {/* Register 1 — status band: the greeting IS the page title (the app's
+          one display-size text; every section heading below is the
+          `label-data` uppercase idiom instead), a one-line subtitle, the
+          streak/due-now/forecast readout composed as one horizontal band,
+          and the review CTA. */}
+      <div className="flex flex-col gap-4">
+        <header>
+          {stats ? (
+            <>
+              <h1 className="font-[var(--font-serif)] text-[length:var(--text-display)] text-[var(--color-text-primary)]">{greeting()}.</h1>
+              {topics !== null && (
+                <p className="text-sm text-[var(--color-text-dim)] mt-1">
+                  {topics.length} {topics.length === 1 ? 'topic' : 'topics'} in your atlas
+                </p>
+              )}
+            </>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <SkeletonBar width={220} height={30} />
+              <SkeletonBar width={160} height={14} />
             </div>
-            {forecast ? (
-              <div className="mt-3 max-w-xs">
+          )}
+        </header>
+
+        {stats && (
+          <div className="flex items-stretch gap-3 flex-wrap">
+            <StatBlock
+              label="Streak"
+              value={String(stats.streak_days)}
+              tone="warm"
+              caption="Fig. — days of uninterrupted recall"
+            />
+            <StatBlock
+              label="Due now"
+              value={String(stats.due_now)}
+              tone="cool"
+              caption="Fig. — items awaiting free recall"
+              pulse={duePulse}
+              onPulseEnd={() => setDuePulse(false)}
+            />
+            <div className="panel p-3 flex-1 min-w-[180px] flex flex-col justify-center">
+              {forecast ? (
                 <DueForecast buckets={forecast} />
-              </div>
-            ) : (
-              <div className="mt-3 max-w-xs flex flex-col gap-1.5">
-                <SkeletonBar height={32} />
-                <SkeletonBar width="40%" height={10} />
-              </div>
-            )}
-          </>
-        ) : (
-          <div className="flex flex-col gap-2">
-            <SkeletonBar width={220} height={30} />
-            <SkeletonBar width={160} height={14} />
+              ) : (
+                <div className="flex flex-col gap-1.5">
+                  <SkeletonBar height={32} />
+                  <SkeletonBar width="40%" height={10} />
+                </div>
+              )}
+            </div>
           </div>
         )}
-      </header>
 
-      <ExperimentBanner experiment={activeExperiment} />
+        <ExperimentBanner experiment={activeExperiment} />
 
-      {flashback && (
-        <div className="panel px-5 py-4 flex flex-col gap-1.5">
-          <div className="text-xs label-data text-[var(--color-text-faint)] uppercase tracking-wide">
-            {flashback.daysAgo} days ago · {flashback.topicTitle}
+        {flashback && (
+          <div className="panel px-5 py-4 flex flex-col gap-1.5">
+            <div className="text-xs label-data text-[var(--color-text-faint)] uppercase tracking-wide">
+              {flashback.daysAgo} days ago · {flashback.topicTitle}
+            </div>
+            <DendriteDivider className="mb-3" />
+            <p className="text-sm text-[var(--color-text-dim)]">{flashback.claim}</p>
+            <div className="text-xs text-[var(--color-text-faint)] mt-0.5">{humanizeNodeId(flashback.node)}</div>
           </div>
-          <DendriteDivider className="mb-3" />
-          <p className="text-sm text-[var(--color-text-dim)]">{flashback.claim}</p>
-          <div className="text-xs text-[var(--color-text-faint)] mt-0.5">{humanizeNodeId(flashback.node)}</div>
-        </div>
-      )}
+        )}
 
-      {stats && stats.due_now > 0 && (
-        <Button
-          variant="primary"
-          onClick={onGoReview}
-          className="!px-6 !py-5 w-full flex items-center justify-between text-left normal-case"
-        >
-          <div>
-            <div className="text-base">Clear today’s reviews</div>
-            <div className="text-xs opacity-80 mt-1">{stats.due_now} item(s) waiting — a couple of minutes each.</div>
-          </div>
-          <span className="text-lg">→</span>
-        </Button>
-      )}
+        {stats && stats.due_now > 0 && (
+          <Button
+            variant="primary"
+            size="lg"
+            onClick={onGoReview}
+            className="w-full flex items-center justify-between text-left normal-case"
+          >
+            <div>
+              <div className="text-base">Clear today’s reviews</div>
+              <div className="text-xs opacity-80 mt-1">{stats.due_now} item(s) waiting — a couple of minutes each.</div>
+            </div>
+            <span className="text-lg">→</span>
+          </Button>
+        )}
+      </div>
 
+      <DendriteDivider />
+
+      {/* Register 2 — library: the topic groups, on a responsive grid (one
+          column narrow, two past 760px — the app's one narrow threshold —
+          three past 1080px). */}
       <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-medium text-[var(--color-text-dim)] uppercase tracking-wide">Your topics</h2>
-        <DendriteDivider className="mb-3" />
+        <h2 className="text-[10px] label-data uppercase tracking-wide text-[var(--color-text-faint)]">Your topics</h2>
         {topics === null && <SkeletonGrid count={3} />}
         {/* The empty-state decision itself (guided card vs. plain invitation) must wait on
             envCheck — topics() is a cheap readdir that routinely resolves before
@@ -387,50 +407,55 @@ export function HomeView({ onGoReview, onGoCoach, onGoTopic, onNewTopic, onGoNod
         </div>
       </section>
 
-      {/* Quiet row of the last few nodes/sittings opened elsewhere in the app —
-          hidden entirely when there's nothing yet (no empty chrome, same
-          discipline as the rest of Home). See shared/recentlyViewed.ts;
-          selecting one reuses the exact goToNode/goToSitting paths the Topic
-          Map and the command palette already use. */}
-      {recent.length > 0 && (
-        <div className="flex flex-col gap-2">
-          <DendriteDivider className="mb-1" />
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[10px] label-data uppercase tracking-wide text-[var(--color-text-faint)] shrink-0">
-              Recently viewed
-            </span>
-            {recent.map((v) => (
-              <button
-                key={v.kind === 'node' ? `n:${v.topic}:${v.node}` : `s:${v.sessionId}`}
-                onClick={() => (v.kind === 'node' ? onGoNode(v.topic, v.node) : onGoSitting(v.sessionId))}
-                title={v.kind === 'node' ? `${v.label} — ${v.topicTitle}` : v.label}
-                className="focus-ring flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs text-[var(--color-text-dim)] bg-[var(--color-surface-2)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-primary)] transition-colors duration-[var(--dur-fast)]"
-              >
-                {v.kind === 'node' && <InkNode id={v.node} variant="outlined" color="var(--color-ink-cool)" size={10} />}
-                <span className="truncate max-w-[9rem]">{v.label}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Register 3 — trails: quietest register, the last few nodes/sittings
+          opened elsewhere in the app and the coach summary row. Only rendered
+          at all (divider included) when there's at least one of the two —
+          same "no empty chrome" discipline as the rest of Home. */}
+      {(recent.length > 0 || stats) && (
+        <>
+          <DendriteDivider />
+          <div className="flex flex-col gap-6">
+            {/* Hidden entirely when there's nothing yet. See
+                shared/recentlyViewed.ts; selecting one reuses the exact
+                goToNode/goToSitting paths the Topic Map and the command
+                palette already use. */}
+            {recent.length > 0 && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[10px] label-data uppercase tracking-wide text-[var(--color-text-faint)] shrink-0">
+                  Recently viewed
+                </span>
+                {recent.map((v) => (
+                  <button
+                    key={v.kind === 'node' ? `n:${v.topic}:${v.node}` : `s:${v.sessionId}`}
+                    onClick={() => (v.kind === 'node' ? onGoNode(v.topic, v.node) : onGoSitting(v.sessionId))}
+                    title={v.kind === 'node' ? `${v.label} — ${v.topicTitle}` : v.label}
+                    className="focus-ring flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs text-[var(--color-text-dim)] bg-[var(--color-surface-2)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-primary)] transition-colors duration-[var(--dur-fast)]"
+                  >
+                    {v.kind === 'node' && <InkNode id={v.node} variant="outlined" color="var(--color-ink-cool)" size={10} />}
+                    <span className="truncate max-w-[9rem]">{v.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
 
-      {stats && (
-        <div className="flex flex-col gap-0">
-          <DendriteDivider className="mb-3" />
-          <Button
-            variant="ghost"
-            onClick={onGoCoach}
-            className="!px-5 !py-4 w-full flex items-center justify-between text-left"
-          >
-            <div className="text-sm">
-              {stats.pending_verify > 0 ? `${stats.pending_verify} pending grading · ` : ''}
-              {stats.misconceptions_open > 0
-                ? `${stats.misconceptions_open} noticed, filed for re-testing`
-                : 'Nothing filed for re-testing'}
-            </div>
-            <span className="text-sm">Coach →</span>
-          </Button>
-        </div>
+            {stats && (
+              <Button
+                variant="ghost"
+                size="lg"
+                onClick={onGoCoach}
+                className="w-full flex items-center justify-between text-left"
+              >
+                <div className="text-sm">
+                  {stats.pending_verify > 0 ? `${stats.pending_verify} pending grading · ` : ''}
+                  {stats.misconceptions_open > 0
+                    ? `${stats.misconceptions_open} noticed, filed for re-testing`
+                    : 'Nothing filed for re-testing'}
+                </div>
+                <span className="text-sm">Coach →</span>
+              </Button>
+            )}
+          </div>
+        </>
       )}
 
       {toastQueue[0] && (

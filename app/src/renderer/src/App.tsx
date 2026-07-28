@@ -1,4 +1,4 @@
-import { useEffect, useState, Suspense, lazy, type ReactElement } from 'react'
+import { useEffect, useRef, useState, Suspense, lazy, type ReactElement } from 'react'
 import { HomeView } from './app/HomeView'
 import { DashboardView } from './app/DashboardView'
 import { ReviewSessionView } from './app/ReviewSessionView'
@@ -53,6 +53,12 @@ const NAV: { id: View; label: string; hint: string; icon: ReactElement }[] = [
     icon: <path d="M10 3v4M5 14l3.2-4.6M15 14l-3.2-4.6M3 16h4M13 16h4M10 7a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" />,
   },
   {
+    // The plan considered renaming this id to `coach` (matching the visible
+    // label) and rejected it — pure churn through NAV, the palette's
+    // `nav:${id}` command ids, tray/menu deep-link strings ('dashboard' is
+    // the literal `focusOrCreateWindow`/appMenu.ts argument), and this file's
+    // own in-memory `visited`/`activity` keys, for zero behavior change. The
+    // id and label diverge on purpose; leave it.
     id: 'dashboard',
     label: 'Coach',
     hint: '4',
@@ -147,6 +153,11 @@ export default function App() {
   // click (not gated on `view` actually changing — clicking Coach while
   // already ON Coach, mid-drilldown, must still jump back to the overview).
   const [coachHomeSignal, setCoachHomeSignal] = useState(0)
+  // Sidebar Review nav item's due-count badge — pushed every 5 min by
+  // reviewNotifier (main/session/reviewNotifier.ts), refreshed on demand
+  // below. `null` (not 0) until the first push/refresh lands, so the badge
+  // stays hidden rather than flashing "0" before anything real is known.
+  const [dueCount, setDueCount] = useState<number | null>(null)
 
   useEffect(() => {
     const onResize = () => setNarrow(window.innerWidth < COLLAPSE_WIDTH)
@@ -176,6 +187,33 @@ export default function App() {
       }
     })
   }, [])
+
+  // Sidebar badge push — reviewNotifier's 5-min poll (see preload's
+  // onDueCount / main's sendDueCount).
+  useEffect(() => {
+    return window.engram.onDueCount(setDueCount)
+  }, [])
+
+  // Freshness pulls: on window focus (the badge shouldn't wait up to 5 min
+  // after switching back from another app) and immediately after a review
+  // sitting ends (see the true→false edge below) — both go through the same
+  // `refreshDueCount` IPC, which updates the dock badge too and is the
+  // notification-cadence-free sibling of the background poll.
+  useEffect(() => {
+    function onFocus() {
+      window.engram.refreshDueCount().then((r) => setDueCount(r.dueCount))
+    }
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [])
+
+  const prevReviewActive = useRef(activity.review.active)
+  useEffect(() => {
+    if (prevReviewActive.current && !activity.review.active) {
+      window.engram.refreshDueCount().then((r) => setDueCount(r.dueCount))
+    }
+    prevReviewActive.current = activity.review.active
+  }, [activity.review.active])
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -287,17 +325,14 @@ export default function App() {
                 title={collapsed ? `${n.label} (⌘${n.hint})` : undefined}
                 aria-label={n.label}
                 aria-current={active ? 'page' : undefined}
+                aria-keyshortcuts={`Meta+${n.hint}`}
                 onClick={() => {
                   goToView(n.id)
                   if (narrow) setPinnedOpen(false)
                 }}
                 className={`focus-ring group relative flex items-center gap-2.5 text-left px-3 py-2 rounded-lg text-sm transition-colors duration-[var(--dur-fast)] ${
                   collapsed ? 'justify-center px-0' : ''
-                } ${
-                  active
-                    ? 'bg-[color-mix(in_srgb,var(--color-ink-lavender)_14%,transparent)] text-[var(--color-ink-warm)]'
-                    : 'text-[var(--color-text-dim)] hover:text-[var(--color-text-primary)] hover:bg-[color-mix(in_srgb,var(--color-ink-lavender)_8%,transparent)]'
-                }`}
+                } ${active ? 'nav-item-active' : 'nav-item'}`}
               >
                 {active && (
                   <span className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-0.5 rounded-full bg-[var(--color-ink-warm)]" aria-hidden="true" />
@@ -317,6 +352,21 @@ export default function App() {
                   {n.icon}
                 </svg>
                 {!collapsed && <span className="truncate">{n.label}</span>}
+                {/* Review's due-count micro-pill — fed by Task 7's due-count
+                    plumbing (App's `dueCount` state). Hidden until the first
+                    push/refresh lands (`null`) and at 0 — an empty queue gets
+                    no badge, not a "0" badge. */}
+                {!collapsed && n.id === 'review' && dueCount != null && dueCount > 0 && (
+                  <span className="label-data text-[10px] leading-none px-1.5 py-1 rounded-full bg-[var(--color-surface-3)] text-[var(--color-ink-warm)] shrink-0">
+                    {dueCount}
+                  </span>
+                )}
+                {collapsed && n.id === 'review' && dueCount != null && dueCount > 0 && (
+                  <span
+                    className="absolute top-1.5 right-2.5 h-1.5 w-1.5 rounded-full bg-[var(--color-ink-warm)]"
+                    aria-hidden="true"
+                  />
+                )}
                 {!collapsed && (
                   <span className="ml-auto flex items-center gap-1.5">
                     {(n.id === 'learn' || n.id === 'review') && activity[n.id].active && !active && (
@@ -335,6 +385,18 @@ export default function App() {
                     <span className="text-[10px] label-data text-[var(--color-text-faint)] opacity-0 group-hover:opacity-100 transition-opacity duration-[var(--dur-fast)]">
                       ⌘{n.hint}
                     </span>
+                  </span>
+                )}
+                {/* Collapsed-rail hint — the native `title` tooltip above only
+                    shows on mouse hover, never on keyboard focus. This floating
+                    label repeats the same "Label (⌘n)" text, visible only via
+                    focus-visible, so tabbing through the collapsed rail is never
+                    silent about what each icon does or its shortcut. */}
+                {collapsed && (
+                  <span
+                    className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 z-20 whitespace-nowrap rounded-md bg-[var(--color-surface-3)] px-2 py-1 text-[10px] label-data text-[var(--color-text-primary)] opacity-0 group-focus-visible:opacity-100 transition-opacity duration-[var(--dur-fast)]"
+                  >
+                    {n.label} · ⌘{n.hint}
                   </span>
                 )}
               </button>

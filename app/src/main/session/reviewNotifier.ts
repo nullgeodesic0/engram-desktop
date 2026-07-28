@@ -30,10 +30,11 @@ function updateBadge(settings: NotifierSettings, dueCount: number): void {
  * genuinely new item (or enough time passing) does surface again. The dock
  * badge is refreshed on every poll regardless of the notification cadence.
  */
-async function checkAndMaybeNotify(onClick: () => void): Promise<void> {
+async function checkAndMaybeNotify(onClick: () => void, onDueCount?: (count: number) => void): Promise<void> {
   const settings = await getNotifierSettings()
   const due = await currentDue().catch(() => [])
   updateBadge(settings, due.length)
+  onDueCount?.(due.length)
 
   if (!settings.remindersEnabled) return
   if (due.length === 0) return
@@ -61,10 +62,14 @@ function fireNotification(count: number, onClick: () => void): void {
   n.show()
 }
 
-export function startReviewNotifier(onClick: () => void): void {
+/** `onDueCount`, when given, is pushed the fresh count on every poll — this is
+ * the sidebar badge's data path (see App.tsx's `onDueCount`/preload's
+ * `onDueCount`). Optional so nothing else calling this module needs to know
+ * about it. */
+export function startReviewNotifier(onClick: () => void, onDueCount?: (count: number) => void): void {
   if (timer) return
-  checkAndMaybeNotify(onClick)
-  timer = setInterval(() => checkAndMaybeNotify(onClick), CHECK_INTERVAL_MS)
+  checkAndMaybeNotify(onClick, onDueCount)
+  timer = setInterval(() => checkAndMaybeNotify(onClick, onDueCount), CHECK_INTERVAL_MS)
 }
 
 export function stopReviewNotifier(): void {
@@ -75,14 +80,28 @@ export function stopReviewNotifier(): void {
 /** The "Check reviews now" action (Settings button, tray menu item) — bypasses
  * the cadence/dedup throttle so it always gives real feedback on demand,
  * including confirming notifications are actually configured/permitted. */
-export async function checkReviewsNow(onClick: () => void): Promise<{ dueCount: number }> {
+export async function checkReviewsNow(onClick: () => void, onDueCount?: (count: number) => void): Promise<{ dueCount: number }> {
   const settings = await getNotifierSettings()
   const due = await currentDue().catch(() => [])
   updateBadge(settings, due.length)
+  onDueCount?.(due.length)
   if (due.length > 0) {
     fireNotification(due.length, onClick)
     const signature = due.map((d) => `${d.topic}:${d.id}`).sort().join(',')
     await recordNotified(signature)
   }
+  return { dueCount: due.length }
+}
+
+/** The badge's freshness path (App.tsx calls this on window focus and when a
+ * review sitting ends) — same fetch+badge-update as `checkAndMaybeNotify`,
+ * minus the notification/cadence dedup: this is a user- or event-triggered
+ * refresh, not a background poll, so it should never fire a native
+ * notification on its own. */
+export async function refreshDueCount(onDueCount?: (count: number) => void): Promise<{ dueCount: number }> {
+  const settings = await getNotifierSettings()
+  const due = await currentDue().catch(() => [])
+  updateBadge(settings, due.length)
+  onDueCount?.(due.length)
   return { dueCount: due.length }
 }
