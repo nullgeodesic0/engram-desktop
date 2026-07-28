@@ -361,13 +361,18 @@ export function LearnSessionView({
     setMastheadPeek(true)
   }
   const scheduleMastheadCollapse = () => {
-    // Already armed → let the existing deadline stand, so continuous motion
-    // below the header doesn't keep pushing the collapse into the future.
-    if (peekLeaveTimer.current) return
+    // Motion defers the deadline (clear + rearm): the collapse may only fire
+    // after the pointer has genuinely SETTLED below the header. The previous
+    // "armed deadline stands" variant was the root cause of the dead back
+    // button: a standing 250ms deadline kept ticking while the cursor was
+    // mid-flight toward (or hovering over) the header — mousemove sampling
+    // has holes at the top edge — so the masthead folded under the cursor
+    // and the click landed on a 0fr overflow-hidden row.
+    if (peekLeaveTimer.current) clearTimeout(peekLeaveTimer.current)
     peekLeaveTimer.current = setTimeout(() => {
       peekLeaveTimer.current = null
       setMastheadPeek(false)
-    }, 250)
+    }, 400)
   }
   /** Pointer-position tracking over the whole session view — runs at the
    * device's own mousemove rate (no throttle; the handler is a couple of
@@ -386,18 +391,19 @@ export function LearnSessionView({
     setTicketPeek(true)
   }
   const scheduleTicketTuck = () => {
-    if (ticketLeaveTimer.current) return
+    // Clear + rearm — same settled-pointer discipline as the masthead above.
+    if (ticketLeaveTimer.current) clearTimeout(ticketLeaveTimer.current)
     ticketLeaveTimer.current = setTimeout(() => {
       ticketLeaveTimer.current = null
       setTicketPeek(false)
-    }, 250)
+    }, 400)
   }
   const handleSessionPointer = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect()
     // Masthead: top edge reveals; settling below the open header tucks it.
     // Pinned ignores the cursor entirely.
     if (!mastheadPinned) {
-      if (e.clientY - rect.top <= 18) {
+      if (e.clientY - rect.top <= 28) {
         peekMasthead()
       } else {
         const header = mastheadRef.current
@@ -1507,7 +1513,11 @@ export function LearnSessionView({
         return (
           <>
             {mastheadCollapsed && (
-              <div className="shrink-0 h-2 -mx-6 flex items-center justify-center group cursor-default" aria-hidden="true">
+              <div
+                className="shrink-0 h-2 -mx-6 flex items-center justify-center group cursor-default"
+                onMouseEnter={peekMasthead}
+                aria-hidden="true"
+              >
                 <span className="h-px w-12 rounded bg-[var(--color-hairline)] group-hover:bg-[var(--color-ink-warm-dim)] transition-colors duration-[var(--dur-fast)]" />
               </div>
             )}
@@ -1519,6 +1529,12 @@ export function LearnSessionView({
                 settle, not a snap. */}
             <header
               ref={mastheadRef}
+              // Direct hover is AUTHORITATIVE: entering the header (including
+              // mid-fold, while its content is still visibly painted) claims
+              // it open immediately, independent of the container-mousemove
+              // sampling below — the sampled-position proxy alone had holes
+              // at exactly the top edge where these controls live.
+              onMouseEnter={started && messages.length > 0 ? peekMasthead : undefined}
               onFocusCapture={peekMasthead}
               className={`shrink-0 grid transition-[grid-template-rows] ${
                 mastheadCollapsed
@@ -1528,10 +1544,15 @@ export function LearnSessionView({
               style={{ gridTemplateRows: mastheadCollapsed ? '0fr' : '1fr' }}
             >
               <div
-                className={`min-h-0 overflow-hidden flex flex-col gap-2 transition-[opacity,transform] ${
+                // Command-bar band: a full-width hairline runs beneath the
+                // masthead (-mx-6 bleeds it to the view edges; the parent grid
+                // has no overflow clip, so the bleed survives the 0fr row).
+                className={`min-h-0 overflow-hidden flex flex-col gap-2 border-b transition-[opacity,transform] ${
+                  started ? '-mx-6 px-6' : '-mx-8 px-8'
+                } ${
                   mastheadCollapsed
-                    ? 'duration-[340ms] ease-[cubic-bezier(0.45,0.05,0.25,1)] opacity-0 -translate-y-1'
-                    : 'duration-[var(--dur-base)] ease-[var(--ease-out-soft)] opacity-100 translate-y-0'
+                    ? 'duration-[340ms] ease-[cubic-bezier(0.45,0.05,0.25,1)] opacity-0 -translate-y-1 pb-0 border-transparent'
+                    : 'duration-[var(--dur-base)] ease-[var(--ease-out-soft)] opacity-100 translate-y-0 pb-2 border-[var(--color-hairline)]'
                 }`}
               >
         <div className="flex items-center justify-between">
@@ -1595,12 +1616,17 @@ export function LearnSessionView({
                 {exportStatus.text}
               </span>
             )}
+            {/* Command-bar action cluster: tracked mono row, hairline
+                separators between instrument / export / navigation groups. */}
+            {started && activeTopic && sessionId && (
+              <span className="h-4 w-px bg-[var(--color-hairline)] shrink-0" aria-hidden="true" />
+            )}
             {started && activeTopic && sessionId && (
               <button
                 onClick={() => exportCurrentSitting('md')}
                 disabled={exportingFormat !== null}
                 title="Export this sitting as a Markdown file"
-                className="focus-ring text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] disabled:opacity-50"
+                className="focus-ring label-data text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] disabled:opacity-50"
               >
                 {exportingFormat === 'md' ? 'Exporting…' : 'Export .md'}
               </button>
@@ -1610,7 +1636,7 @@ export function LearnSessionView({
                 onClick={() => exportCurrentSitting('pdf')}
                 disabled={exportingFormat !== null}
                 title="Export this sitting as a PDF"
-                className="focus-ring text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] disabled:opacity-50"
+                className="focus-ring label-data text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] disabled:opacity-50"
               >
                 {exportingFormat === 'pdf' ? 'Exporting…' : 'Export .pdf'}
               </button>
@@ -1618,16 +1644,19 @@ export function LearnSessionView({
             {started && activeTopic && (
               <button
                 onClick={() => setHistoryDrawerOpen(true)}
-                className="focus-ring text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]"
+                className="focus-ring label-data text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]"
               >
                 History
               </button>
             )}
+            {started && <span className="h-4 w-px bg-[var(--color-hairline)] shrink-0" aria-hidden="true" />}
             {started && (
               <button
                 onClick={backToTopics}
                 title="Leave this session view (the session keeps running)"
-                className="focus-ring text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]"
+                // A real claimable control — the sidebar's bordered rail-item
+                // idiom rather than bare faint text; also an honest hit target.
+                className="focus-ring nav-item label-data text-[10px] uppercase tracking-[0.14em] px-2.5 py-1.5 shrink-0"
               >
                 ← All topics
               </button>
