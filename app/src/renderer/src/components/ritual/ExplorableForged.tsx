@@ -50,7 +50,7 @@ export const ExplorableForged = memo(function ExplorableForged({
 
   return (
     <div className="flex justify-start my-1.5 pl-1">
-      <div className="panel max-w-[92%] flex flex-col gap-2 px-3.5 py-3 border-[var(--color-ink-violet-dim)] ritual-explorable-in">
+      <div className="tilt-card panel max-w-[92%] flex flex-col gap-2 px-3.5 py-3 border-[var(--color-ink-violet-dim)] ritual-explorable-in">
         <div className="flex items-center gap-2">
           <svg
             width="14"

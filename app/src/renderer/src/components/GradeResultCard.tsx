@@ -180,7 +180,10 @@ export function GradeResultCard({
   if (stage === 'facedown' || stage === 'flipping') {
     return (
       <div className="card-flip-scene max-w-sm">
-        <div className={`panel px-4 py-3 flex items-center gap-3 card-face ${stage === 'flipping' ? 'flip-away' : ''}`}>
+        {/* `.tilt-card` composes cleanly with the flip: a running CSS
+            animation (flip-away/flip-in) overrides the static tilt transform
+            for exactly as long as it runs, then hands back. */}
+        <div className={`tilt-card panel px-4 py-3 flex items-center gap-3 card-face ${stage === 'flipping' ? 'flip-away' : ''}`}>
           <InkNode id={result.node} variant="filled" size={16} />
           <div className="flex flex-col gap-0.5 min-w-0">
             <span className="fig-caption">the assessor’s verdict</span>
@@ -197,7 +200,7 @@ export function GradeResultCard({
 
   return (
     <div
-      className={`panel px-4 py-3 flex flex-col gap-2 max-w-sm transition-shadow duration-[var(--dur-fast)] ${reveal && !reducedMotion() ? 'flip-in' : ''} ${highlighted ? 'pair-linked' : ''}`}
+      className={`tilt-card panel px-4 py-3 flex flex-col gap-2 max-w-sm transition-shadow duration-[var(--dur-fast)] ${reveal && !reducedMotion() ? 'flip-in' : ''} ${highlighted ? 'pair-linked' : ''}`}
       onMouseEnter={onHoverChange ? () => onHoverChange(true) : undefined}
       onMouseLeave={onHoverChange ? () => onHoverChange(false) : undefined}
     >

@@ -12,7 +12,7 @@ import { MathRenderer } from '../MathRenderer'
 export const MisconceptionPin = memo(function MisconceptionPin({ text, node }: { text: string; node?: string }) {
   return (
     <div className="flex justify-start my-1.5 pl-1">
-      <div className="max-w-[92%] flex flex-col gap-1.5 rounded-md border border-[var(--color-ink-danger-dim)] px-3 py-2.5 ritual-misconception-in">
+      <div className="tilt-card max-w-[92%] flex flex-col gap-1.5 rounded-md border border-[var(--color-ink-danger-dim)] px-3 py-2.5 ritual-misconception-in">
         <div className="flex items-center gap-2">
           <svg
             width="13"

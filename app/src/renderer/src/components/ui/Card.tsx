@@ -9,5 +9,5 @@ export function Card({
   className?: string
   children: ReactNode
 }) {
-  return <div className={`${raised ? 'panel-raised' : 'panel'} ${className}`}>{children}</div>
+  return <div className={`tilt-card ${raised ? 'panel-raised' : 'panel'} ${className}`}>{children}</div>
 }

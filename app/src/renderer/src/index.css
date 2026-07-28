@@ -336,7 +336,45 @@
  *     continuing topic, the current probe, the active nav item). Scarce by
  *     decree — ACTIVE ONLY. A dogear on every card in a list is just
  *     wallpaper; it only means something because most cards don't have one.
+ *   - Tilt vocabulary (`.tilt-card`, driven by useCardPhysics.ts): card-
+ *     scale surfaces sit embedded in shallow 3D space. Two motions, both
+ *     nearly subliminal: a slow idle drift (≤ ~0.35deg sinusoid, minute-
+ *     scale periods, per-card phase so the surface breathes rather than
+ *     marches) and a pointer-follow tilt (≤ 1.5deg at the edges, damped —
+ *     the corner under the cursor dips AWAY, pressing into a floating
+ *     plate), through `perspective(1200px)`. WHAT TILTS: cards — topic
+ *     cards, the chat ritual cards (grade/probe/milestone/canonical/ask/
+ *     beat and their kin), stat blocks, artifact tiles, the ready-room
+ *     plate, history-drawer rows. WHAT NEVER TILTS: shell chrome and
+ *     reading surfaces — the sidebar rail, TitleBar, the composer, the
+ *     transcript container and its prose dialogue blocks, ChatScrollRegion,
+ *     the map plate/GraphView, the NeuralField, modal bodies (modals stay
+ *     planted), and anything that scrolls its own overflow. The manager
+ *     writes ONLY the non-inheriting `--tilt-rx`/`--tilt-ry` properties
+ *     (see `@property` below); the single `.tilt-card` rule owns the
+ *     transform, so no other transform source is ever clobbered. No lift,
+ *     no shadow choreography — rotation only; restraint wins. Reduced
+ *     motion: fully static (JS no-ops AND `transform: none` below).
  */
+/* Card-physics tilt angles — registered as TYPED, NON-INHERITING properties.
+   Non-inheritance is the load-bearing part: useCardPhysics.ts rewrites these
+   per frame on drifting cards, and an unregistered (inheriting) custom
+   property would invalidate computed style across the card's entire subtree
+   on every write. Registered with `inherits: false`, the per-frame write
+   restyles the card element alone, and only `transform` — compositor work —
+   depends on it. `initial-value: 0deg` means a card with no inline value
+   rests exactly flat. */
+@property --tilt-rx {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+@property --tilt-ry {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
 @layer components {
   /* The sidebar's hero-nocturne wash: indigo deepening downward, with a faint
      lavender bloom at the top under the brand lockup. The dendrite
@@ -517,6 +555,39 @@
     border-top: 9px solid var(--color-ink-warm);
     border-left: 9px solid transparent;
     pointer-events: none;
+  }
+
+  /* Card physics — the ONE rule that consumes the tilt angles (see the
+     `@property` block above @layer components and useCardPhysics.ts, which
+     writes them). Element-level perspective, so each card has its own quiet
+     vanishing point. A card's `.frame-hover` ::after frame and `.dogear`
+     fold are children of the same box, so they tilt with it — the whole
+     plate moves as one. Rasterization stays crisp by construction: at these
+     angles (idle ≤ ~0.35deg, hover ≤ 1.5deg) with a 1200px perspective the
+     projected displacement across even a transcript-width card is subpixel-
+     to-low-single-digit-px, and macOS renders grayscale-AA text either way. */
+  .tilt-card {
+    transform: perspective(1200px) rotateX(var(--tilt-rx)) rotateY(var(--tilt-ry));
+  }
+  /* The base-layer press scale (`button:active` in @layer base) would be
+     fully SHADOWED by the rule above on button cards — layer order puts
+     components over base, and two `transform` declarations never merge — so
+     the press composes here explicitly, tilt-then-scale. */
+  button.tilt-card:not(:disabled):not(.no-press):active {
+    transform: perspective(1200px) rotateX(var(--tilt-rx)) rotateY(var(--tilt-ry)) scale(0.97);
+  }
+  /* Reduced motion: fully static, belt-and-braces with useCardPhysics.ts's
+     own no-op guard (the global kill-switch only zeros durations — it can't
+     stop a JS-driven transform, so the tilt needs this hard override; same
+     discipline as RetentionCurve's matchMedia guard). The press scale is
+     kept: it's positional feedback, not motion. */
+  @media (prefers-reduced-motion: reduce) {
+    .tilt-card {
+      transform: none;
+    }
+    button.tilt-card:not(:disabled):not(.no-press):active {
+      transform: scale(0.97);
+    }
   }
 
   /* Corner brackets — ⌐-shaped crop marks at all four corners, drawn as 8

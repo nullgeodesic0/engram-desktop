@@ -86,7 +86,7 @@ export const AskCard = memo(function AskCard({
         tabIndex={-1}
         role={isOpen ? 'group' : undefined}
         aria-label={isOpen ? `${header}: ${question}` : undefined}
-        className={`max-w-[92%] flex flex-col gap-3 rounded-md border px-4 py-3 ${
+        className={`tilt-card max-w-[92%] flex flex-col gap-3 rounded-md border px-4 py-3 ${
           isOpen ? 'ask-card-pending' : 'ask-card-settle'
         }`}
         style={{ borderColor: isOpen ? 'var(--color-ink-warm-dim)' : 'var(--color-hairline)' }}
