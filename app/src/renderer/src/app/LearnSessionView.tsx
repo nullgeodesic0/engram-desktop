@@ -1122,13 +1122,22 @@ export function LearnSessionView({
       setContextUsage(extractLastUsageFromTranscript(lines))
       // Populate the loop banner INSTANTLY from the transcript's own record of
       // render_beat/beat_outcome calls — the same signals that drive it live —
-      // instead of sitting gray until the tutor's next call. The prose-regex
-      // fallback below only fires when the transcript carries no beat calls at
-      // all (e.g. a session predating the bridge tools).
+      // instead of sitting gray until the tutor's next call. The banner only
+      // replays BRIDGE calls, though, and some beats (VERIFY chief among
+      // them — see beatEvents.ts's doctrine comment: the tutor never calls
+      // render_beat for it) only ever show up as a bolded prose label. A
+      // sitting that ends text-only after its last bridge call (e.g. …RESOLVE
+      // via render_beat, then a plain "**VERIFY — cold, no notes.**") would
+      // otherwise reopen with the stepper stuck on the stale bridge beat. The
+      // last assistant message is by construction at least as recent as any
+      // bridge call within it, so a real text-tier label there wins; same
+      // "null means no signal, not no beat" rule the live path already uses.
       const banner = extractBannerFromTranscript(lines)
       setLastWalk(extractLastWalkFromTranscript(lines))
-      if (banner.beat) {
-        setBeat(banner.beat)
+      const lastAssistant = [...history].reverse().find((m) => m.role === 'assistant')
+      const textBeat = lastAssistant ? latestBeatLabel(lastAssistant.text) : null
+      if (banner.beat || textBeat) {
+        setBeat(textBeat ?? banner.beat)
         setBeatTrail(banner.trail)
         setNodePosition(banner.position)
         if (banner.node) {
@@ -1138,8 +1147,7 @@ export function LearnSessionView({
           lastNodeIdRef.current = banner.node
         }
       } else {
-        const lastAssistant = [...history].reverse().find((m) => m.role === 'assistant')
-        setBeat(lastAssistant ? latestBeatLabel(lastAssistant.text) : null)
+        setBeat(null)
       }
       // Same replay for the beat cards + crossing dividers themselves — a
       // resumed sitting shouldn't open to a bare transcript when the same

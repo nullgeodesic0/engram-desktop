@@ -14,6 +14,11 @@ const BEAT_STYLE: Record<ProseBeat, { label: string; icon: string; accent: strin
   resolve: { label: 'Resolve', icon: '●', accent: 'var(--color-ink-warm)' },
   self_explain: { label: 'Self-explain', icon: '»', accent: 'var(--color-ink-cool)' },
   connect: { label: 'Connect', icon: '↝', accent: 'var(--color-ink-hot)' },
+  // Same glyph + ink as BeatStepper's own verify step and VerifySeal's
+  // confirmed-outcome stamp (Marks.tsx) — this card is the announcement, the
+  // seal is the (later, outcome-gated) receipt, but both speak "verify" in
+  // the same visual language.
+  verify: { label: 'Verify', icon: '✓', accent: 'var(--color-ink-warm)' },
 }
 
 export const BeatCard = memo(function BeatCard({
