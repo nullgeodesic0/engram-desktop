@@ -1049,9 +1049,12 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
   // (H1: no per-checkpoint DOM anchor existed at all; H2: `content-visibility`
   // layout settling drifts the landing spot after the first scroll).
   function jumpToCheckpointMoment(moment: InstrumentMoment) {
-    if (!scrollEl || messages.length === 0) return
+    if (!scrollEl || messages.length === 0) return undefined
     const fallbackIndex = Math.min(Math.max(moment.atIndex, 0), messages.length - 1)
-    jumpToCheckpoint(scrollEl, moment.id, fallbackIndex)
+    // Returned (not fire-and-forget) so TranscriptMinimap can re-measure
+    // glyph positions once the jump has actually settled — see that
+    // component's own doctrine comment.
+    return jumpToCheckpoint(scrollEl, moment.id, fallbackIndex)
   }
 
   return (

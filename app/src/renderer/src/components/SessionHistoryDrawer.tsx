@@ -808,9 +808,12 @@ export function SessionHistoryDrawer({
   // Minimap Precision fix (second report on the same bug) — see
   // shared/jumpToCheckpoint.ts's doctrine comment for the full root-cause.
   function jumpToCheckpointMoment(moment: InstrumentMoment) {
-    if (!scrollEl || !timeline || timeline.messages.length === 0) return
+    if (!scrollEl || !timeline || timeline.messages.length === 0) return undefined
     const fallbackIndex = Math.min(Math.max(moment.atIndex, 0), timeline.messages.length - 1)
-    jumpToCheckpoint(scrollEl, moment.id, fallbackIndex)
+    // Returned (not fire-and-forget) so TranscriptMinimap can re-measure
+    // glyph positions once the jump has actually settled — see that
+    // component's own doctrine comment.
+    return jumpToCheckpoint(scrollEl, moment.id, fallbackIndex)
   }
 
   return (

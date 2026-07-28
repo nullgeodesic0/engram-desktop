@@ -1483,9 +1483,12 @@ export function LearnSessionView({
   // viewport; H2: `content-visibility` layout settling drifts the landing
   // spot after the first scroll, corrected with a bounded two-pass re-check).
   function jumpToCheckpointMoment(moment: InstrumentMoment) {
-    if (!scrollEl || messages.length === 0) return
+    if (!scrollEl || messages.length === 0) return undefined
     const fallbackIndex = Math.min(Math.max(moment.atIndex, 0), messages.length - 1)
-    jumpToCheckpoint(scrollEl, moment.id, fallbackIndex)
+    // Returned (not fire-and-forget) so TranscriptMinimap can re-measure
+    // glyph positions once the jump has actually settled — see that
+    // component's own doctrine comment.
+    return jumpToCheckpoint(scrollEl, moment.id, fallbackIndex)
   }
 
   return (
