@@ -39,12 +39,15 @@ export function renderMarkdownWithMath(source: string): string {
     .replace(/\$\$([\s\S]+?)\$\$/g, (_m, tex: string) => stash(renderMath(tex, true)))
     .replace(/\\\[([\s\S]+?)\\\]/g, (_m, tex: string) => stash(renderMath(tex, true)))
     // Pandoc's inline-math delimiter rules, not "any two dollars on a line": the
-    // opening `$` must be followed by a non-space (and not a digit), the closing `$`
-    // must be preceded by a non-space (and not followed by a digit). This keeps `$x$`
-    // and `$f(x)=x^2$` working while leaving currency like "$5 … $2" as prose —
-    // otherwise the text between two stray dollars gets rendered in math mode, where
-    // whitespace is dropped, swallowing the spaces (notably after `?`/`:`).
-    .replace(/\$(?![\s\d])((?:[^$\n]|\\\$)*?)(?<!\s)\$(?!\d)/g, (_m, tex: string) => stash(renderMath(tex, false)))
+    // opening `$` must be followed by a non-space, the closing `$` must be preceded
+    // by a non-space and not followed by a digit. This keeps `$x$`, `$f(x)=x^2$`,
+    // and digit-leading math like `$2n$`/`$5$` working while leaving currency like
+    // "$5 … $2" as prose — an unpaired-currency "pair" always fails the closing-side
+    // guards (the closer is preceded by a space, or followed by a digit as in
+    // "$5-$10"), which is what actually prevents math mode swallowing the spaces.
+    // NOTE: Pandoc forbids a digit only AFTER THE CLOSER — a digit after the opener
+    // is legitimate math, and banning it there was exactly what broke `$2n$`.
+    .replace(/\$(?!\s)((?:[^$\n]|\\\$)*?)(?<!\s)\$(?!\d)/g, (_m, tex: string) => stash(renderMath(tex, false)))
     .replace(/\\\(([\s\S]+?)\\\)/g, (_m, tex: string) => stash(renderMath(tex, false)))
 
   // Synchronous parse (no async extensions configured) — `marked.parse` with default
