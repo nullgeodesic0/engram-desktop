@@ -44,6 +44,7 @@ import { ReadyRoomPlate } from '../components/ritual/ReadyRoomPlate'
 import { ReviewHorizon } from '../components/ReviewHorizon'
 import { InkWell } from '../components/ritual/InkWell'
 import { FlowChain } from '../components/ritual/FlowChain'
+import { ExportCommand } from '../components/ui/ExportCommand'
 import { trailingRecalled } from '../../../shared/gradeResult'
 import { invalidateSearchIndex } from '../shared/searchIndex'
 import { computeDueBuckets } from '../shared/dueBuckets'
@@ -1078,14 +1079,61 @@ export function ReviewSessionView({ onActivity, onGoHome }: ReviewSessionViewPro
         // (-mx-8 bleeds it past the container padding).
         className="shrink-0 -mx-8 px-8 pb-3 border-b border-[var(--color-hairline)]"
         title="Review"
-        // The ready plate below now says this count once, big — the header
-        // repeating it as "N due" right above would be the exact "three due
-        // counts" redundancy this wave set out to fix. Every other phase
-        // (loading/empty/in-session/done) keeps the subtitle: in-session it's
-        // what's left in the live queue, which the plate isn't showing.
-        subtitle={phase === 'ready' ? undefined : `${queue.length} due`}
+        // Identity sub-line, one compact mono lockup under the title: in a
+        // sitting (and at its close) it's the session's own position —
+        // "N of M · K topics", off the same sessionGrades/sessionTotal pair
+        // the queue rail's invariant guarantees; otherwise the due count.
+        // The ready plate below says the due count once, big — the header
+        // repeating it there would be the exact "three due counts"
+        // redundancy an earlier wave fixed, so `ready` shows nothing.
+        subtitle={(() => {
+          if (phase === 'in-session' || phase === 'done') {
+            // Topics still represented in the live queue — honest and cheap
+            // (GradeResult carries no topic, so already-cleared topics drop
+            // out of the count as the sitting narrows).
+            const topicCount = new Set(queue.map((q) => q.topic)).size
+            return (
+              <span className="label-data text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-faint)]">
+                {sessionGrades.length} of {sessionTotal}
+                {topicCount > 0 && ` · ${topicCount} ${topicCount === 1 ? 'topic' : 'topics'}`}
+              </span>
+            )
+          }
+          if (phase === 'ready') return undefined
+          return (
+            <span className="label-data text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-faint)]">
+              {queue.length} due
+            </span>
+          )
+        })()}
         right={
           <>
+            {/* Nav cluster: tracked uppercase command items — History,
+                Export (one item, disclosing .md/.pdf), Home — then the
+                hairline-separated glyph/instrument cluster. */}
+            {phase !== 'loading' && (
+              <button
+                onClick={() => setHistoryDrawerOpen(true)}
+                className="focus-ring cmd-item label-data text-[10px] uppercase tracking-[0.16em] shrink-0"
+              >
+                History
+              </button>
+            )}
+            {sessionId && (phase === 'in-session' || phase === 'done') && (
+              <ExportCommand exporting={exportingFormat} onExport={exportCurrentSitting} />
+            )}
+            {onGoHome && (
+              <button
+                onClick={onGoHome}
+                title="Back to the main page (a live sitting keeps running)"
+                className="focus-ring cmd-item label-data text-[10px] uppercase tracking-[0.16em] shrink-0"
+              >
+                Home
+              </button>
+            )}
+            {(phase === 'in-session' || phase === 'done') && (
+              <span className="h-4 w-px bg-[var(--color-hairline)] shrink-0" aria-hidden="true" />
+            )}
             {/* Addition D (chat refine round) — live only; freezes (stops
                 ticking, stays on screen) once the sitting reaches 'done'
                 rather than disappearing — see SittingClock's own doctrine
@@ -1099,65 +1147,21 @@ export function ReviewSessionView({ onActivity, onGoHome }: ReviewSessionViewPro
             {(phase === 'in-session' || phase === 'done') && contextUsage && (
               <ContextGauge usedTokens={contextUsage.usedTokens} contextWindow={contextUsage.contextWindow} />
             )}
-            {exportStatus && (
-              <span
-                className={`text-xs truncate max-w-[12rem] ${exportStatus.failed ? 'text-[var(--color-ink-danger)]' : 'text-[var(--color-text-faint)]'}`}
-                title={exportStatus.text}
-              >
-                {exportStatus.text}
-              </span>
-            )}
-            {/* Command-bar action cluster: tracked mono row, hairline
-                separators between instrument / export / navigation groups. */}
-            {sessionId && (phase === 'in-session' || phase === 'done') && (
-              <span className="h-4 w-px bg-[var(--color-hairline)] shrink-0" aria-hidden="true" />
-            )}
-            {sessionId && (phase === 'in-session' || phase === 'done') && (
-              <button
-                onClick={() => exportCurrentSitting('md')}
-                disabled={exportingFormat !== null}
-                title="Export this sitting as a Markdown file"
-                className="focus-ring label-data text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] disabled:opacity-50"
-              >
-                {exportingFormat === 'md' ? 'Exporting…' : 'Export .md'}
-              </button>
-            )}
-            {sessionId && (phase === 'in-session' || phase === 'done') && (
-              <button
-                onClick={() => exportCurrentSitting('pdf')}
-                disabled={exportingFormat !== null}
-                title="Export this sitting as a PDF"
-                className="focus-ring label-data text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] disabled:opacity-50"
-              >
-                {exportingFormat === 'pdf' ? 'Exporting…' : 'Export .pdf'}
-              </button>
-            )}
-            {phase !== 'loading' && (
-              <button
-                onClick={() => setHistoryDrawerOpen(true)}
-                className="focus-ring label-data text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]"
-              >
-                History
-              </button>
-            )}
-            {onGoHome && (
-              <>
-                <span className="h-4 w-px bg-[var(--color-hairline)] shrink-0" aria-hidden="true" />
-                {/* The back-to-main affordance this header never actually had:
-                    a bordered rail-item (sidebar nav idiom), a real claimable
-                    control with an honest hit target. */}
-                <button
-                  onClick={onGoHome}
-                  title="Back to the main page (a live sitting keeps running)"
-                  className="focus-ring nav-item label-data text-[10px] uppercase tracking-[0.14em] px-2.5 py-1.5 shrink-0"
-                >
-                  ← Home
-                </button>
-              </>
-            )}
           </>
         }
       />
+      {/* Export outcome on its own transient caption line under the command
+          bar, never inside it — the row-1 cluster's width is a fixed cost
+          that must fit at the app's narrowest, and a saved-path string is
+          the one item that can't be given a fixed cost. */}
+      {exportStatus && (
+        <div
+          className={`shrink-0 -mt-1 text-xs truncate text-right ${exportStatus.failed ? 'text-[var(--color-ink-danger)]' : 'text-[var(--color-text-faint)]'}`}
+          title={exportStatus.text}
+        >
+          {exportStatus.text}
+        </div>
+      )}
 
       {rateLimit && (
         <div className="shrink-0">

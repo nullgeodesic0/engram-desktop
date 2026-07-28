@@ -24,7 +24,11 @@ export type BeatOutcome = 'visited' | 'confirmed' | 'partial' | 'missed'
 export function BeatStepper({ current, trail }: { current: string | null; trail?: Map<string, BeatOutcome> }) {
   const idx = STEPS.findIndex((s) => s.key === current)
   return (
-    <div className="flex items-center gap-1 overflow-x-auto" aria-label="Dialogue beat progress">
+    // min-w-0 + overflow-hidden, never overflow-x-auto: a masthead element
+    // must not grow a scrollbar. At narrow widths the connector hairlines
+    // compress first (they carry no meaning per-pixel); clipping is the
+    // last resort.
+    <div className="flex items-center gap-1 min-w-0 overflow-hidden" aria-label="Dialogue beat progress">
       {STEPS.map((s, i) => {
         const active = i === idx
         const outcome = !active ? trail?.get(s.key) : undefined
@@ -37,7 +41,7 @@ export function BeatStepper({ current, trail }: { current: string | null; trail?
                 ? 'text-[var(--color-ink-danger)]'
                 : 'text-[var(--color-text-faint)]'
         return (
-          <div key={s.key} className="flex items-center gap-1 shrink-0">
+          <div key={s.key} className="flex items-center gap-1 min-w-0">
             <div
               title={s.label}
               aria-current={active ? 'step' : undefined}
@@ -53,7 +57,9 @@ export function BeatStepper({ current, trail }: { current: string | null; trail?
               </span>
               <span className="hidden sm:inline">{s.label}</span>
             </div>
-            {i < STEPS.length - 1 && <span className="w-3 h-px bg-[var(--color-hairline)] shrink-0" aria-hidden="true" />}
+            {i < STEPS.length - 1 && (
+              <span className="w-3 min-w-[3px] shrink h-px bg-[var(--color-hairline)]" aria-hidden="true" />
+            )}
           </div>
         )
       })}
