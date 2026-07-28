@@ -105,7 +105,7 @@ export function IntervalLadder({
       {shown.map((r, i) => (
         <span
           key={i}
-          className="w-[3px] rounded-full shrink-0"
+          className="w-[3px] shrink-0"
           style={{
             height: `${rungHeightPx(r.days)}px`,
             background: r.lapsed ? 'var(--color-ink-danger)' : 'var(--color-ink-warm)',

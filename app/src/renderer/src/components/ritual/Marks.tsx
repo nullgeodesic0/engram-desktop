@@ -207,11 +207,13 @@ export const NodeCrossingDivider = memo(function NodeCrossingDivider({
   )
 })
 
-/** Ink seal confirming a production was stashed for later batch grading. */
+/** Ink seal confirming a production was stashed for later batch grading. A
+ * sharp rectangle, not a pill — a stash is a filed receipt, and a rectangular
+ * stamp is the period-correct mark for that (see the rounded-full audit). */
 export const StashStamp = memo(function StashStamp() {
   return (
     <div className="flex justify-end pr-2">
-      <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--color-ink-warm-dim)] px-2.5 py-0.5 text-[10px] label-data text-[var(--color-ink-warm)] ritual-stamp">
+      <span className="inline-flex items-center gap-1.5 border border-[var(--color-ink-warm-dim)] px-2.5 py-0.5 text-[10px] label-data text-[var(--color-ink-warm)] ritual-stamp">
         <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
           <circle cx="5" cy="5" r="4" stroke="currentColor" strokeWidth="1" />
           <path d="M3.2 5 4.5 6.3 7 3.8" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" />

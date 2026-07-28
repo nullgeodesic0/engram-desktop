@@ -8,8 +8,8 @@ import { StatBlock } from '../components/ui/StatBlock'
 import { Button } from '../components/ui/Button'
 import { SegmentedControl } from '../components/ui/SegmentedControl'
 import { ArtifactTile } from '../components/ArtifactTile'
-import { DendriteDivider } from '../components/ui/DendriteDivider'
 import { SkeletonBar, SkeletonGrid } from '../components/Skeleton'
+import { SectionBanner } from '../components/ui/SectionBanner'
 import { ExplorableViewer } from '../components/ExplorableViewer'
 import { humanizeNodeId } from '../../../shared/humanizeId'
 import { allPicks } from '../shared/calibrationStore'
@@ -39,8 +39,13 @@ function formatDate(date: string): string {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="flex flex-col gap-3">
-      <h2 className="text-sm font-medium text-[var(--color-text-dim)] uppercase tracking-wide">{title}</h2>
-      <DendriteDivider className="mb-3" />
+      {/* `contents`: same accessibility-preserving wrap as DashboardView's
+          identical Section helper (see its own doctrine comment) — a real
+          `<h2>` landmark with zero box of its own, styling delegated whole to
+          SectionBanner. */}
+      <h2 className="contents">
+        <SectionBanner label={title} />
+      </h2>
       {children}
     </section>
   )

@@ -3,7 +3,13 @@ import type { ParsedTicket } from '../../shared/ticketParser'
 
 /** The session ticket, set as an actual ticket — the dialogue grammar's
  * fenced mono block given a home: perforated left edge, stamped header,
- * serif topic line, mono field grid. `compact` is the rail-pinned variant. */
+ * serif topic line, mono field grid. `compact` is the rail-pinned variant.
+ *
+ * Deliberate keep (Guardian Atlas restyle): the perforation stays a punched
+ * radial-gradient notch, not squared off with the rest of the app's edges —
+ * it's the engraved-artifact identity of this one object (a literal ticket
+ * stub), not a generic panel corner, so the sharp-corners sweep does not
+ * touch it. */
 export const TicketCard = memo(function TicketCard({
   ticket,
   walkNumber = null,

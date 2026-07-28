@@ -41,7 +41,7 @@ export function BeatStepper({ current, trail }: { current: string | null; trail?
             <div
               title={s.label}
               aria-current={active ? 'step' : undefined}
-              className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] label-data transition-colors duration-[var(--dur-base)] ${
+              className={`flex items-center gap-1 px-2 py-1 text-[10px] label-data transition-colors duration-[var(--dur-base)] ${
                 active ? 'bg-[var(--color-surface-3)] text-[var(--color-ink-warm)]' : outcomeClass
               }`}
             >
