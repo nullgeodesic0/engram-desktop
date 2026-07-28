@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { SessionEvent } from '../../../shared/sessionEvents'
-import type { TopicListEntry, ArtifactEntry, TopicGraph, ExportSittingFormat } from '../../../shared/types'
+import type { TopicListEntry, ArtifactEntry, TopicGraph, ExportSittingFormat, EnvironmentCheckResult } from '../../../shared/types'
 import { RateLimitBanner } from '../components/RateLimitBanner'
 import { isBlockingRateLimitStatus } from '../../../shared/rateLimit'
 import { ChatMessageView } from '../components/ChatMessageView'
@@ -63,6 +63,8 @@ import { SkeletonBar } from '../components/Skeleton'
 import { InkNode } from '../components/ui/InkNode'
 import { PinTackIcon } from '../components/ui/PinTackIcon'
 import { TopicCard } from '../components/TopicCard'
+import { topicBucket } from '../shared/topicShelf'
+import { EnvironmentSteps } from '../components/EnvironmentSteps'
 import { extractTicketFromMessages } from '../shared/ticketParser'
 import { TicketCard } from '../components/ritual/TicketCard'
 import { InkWell } from '../components/ritual/InkWell'
@@ -161,6 +163,77 @@ function TopicListSkeleton() {
   )
 }
 
+/** A group of shelf rows under a small subheading — hidden entirely (no
+ * heading, no empty stack) when the bucket is empty, same discipline as
+ * Home's TopicGroup (HomeView.tsx) — same three-bucket grammar, just laid out
+ * as a vertical shelf instead of a grid. */
+function LearnTopicGroup({
+  heading,
+  caption,
+  topics,
+  resumableTopics,
+  onOpen,
+  onSettings,
+  onStartFresh,
+}: {
+  heading: string
+  caption?: string
+  topics: TopicListEntry[]
+  resumableTopics: Set<string>
+  onOpen: (t: TopicListEntry) => void
+  onSettings: (t: TopicListEntry) => void
+  onStartFresh: (t: TopicListEntry) => void
+}) {
+  if (topics.length === 0) return null
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-baseline gap-2">
+        <span className="text-[10px] label-data uppercase tracking-wide text-[var(--color-text-faint)]">{heading}</span>
+        {caption && <span className="text-xs text-[var(--color-text-faint)]">{caption}</span>}
+      </div>
+      <div className="flex flex-col gap-3">
+        {topics.map((t) => (
+          <TopicCard
+            key={t.topic}
+            variant="shelf"
+            topic={t}
+            resumable={resumableTopics.has(t.topic)}
+            onOpen={() => onOpen(t)}
+            onSettings={() => onSettings(t)}
+            onStartFresh={() => onStartFresh(t)}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/** The shelf's last card — a dashed hairline panel replacing the old
+ * full-width primary Button, so "start something new" reads as one more
+ * territory on the atlas rather than a form action bolted below the list.
+ * Stays a real button (focus-ring, disabled semantics) under the hood; the
+ * blocked (rate-limited) state is drawn ON the card itself — dimmed, with an
+ * explicit reason — rather than silently disabling it with no explanation,
+ * which the old floating Button did. */
+function AddTerritoryCard({ onClick, blocked }: { onClick: () => void; blocked: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={blocked}
+      title={blocked ? 'Blocked until the current rate limit resets' : undefined}
+      className="focus-ring panel border-dashed border-[var(--color-hairline)] px-5 py-4 flex items-center gap-3 text-left hover:bg-[var(--color-surface-2)] hover:border-[var(--color-ink-warm-dim)] transition-colors duration-[var(--dur-base)] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+    >
+      <span className="text-lg leading-none text-[var(--color-text-faint)]">+</span>
+      <div className="flex flex-col gap-0.5">
+        <span className="text-sm text-[var(--color-text-dim)]">Chart a new territory</span>
+        {blocked && (
+          <span className="label-data text-[10px] text-[var(--color-ink-danger)]">blocked — rate limit in effect</span>
+        )}
+      </div>
+    </button>
+  )
+}
+
 interface LearnSessionViewProps {
   /** Set by App.tsx when arriving via the Home screen or ⌘K command palette's
    * "Continue: <topic>" entry — opens that topic automatically once the topic
@@ -203,6 +276,11 @@ export function LearnSessionView({
   const [topics, setTopics] = useState<TopicListEntry[] | null>(null)
   const [settingsFor, setSettingsFor] = useState<TopicListEntry | null>(null)
   const [newTopicOpen, setNewTopicOpen] = useState(false)
+  // Only consulted for the empty-shelf guided card below — same gate HomeView
+  // uses (EnvironmentGate already blocks the app on a broken environment, but
+  // its "Continue anyway" escape hatch can still land you here with topics
+  // still unmapped and Claude/the plugin unresolved).
+  const [envCheck, setEnvCheck] = useState<EnvironmentCheckResult | null>(null)
   // Which topics have a resumable session — shown as a hint on each TopicCard so opening
   // a topic's "continue vs. fresh start" behavior (see openTopic) isn't a surprise.
   const [resumableTopics, setResumableTopics] = useState<Set<string>>(new Set())
@@ -508,6 +586,7 @@ export function LearnSessionView({
 
   useEffect(() => {
     refreshTopics()
+    window.engram.environmentCheck().then(setEnvCheck)
     const offEvent = window.engram.onSessionEvent((sid, event) => {
       if (sid !== sessionIdRef.current) return
       handleSessionEvent(event)
@@ -1448,7 +1527,19 @@ export function LearnSessionView({
               )}
             </div>
           ) : (
-            <h1 className="font-[var(--font-serif)] text-[length:var(--text-display)] text-[var(--color-text-primary)]">Learn</h1>
+            <div className="flex flex-col gap-0.5">
+              <h1 className="font-[var(--font-serif)] text-[length:var(--text-display)] text-[var(--color-text-primary)]">Learn</h1>
+              {/* Due-context subtitle — read off the same `topics` list already
+                  fetched for the shelf below (each entry's own `.due`), not a
+                  second fetch. Hidden until topics have loaded so it never
+                  flashes "0 territories" before the real count lands. */}
+              {topics !== null && topics.length > 0 && (
+                <div className="label-data text-xs text-[var(--color-text-faint)]">
+                  {topics.length} {topics.length === 1 ? 'territory' : 'territories'} ·{' '}
+                  {topics.reduce((sum, t) => sum + t.due, 0)} due across the atlas
+                </div>
+              )}
+            </div>
           )}
           <div className="flex items-center gap-4">
             {started && momentumOn && <FlowChain chain={trailingRecalled(sessionGrades)} />}
@@ -1563,43 +1654,91 @@ export function LearnSessionView({
       )}
       {error && <ErrorPanel error={error} onDismiss={() => setError(null)} />}
 
-      {!started && (
-        <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-3">
-          {topics === null && (
-            <>
-              <div className="fig-caption">reading your topics…</div>
-              <TopicListSkeleton />
-            </>
-          )}
-          {topics !== null && topics.length === 0 && (
-            <Card className="px-5 py-4 flex flex-col gap-3">
-              <div className="fig-caption">Fig. — no territories mapped yet</div>
-              <div className="font-[var(--font-serif)] text-[length:var(--text-display)] text-[var(--color-text-primary)]">Every topic starts as a first-principles map.</div>
-            </Card>
-          )}
-          {topics?.map((t) => (
-            <TopicCard
-              key={t.topic}
-              variant="shelf"
-              topic={t}
-              resumable={resumableTopics.has(t.topic)}
-              onOpen={() => openTopic(t)}
-              onSettings={() => setSettingsFor(t)}
-              onStartFresh={() => startFreshForTopic(t)}
-            />
-          ))}
+      {!started && (() => {
+        // Same three-bucket partition Home uses (topicBucket's doc comment) —
+        // exhaustive, so whenever topics.length > 0 at least one group below
+        // is non-empty.
+        const active = topics?.filter((t) => topicBucket(t) === 'active') ?? []
+        const consolidated = topics?.filter((t) => topicBucket(t) === 'consolidated') ?? []
+        const notStarted = topics?.filter((t) => topicBucket(t) === 'notStarted') ?? []
+        const envBroken = envCheck !== null && !(envCheck.claudeOk && envCheck.pluginOk)
+        return (
+          <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-3">
+            {topics === null && (
+              <>
+                <div className="fig-caption">reading your topics…</div>
+                <TopicListSkeleton />
+              </>
+            )}
+            {/* Same envCheck gate as HomeView's empty state — topics() routinely
+                resolves before environmentCheck() (up to ~10s spawning `claude
+                --version`), so the guided-vs-plain decision waits on it too. */}
+            {topics !== null && topics.length === 0 && envCheck === null && <TopicListSkeleton />}
+            {topics !== null && topics.length === 0 && envBroken && envCheck && (
+              <div className="flex flex-col items-start gap-3 py-10 w-full max-w-lg">
+                <div className="fig-caption">Fig. — setup needed before your first topic</div>
+                <div className="font-[var(--font-serif)] text-[length:var(--text-display)] text-[var(--color-text-primary)]">
+                  Two things first.
+                </div>
+                <p className="text-sm text-[var(--color-text-dim)] max-w-md">
+                  Engram Desktop scripts the Claude Code CLI directly — both of these need to be in place before a
+                  topic can start.
+                </p>
+                <div className="w-full">
+                  <EnvironmentSteps result={envCheck} />
+                </div>
+                <Button variant="ghost" onClick={() => window.engram.environmentCheck().then(setEnvCheck)}>
+                  Check again
+                </Button>
+              </div>
+            )}
+            {topics !== null && topics.length === 0 && envCheck !== null && !envBroken && (
+              <Card className="px-5 py-4 flex flex-col gap-3 items-start">
+                <div className="fig-caption">Fig. — no territories mapped yet</div>
+                <div className="font-[var(--font-serif)] text-[length:var(--text-display)] text-[var(--color-text-primary)]">
+                  Every topic starts as a first-principles map.
+                </div>
+                <Button variant="primary" onClick={() => setNewTopicOpen(true)} disabled={rateLimitBlocking}>
+                  Start your first topic
+                </Button>
+              </Card>
+            )}
 
-          <Button
-            variant="primary"
-            onClick={() => setNewTopicOpen(true)}
-            disabled={rateLimitBlocking}
-            className="w-full flex items-center gap-3"
-          >
-            <span className="text-lg leading-none">+</span>
-            <span className="text-sm">Start a new topic</span>
-          </Button>
-        </div>
-      )}
+            {topics !== null && topics.length > 0 && (
+              <div className="flex flex-col gap-6">
+                <LearnTopicGroup
+                  heading="Continue learning"
+                  topics={active}
+                  resumableTopics={resumableTopics}
+                  onOpen={openTopic}
+                  onSettings={setSettingsFor}
+                  onStartFresh={startFreshForTopic}
+                />
+                <LearnTopicGroup
+                  heading="Consolidated"
+                  caption="fully encoded — held by review alone"
+                  topics={consolidated}
+                  resumableTopics={resumableTopics}
+                  onOpen={openTopic}
+                  onSettings={setSettingsFor}
+                  onStartFresh={startFreshForTopic}
+                />
+                <LearnTopicGroup
+                  heading="Not started"
+                  topics={notStarted}
+                  resumableTopics={resumableTopics}
+                  onOpen={openTopic}
+                  onSettings={setSettingsFor}
+                  onStartFresh={startFreshForTopic}
+                />
+                {/* The shelf's last card, not a floating button below the list —
+                    see AddTerritoryCard's doctrine comment. */}
+                <AddTerritoryCard onClick={() => setNewTopicOpen(true)} blocked={rateLimitBlocking} />
+              </div>
+            )}
+          </div>
+        )
+      })()}
 
       {started && (
         <div ref={setSessionPaneRef} className="flex-1 min-h-0 flex flex-col gap-4">

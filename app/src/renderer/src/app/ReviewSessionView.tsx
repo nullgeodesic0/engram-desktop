@@ -125,6 +125,10 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
   const [error, setError] = useState<string | null>(null)
   const [hasPriorSession, setHasPriorSession] = useState(false)
   const [totalDue, setTotalDue] = useState(0)
+  // Topic id -> real title for the ready plate's per-topic rows — fetched
+  // once, non-blocking (the plate renders raw topic slugs until this
+  // resolves; see ReadyRoomPlate's `topicTitles` prop doc comment).
+  const [topicTitles, setTopicTitles] = useState<Record<string, string>>({})
   // Captured once when a session starts — the denominator for "Item N of M".
   // `queue` itself shrinks as items get graded, so it can't serve as both.
   const [sessionTotal, setSessionTotal] = useState(0)
@@ -312,11 +316,21 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
   useEffect(() => {
     refreshQueue().then((items) => {
       setPhase(items.length > 0 ? 'ready' : 'empty')
-      if (items.length === 0) refreshHorizon()
     })
-    // Uncapped, purely for the amnesty-banner heuristic below — `queue` itself
-    // stays capped at 12 (the actual review cap /review would use).
+    // The horizon now renders at `ready` too (the plate, below), not just
+    // `empty`/`done` — fetch it unconditionally on mount rather than only
+    // when the queue is empty.
+    refreshHorizon()
+    // Uncapped, purely for the amnesty paragraph folded into the ready plate
+    // — `queue` itself stays capped at 12 (the actual review cap /review
+    // would use).
     window.engram.due().then((all) => setTotalDue(all.length))
+    // Real topic titles for the ready plate's per-topic rows — non-blocking,
+    // same discipline as HomeView/LearnSessionView's own topics() fetches;
+    // the plate falls back to the raw topic slug until this resolves.
+    window.engram.topics().then((list) => {
+      setTopicTitles(Object.fromEntries(list.map((t) => [t.topic, t.title])))
+    })
     // Momentum opt-out gates the cosmetic inkwell (dialogue-grammar.md's
     // opt-out, honored beyond the dialogue itself).
     window.engram
@@ -1012,7 +1026,12 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
       <PageHeader
         className="shrink-0"
         title="Review"
-        subtitle={`${queue.length} due`}
+        // The ready plate below now says this count once, big — the header
+        // repeating it as "N due" right above would be the exact "three due
+        // counts" redundancy this wave set out to fix. Every other phase
+        // (loading/empty/in-session/done) keeps the subtitle: in-session it's
+        // what's left in the live queue, which the plate isn't showing.
+        subtitle={phase === 'ready' ? undefined : `${queue.length} due`}
         right={
           <>
             {phase === 'in-session' && momentumOn && <FlowChain chain={trailingRecalled(sessionGrades)} />}
@@ -1092,27 +1111,28 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
         </div>
       )}
 
-      {/* App-computed (Tier-1) amnesty framing — the skill itself narrates this too
-          once a session starts, but that's prose the model may or may not lead
-          with; this is a reliable pre-session beat instead of hoped-for from text.
-          Heuristic mirrors the skill's own "due > 2x mode cap" (SKILL.md: standard
-          cap ~12), shown before any grading pressure, not after. */}
-      {phase === 'ready' && totalDue > 24 && (
-        <div className="shrink-0 panel border-[var(--color-ink-warm-dim)] px-4 py-3 text-sm text-[var(--color-ink-warm)]">
-          {totalDue} reviews have piled up — nothing is owed, and that’s not a debt to clear in one sitting. A normal
-          session still only covers a capped set (most-overdue first); the rest just stays due, no guilt attached.
-        </div>
-      )}
-
+      {/* The amnesty framing (App-computed, Tier-1 — the skill itself narrates
+          this too once a session starts, but that's prose the model may or
+          may not lead with) now folds INTO the plate itself as a warm-ink
+          paragraph between the figure and the rows, a register shift inside
+          one document rather than a sibling panel repeating "reviews" a
+          second time above it. See ReadyRoomPlate's own totalDue>24 branch. */}
       {phase === 'ready' && current && (
-        <ReadyRoomPlate
-          dueItems={queue}
-          totalDue={totalDue}
-          onStart={() => startSession(false)}
-          onResume={() => startSession(true)}
-          hasPriorSession={hasPriorSession}
-          blocked={blocked}
-        />
+        <>
+          <ReadyRoomPlate
+            dueItems={queue}
+            totalDue={totalDue}
+            topicTitles={topicTitles}
+            onStart={() => startSession(false)}
+            onResume={() => startSession(true)}
+            hasPriorSession={hasPriorSession}
+            blocked={blocked}
+          />
+          {/* Reuses the same computeDueBuckets fetch the empty/done phases
+              already read from (refreshHorizon, fetched unconditionally on
+              mount now) — no second walk of the topic graphs. */}
+          {horizonBuckets && <ReviewHorizon buckets={horizonBuckets} holdingCount={holdingCount} />}
+        </>
       )}
 
       {(phase === 'in-session' || phase === 'done') && (
