@@ -544,13 +544,15 @@
      title line → optional label-data note, then the caller's own rows,
      fig-caption, and action row. One size by decree so the surfaces rhyme —
      a smaller "sub-figure" scale would just be a stat block, which already
-     exists. Tabular numerals so a live count (Home's due figure pulsing up)
-     never reflows its neighbors. */
+     exists. The serif's own default figures, deliberately NOT tabular-nums:
+     Fraunces' native numerals are the whole charm of this figure (the user
+     called it out when a tabular pass flattened them), and a single headline
+     number reflowing its trailing text by a pixel on change is a fine trade
+     for the better glyphs. */
   .figure-display {
     font-family: var(--font-serif);
     font-size: 3.5rem;
     line-height: 1;
-    font-variant-numeric: tabular-nums;
   }
 
   /* Guardian vocabulary — the Destiny 1/2 grammar's shared atoms. Every
