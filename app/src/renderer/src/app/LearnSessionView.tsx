@@ -13,6 +13,7 @@ import { ContextGauge } from '../components/ContextGauge'
 import { BeatStepper, type BeatOutcome } from '../components/BeatStepper'
 import { ActivityLine } from '../components/ActivityLine'
 import { ChatScrollRegion } from '../components/ChatScrollRegion'
+import { useEquationCopy } from '../components/useEquationCopy'
 import { useTutorActivity, composerDisabledReason } from '../shared/tutorActivity'
 import { parseTranscriptToMessages, type ChatMessage } from '../../../shared/chatMessages'
 import { extractLastUsageFromTranscript } from '../../../shared/sessionUsage'
@@ -781,7 +782,11 @@ export function LearnSessionView({
           }
           const label = latestBeatLabel(event.text)
           if (label) setBeat(label)
-          return [...prev, { id: crypto.randomUUID(), role: 'assistant', text: event.text }]
+          // `Date.now()` at append time — SessionEvent carries no timestamp
+          // of its own (see shared/sessionEvents.ts), so this is honest as
+          // "when the app received it", the same discipline ChatMessage's
+          // own doctrine comment documents.
+          return [...prev, { id: crypto.randomUUID(), role: 'assistant', text: event.text, timestamp: Date.now() }]
         })
         break
       }
@@ -1251,7 +1256,7 @@ export function LearnSessionView({
     if (!sessionId || !production.trim() || busy) return
     const text = production.trim()
     const files = attachedFiles
-    setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'user', text, attachments: files }])
+    setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'user', text, attachments: files, timestamp: Date.now() }])
     setBusy(true)
     setProduction('')
     setAttachedFiles([])
@@ -1377,6 +1382,19 @@ export function LearnSessionView({
     () => (currentNodeId && topicGraphCache ? topicGraphCache.nodes[currentNodeId]?.why_chain ?? [] : []),
     [currentNodeId, topicGraphCache],
   )
+
+  // Chat Instruments Wave A — wired at the whole session pane's own root
+  // below (not just the transcript's ChatScrollRegion), so it also covers
+  // SessionCeremony's commitment line and ActionChips' suggested-action
+  // labels, both of which render as siblings of the transcript inside the
+  // same pane, plus the composer's own MarkdownPreview (separately wired at
+  // its own root too — see that component — so it stays correct even if
+  // ever mounted somewhere else; nesting is safe, see useEquationCopy's own
+  // doctrine comment on `stopPropagation`). A callback ref: this pane's root
+  // is itself behind the `started` conditional below, which unmounts and
+  // remounts across "back to topics" / re-open — exactly the case
+  // `useEquationCopy`'s callback-ref design exists for.
+  const equationCopyRef = useEquationCopy()
 
   return (
     // h-full from <main>'s flex-1 (see App.tsx); min-h-0 is required for the flex
@@ -1607,7 +1625,7 @@ export function LearnSessionView({
       )}
 
       {started && (
-        <div className="flex-1 min-h-0 flex flex-col gap-4">
+        <div ref={equationCopyRef} className="flex-1 min-h-0 flex flex-col gap-4">
           {sessionGrades.length > 0 && (
             <div className="shrink-0">
               <SessionCeremony
@@ -1691,6 +1709,7 @@ export function LearnSessionView({
                       // very last message, only while it's the live growing
                       // assistant bubble.
                       trailingCaret={busy && i === messages.length - 1 && m.role === 'assistant' && tutorActivity.activity.kind === 'streaming'}
+                      previousTimestamp={messages[i - 1]?.timestamp}
                     />
                     {marks
                       .filter((k) => k.atIndex === i + 1 || (i === messages.length - 1 && k.atIndex > messages.length))

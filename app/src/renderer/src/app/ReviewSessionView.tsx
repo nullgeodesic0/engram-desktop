@@ -9,6 +9,7 @@ import { MessageComposer } from '../components/MessageComposer'
 import { ContextGauge } from '../components/ContextGauge'
 import { ActivityLine } from '../components/ActivityLine'
 import { ChatScrollRegion } from '../components/ChatScrollRegion'
+import { useEquationCopy } from '../components/useEquationCopy'
 import { useTutorActivity, composerDisabledReason } from '../shared/tutorActivity'
 import { parseTranscriptToMessages, type ChatMessage } from '../../../shared/chatMessages'
 import { extractLastUsageFromTranscript } from '../../../shared/sessionUsage'
@@ -396,7 +397,9 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
           if (last && last.role === 'assistant' && !breakBubble) {
             return [...prev.slice(0, -1), { ...last, text: last.text + event.text }]
           }
-          return [...prev, { id: crypto.randomUUID(), role: 'assistant', text: event.text }]
+          // `Date.now()` at append time — SessionEvent carries no timestamp
+          // of its own; see ChatMessage's own doctrine comment.
+          return [...prev, { id: crypto.randomUUID(), role: 'assistant', text: event.text, timestamp: Date.now() }]
         })
         break
       }
@@ -697,7 +700,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
     if (!sessionId || !production.trim() || busy) return
     const text = production.trim()
     const files = attachedFiles
-    setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'user', text, attachments: files }])
+    setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'user', text, attachments: files, timestamp: Date.now() }])
     setBusy(true)
     setProduction('')
     setAttachedFiles([])
@@ -934,6 +937,16 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
   const lastUserMessageId = useMemo(() => [...messages].reverse().find((m) => m.role === 'user')?.id ?? null, [messages])
   const latestTicket = useMemo(() => extractTicketFromMessages(messages), [messages])
 
+  // Chat Instruments Wave A — wired at the whole session pane's own root
+  // below (not just the transcript's ChatScrollRegion), so it also covers
+  // SessionCeremony's closing card and the composer's MarkdownPreview
+  // (separately wired at its own root too — safe to nest, see
+  // useEquationCopy's own doctrine comment). A callback ref: this pane's
+  // root is behind the `phase === 'in-session' || phase === 'done'`
+  // conditional below, which unmounts/remounts across a session's own
+  // lifecycle — exactly the case the callback-ref design exists for.
+  const equationCopyRef = useEquationCopy()
+
   return (
     // Tighter at the top than the standard p-8 so the header sits near the
     // window chrome and the transcript gets the reclaimed height; the gap
@@ -1063,7 +1076,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
       )}
 
       {(phase === 'in-session' || phase === 'done') && (
-        <div className="flex-1 min-h-0 flex flex-col gap-4">
+        <div ref={equationCopyRef} className="flex-1 min-h-0 flex flex-col gap-4">
           {/* The only scrolling region — header and input stay anchored. */}
           {/* Must be a flex column: ChatScrollRegion sizes itself with
               flex-1/min-h-0 and loses its height bound (killing scrolling)
@@ -1222,6 +1235,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
                       verdictSegments={verdictProps?.segments}
                       verdictEyebrowIndex={verdictProps?.eyebrowIndex}
                       suppressSchedule={verdictProps?.suppressSchedule}
+                      previousTimestamp={messages[i - 1]?.timestamp}
                     />
                     {marks
                       .filter(

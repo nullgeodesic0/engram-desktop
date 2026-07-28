@@ -6,6 +6,7 @@ import { ProseMarkdown } from './ProseMarkdown'
 import { Button } from './ui/Button'
 import { TypingIndicator } from './TypingIndicator'
 import { friendlyErrorText } from '../shared/friendlyError'
+import { useEquationCopy } from './useEquationCopy'
 
 const QUICK_ACTIONS = [
   { label: 'Check-in', message: '/engram:coach' },
@@ -94,8 +95,14 @@ export function CoachSessionPanel() {
     setAskRequest(null)
   }
 
+  // Chat Instruments Wave A — covers the streamed prose below AND
+  // AskDialog's own MathRenderer output (Modal is a plain in-place div, not
+  // a portal — see ui/Modal.tsx — so it's a real DOM descendant of this
+  // panel, not out of a delegated listener's reach).
+  const equationCopyRef = useEquationCopy()
+
   return (
-    <div className="panel px-5 py-5 flex flex-col gap-4">
+    <div ref={equationCopyRef} className="panel px-5 py-5 flex flex-col gap-4">
       <div className="text-sm text-[var(--color-text-primary)]">Coach actions</div>
       <div className="flex flex-wrap gap-2">
         {QUICK_ACTIONS.map((a) => (
