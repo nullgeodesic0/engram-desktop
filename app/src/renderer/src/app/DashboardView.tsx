@@ -49,7 +49,7 @@ function StatCard({ label, value, sub, tone = 'default' }: { label: string; valu
           ? 'text-[var(--color-text-dim)]'
           : 'text-[var(--color-text-primary)]'
   return (
-    <div className="panel px-4 py-3 flex flex-col gap-1 min-w-0">
+    <div className="tilt-card panel px-4 py-3 flex flex-col gap-1 min-w-0">
       <div className="text-xs text-[var(--color-text-dim)] uppercase tracking-wide">{label}</div>
       <div className={`label-data text-2xl font-medium ${valueColor}`}>{value}</div>
       {sub && <div className="text-xs text-[var(--color-text-faint)]">{sub}</div>}
@@ -365,7 +365,7 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts, coachHomeSi
             />
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <div className="panel px-4 py-4 flex flex-col gap-3">
+            <div className="tilt-card panel px-4 py-4 flex flex-col gap-3">
               <div className="text-xs font-medium text-[var(--color-text-dim)] uppercase tracking-wide">
                 Activity, {rangeText}
               </div>
@@ -374,7 +374,7 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts, coachHomeSi
                 onSelectDay={(day) => setDetail({ label: day.date, items: day.items })}
               />
             </div>
-            <div className="panel px-4 py-4 flex flex-col gap-3">
+            <div className="tilt-card panel px-4 py-4 flex flex-col gap-3">
               <div className="text-xs font-medium text-[var(--color-text-dim)] uppercase tracking-wide">
                 Recall rate, weekly
               </div>
@@ -387,7 +387,7 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts, coachHomeSi
           </div>
 
           {detail && (
-            <div className="panel px-4 py-4 flex flex-col gap-3">
+            <div className="tilt-card panel px-4 py-4 flex flex-col gap-3">
               <div className="flex items-center justify-between">
                 <div className="text-xs font-medium text-[var(--color-text-dim)] uppercase tracking-wide">
                   {detail.label} · {detail.items.length} item{detail.items.length === 1 ? '' : 's'}
@@ -472,7 +472,7 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts, coachHomeSi
             <SkeletonBar height={50} />
           </div>
         ) : (
-          <div className="panel px-4 py-4 flex flex-col gap-5 mt-1">
+          <div className="tilt-card panel px-4 py-4 flex flex-col gap-5 mt-1">
             <div className="fig-caption">Chart below reflects: {rangeText}</div>
             <RetentionCurve data={weeksInRange} />
             <ActivityStrip data={daysInRange} />
@@ -526,7 +526,7 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts, coachHomeSi
               <StatBlock label="Calibrated" value={String(cal.calibrated)} tone="neutral" />
             </div>
             <div className="fig-caption">Fig. — how your felt-sense tracks the assessor</div>
-            <div className="panel px-4 py-4 mt-1">
+            <div className="tilt-card panel px-4 py-4 mt-1">
               <CalibrationScatter data={{ picks: cal.picks, days: daysInRange }} />
             </div>
           </>
@@ -541,7 +541,7 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts, coachHomeSi
               <button
                 key={t.topic}
                 onClick={() => setOpenTopic(t.topic)}
-                className="focus-ring panel px-4 py-3 flex items-center justify-between text-left w-full hover:border-[var(--color-text-faint)] transition-colors"
+                className="focus-ring tilt-card panel px-4 py-3 flex items-center justify-between text-left w-full hover:border-[var(--color-text-faint)] transition-colors"
               >
                 <div>
                   <div className="text-sm text-[var(--color-text-primary)]">{t.title}</div>
@@ -562,7 +562,7 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts, coachHomeSi
         <Section title="Misconceptions">
           <button
             onClick={() => setLedgerOpen(true)}
-            className="focus-ring panel px-4 py-3 flex items-center justify-between gap-3 w-full text-left hover:border-[var(--color-text-faint)] transition-colors"
+            className="focus-ring tilt-card panel px-4 py-3 flex items-center justify-between gap-3 w-full text-left hover:border-[var(--color-text-faint)] transition-colors"
           >
             <span className="text-sm text-[var(--color-text-primary)]">
               {stats.misconceptions_open} open — noticed along the way, filed for re-testing.

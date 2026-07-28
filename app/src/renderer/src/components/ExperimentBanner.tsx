@@ -28,7 +28,7 @@ export function ExperimentBanner({ experiment }: { experiment: ActiveExperiment 
   // Each renders only if genuinely present; nothing is inferred.
   const arms = experiment.arms?.filter((a) => typeof a === 'string' && a.length > 0) ?? []
   return (
-    <div className="panel px-4 py-3 flex flex-col gap-1">
+    <div className="tilt-card panel px-4 py-3 flex flex-col gap-1">
       <div className="text-xs label-data text-[var(--color-text-faint)] uppercase tracking-wide">
         A teaching experiment is running · since {formatSince(experiment.started)}
       </div>

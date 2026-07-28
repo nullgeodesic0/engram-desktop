@@ -39,7 +39,8 @@ export const SessionOpenPlate = memo(function SessionOpenPlate({
 
 /** End-of-walk ceremony — tally, stability movements, next-due, and the
  * return commitment framed as a signed ledger entry. Shared by Learn (fires
- * when a receipt batch lands) and Review (done phase). */
+ * when a receipt batch lands) and Review (done phase). `.tilt-card-soft` — a
+ * chat-transcript card, missed in the first tilt pass. */
 export const SessionCeremony = memo(function SessionCeremony({
   results,
   streakDays,
@@ -59,7 +60,7 @@ export const SessionCeremony = memo(function SessionCeremony({
       : null
   const nextDueValue = results.length > 0 && nextDue !== Infinity ? nextDue : null
   return (
-    <div className="panel-raised p-4 flex flex-col gap-3 max-w-md">
+    <div className="tilt-card-soft panel-raised p-4 flex flex-col gap-3 max-w-md">
       <div className="font-[var(--font-serif)] text-[length:var(--text-heading)] text-[var(--color-text-primary)]">
         {heading}
       </div>

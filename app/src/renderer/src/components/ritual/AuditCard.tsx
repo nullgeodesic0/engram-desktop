@@ -34,7 +34,7 @@ export const AuditCard = memo(function AuditCard({
 
   return (
     <div className="flex justify-start my-1.5 pl-1">
-      <div className="tilt-card max-w-[92%] flex flex-col gap-1.5 rounded-md border px-3 py-2.5 ritual-audit-in" style={{ borderColor: borderTone }}>
+      <div className="tilt-card-soft max-w-[92%] flex flex-col gap-1.5 rounded-md border px-3 py-2.5 ritual-audit-in" style={{ borderColor: borderTone }}>
         <div className="flex items-center gap-2">
           <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true" className="shrink-0" style={{ color: tone }}>
             <circle cx="6.5" cy="6.5" r="5" stroke="currentColor" strokeWidth="1.1" />

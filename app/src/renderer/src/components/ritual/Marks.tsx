@@ -225,10 +225,11 @@ export const StashStamp = memo(function StashStamp() {
 })
 
 /** A tutor-authored figure — a diagram, table, or worked aside dropped into the
- * transcript via the show_figure bridge:ui tool. Rendered as markdown, not raw HTML. */
+ * transcript via the show_figure bridge:ui tool. Rendered as markdown, not raw HTML.
+ * `.tilt-card-soft` — a chat-transcript card, missed in the first tilt pass. */
 export const FigureCard = memo(function FigureCard({ title, body }: { title: string | null; body: string }) {
   return (
-    <div className="panel px-4 py-3 max-w-[92%] flex flex-col gap-2">
+    <div className="tilt-card-soft panel px-4 py-3 max-w-[92%] flex flex-col gap-2">
       {title && <div className="font-[var(--font-serif)] text-sm text-[var(--color-text-primary)]">{title}</div>}
       <MarkdownPreview source={body} />
     </div>

@@ -24,7 +24,7 @@ export function WeekDigest({ digest }: { digest: WeekDigestOutput | null }) {
   const quiet = digest.reviews.thisWeek === 0
 
   return (
-    <div className="panel px-4 py-4 flex flex-col gap-3">
+    <div className="tilt-card panel px-4 py-4 flex flex-col gap-3">
       <div className="fig-caption">{digest.caption}</div>
 
       {!quiet && (

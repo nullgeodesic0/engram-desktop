@@ -32,7 +32,7 @@ export const ProbeCard = memo(function ProbeCard({
   const accent = header.threshold ? 'var(--color-ink-violet)' : 'var(--color-ink-cool)'
   return (
     <div
-      className={`tilt-card panel px-5 py-4 flex flex-col gap-3 border-l-2 transition-shadow duration-[var(--dur-fast)] ${highlighted ? 'pair-linked' : ''}`}
+      className={`tilt-card-soft panel px-5 py-4 flex flex-col gap-3 border-l-2 transition-shadow duration-[var(--dur-fast)] ${highlighted ? 'pair-linked' : ''}`}
       style={{ borderLeftColor: accent }}
       onMouseEnter={onHoverChange ? () => onHoverChange(true) : undefined}
       onMouseLeave={onHoverChange ? () => onHoverChange(false) : undefined}

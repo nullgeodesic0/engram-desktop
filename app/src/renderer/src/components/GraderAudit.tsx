@@ -95,7 +95,7 @@ function ThresholdStat({
           ? 'text-[var(--color-ink-danger)]'
           : 'text-[var(--color-text-dim)]'
   return (
-    <div className="panel px-4 py-3 flex flex-col gap-1 min-w-0">
+    <div className="tilt-card panel px-4 py-3 flex flex-col gap-1 min-w-0">
       <div className="text-xs text-[var(--color-text-dim)] uppercase tracking-wide">{label}</div>
       <div className={`label-data text-2xl font-medium ${value == null ? 'text-[var(--color-text-faint)]' : color}`}>
         {displayValue}
@@ -214,7 +214,7 @@ export function GraderAudit() {
   if (!health.audited) {
     const unreadable = health.verdict === 'unreadable'
     return (
-      <div className="panel px-4 py-3 flex items-start gap-3">
+      <div className="tilt-card panel px-4 py-3 flex items-start gap-3">
         <span className="text-[var(--color-text-faint)]">?</span>
         <div className="flex-1 min-w-0">
           <div className="text-sm text-[var(--color-text-primary)]">
@@ -261,7 +261,7 @@ export function GraderAudit() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className={`panel px-4 py-3 flex items-start gap-3 ${health.grader_unvalidated ? 'border-[var(--color-ink-danger-dim)]' : ''}`}>
+      <div className={`tilt-card panel px-4 py-3 flex items-start gap-3 ${health.grader_unvalidated ? 'border-[var(--color-ink-danger-dim)]' : ''}`}>
         <span className={verdictTone(health.verdict)}>{health.verdict === 'pass' ? '✓' : health.verdict === 'warn' ? '~' : '✕'}</span>
         <div className="flex-1 min-w-0">
           <div className={`text-sm ${verdictTone(health.verdict)}`}>
@@ -296,18 +296,18 @@ export function GraderAudit() {
       )}
 
       <div className="grid grid-cols-2 gap-3">
-        <div className="panel px-4 py-3 flex flex-col gap-1">
+        <div className="tilt-card panel px-4 py-3 flex flex-col gap-1">
           <div className="text-xs text-[var(--color-text-dim)] uppercase tracking-wide">Exact agreement</div>
           <div className="label-data text-lg text-[var(--color-text-primary)]">{fmtPct(health.exact_agreement)}</div>
         </div>
-        <div className="panel px-4 py-3 flex flex-col gap-1">
+        <div className="tilt-card panel px-4 py-3 flex flex-col gap-1">
           <div className="text-xs text-[var(--color-text-dim)] uppercase tracking-wide">Test-retest</div>
           <div className="label-data text-lg text-[var(--color-text-primary)]">{fmtPct(health.test_retest)}</div>
         </div>
       </div>
 
       {showCaveat && (
-        <div className="panel border-[var(--color-ink-cool-dim)] px-4 py-3 flex flex-col gap-2">
+        <div className="tilt-card panel border-[var(--color-ink-cool-dim)] px-4 py-3 flex flex-col gap-2">
           <div className="text-xs text-[var(--color-ink-cool)] uppercase tracking-wide">
             Gold set: {health.gold_adjudication}, not independently adjudicated
           </div>
@@ -321,7 +321,7 @@ export function GraderAudit() {
       )}
 
       {health.direction && (
-        <div className="panel px-4 py-3 flex flex-col gap-2">
+        <div className="tilt-card panel px-4 py-3 flex flex-col gap-2">
           <div className="text-xs text-[var(--color-text-dim)] uppercase tracking-wide">Direction, of {health.direction.judgments} judgments</div>
           <div className="grid grid-cols-3 gap-3">
             <div className="flex flex-col gap-0.5">
