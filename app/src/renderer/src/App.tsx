@@ -9,6 +9,7 @@ import { SessionHistoryDrawer, ALL_HISTORY_KEY } from './components/SessionHisto
 import { TitleBar } from './components/TitleBar'
 import { SkeletonBar, SkeletonGrid } from './components/Skeleton'
 import { HelpSheet } from './components/HelpSheet'
+import { NeuronMark } from './components/BrandMark'
 
 // Code-split: both views unmount on tab switch already (they're not inside
 // KeepMounted — see the comment on `main` below), so there's no "resolve once,
@@ -255,25 +256,24 @@ export default function App() {
       <TitleBar />
       <div className="flex flex-1 min-h-0 relative">
       <aside
-        className={`shrink-0 border-r border-[var(--color-hairline)] bg-[var(--color-surface)] flex flex-col transition-[width] duration-[var(--dur-base)] ease-out ${
+        className={`shrink-0 border-r border-[var(--color-hairline)] sidebar-nocturne flex flex-col transition-[width] duration-[var(--dur-base)] ease-out ${
           collapsed ? 'w-14' : 'w-48'
         } ${narrow ? 'absolute inset-y-0 left-0 z-20 shadow-[8px_0_24px_rgba(0,0,0,0.4)]' : 'relative'}`}
       >
-        <div className={`flex items-center gap-2 px-4 py-5 ${collapsed ? 'justify-center px-0' : ''}`}>
-          <span className="relative inline-flex h-2 w-2 shrink-0">
-            <span className="absolute inline-flex h-full w-full rounded-full bg-[var(--color-ink-warm)] animate-consolidate-ping" />
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--color-ink-warm)]" />
-          </span>
+        <div className={`relative z-10 flex items-center gap-2.5 px-4 py-5 ${collapsed ? 'justify-center px-0' : ''}`}>
+          <NeuronMark size={22} />
           {!collapsed && (
             <div>
-              <div className="font-[var(--font-serif)] text-lg tracking-tight text-[var(--color-text-primary)] leading-none">
-                Engram
+              {/* font-serif-display, NOT font-[var(--font-serif)] — the arbitrary
+                  form compiles to an invalid font-weight and never applies Fraunces. */}
+              <div className="font-serif-display font-semibold text-[15px] tracking-[0.16em] text-[var(--color-text-primary)] leading-none">
+                ENGRAM
               </div>
-              <div className="text-xs text-[var(--color-text-dim)] label-data leading-none mt-1">desktop</div>
+              <div className="text-[8.5px] whitespace-nowrap text-[var(--color-ink-lavender-dim)] label-data leading-none mt-1.5">learn anything. keep it.</div>
             </div>
           )}
         </div>
-        <nav className="flex flex-col gap-0.5 px-2" aria-label="Primary">
+        <nav className="relative z-10 flex flex-col gap-0.5 px-2" aria-label="Primary">
           {NAV.map((n) => {
             const active = view === n.id
             return (
@@ -290,8 +290,8 @@ export default function App() {
                   collapsed ? 'justify-center px-0' : ''
                 } ${
                   active
-                    ? 'bg-[var(--color-surface-3)] text-[var(--color-ink-warm)]'
-                    : 'text-[var(--color-text-dim)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-2)]'
+                    ? 'bg-[color-mix(in_srgb,var(--color-ink-lavender)_14%,transparent)] text-[var(--color-ink-warm)]'
+                    : 'text-[var(--color-text-dim)] hover:text-[var(--color-text-primary)] hover:bg-[color-mix(in_srgb,var(--color-ink-lavender)_8%,transparent)]'
                 }`}
               >
                 {active && (
@@ -336,11 +336,58 @@ export default function App() {
             )
           })}
         </nav>
+        {/* Dendrite constellation footer — the icon's neuron, quieted: an axon
+            entering from the edge, a small soma branching up into a few nodes
+            (one consolidated cream, one amber spark on the axon). Pure
+            imagery: aria-hidden, pointer-events-none, behind the nav (z-0 vs
+            z-10) so it never competes with a hit target. Hidden while
+            collapsed — at rail width it would just read as noise. */}
+        {!collapsed && (
+          <svg viewBox="0 0 192 230" className="pointer-events-none select-none absolute bottom-0 inset-x-0 z-0" aria-hidden="true">
+            <defs>
+              <radialGradient id="sb-halo-cream" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stopColor="var(--color-ink-paper)" stopOpacity="0.4" />
+                <stop offset="100%" stopColor="var(--color-ink-paper)" stopOpacity="0" />
+              </radialGradient>
+              <radialGradient id="sb-halo-amber" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stopColor="var(--color-ink-warm)" stopOpacity="0.45" />
+                <stop offset="100%" stopColor="var(--color-ink-warm)" stopOpacity="0" />
+              </radialGradient>
+            </defs>
+            <g opacity="0.55">
+              <g stroke="var(--color-ink-lavender)" strokeOpacity="0.5" strokeWidth="1" fill="none">
+                <path d="M58 124 L50 106 M104 128 L112 104 M36 152 L22 138 M50 106 L78 88 M112 104 L146 92 M78 88 L120 62 M146 92 L170 120" />
+              </g>
+              <circle cx="78" cy="88" r="13" fill="url(#sb-halo-cream)" />
+              <circle cx="34" cy="222" r="11" fill="url(#sb-halo-amber)" />
+              <g stroke="var(--color-ink-lavender)" strokeWidth="2" strokeLinecap="round" fill="none">
+                <path d="M-8 232 C40 224 58 206 76 186" />
+                <path d="M80 168 C74 150 66 138 58 124" />
+                <path d="M92 168 C98 152 102 142 104 128" />
+                <path d="M76 172 C62 166 50 162 36 152" />
+              </g>
+              <circle cx="84" cy="176" r="9" fill="var(--color-nocturne-lo)" stroke="var(--color-ink-lavender)" strokeWidth="2" />
+              <circle cx="84" cy="176" r="2.5" fill="var(--color-ink-lavender)" fillOpacity="0.8" />
+              <g fill="var(--color-ink-lavender)">
+                <circle cx="50" cy="106" r="3.5" />
+                <circle cx="22" cy="138" r="3" />
+                <circle cx="146" cy="92" r="3.5" />
+                <circle cx="120" cy="62" r="2.5" />
+                <circle cx="170" cy="120" r="2.5" />
+              </g>
+              <circle cx="78" cy="88" r="4" fill="var(--color-ink-paper)" />
+              <g transform="rotate(45 34 222)" stroke="var(--color-ink-warm)" strokeWidth="1.6" strokeLinecap="round">
+                <path d="M27.5 222 L31 222 M37 222 L40.5 222 M34 215.5 L34 219 M34 225 L34 228.5" />
+              </g>
+              <circle cx="34" cy="222" r="1.5" fill="var(--color-ink-warm)" />
+            </g>
+          </svg>
+        )}
         {narrow && (
           <button
             onClick={() => setPinnedOpen((v) => !v)}
             aria-label={pinnedOpen ? 'Collapse navigation' : 'Expand navigation'}
-            className="focus-ring mt-auto mb-3 mx-2 flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-2)]"
+            className="focus-ring relative z-10 mt-auto mb-3 mx-2 flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] hover:bg-[color-mix(in_srgb,var(--color-ink-lavender)_8%,transparent)]"
           >
             <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
               {pinnedOpen ? <path d="M12.5 5 7.5 10l5 5" /> : <path d="M7.5 5 12.5 10l-5 5" />}

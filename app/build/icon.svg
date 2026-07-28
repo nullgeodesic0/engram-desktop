@@ -1,24 +1,124 @@
 <svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- Night-indigo neuron constellation — the GitHub hero's identity recomposed
+       for a square: Cajal soma + dendrites in lavender ink, dendrite tips
+       hairlined into a concept-graph constellation (cream = consolidated),
+       axon sweeping out bottom-right with amber signal sparks. qlmanage-safe:
+       gradients/paths/circles only, no filters/masks/clipPaths — the squircle
+       alpha is applied by build-icons.sh from the first path below. -->
   <defs>
-    <radialGradient id="field" cx="50%" cy="42%" r="75%">
-      <stop offset="0%" stop-color="#0d0e12"/>
-      <stop offset="100%" stop-color="#08090c"/>
+    <radialGradient id="field" cx="42%" cy="40%" r="85%">
+      <stop offset="0%" stop-color="#221c3a"/>
+      <stop offset="100%" stop-color="#0f0c1c"/>
     </radialGradient>
-    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#e8a857" stop-opacity="0.35"/>
+    <radialGradient id="ambient" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#a99ef0" stop-opacity="0.10"/>
+      <stop offset="100%" stop-color="#a99ef0" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="halo-cream" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#f3ecd9" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#f3ecd9" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="halo-amber" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#e8a857" stop-opacity="0.55"/>
       <stop offset="100%" stop-color="#e8a857" stop-opacity="0"/>
     </radialGradient>
   </defs>
 
   <path d="M 993.28 512.00 L 993.05 656.12 L 992.35 702.07 L 991.19 735.36 L 989.56 762.32 L 987.46 785.29 L 984.88 805.45 L 981.82 823.45 L 978.28 839.74 L 974.24 854.61 L 969.69 868.25 L 964.62 880.82 L 959.03 892.45 L 952.89 903.21 L 946.18 913.18 L 938.89 922.42 L 930.98 930.98 L 922.42 938.89 L 913.18 946.18 L 903.21 952.89 L 892.45 959.03 L 880.82 964.62 L 868.25 969.69 L 854.61 974.24 L 839.74 978.28 L 823.45 981.82 L 805.45 984.88 L 785.29 987.46 L 762.32 989.56 L 735.36 991.19 L 702.07 992.35 L 656.12 993.05 L 512.00 993.28 L 367.88 993.05 L 321.93 992.35 L 288.64 991.19 L 261.68 989.56 L 238.71 987.46 L 218.55 984.88 L 200.55 981.82 L 184.26 978.28 L 169.39 974.24 L 155.75 969.69 L 143.18 964.62 L 131.55 959.03 L 120.79 952.89 L 110.82 946.18 L 101.58 938.89 L 93.02 930.98 L 85.11 922.42 L 77.82 913.18 L 71.11 903.21 L 64.97 892.45 L 59.38 880.82 L 54.31 868.25 L 49.76 854.61 L 45.72 839.74 L 42.18 823.45 L 39.12 805.45 L 36.54 785.29 L 34.44 762.32 L 32.81 735.36 L 31.65 702.07 L 30.95 656.12 L 30.72 512.00 L 30.95 367.88 L 31.65 321.93 L 32.81 288.64 L 34.44 261.68 L 36.54 238.71 L 39.12 218.55 L 42.18 200.55 L 45.72 184.26 L 49.76 169.39 L 54.31 155.75 L 59.38 143.18 L 64.97 131.55 L 71.11 120.79 L 77.82 110.82 L 85.11 101.58 L 93.02 93.02 L 101.58 85.11 L 110.82 77.82 L 120.79 71.11 L 131.55 64.97 L 143.18 59.38 L 155.75 54.31 L 169.39 49.76 L 184.26 45.72 L 200.55 42.18 L 218.55 39.12 L 238.71 36.54 L 261.68 34.44 L 288.64 32.81 L 321.93 31.65 L 367.88 30.95 L 512.00 30.72 L 656.12 30.95 L 702.07 31.65 L 735.36 32.81 L 762.32 34.44 L 785.29 36.54 L 805.45 39.12 L 823.45 42.18 L 839.74 45.72 L 854.61 49.76 L 868.25 54.31 L 880.82 59.38 L 892.45 64.97 L 903.21 71.11 L 913.18 77.82 L 922.42 85.11 L 930.98 93.02 L 938.89 101.58 L 946.18 110.82 L 952.89 120.79 L 959.03 131.55 L 964.62 143.18 L 969.69 155.75 L 974.24 169.39 L 978.28 184.26 L 981.82 200.55 L 984.88 218.55 L 987.46 238.71 L 989.56 261.68 L 991.19 288.64 L 992.35 321.93 L 993.05 367.88 Z" fill="url(#field)"/>
 
-  <circle cx="512" cy="512" r="483.84000000000003" fill="url(#glow)"/>
-
-  <g stroke="#e8a857" stroke-width="26" stroke-linecap="round" fill="none" opacity="0.95">
-    <path d="M 541.79 353.50 Q 524.78 187.79 584.99 123.69"/>
-    <path d="M 660.96 573.83 Q 776.48 666.10 847.30 651.18"/>
-    <path d="M 368.19 585.00 Q 246.49 698.83 159.16 691.10"/>
+  <!-- Graph-paper grid, cropped to the squircle by the build script's alpha mask. -->
+  <g stroke="#a99ef0" stroke-opacity="0.05" stroke-width="2">
+    <path d="M 128 32 V 992 M 224 32 V 992 M 320 32 V 992 M 416 32 V 992 M 512 32 V 992 M 608 32 V 992 M 704 32 V 992 M 800 32 V 992 M 896 32 V 992"/>
+    <path d="M 32 128 H 992 M 32 224 H 992 M 32 320 H 992 M 32 416 H 992 M 32 512 H 992 M 32 608 H 992 M 32 704 H 992 M 32 800 H 992 M 32 896 H 992"/>
   </g>
 
-  <path d="M 206.56 61.97 Q 242.53 0.00 206.56 61.97 Q 170.60 123.95 122.86 177.58 Q 75.12 231.21 8.55 204.90 Q -58.03 178.59 -118.01 153.95 Q -177.99 129.32 -215.11 64.66 Q -252.24 0.00 -215.35 -64.83 Q -178.46 -129.66 -128.29 -185.05 Q -78.12 -240.44 -8.55 -214.13 Q 61.03 -187.82 123.44 -161.42 Q 185.85 -135.02 214.19 -67.51 Q 242.53 0.00 206.56 61.97 Z" fill="#e8a857" stroke="#8a6533" stroke-width="6" transform="translate(512 512)"/>
+  <circle cx="430" cy="480" r="430" fill="url(#ambient)"/>
+
+  <!-- Constellation hairlines: dendrite tips into the concept graph. -->
+  <g stroke="#857ac2" stroke-width="3.5" stroke-opacity="0.55">
+    <path d="M 462 272 L 462 215 M 462 215 L 520 180 M 520 180 L 560 120 M 520 180 L 610 215 M 610 215 L 680 300 M 680 300 L 760 235 M 575 355 L 610 215"/>
+    <path d="M 288 312 L 300 250 M 300 250 L 350 175 M 350 175 L 462 215 M 300 250 L 190 300 M 190 300 L 258 350 M 190 300 L 130 430 M 130 430 L 105 530 M 105 530 L 170 610 M 205 480 L 130 430"/>
+    <path d="M 228 652 L 170 610 M 250 690 L 300 760 M 340 700 L 300 760"/>
+  </g>
+
+  <!-- Consolidated-node glows (cream) -->
+  <circle cx="560" cy="120" r="72" fill="url(#halo-cream)"/>
+  <circle cx="105" cy="530" r="72" fill="url(#halo-cream)"/>
+  <circle cx="350" cy="175" r="72" fill="url(#halo-cream)"/>
+  <circle cx="760" cy="235" r="58" fill="url(#halo-cream)"/>
+
+  <!-- Dendrites -->
+  <g stroke="#b3a7ef" fill="none" stroke-linecap="round">
+    <path d="M 448 428 C 455 370 445 330 462 272" stroke-width="13"/>
+    <path d="M 452 340 C 470 305 482 285 500 262" stroke-width="7"/>
+    <path d="M 375 448 C 330 400 300 385 258 350" stroke-width="13"/>
+    <path d="M 315 392 C 300 365 292 340 288 312" stroke-width="7"/>
+    <path d="M 352 505 C 300 490 258 496 205 480" stroke-width="12"/>
+    <path d="M 362 575 C 320 610 288 642 250 690" stroke-width="12"/>
+    <path d="M 302 628 C 278 640 255 648 228 652" stroke-width="6"/>
+    <path d="M 505 458 C 540 420 558 396 575 355" stroke-width="12"/>
+    <path d="M 400 605 C 386 645 368 668 340 700" stroke-width="10"/>
+  </g>
+
+  <!-- Axon: out toward bottom-right, hand-drawn double stroke, tapering tail. -->
+  <g stroke="#cfc6f4" fill="none" stroke-linecap="round">
+    <path d="M 512 540 C 610 572 645 662 725 712 C 790 753 830 762 882 774" stroke-width="16"/>
+    <path d="M 516 558 C 606 592 648 674 726 724" stroke-width="6" stroke-opacity="0.5"/>
+    <path d="M 882 774 C 910 779 935 784 960 790" stroke-width="9"/>
+  </g>
+
+  <!-- Soma + nucleus -->
+  <path d="M 430 425 C 492 428 522 468 516 524 C 511 578 478 612 427 613 C 374 615 344 570 348 517 C 352 464 371 422 430 425 Z" fill="#251e40" stroke="#cfc6f4" stroke-width="13" stroke-linejoin="round"/>
+  <path d="M 383 458 C 396 440 414 431 438 433" fill="none" stroke="#cfc6f4" stroke-width="5" stroke-opacity="0.45" stroke-linecap="round"/>
+  <circle cx="433" cy="521" r="30" fill="#16112b" stroke="#cfc6f4" stroke-width="9"/>
+  <circle cx="436" cy="524" r="9" fill="#cfc6f4" fill-opacity="0.8"/>
+
+  <!-- Concept nodes: lavender = held, cream = consolidated. -->
+  <g fill="#a99ef0">
+    <circle cx="462" cy="215" r="15"/>
+    <circle cx="520" cy="180" r="12"/>
+    <circle cx="610" cy="215" r="14"/>
+    <circle cx="680" cy="300" r="12"/>
+    <circle cx="300" cy="250" r="14"/>
+    <circle cx="190" cy="300" r="12"/>
+    <circle cx="130" cy="430" r="13"/>
+    <circle cx="170" cy="610" r="12"/>
+    <circle cx="300" cy="760" r="13"/>
+  </g>
+  <g fill="#f3ecd9">
+    <circle cx="560" cy="120" r="16"/>
+    <circle cx="105" cy="530" r="15"/>
+    <circle cx="350" cy="175" r="14"/>
+    <circle cx="760" cy="235" r="13"/>
+  </g>
+  <g fill="#a99ef0" fill-opacity="0.5">
+    <circle cx="720" cy="150" r="6"/>
+    <circle cx="90" cy="250" r="6"/>
+    <circle cx="60" cy="650" r="6"/>
+    <circle cx="390" cy="90" r="6"/>
+    <circle cx="860" cy="120" r="5"/>
+  </g>
+
+  <!-- Signal sparks along the axon (amber) -->
+  <g transform="rotate(45 622 640)">
+    <circle cx="622" cy="640" r="60" fill="url(#halo-amber)"/>
+    <g stroke="#e8a857" stroke-width="8" stroke-linecap="round">
+      <path d="M 596 640 L 610 640 M 634 640 L 648 640 M 622 614 L 622 628 M 622 652 L 622 666"/>
+    </g>
+    <circle cx="622" cy="640" r="6" fill="#e8a857"/>
+  </g>
+  <g transform="rotate(45 800 752)">
+    <circle cx="800" cy="752" r="60" fill="url(#halo-amber)"/>
+    <g stroke="#e8a857" stroke-width="8" stroke-linecap="round">
+      <path d="M 774 752 L 788 752 M 812 752 L 826 752 M 800 726 L 800 740 M 800 764 L 800 778"/>
+    </g>
+    <circle cx="800" cy="752" r="6" fill="#e8a857"/>
+  </g>
+  <g transform="rotate(45 938 786)">
+    <circle cx="938" cy="786" r="46" fill="url(#halo-amber)"/>
+    <g stroke="#e8a857" stroke-width="7" stroke-linecap="round">
+      <path d="M 918 786 L 929 786 M 947 786 L 958 786 M 938 766 L 938 777 M 938 795 L 938 806"/>
+    </g>
+    <circle cx="938" cy="786" r="5" fill="#e8a857"/>
+  </g>
 </svg>
