@@ -13,6 +13,7 @@ import { Button } from '../components/ui/Button'
 import { Modal } from '../components/ui/Modal'
 import { DendriteDivider } from '../components/ui/DendriteDivider'
 import { CopyButton } from '../components/ui/CopyButton'
+import { PageHeader } from '../components/ui/PageHeader'
 import { soundOn, setSoundOn } from '../shared/soundscape'
 import { friendlyErrorText } from '../shared/friendlyError'
 
@@ -525,9 +526,7 @@ export function SettingsView() {
 
   return (
     <div className="p-8 flex flex-col gap-6 w-full h-full overflow-y-auto">
-      <header>
-        <h1 className="font-[var(--font-display)] text-2xl text-[var(--color-text-primary)]">Settings</h1>
-      </header>
+      <PageHeader title="Settings" />
 
       {sessionActive && (
         <div className="panel border-[var(--color-ink-warm-dim)] px-4 py-3 text-sm text-[var(--color-ink-warm)]">

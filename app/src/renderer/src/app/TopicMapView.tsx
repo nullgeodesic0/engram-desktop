@@ -12,6 +12,7 @@ import { humanizeNodeId } from '../../../shared/humanizeId'
 import { SkeletonBar } from '../components/Skeleton'
 import { StatBlock } from '../components/ui/StatBlock'
 import { Button } from '../components/ui/Button'
+import { PageHeader } from '../components/ui/PageHeader'
 import { Modal } from '../components/ui/Modal'
 import { MathRenderer } from '../components/MathRenderer'
 import { SessionHistoryDrawer } from '../components/SessionHistoryDrawer'
@@ -655,8 +656,8 @@ export function TopicMapView({
 
   return (
     <div className="p-8 flex flex-col gap-4 h-full min-h-0">
-      <header className="shrink-0 flex flex-col gap-3">
-        <h1 className="font-[var(--font-display)] text-2xl text-[var(--color-text-primary)]">Topic Map</h1>
+      <div className="shrink-0 flex flex-col gap-3">
+        <PageHeader title="Topic Map" />
         <div className="flex gap-2 flex-wrap">
           {topics.map((t) => (
             <button
@@ -673,7 +674,7 @@ export function TopicMapView({
             </button>
           ))}
         </div>
-      </header>
+      </div>
 
       {error && (() => {
         const fe = friendlyErrorText(error)
