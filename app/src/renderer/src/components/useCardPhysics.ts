@@ -5,12 +5,12 @@ import { useCallback, useRef } from 'react'
  * Two motions, both nearly subliminal:
  *
  *   1. Idle drift — every visible `.tilt-card` wanders in and out of the page
- *      plane on a slow sinusoid (≤ ~0.35deg, minute-scale periods), each card
+ *      plane on a slow sinusoid (≤ ~0.9deg, half-minute-scale periods), each card
  *      carrying its own randomized period + phase so the surface breathes
  *      rather than marches in lockstep.
  *   2. Pointer tilt — while the cursor is over a card, the tilt follows the
  *      pointer as if pressing INTO a floating plate: the corner nearest the
- *      cursor dips away toward the page (≤ 1.5deg at the edges), critically-
+ *      cursor dips away toward the page (≤ 3.2deg at the edges), critically-
  *      damped so it glides, never snaps, and eases back to idle drift on
  *      leave.
  *
@@ -55,11 +55,11 @@ import { useCallback, useRef } from 'react'
 const TILT_SELECTOR = '.tilt-card'
 
 /* Tuning — tiny by decree. The effect should be felt, not watched. */
-const IDLE_AMP_MIN_DEG = 0.15
-const IDLE_AMP_MAX_DEG = 0.35
-const POINTER_MAX_DEG = 1.5
-const IDLE_PERIOD_MIN_S = 45
-const IDLE_PERIOD_MAX_S = 95
+const IDLE_AMP_MIN_DEG = 0.45
+const IDLE_AMP_MAX_DEG = 0.9
+const POINTER_MAX_DEG = 3.2
+const IDLE_PERIOD_MIN_S = 22
+const IDLE_PERIOD_MAX_S = 55
 /** Critically-damped-feel exponential smoothing time constant. */
 const SMOOTH_TAU_MS = 150
 /** Idle-drift concurrency cap — hover responsiveness is never capped. */
