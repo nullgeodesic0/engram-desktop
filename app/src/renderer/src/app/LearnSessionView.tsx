@@ -66,6 +66,7 @@ import { InkNode } from '../components/ui/InkNode'
 import { PinTackIcon } from '../components/ui/PinTackIcon'
 import { TopicCard } from '../components/TopicCard'
 import { SectionBanner } from '../components/ui/SectionBanner'
+import { PlateFigure } from '../components/ui/PlateFigure'
 import { topicBucket } from '../shared/topicShelf'
 import { EnvironmentSteps } from '../components/EnvironmentSteps'
 import { extractTicketFromMessages } from '../shared/ticketParser'
@@ -222,7 +223,7 @@ function AddTerritoryCard({ onClick, blocked }: { onClick: () => void; blocked: 
       onClick={onClick}
       disabled={blocked}
       title={blocked ? 'Blocked until the current rate limit resets' : undefined}
-      className="focus-ring panel border-dashed border-[var(--color-hairline)] px-5 py-4 flex items-center gap-3 text-left hover:bg-[var(--color-surface-2)] hover:border-[var(--color-ink-warm-dim)] transition-colors duration-[var(--dur-base)] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+      className="focus-ring panel border-dashed px-5 py-4 flex items-center gap-3 text-left hover:bg-[var(--color-surface-2)] hover:border-[var(--color-ink-warm-dim)] transition-colors duration-[var(--dur-base)] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
     >
       <span className="text-lg leading-none text-[var(--color-text-faint)]">+</span>
       <div className="flex flex-col gap-0.5">
@@ -1548,18 +1549,32 @@ export function LearnSessionView({
               )}
             </div>
           ) : (
-            <div className="flex flex-col gap-0.5">
+            <div className="flex flex-col gap-2">
               <h1 className="font-[var(--font-serif)] text-[length:var(--text-display)] text-[var(--color-text-primary)]">Learn</h1>
-              {/* Due-context subtitle — read off the same `topics` list already
-                  fetched for the shelf below (each entry's own `.due`), not a
-                  second fetch. Hidden until topics have loaded so it never
-                  flashes "0 territories" before the real count lands. */}
-              {topics !== null && topics.length > 0 && (
-                <div className="label-data text-xs text-[var(--color-text-faint)]">
-                  {topics.length} {topics.length === 1 ? 'territory' : 'territories'} ·{' '}
-                  {topics.reduce((sum, t) => sum + t.due, 0)} due across the atlas
-                </div>
-              )}
+              {/* The shelf's briefing figure (ui/PlateFigure — the ready-room
+                  grammar): territory count as the headline, the atlas-wide due
+                  total as its note. Same numbers the old faint one-line
+                  subtitle carried, read off the same already-fetched `topics`
+                  list (each entry's own `.due`), not a second fetch. Hidden
+                  until topics have loaded so it never flashes "0 territories"
+                  before the real count lands. */}
+              {topics !== null && topics.length > 0 && (() => {
+                const atlasDue = topics.reduce((sum, t) => sum + t.due, 0)
+                return (
+                  <PlateFigure
+                    value={topics.length}
+                    tone="primary"
+                    title={topics.length === 1 ? 'territory in the atlas' : 'territories in the atlas'}
+                    note={
+                      atlasDue > 0 ? (
+                        <span className="text-[var(--color-ink-warm)]">{atlasDue} due across the atlas</span>
+                      ) : (
+                        'nothing due across the atlas'
+                      )
+                    }
+                  />
+                )
+              })()}
             </div>
           )}
           <div className="flex items-center gap-4">

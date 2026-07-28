@@ -11,7 +11,13 @@
  * rail width it would just read as noise) — see App.tsx's `!collapsed &&`. */
 export function DendriteConstellation() {
   return (
-    <svg viewBox="0 0 192 240" className="pointer-events-none select-none absolute bottom-0 inset-x-0 z-0" aria-hidden="true">
+    // opacity-70: dimmed since the rail went translucent — the NeuralField's
+    // own luminous nodes now read through this footer's patch of glass, and
+    // two constellations at full strength in the same corner fight each
+    // other; the etched one yields a step so the ambient weather stays behind
+    // it. (The inner <g> keeps its long-standing 0.55 — this is a second,
+    // deliberate dimming for the glass rail, not a replacement.)
+    <svg viewBox="0 0 192 240" className="pointer-events-none select-none absolute bottom-0 inset-x-0 z-0 opacity-70" aria-hidden="true">
       <defs>
         <radialGradient id="sb-halo-cream" cx="50%" cy="50%" r="50%">
           <stop offset="0%" stopColor="var(--color-ink-paper)" stopOpacity="0.4" />

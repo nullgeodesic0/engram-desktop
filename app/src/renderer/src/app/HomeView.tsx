@@ -12,6 +12,7 @@ import { DueForecast } from '../components/DueForecast'
 import { DendriteDivider } from '../components/ui/DendriteDivider'
 import { StatBlock } from '../components/ui/StatBlock'
 import { StatFraction } from '../components/ui/StatFraction'
+import { PlateFigure } from '../components/ui/PlateFigure'
 import { SectionBanner } from '../components/ui/SectionBanner'
 import { Button } from '../components/ui/Button'
 import { EnvironmentSteps } from '../components/EnvironmentSteps'
@@ -322,6 +323,34 @@ export function HomeView({ onGoReview, onGoCoach, onGoTopic, onNewTopic, onGoNod
           )}
         </header>
 
+        {/* The due briefing plate — Home's own ready-room (the anatomy the
+            Review plate established, via the shared PlateFigure): the due-now
+            count as THE figure, the old CTA sub-line re-set as its note, the
+            old Due-now StatBlock's caption kept as the fig-caption, and the
+            review CTA as the plate's action row. The one-shot pulse (real
+            count increases only — see the localStorage tracking above) now
+            lands on the figure itself. */}
+        {stats && (
+          <div className="tilt-card panel px-6 py-5 flex flex-col gap-4">
+            <PlateFigure
+              value={stats.due_now}
+              tone={stats.due_now > 0 ? 'warm' : 'dim'}
+              title={stats.due_now > 0 ? 'due for recall now' : 'nothing due right now'}
+              note={stats.due_now > 0 ? 'a couple of minutes each' : undefined}
+              pulse={duePulse}
+              onPulseEnd={() => setDuePulse(false)}
+            />
+            <div className="fig-caption">Fig. — items awaiting free recall</div>
+            {stats.due_now > 0 && (
+              <div className="flex gap-3 items-center">
+                <Button variant="primary" size="lg" onClick={onGoReview}>
+                  Clear today’s reviews
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+
         {stats && (
           <div className="flex items-stretch gap-3 flex-wrap">
             <StatBlock
@@ -329,14 +358,6 @@ export function HomeView({ onGoReview, onGoCoach, onGoTopic, onNewTopic, onGoNod
               value={String(stats.streak_days)}
               tone="warm"
               caption="Fig. — days of uninterrupted recall"
-            />
-            <StatBlock
-              label="Due now"
-              value={String(stats.due_now)}
-              tone="cool"
-              caption="Fig. — items awaiting free recall"
-              pulse={duePulse}
-              onPulseEnd={() => setDuePulse(false)}
             />
             <div className="panel tilt-card p-3 flex-1 min-w-[180px] flex flex-col justify-center">
               {forecast ? (
@@ -362,20 +383,6 @@ export function HomeView({ onGoReview, onGoCoach, onGoTopic, onNewTopic, onGoNod
           </div>
         )}
 
-        {stats && stats.due_now > 0 && (
-          <Button
-            variant="primary"
-            size="lg"
-            onClick={onGoReview}
-            className="tilt-card w-full flex items-center justify-between text-left normal-case"
-          >
-            <div>
-              <div className="text-base">Clear today’s reviews</div>
-              <div className="text-xs opacity-80 mt-1">{stats.due_now} item(s) waiting — a couple of minutes each.</div>
-            </div>
-            <span className="text-lg">→</span>
-          </Button>
-        )}
       </div>
 
       <DendriteDivider />

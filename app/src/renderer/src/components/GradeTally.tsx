@@ -10,16 +10,23 @@ export function GradeTally({
   results,
   streakDays,
   label,
+  omitTotal = false,
 }: {
   results: GradeResult[]
   streakDays: number | null
   label: string
+  /** Skip the leading "{n} {label}" span — for hosts (SessionCeremony) whose
+   * PlateFigure headline already states the total; the tally then reads as
+   * the breakdown row under the figure rather than saying the count twice. */
+  omitTotal?: boolean
 }) {
   return (
     <div className="flex items-center gap-4 text-xs label-data text-[var(--color-text-dim)]">
-      <span>
-        {results.length} {label}
-      </span>
+      {!omitTotal && (
+        <span>
+          {results.length} {label}
+        </span>
+      )}
       <span className="text-[var(--color-ink-warm)]">
         {results.filter((g) => g.grade === 'recalled').length} recalled
       </span>
