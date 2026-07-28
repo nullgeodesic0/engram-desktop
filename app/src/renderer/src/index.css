@@ -425,19 +425,24 @@
      them. A mask (not an overlay gradient) so it works over the void, over a
      panel, and under the floating session cards alike — nothing has to know
      what colour is behind it. */
-  /* Fix (Chat Instruments follow-up): the minimap's click-to-jump resolves
-     the real DOM node via `[data-msg-index]` and calls
-     `scrollIntoView({ block: 'start' })` — never index-proportional math, so
-     virtualized/unmeasured blocks can't drift it. `block: 'start'` alone
-     would still land the message flush against the viewport top, which is
-     exactly where `.scroll-fade-top`'s 28px mask dims it and where a peeked/
-     pinned TicketCard (`absolute top-*, left-0, w-72`, LearnSessionView.tsx /
-     ReviewSessionView.tsx) floats over the transcript's left column. A fixed
-     `scroll-margin-top` big enough to clear both — the 28px fade plus the
-     ticket's own typical height — makes `scrollIntoView` stop short of that
-     band instead, so the jumped-to message always lands fully visible and
-     un-occluded. Applied to the same three `data-msg-index` root `<div>`s in
-     ChatMessageView.tsx that the jump already targets. */
+  /* Minimap Precision fix (second report on the same bug) — the minimap's
+     click-to-jump used to resolve only the HOST MESSAGE's `[data-msg-index]`
+     root and `scrollIntoView({ block: 'start' })` it, which is fine when the
+     checkpoint IS the message but wrong whenever it's a mark rendered BETWEEN
+     messages or a probe/grade card rendered MID-message — the actual
+     checkpoint then lands off past the viewport edge, exactly the "doesn't
+     land on the checkpoint" report. `CheckpointAnchor`
+     (components/CheckpointAnchor.tsx) now wraps every checkpoint's own card
+     directly (mark cards, probe cards, grade cards, inline crossing
+     dividers), and `shared/jumpToCheckpoint.ts` scrolls to THAT element, not
+     the message. This class still carries the chrome-clearance
+     `scroll-margin-top` every one of those anchors needs — big enough to
+     clear `.scroll-fade-top`'s 28px mask plus a peeked/pinned TicketCard
+     (`absolute top-*, left-0, w-72`, LearnSessionView.tsx/
+     ReviewSessionView.tsx) — so `scrollIntoView` stops short of that band
+     instead of landing flush under it. Also still applied to the message
+     roots themselves (ChatMessageView.tsx's `data-msg-index` divs) as
+     `jumpToCheckpoint`'s defensive fallback target. */
   .scroll-anchor-top {
     scroll-margin-top: 140px;
   }

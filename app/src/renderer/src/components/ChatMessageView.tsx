@@ -7,6 +7,7 @@ import { ProseMarkdown } from './ProseMarkdown'
 import { InkNode } from './ui/InkNode'
 import { splitAroundProbeHeader } from '../../../shared/probeHeader'
 import { ProbeCard } from './ritual/ProbeCard'
+import { CheckpointAnchor } from './CheckpointAnchor'
 import { CanonicalPlate } from './ritual/CanonicalPlate'
 import { VerdictEyebrowRail, RatingEchoRow, ScheduleEchoRow, ConfidenceEchoRow } from './ritual/VerdictRows'
 
@@ -282,7 +283,14 @@ export const ChatMessageView = memo(function ChatMessageView({
           {probe && (
             <Fragment>
               {beforeProbeHeader}
-              <ProbeCard header={probe.header} highlighted={probeHighlighted} onHoverChange={onProbeHoverChange} />
+              {/* Minimap Precision fix — `probe-${dataIndex}`, matching
+                  `probeMoment`'s id (shared/instrumentMoments.ts); the probe
+                  header renders mid-message (after this message's own leading
+                  verdict prose), so the message's own root is the wrong jump
+                  target — see CheckpointAnchor.tsx's doctrine comment. */}
+              <CheckpointAnchor id={`probe-${dataIndex}`}>
+                <ProbeCard header={probe.header} highlighted={probeHighlighted} onHoverChange={onProbeHoverChange} />
+              </CheckpointAnchor>
             </Fragment>
           )}
         </div>
@@ -319,7 +327,10 @@ export const ChatMessageView = memo(function ChatMessageView({
               <Fragment key={i}>
                 {probe.before && <PlainDialogueBlock text={probe.before} nodeIds={nodeIds} nodeChipTopic={nodeChipTopic} />}
                 {beforeProbeHeader}
-                <ProbeCard header={probe.header} highlighted={probeHighlighted} onHoverChange={onProbeHoverChange} />
+                {/* Minimap Precision fix — see the twin comment above. */}
+                <CheckpointAnchor id={`probe-${dataIndex}`}>
+                  <ProbeCard header={probe.header} highlighted={probeHighlighted} onHoverChange={onProbeHoverChange} />
+                </CheckpointAnchor>
               </Fragment>
             )
           }

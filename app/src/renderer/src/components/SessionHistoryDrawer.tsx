@@ -19,9 +19,11 @@ import { Modal } from './ui/Modal'
 import { ChatMessageView } from './ChatMessageView'
 import { useEquationCopy } from './useEquationCopy'
 import { TranscriptMinimap } from './TranscriptMinimap'
-import { deriveInstrumentMoments } from '../shared/instrumentMoments'
+import { deriveInstrumentMoments, type InstrumentMoment } from '../shared/instrumentMoments'
+import { jumpToCheckpoint } from '../shared/jumpToCheckpoint'
 import { GradeResultCard } from './GradeResultCard'
 import { MarkView, NodeCrossingDivider } from './ritual/Marks'
+import { CheckpointAnchor } from './CheckpointAnchor'
 
 interface TranscriptLine {
   type?: string
@@ -763,15 +765,22 @@ export function SessionHistoryDrawer({
     }
   }
   function renderGradeBatch(g: GradeBatch) {
+    // Minimap Precision fix — `grade-${g.id}-${j}` matches
+    // `deriveInstrumentMoments`'s grade-batch loop id exactly (same id
+    // convention ReviewSessionView's live `renderGradeBatch` uses); nested
+    // inside the existing `data-anchor-index` wrapper (an unrelated export
+    // anchor this drawer already had), never replacing it.
     return g.results.map((r, j) => (
       <div key={`${g.id}-${j}`} className="contents" data-anchor-index={g.sourceIndex}>
-        <GradeResultCard
-          result={r}
-          topic={ladderTopic}
-          asOfDate={g.date ?? undefined}
-          highlighted={hoveredPairNode === r.node}
-          onHoverChange={(hovering) => setHoveredPairNode(hovering ? r.node : null)}
-        />
+        <CheckpointAnchor id={`grade-${g.id}-${j}`}>
+          <GradeResultCard
+            result={r}
+            topic={ladderTopic}
+            asOfDate={g.date ?? undefined}
+            highlighted={hoveredPairNode === r.node}
+            onHoverChange={(hovering) => setHoveredPairNode(hovering ? r.node : null)}
+          />
+        </CheckpointAnchor>
       </div>
     ))
   }
@@ -796,15 +805,12 @@ export function SessionHistoryDrawer({
         : [],
     [timeline, drawerProbes, resolvedGrades, reviewCrossings],
   )
-  // Minimap fix — see LearnSessionView.tsx's own jumpToMessage doctrine
-  // comment: `block: 'start'` + `.scroll-anchor-top` (index.css), not
-  // `block: 'center'`, so clamped-near-edge jumps never land under the top
-  // fade mask or the peeked/pinned TicketCard.
-  function jumpToMessage(atIndex: number) {
+  // Minimap Precision fix (second report on the same bug) — see
+  // shared/jumpToCheckpoint.ts's doctrine comment for the full root-cause.
+  function jumpToCheckpointMoment(moment: InstrumentMoment) {
     if (!scrollEl || !timeline || timeline.messages.length === 0) return
-    const idx = Math.min(Math.max(atIndex, 0), timeline.messages.length - 1)
-    const target = scrollEl.querySelector<HTMLElement>(`[data-msg-index="${idx}"]`)
-    target?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    const fallbackIndex = Math.min(Math.max(moment.atIndex, 0), timeline.messages.length - 1)
+    jumpToCheckpoint(scrollEl, moment.id, fallbackIndex)
   }
 
   return (
@@ -974,12 +980,12 @@ export function SessionHistoryDrawer({
                               {reviewCrossings
                                 .filter((c) => c.atMessageIndex === i)
                                 .map((c) => (
-                                  <NodeCrossingDivider
-                                    key={`${c.fromNode}-${c.header.node}-${i}`}
-                                    nodeId={c.header.node}
-                                    verb="moving to"
-                                    topicCrossing={c.topicCrossing}
-                                  />
+                                  // Minimap Precision fix — `crossing-${i}-${node}`,
+                                  // matching `deriveInstrumentMoments`'s
+                                  // `input.crossings` loop id exactly.
+                                  <CheckpointAnchor key={`${c.fromNode}-${c.header.node}-${i}`} id={`crossing-${i}-${c.header.node}`}>
+                                    <NodeCrossingDivider nodeId={c.header.node} verb="moving to" topicCrossing={c.topicCrossing} />
+                                  </CheckpointAnchor>
                                 ))}
                             </>
                           ) : undefined
@@ -1052,7 +1058,7 @@ export function SessionHistoryDrawer({
             moments={minimapMoments}
             totalMessages={timeline?.messages.length ?? 0}
             containerEl={scrollEl}
-            onJump={jumpToMessage}
+            onJump={jumpToCheckpointMoment}
           />
           </div>
         </div>

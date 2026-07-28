@@ -43,7 +43,13 @@ export const TranscriptMinimap = memo(function TranscriptMinimap({
    * message's DOM node to scroll to. `null` before ChatScrollRegion has
    * mounted; the rail simply doesn't track a viewport band yet. */
   containerEl: HTMLDivElement | null
-  onJump: (atIndex: number) => void
+  /** Minimap Precision fix — passes the WHOLE moment, not just `atIndex`:
+   * `jumpToCheckpoint` (shared/jumpToCheckpoint.ts) needs the moment's own
+   * `id` to resolve its `CheckpointAnchor` directly (the actual card, never
+   * the host message standing in for it), and keeps `atIndex` only as the
+   * defensive message-index fallback that function's own doctrine comment
+   * describes. */
+  onJump: (moment: InstrumentMoment) => void
 }) {
   const [viewport, setViewport] = useState<{ start: number; end: number }>({ start: 0, end: 1 })
 
@@ -91,7 +97,7 @@ export const TranscriptMinimap = memo(function TranscriptMinimap({
           type="button"
           title={m.tooltip}
           aria-label={m.tooltip}
-          onClick={() => onJump(m.atIndex)}
+          onClick={() => onJump(m)}
           className="focus-ring absolute left-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center h-3.5 w-3.5 leading-none text-[9px] rounded-full hover:scale-125 transition-transform duration-[var(--dur-fast)]"
           style={{ top: `${positionPercent(m.atIndex, totalMessages)}%`, color: m.tone }}
         >

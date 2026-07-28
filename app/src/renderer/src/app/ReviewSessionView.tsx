@@ -12,7 +12,10 @@ import { ActivityLine } from '../components/ActivityLine'
 import { ChatScrollRegion } from '../components/ChatScrollRegion'
 import { useEquationCopy } from '../components/useEquationCopy'
 import { TranscriptMinimap } from '../components/TranscriptMinimap'
+import { CheckpointAnchor } from '../components/CheckpointAnchor'
 import { deriveInstrumentMoments } from '../shared/instrumentMoments'
+import { jumpToCheckpoint } from '../shared/jumpToCheckpoint'
+import type { InstrumentMoment } from '../shared/instrumentMoments'
 import { useTutorActivity, composerDisabledReason } from '../shared/tutorActivity'
 import { parseTranscriptToMessages, type ChatMessage } from '../../../shared/chatMessages'
 import { extractLastUsageFromTranscript } from '../../../shared/sessionUsage'
@@ -946,16 +949,22 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
     }
   }
   function renderGradeBatch(b: GradeBatch) {
+    // Minimap Precision fix — `grade-${b.id}-${ri}`, matching
+    // `deriveInstrumentMoments`'s own grade-batch loop id exactly, so the
+    // minimap can jump straight to THIS result card (these render nested
+    // inside a message's own `beforeProbeHeader` flow, or after the whole
+    // transcript for the tail case — never the message's own root).
     return b.results.map((r, ri) => (
-      <GradeResultCard
-        key={`${b.id}-${ri}`}
-        result={r}
-        confidenceLabel={latestPickFor(r.node)?.label ?? null}
-        reveal={b.id === revealBatchId}
-        topic={b.id === revealBatchId ? lastGradeTopic ?? undefined : undefined}
-        highlighted={hoveredPairNode === r.node}
-        onHoverChange={(hovering) => setHoveredPairNode(hovering ? r.node : null)}
-      />
+      <CheckpointAnchor key={`${b.id}-${ri}`} id={`grade-${b.id}-${ri}`}>
+        <GradeResultCard
+          result={r}
+          confidenceLabel={latestPickFor(r.node)?.label ?? null}
+          reveal={b.id === revealBatchId}
+          topic={b.id === revealBatchId ? lastGradeTopic ?? undefined : undefined}
+          highlighted={hoveredPairNode === r.node}
+          onHoverChange={(hovering) => setHoveredPairNode(hovering ? r.node : null)}
+        />
+      </CheckpointAnchor>
     ))
   }
   /** Grade card(s) + crossing divider belonging INSIDE message `i`'s own
@@ -982,7 +991,13 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
           />
         ))}
         {crossing && (
-          <NodeCrossingDivider nodeId={crossing.header.node} verb="moving to" topicCrossing={crossing.topicCrossing} />
+          // Minimap Precision fix — `crossing-${messageIndex}-${node}`,
+          // matching `deriveInstrumentMoments`'s own `input.crossings` loop id
+          // exactly (Review's crossings, unlike Learn's, don't come through
+          // `marks` — see that function's doctrine comment).
+          <CheckpointAnchor id={`crossing-${i}-${crossing.header.node}`}>
+            <NodeCrossingDivider nodeId={crossing.header.node} verb="moving to" topicCrossing={crossing.topicCrossing} />
+          </CheckpointAnchor>
         )}
       </Fragment>
     )
@@ -1028,15 +1043,15 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
     [marks, reviewProbes, resolvedGradeBatches, crossings, messages.length],
   )
   const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null)
-  // Minimap fix — see LearnSessionView.tsx's own jumpToMessage doctrine
-  // comment: `block: 'start'` + `.scroll-anchor-top` (index.css), not
-  // `block: 'center'`, so clamped-near-edge jumps never land under the top
-  // fade mask or the peeked/pinned TicketCard.
-  function jumpToMessage(atIndex: number) {
+  // Minimap Precision fix (second report on the same bug) — jumps straight to
+  // the checkpoint's OWN `CheckpointAnchor`, never the host message; see
+  // shared/jumpToCheckpoint.ts's doctrine comment for the full root-cause
+  // (H1: no per-checkpoint DOM anchor existed at all; H2: `content-visibility`
+  // layout settling drifts the landing spot after the first scroll).
+  function jumpToCheckpointMoment(moment: InstrumentMoment) {
     if (!scrollEl || messages.length === 0) return
-    const idx = Math.min(Math.max(atIndex, 0), messages.length - 1)
-    const target = scrollEl.querySelector<HTMLElement>(`[data-msg-index="${idx}"]`)
-    target?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    const fallbackIndex = Math.min(Math.max(moment.atIndex, 0), messages.length - 1)
+    jumpToCheckpoint(scrollEl, moment.id, fallbackIndex)
   }
 
   return (
@@ -1296,7 +1311,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
                   moments={minimapMoments}
                   totalMessages={messages.length}
                   containerEl={scrollEl}
-                  onJump={jumpToMessage}
+                  onJump={jumpToCheckpointMoment}
                 />
               }
             >

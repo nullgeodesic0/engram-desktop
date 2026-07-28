@@ -1,4 +1,4 @@
-import { memo } from 'react'
+import { memo, type ReactNode } from 'react'
 import { humanizeNodeId } from '../../../../shared/humanizeId'
 import { MarkdownPreview } from '../MarkdownPreview'
 import { MathRenderer } from '../MathRenderer'
@@ -13,6 +13,7 @@ import { AuditCard, type AuditVerdict } from './AuditCard'
 import { MilestoneCard } from './MilestoneCard'
 import { ToolFailureCard } from './ToolFailureCard'
 import { AskCard, type AskCardOption } from './AskCard'
+import { CheckpointAnchor } from '../CheckpointAnchor'
 import type { ToolFailureKind } from '../../../../shared/signals/tutorSignals'
 import type { StabilityMilestoneScale } from '../../../../shared/gradeResult'
 
@@ -289,20 +290,29 @@ export function MarkView({
    * behavior, byte-identical to before this fix. */
   milestonePairedWithGradeCard?: boolean
 }) {
-  if (mark.kind === 'beat') return <BeatMarkCard beat={mark.beat} content={suppressBeatExcerpt ? '' : mark.content} />
-  if (mark.kind === 'crossing') return <NodeCrossingDivider nodeId={mark.nodeId} verb={mark.verb} />
-  if (mark.kind === 'figure') return <FigureCard title={mark.title} body={mark.body} />
-  if (mark.kind === 'atlas') return <AtlasBirth topic={mark.topic} />
-  if (mark.kind === 'phase') return <Frontispiece phase={mark.phase} />
-  if (mark.kind === 'diagnostic') return <DiagnosticPlate items={mark.items} />
-  if (mark.kind === 'misconception') return <MisconceptionPin text={mark.text} node={mark.node} />
-  if (mark.kind === 'explorable') return <ExplorableForged title={mark.title} path={mark.path} node={mark.node} />
-  if (mark.kind === 'verify-seal') return <VerifySeal />
-  if (mark.kind === 'lapse') return <LapseRite node={mark.node} returnDate={mark.returnDate} />
-  if (mark.kind === 'docket') return <ReviewDocket items={mark.items} />
-  if (mark.kind === 'audit') return <AuditCard itemCount={mark.itemCount} verdict={mark.verdict} disputedNodes={mark.disputedNodes} />
-  if (mark.kind === 'milestone')
-    return (
+  // Minimap Precision fix — every mark kind wraps in the SAME
+  // `CheckpointAnchor` (id = `mark.id`, the exact id `deriveInstrumentMoments`
+  // gives this moment for the four kinds it reads out of `marks` — crossing/
+  // beat/misconception/milestone/ask) at the single return below, so the
+  // minimap's click-to-jump always has a real DOM node for this mark, never
+  // just the message it happens to render next to. See CheckpointAnchor.tsx's
+  // own doctrine comment.
+  let content: ReactNode
+  if (mark.kind === 'beat') content = <BeatMarkCard beat={mark.beat} content={suppressBeatExcerpt ? '' : mark.content} />
+  else if (mark.kind === 'crossing') content = <NodeCrossingDivider nodeId={mark.nodeId} verb={mark.verb} />
+  else if (mark.kind === 'figure') content = <FigureCard title={mark.title} body={mark.body} />
+  else if (mark.kind === 'atlas') content = <AtlasBirth topic={mark.topic} />
+  else if (mark.kind === 'phase') content = <Frontispiece phase={mark.phase} />
+  else if (mark.kind === 'diagnostic') content = <DiagnosticPlate items={mark.items} />
+  else if (mark.kind === 'misconception') content = <MisconceptionPin text={mark.text} node={mark.node} />
+  else if (mark.kind === 'explorable') content = <ExplorableForged title={mark.title} path={mark.path} node={mark.node} />
+  else if (mark.kind === 'verify-seal') content = <VerifySeal />
+  else if (mark.kind === 'lapse') content = <LapseRite node={mark.node} returnDate={mark.returnDate} />
+  else if (mark.kind === 'docket') content = <ReviewDocket items={mark.items} />
+  else if (mark.kind === 'audit')
+    content = <AuditCard itemCount={mark.itemCount} verdict={mark.verdict} disputedNodes={mark.disputedNodes} />
+  else if (mark.kind === 'milestone')
+    content = (
       <MilestoneCard
         node={mark.node}
         scale={mark.scale}
@@ -311,9 +321,9 @@ export function MarkView({
         pairedWithGradeCard={milestonePairedWithGradeCard ?? false}
       />
     )
-  if (mark.kind === 'tool-failure') return <ToolFailureCard failureKind={mark.failureKind} />
-  if (mark.kind === 'ask') {
-    return (
+  else if (mark.kind === 'tool-failure') content = <ToolFailureCard failureKind={mark.failureKind} />
+  else if (mark.kind === 'ask') {
+    content = (
       <AskCard
         header={mark.header}
         question={mark.question}
@@ -323,8 +333,9 @@ export function MarkView({
         onAnswer={onAnswerAsk ? (chosen) => onAnswerAsk(mark.requestId, chosen) : undefined}
       />
     )
-  }
-  return <StashStamp />
+  } else content = <StashStamp />
+
+  return <CheckpointAnchor id={mark.id}>{content}</CheckpointAnchor>
 }
 
 /** Shown at the transcript foot while the assessor examines the stash.

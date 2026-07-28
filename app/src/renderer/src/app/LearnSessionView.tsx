@@ -17,7 +17,8 @@ import { ChatScrollRegion } from '../components/ChatScrollRegion'
 import { useEquationCopy } from '../components/useEquationCopy'
 import { useNodeChipClick } from '../components/useNodeChipClick'
 import { TranscriptMinimap } from '../components/TranscriptMinimap'
-import { deriveInstrumentMoments } from '../shared/instrumentMoments'
+import { deriveInstrumentMoments, type InstrumentMoment } from '../shared/instrumentMoments'
+import { jumpToCheckpoint } from '../shared/jumpToCheckpoint'
 import { allProbeHeaders } from '../../../shared/reviewCrossing'
 import { useTutorActivity, composerDisabledReason } from '../shared/tutorActivity'
 import { parseTranscriptToMessages, type ChatMessage } from '../../../shared/chatMessages'
@@ -1473,20 +1474,18 @@ export function LearnSessionView({
   const learnProbes = useMemo(() => allProbeHeaders(messages), [messages])
   const minimapMoments = useMemo(() => deriveInstrumentMoments({ marks, probes: learnProbes }), [marks, learnProbes])
   const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null)
-  // Minimap fix — `block: 'start'`, not `'center'`: centering clamps near the
-  // transcript's own start/end (not enough content above/below to actually
-  // center), and the clamped landing spot then sits under `.scroll-fade-top`'s
-  // 28px mask or behind the peeked/pinned TicketCard — exactly the "lands
-  // slightly off" reports. `block: 'start'` plus `.scroll-anchor-top`'s
-  // `scroll-margin-top` (index.css) makes the browser stop short of that
-  // band instead, using the resolved DOM node's real geometry — never
-  // index-proportional arithmetic, so virtualized/unmeasured blocks can't
-  // drift it either.
-  function jumpToMessage(atIndex: number) {
+  // Minimap Precision fix (second report on the same bug) — jumps straight to
+  // the checkpoint's OWN `CheckpointAnchor`, never the host message; see
+  // shared/jumpToCheckpoint.ts's doctrine comment for the full root-cause
+  // (H1: no per-checkpoint DOM anchor existed at all — a mark rendered
+  // BETWEEN two messages had nothing of its own to scroll to, so the jump
+  // landed on the NEXT message instead, leaving the checkpoint above the
+  // viewport; H2: `content-visibility` layout settling drifts the landing
+  // spot after the first scroll, corrected with a bounded two-pass re-check).
+  function jumpToCheckpointMoment(moment: InstrumentMoment) {
     if (!scrollEl || messages.length === 0) return
-    const idx = Math.min(Math.max(atIndex, 0), messages.length - 1)
-    const target = scrollEl.querySelector<HTMLElement>(`[data-msg-index="${idx}"]`)
-    target?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    const fallbackIndex = Math.min(Math.max(moment.atIndex, 0), messages.length - 1)
+    jumpToCheckpoint(scrollEl, moment.id, fallbackIndex)
   }
 
   return (
@@ -1840,7 +1839,7 @@ export function LearnSessionView({
                   moments={minimapMoments}
                   totalMessages={messages.length}
                   containerEl={scrollEl}
-                  onJump={jumpToMessage}
+                  onJump={jumpToCheckpointMoment}
                 />
               }
             >
