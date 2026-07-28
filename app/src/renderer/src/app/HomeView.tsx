@@ -338,7 +338,7 @@ export function HomeView({ onGoReview, onGoCoach, onGoTopic, onNewTopic, onGoNod
               pulse={duePulse}
               onPulseEnd={() => setDuePulse(false)}
             />
-            <div className="panel p-3 flex-1 min-w-[180px] flex flex-col justify-center">
+            <div className="panel tilt-card p-3 flex-1 min-w-[180px] flex flex-col justify-center">
               {forecast ? (
                 <DueForecast buckets={forecast} />
               ) : (
@@ -354,7 +354,7 @@ export function HomeView({ onGoReview, onGoCoach, onGoTopic, onNewTopic, onGoNod
         <ExperimentBanner experiment={activeExperiment} />
 
         {flashback && (
-          <div className="panel px-5 py-4 flex flex-col gap-1.5">
+          <div className="panel tilt-card px-5 py-4 flex flex-col gap-1.5">
             <SectionBanner label={`${flashback.daysAgo} days ago · ${flashback.topicTitle}`} className="border-t-0" />
             <DendriteDivider className="mb-3" />
             <p className="text-sm text-[var(--color-text-dim)]">{flashback.claim}</p>
@@ -367,7 +367,7 @@ export function HomeView({ onGoReview, onGoCoach, onGoTopic, onNewTopic, onGoNod
             variant="primary"
             size="lg"
             onClick={onGoReview}
-            className="w-full flex items-center justify-between text-left normal-case"
+            className="tilt-card w-full flex items-center justify-between text-left normal-case"
           >
             <div>
               <div className="text-base">Clear today’s reviews</div>
@@ -483,7 +483,7 @@ export function HomeView({ onGoReview, onGoCoach, onGoTopic, onNewTopic, onGoNod
                 variant="ghost"
                 size="lg"
                 onClick={onGoCoach}
-                className="w-full flex items-center justify-between text-left"
+                className="tilt-card w-full flex items-center justify-between text-left"
               >
                 <div className="text-sm">
                   {stats.pending_verify > 0 ? `${stats.pending_verify} pending grading · ` : ''}
