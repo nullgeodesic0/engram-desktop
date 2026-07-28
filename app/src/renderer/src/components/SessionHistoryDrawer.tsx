@@ -3,7 +3,7 @@ import type { ExportSittingFormat, ExportSittingResult, SessionIndexEntry } from
 import { parseLineTimestamp, type ChatMessage } from '../../../shared/chatMessages'
 import { parseGradeResult, parseGradeResults, type GradeResult } from '../../../shared/gradeResult'
 import { deriveRitualMarks, type DerivedRitualMark } from '../../../shared/ritualFromTranscript'
-import { deriveReviewCrossings, nextProbeHeaderAt } from '../../../shared/reviewCrossing'
+import { deriveReviewCrossings, nextProbeHeaderAt, allProbeHeaders } from '../../../shared/reviewCrossing'
 import {
   deriveVerdictRegions,
   verdictRegionMessageRenders,
@@ -18,6 +18,8 @@ import { recordView } from '../shared/recentlyViewed'
 import { Modal } from './ui/Modal'
 import { ChatMessageView } from './ChatMessageView'
 import { useEquationCopy } from './useEquationCopy'
+import { TranscriptMinimap } from './TranscriptMinimap'
+import { deriveInstrumentMoments } from '../shared/instrumentMoments'
 import { GradeResultCard } from './GradeResultCard'
 import { MarkView, NodeCrossingDivider } from './ritual/Marks'
 
@@ -467,10 +469,18 @@ export function SessionHistoryDrawer({
   // see its own doctrine comment), via a small composed callback rather
   // than a second `ref` prop (a DOM node only accepts one).
   const equationCopyRef = useEquationCopy()
+  // Chat Instruments Wave B — the transcript minimap needs the container as
+  // REACT STATE, not just `scrollRef.current` — a plain ref mutation doesn't
+  // trigger a re-render, so TranscriptMinimap's own effect (keyed on this
+  // value) would never see it become available. Set from the same merged
+  // callback ref below, once per Modal open (this whole pane unmounts on
+  // close — see `equationCopyRef`'s own doctrine comment just above).
+  const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null)
   const setScrollAndCopyRef = useCallback(
     (node: HTMLDivElement | null) => {
       scrollRef.current = node
       equationCopyRef(node)
+      setScrollEl(node)
     },
     [equationCopyRef],
   )
@@ -653,6 +663,21 @@ export function SessionHistoryDrawer({
     () => (isReviewSitting && timeline ? deriveReviewCrossings(timeline.messages) : []),
     [isReviewSitting, timeline],
   )
+  // Chat Instruments Wave B — every probe header this sitting's transcript
+  // carries (Learn's own `[N/M] · node` markers as much as Review's — see
+  // allProbeHeaders' own doctrine comment), reused by both the minimap and
+  // the grade-card ↔ probe-card hover linkage below.
+  const drawerProbes = useMemo(() => (timeline ? allProbeHeaders(timeline.messages) : []), [timeline])
+  const probeNodeByMessageIndex = useMemo(() => {
+    const map = new Map<number, string>()
+    for (const { index, header } of drawerProbes) map.set(index, header.node)
+    return map
+  }, [drawerProbes])
+  /** Same linkage as ReviewSessionView's live wiring (see that state's own
+   * doctrine comment) — a separate instance here since this is a wholly
+   * separate mounted component tree, reset implicitly every time the drawer
+   * is reopened or a different sitting is selected (new render, fresh state). */
+  const [hoveredPairNode, setHoveredPairNode] = useState<string | null>(null)
   const resolvedGrades = useMemo(() => {
     if (!timeline) return []
     if (!isReviewSitting) return timeline.grades.map((g) => ({ batch: g, resolvedIndex: g.atIndex }))
@@ -721,9 +746,42 @@ export function SessionHistoryDrawer({
   function renderGradeBatch(g: GradeBatch) {
     return g.results.map((r, j) => (
       <div key={`${g.id}-${j}`} className="contents" data-anchor-index={g.sourceIndex}>
-        <GradeResultCard result={r} topic={ladderTopic} asOfDate={g.date ?? undefined} />
+        <GradeResultCard
+          result={r}
+          topic={ladderTopic}
+          asOfDate={g.date ?? undefined}
+          highlighted={hoveredPairNode === r.node}
+          onHoverChange={(hovering) => setHoveredPairNode(hovering ? r.node : null)}
+        />
       </div>
     ))
+  }
+
+  // Chat Instruments Wave B — the transcript minimap, replay side. Reuses
+  // the SAME `resolvedGrades`/`reviewCrossings`/`timeline.marks` this view
+  // already computed for inline rendering — no second resolution pass, same
+  // reshape-only pattern as ReviewSessionView's live `minimapMoments`.
+  const minimapMoments = useMemo(
+    () =>
+      timeline
+        ? deriveInstrumentMoments({
+            marks: timeline.marks,
+            probes: drawerProbes,
+            gradeBatches: resolvedGrades.map((g) => ({
+              id: g.batch.id,
+              atIndex: g.resolvedIndex ?? timeline.messages.length,
+              results: g.batch.results,
+            })),
+            crossings: reviewCrossings.map((c) => ({ atIndex: c.atMessageIndex, node: c.header.node })),
+          })
+        : [],
+    [timeline, drawerProbes, resolvedGrades, reviewCrossings],
+  )
+  function jumpToMessage(atIndex: number) {
+    if (!scrollEl || !timeline || timeline.messages.length === 0) return
+    const idx = Math.min(Math.max(atIndex, 0), timeline.messages.length - 1)
+    const target = scrollEl.querySelector<HTMLElement>(`[data-msg-index="${idx}"]`)
+    target?.scrollIntoView({ block: 'center', behavior: 'smooth' })
   }
 
   return (
@@ -826,7 +884,15 @@ export function SessionHistoryDrawer({
               </div>
             </div>
           )}
-          <div ref={setScrollAndCopyRef} className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-5 pr-1">
+          {/* Chat Instruments Wave B — `relative` wrapper purely so the
+              minimap (an `absolute` sibling of the scroll div, not a child of
+              it) can sit at the scroll region's own right edge without
+              scrolling away with the content it indexes — the drawer never
+              used ChatScrollRegion (it has always hand-rolled this div; see
+              its own file-level doctrine comment), so this wrapper is new
+              here rather than ChatScrollRegion's existing `railSlot` prop. */}
+          <div className="relative flex-1 min-h-0">
+          <div ref={setScrollAndCopyRef} className="h-full overflow-y-auto flex flex-col gap-5 pr-1">
             {selectedId === null && <div className="fig-caption px-1">Select a sitting to view its transcript.</div>}
             {loadingTranscript && <div className="fig-caption px-1">reading transcript…</div>}
             {timeline && (
@@ -880,6 +946,14 @@ export function SessionHistoryDrawer({
                         verdictEyebrowIndex={verdictProps?.eyebrowIndex}
                         suppressSchedule={verdictProps?.suppressSchedule}
                         previousTimestamp={timeline.messages[i - 1]?.timestamp}
+                        dataIndex={i}
+                        probeHighlighted={
+                          hoveredPairNode !== null && probeNodeByMessageIndex.get(i) === hoveredPairNode
+                        }
+                        onProbeHoverChange={(hovering) => {
+                          const node = probeNodeByMessageIndex.get(i)
+                          if (node) setHoveredPairNode(hovering ? node : null)
+                        }}
                       />
                     </div>
                     {!isReviewSitting &&
@@ -921,6 +995,13 @@ export function SessionHistoryDrawer({
                 )}
               </>
             )}
+          </div>
+          <TranscriptMinimap
+            moments={minimapMoments}
+            totalMessages={timeline?.messages.length ?? 0}
+            containerEl={scrollEl}
+            onJump={jumpToMessage}
+          />
           </div>
         </div>
       </div>

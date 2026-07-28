@@ -10,12 +10,32 @@ import { MathRenderer } from '../MathRenderer'
  * the wrong thing before you've answered. A threshold node (`†`) gets the
  * violet accent the design language reserves for gateway concepts, and says
  * so in words rather than leaving a dagger to be decoded. */
-export const ProbeCard = memo(function ProbeCard({ header }: { header: ProbeHeader }) {
+export const ProbeCard = memo(function ProbeCard({
+  header,
+  highlighted,
+  onHoverChange,
+}: {
+  header: ProbeHeader
+  /** Chat Instruments Wave B — true while a GradeResultCard for this SAME
+   * node (matched by the caller — see ChatMessageView's own doctrine
+   * comment) is hovered elsewhere in the transcript. A soft ring/wash only;
+   * never anything that could move layout, since it can flip on/off many
+   * times a second while a pointer drifts across the transcript. */
+  highlighted?: boolean
+  /** Reports THIS card's own hover state up, so the caller can highlight its
+   * partner GradeResultCard in turn. Undefined at any call site that never
+   * wires the linkage (SessionHistoryDrawer's replay of a Learn sitting, a
+   * live Learn session — neither renders a GradeResultCard inline to pair
+   * with). */
+  onHoverChange?: (hovering: boolean) => void
+}) {
   const accent = header.threshold ? 'var(--color-ink-violet)' : 'var(--color-ink-cool)'
   return (
     <div
-      className="panel px-5 py-4 flex flex-col gap-3 border-l-2"
+      className={`panel px-5 py-4 flex flex-col gap-3 border-l-2 transition-shadow duration-[var(--dur-fast)] ${highlighted ? 'pair-linked' : ''}`}
       style={{ borderLeftColor: accent }}
+      onMouseEnter={onHoverChange ? () => onHoverChange(true) : undefined}
+      onMouseLeave={onHoverChange ? () => onHoverChange(false) : undefined}
     >
       <div className="flex items-center gap-2.5 flex-wrap">
         <span

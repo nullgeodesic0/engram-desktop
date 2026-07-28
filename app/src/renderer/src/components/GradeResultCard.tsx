@@ -114,6 +114,8 @@ export function GradeResultCard({
   reveal = false,
   topic,
   asOfDate,
+  highlighted,
+  onHoverChange,
 }: {
   result: GradeResult
   /** The felt-confidence label picked just before this grade landed (see
@@ -133,6 +135,12 @@ export function GradeResultCard({
    * IntervalLadder's `asOfDate`) — threaded straight through, unused by this
    * component otherwise. Omitted by live surfaces. */
   asOfDate?: string
+  /** Chat Instruments Wave B — the grade-card ↔ probe-card hover linkage,
+   * mirroring ProbeCard's own `highlighted`/`onHoverChange` pair exactly
+   * (see that component's doctrine comment). Matched by node id, the same
+   * field the verdict-region/crossing machinery already keys on. */
+  highlighted?: boolean
+  onHoverChange?: (hovering: boolean) => void
 }) {
   const style = GRADE_STYLE[result.grade]
   const before = result.sBefore ?? 0
@@ -188,7 +196,11 @@ export function GradeResultCard({
   const chipText = returnChipText(result)
 
   return (
-    <div className={`panel px-4 py-3 flex flex-col gap-2 max-w-sm ${reveal && !reducedMotion() ? 'flip-in' : ''}`}>
+    <div
+      className={`panel px-4 py-3 flex flex-col gap-2 max-w-sm transition-shadow duration-[var(--dur-fast)] ${reveal && !reducedMotion() ? 'flip-in' : ''} ${highlighted ? 'pair-linked' : ''}`}
+      onMouseEnter={onHoverChange ? () => onHoverChange(true) : undefined}
+      onMouseLeave={onHoverChange ? () => onHoverChange(false) : undefined}
+    >
       <div className="flex items-center justify-between gap-2">
         <span className="text-sm text-[var(--color-text-primary)]">{humanizeNodeId(result.node)}</span>
         <span className="relative shrink-0">

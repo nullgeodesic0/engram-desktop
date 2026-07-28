@@ -10,6 +10,8 @@ import { ContextGauge } from '../components/ContextGauge'
 import { ActivityLine } from '../components/ActivityLine'
 import { ChatScrollRegion } from '../components/ChatScrollRegion'
 import { useEquationCopy } from '../components/useEquationCopy'
+import { TranscriptMinimap } from '../components/TranscriptMinimap'
+import { deriveInstrumentMoments } from '../shared/instrumentMoments'
 import { useTutorActivity, composerDisabledReason } from '../shared/tutorActivity'
 import { parseTranscriptToMessages, type ChatMessage } from '../../../shared/chatMessages'
 import { extractLastUsageFromTranscript } from '../../../shared/sessionUsage'
@@ -52,7 +54,7 @@ import {
 } from '../../../shared/signals/tutorSignals'
 import { QueueRail } from '../components/ritual/QueueRail'
 import { NodeCrossingDivider } from '../components/ritual/Marks'
-import { deriveReviewCrossings, latestProbeHeader, nextProbeHeaderAt } from '../../../shared/reviewCrossing'
+import { deriveReviewCrossings, latestProbeHeader, nextProbeHeaderAt, allProbeHeaders } from '../../../shared/reviewCrossing'
 import {
   deriveVerdictRegions,
   verdictRegionMessageRenders,
@@ -799,6 +801,30 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
   // commentary, immediately before its probe card — never before the message
   // as a whole, which would land it ahead of the very commentary it follows.
   const crossings = useMemo(() => deriveReviewCrossings(messages), [messages])
+  // Chat Instruments Wave B — every probe header, reused by BOTH the
+  // transcript minimap (a "notable moment" per probe) and the grade-card ↔
+  // probe-card hover linkage (`probeNodeByMessageIndex` below) — one walk,
+  // not two, of the same `allProbeHeaders` this file's own `latestProbeHeader`
+  // (imported above) is itself built from.
+  const reviewProbes = useMemo(() => allProbeHeaders(messages), [messages])
+  /** This message index's own probe header node, if it has one — the SAME
+   * lookup `ChatMessageView` performs internally off `message.text` via
+   * `splitAroundProbeHeader` (see that component), read here instead of
+   * re-parsed, purely so the hover-linkage wiring below can ask "does this
+   * message's ProbeCard answer to node X" without a second parse. */
+  const probeNodeByMessageIndex = useMemo(() => {
+    const map = new Map<number, string>()
+    for (const { index, header } of reviewProbes) map.set(index, header.node)
+    return map
+  }, [reviewProbes])
+  /** Chat Instruments Wave B — the grade-card ↔ probe-card hover linkage.
+   * Node id of whichever card (either side) is currently hovered, or null.
+   * Matched purely by node id — the same field the verdict-region/crossing
+   * machinery above already keys grade batches and probe headers on — never
+   * re-derived, just read straight off `GradeResult.node` / `ProbeHeader.node`.
+   * A soft ring/wash only (see index.css's `.pair-linked`); never auto-scrolls
+   * a partner into view. */
+  const [hoveredPairNode, setHoveredPairNode] = useState<string | null>(null)
 
   const blocked = rateLimit !== null && isBlockingRateLimitStatus(rateLimit.status)
   /** Every grade batch's resolved render position — the index of the next
@@ -907,6 +933,8 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
         confidenceLabel={latestPickFor(r.node)?.label ?? null}
         reveal={b.id === revealBatchId}
         topic={b.id === revealBatchId ? lastGradeTopic ?? undefined : undefined}
+        highlighted={hoveredPairNode === r.node}
+        onHoverChange={(hovering) => setHoveredPairNode(hovering ? r.node : null)}
       />
     ))
   }
@@ -946,6 +974,35 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
   // conditional below, which unmounts/remounts across a session's own
   // lifecycle — exactly the case the callback-ref design exists for.
   const equationCopyRef = useEquationCopy()
+
+  // Chat Instruments Wave B — the transcript minimap. Grade batches and
+  // crossings are the SAME `resolvedGradeBatches`/`crossings` this view
+  // already computed above for inline rendering, just reshaped to the
+  // structural input `deriveInstrumentMoments` expects — no second
+  // resolution pass. `resolvedIndex ?? messages.length` mirrors the tail
+  // convention every other resolved position in this file already uses
+  // (render at the very end when no later probe header exists yet).
+  const minimapMoments = useMemo(
+    () =>
+      deriveInstrumentMoments({
+        marks,
+        probes: reviewProbes,
+        gradeBatches: resolvedGradeBatches.map((g) => ({
+          id: g.batch.id,
+          atIndex: g.resolvedIndex ?? messages.length,
+          results: g.batch.results,
+        })),
+        crossings: crossings.map((c) => ({ atIndex: c.atMessageIndex, node: c.header.node })),
+      }),
+    [marks, reviewProbes, resolvedGradeBatches, crossings, messages.length],
+  )
+  const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null)
+  function jumpToMessage(atIndex: number) {
+    if (!scrollEl || messages.length === 0) return
+    const idx = Math.min(Math.max(atIndex, 0), messages.length - 1)
+    const target = scrollEl.querySelector<HTMLElement>(`[data-msg-index="${idx}"]`)
+    target?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }
 
   return (
     // Tighter at the top than the standard p-8 so the header sits near the
@@ -1199,7 +1256,18 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
                 </>
               )
             })()}
-            <ChatScrollRegion deps={[messages, busy, marks]}>
+            <ChatScrollRegion
+              deps={[messages, busy, marks]}
+              onContainerRef={setScrollEl}
+              railSlot={
+                <TranscriptMinimap
+                  moments={minimapMoments}
+                  totalMessages={messages.length}
+                  containerEl={scrollEl}
+                  onJump={jumpToMessage}
+                />
+              }
+            >
               <div className="transcript-measure flex flex-col gap-5">
                 {/* lapse/milestone excluded here — re-anchored via
                     inlineForMessage/tailOtherMarks below (the carried-over
@@ -1236,6 +1304,14 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
                       verdictEyebrowIndex={verdictProps?.eyebrowIndex}
                       suppressSchedule={verdictProps?.suppressSchedule}
                       previousTimestamp={messages[i - 1]?.timestamp}
+                      dataIndex={i}
+                      probeHighlighted={
+                        hoveredPairNode !== null && probeNodeByMessageIndex.get(i) === hoveredPairNode
+                      }
+                      onProbeHoverChange={(hovering) => {
+                        const node = probeNodeByMessageIndex.get(i)
+                        if (node) setHoveredPairNode(hovering ? node : null)
+                      }}
                     />
                     {marks
                       .filter(

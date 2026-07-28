@@ -241,6 +241,20 @@
   border-radius: 6px;
 }
 
+/* Chat Instruments Wave B — grade-card <-> probe-card hover linkage. A soft
+ * ring/wash on a card's own PARTNER (same node id, the other half of a
+ * question-and-answer pair) while either side is hovered — never on the
+ * card's own :hover state (that's the browser's ordinary cursor feedback;
+ * this is "your partner is being looked at"). box-shadow only, so it can
+ * never move layout even flickering on/off as a pointer drifts across the
+ * transcript; ProbeCard/GradeResultCard both already carry
+ * `transition: box-shadow` at --dur-fast. */
+.pair-linked {
+  box-shadow:
+    0 0 0 1.5px var(--color-ink-warm-dim),
+    0 0 0 6px color-mix(in srgb, var(--color-ink-warm) 6%, transparent);
+}
+
 /* Interaction vocabulary — one set of rules for every hover/press micro-interaction
  * in the app, built on the two motion tokens declared in @theme above:
  *   - Rows/cards (interactive .panel surfaces, list rows): background-color +

@@ -388,6 +388,7 @@ export default function App() {
                 onSpotlight={(s) => setPendingSpotlight(s)}
                 onGoReview={() => setView('review')}
                 openNewTopicSignal={newTopicRequest}
+                onOpenNode={goToNode}
               />
             </KeepMounted>
           )}
