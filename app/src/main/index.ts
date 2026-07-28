@@ -17,7 +17,7 @@ import {
 import { bridgeServer } from './bridge/bridgeServer'
 import { getNotifierSettings, setNotifierSettings } from './session/notifierState'
 import { getUnlockedAchievements, recordUnlocked } from './session/achievementsStore'
-import { startReviewNotifier, stopReviewNotifier, checkReviewsNow } from './session/reviewNotifier'
+import { startReviewNotifier, stopReviewNotifier, checkReviewsNow, refreshDueCount } from './session/reviewNotifier'
 import { checkForUpdate, getCachedUpdateCheck, maybeAutoCheckForUpdate } from './session/updateCheck'
 import { restoreWindowState, trackWindowState } from './windowState'
 import { installAppMenu } from './appMenu'
@@ -87,6 +87,13 @@ function resourcePath(name: string): string {
 
 function sendNav(view: string): void {
   mainWindow?.webContents.send('app:navigate', view)
+}
+
+/** The sidebar due-badge's push side — see reviewNotifier's 5-min poll and
+ * `refreshDueCount`'s freshness path. Mirrors `sendNav` exactly: reads the
+ * live `mainWindow`, no-ops if it doesn't exist (tray-only, no window open). */
+function sendDueCount(count: number): void {
+  mainWindow?.webContents.send('engram:due-count', count)
 }
 
 /** Shared by the tray's "Open"/"Check reviews now" and a notification click —
@@ -277,7 +284,11 @@ app.whenReady().then(() => {
       return next
     },
   )
-  ipcMain.handle('notifier:checkNow', () => checkReviewsNow(() => focusOrCreateWindow('review')))
+  ipcMain.handle('notifier:checkNow', () => checkReviewsNow(() => focusOrCreateWindow('review'), sendDueCount))
+  // Freshness path for the sidebar badge — App calls this on window focus and
+  // when a review sitting ends, so the badge doesn't wait up to 5 minutes for
+  // the background poll to notice a sitting just cleared the queue.
+  ipcMain.handle('engram:refresh-due-count', () => refreshDueCount(sendDueCount))
   ipcMain.handle('app:getLoginItemSettings', () => ({ openAtLogin: app.getLoginItemSettings().openAtLogin }))
   ipcMain.handle('app:setLoginItemSettings', (_e, openAtLogin: boolean) => {
     app.setLoginItemSettings({ openAtLogin })
@@ -309,7 +320,7 @@ app.whenReady().then(() => {
 
   registerSessionHandlers(createWindow())
   createTray()
-  startReviewNotifier(() => focusOrCreateWindow('review'))
+  startReviewNotifier(() => focusOrCreateWindow('review'), sendDueCount)
 
   // Once per launch, well after startup settles (30s — this is a `gh` network
   // call, no reason to compete with the `claude --version` probe and window
