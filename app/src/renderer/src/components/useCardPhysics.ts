@@ -5,12 +5,12 @@ import { useCallback, useRef } from 'react'
  * Two motions, both nearly subliminal:
  *
  *   1. Idle drift — every visible `.tilt-card` wanders in and out of the page
- *      plane on a slow sinusoid (≤ ~1.2deg, half-minute-scale periods), each card
+ *      plane on a slow sinusoid (≤ ~0.8deg, half-minute-scale periods), each card
  *      carrying its own randomized period + phase so the surface breathes
  *      rather than marches in lockstep.
  *   2. Pointer tilt — while the cursor is over a card, the tilt follows the
  *      pointer as if pressing INTO a floating plate: the corner nearest the
- *      cursor dips away toward the page (≤ 4.2deg at the edges), critically-
+ *      cursor dips away toward the page (≤ 2.7deg at the edges), critically-
  *      damped so it glides, never snaps, and eases back to idle drift on
  *      leave.
  *
@@ -69,16 +69,18 @@ const TILT_SELECTOR = '.tilt-card, .tilt-card-soft'
 const SOFT_SELECTOR = '.tilt-card-soft'
 
 /* Tuning — tiny by decree. The effect should be felt, not watched. */
-const IDLE_AMP_MIN_DEG = 0.6
-const IDLE_AMP_MAX_DEG = 1.2
-const POINTER_MAX_DEG = 4.2
+const IDLE_AMP_MIN_DEG = 0.4
+const IDLE_AMP_MAX_DEG = 0.8
+const POINTER_MAX_DEG = 2.7
 const IDLE_PERIOD_MIN_S = 22
 const IDLE_PERIOD_MAX_S = 55
 /** `.tilt-card-soft`'s per-element multiplier — applied to both idle
  * amplitude and pointer-tilt target, never a parallel constant set (see the
  * doctrine comment above). Chosen so the chat surface's drift is felt as
  * distinctly quieter without reading as "broken"/imperceptible. */
-const SOFT_SCALE = 0.65
+const SOFT_SCALE = 1 // one scale by user decision (2026-07-28): the chat-bubble
+// values became the app-wide values, so soft === full today. The class split
+// (.tilt-card vs .tilt-card-soft) is kept so the surfaces can re-diverge later.
 /** Critically-damped-feel exponential smoothing time constant. */
 const SMOOTH_TAU_MS = 150
 /** Idle-drift concurrency cap — hover responsiveness is never capped. Bumped
