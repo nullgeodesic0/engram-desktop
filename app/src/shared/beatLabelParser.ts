@@ -1,8 +1,17 @@
 import type { BeatSegment, ProseBeat } from './beatEvents'
 
-const LABEL_RE = /\*\*(OPEN A GAP|PREDICT(?:\s*\/\s*ATTEMPT)?|STRUGGLE(?:\s*\([^)]{0,12}\))?|RESOLVE|SELF-EXPLAIN|CONNECT|VERIFY|CLOSE)\*\*:?/gi
+// The label itself, optionally prefixed with a `§ ` marker (a formatting
+// convention seen in real transcripts — see beatEvents.ts's doctrine comment)
+// and optionally followed, INSIDE the same bold span, by a dash-qualifier:
+// "**VERIFY — cold, no notes.**" or "**RESOLVE – worked example**". That
+// qualifier is instruction, not decoration (parseBeatSegments below keeps it
+// as visible body text), and is a different thing from STRUGGLE's own
+// parenthetical hint-rung marker ("**STRUGGLE (H2)**"), which stays a
+// separate, dropped group exactly as before.
+const LABEL_RE =
+  /\*\*(?:§\s*)?(OPEN A GAP|PREDICT(?:\s*\/\s*ATTEMPT)?|STRUGGLE(?:\s*\([^)]{0,12}\))?|RESOLVE|SELF-EXPLAIN|CONNECT|VERIFY|CLOSE)(\s*[—–-]\s*[^*]*)?\*\*:?/gi
 
-function normalize(label: string): ProseBeat | 'verify' | 'close' | null {
+function normalize(label: string): ProseBeat | 'close' | null {
   const upper = label.toUpperCase().replace(/\s*\([^)]*\)/, '').trim()
   if (upper === 'OPEN A GAP') return 'open_gap'
   if (upper.startsWith('PREDICT')) return 'predict'
@@ -10,7 +19,7 @@ function normalize(label: string): ProseBeat | 'verify' | 'close' | null {
   if (upper === 'RESOLVE') return 'resolve'
   if (upper === 'SELF-EXPLAIN') return 'self_explain'
   if (upper === 'CONNECT') return 'connect'
-  if (upper === 'VERIFY') return 'verify' // recognized but not rendered as a prose card — Tier 1 owns VERIFY
+  if (upper === 'VERIFY') return 'verify'
   if (upper === 'CLOSE') return 'close' // folds visually into the next OPEN_GAP; kept as its own trailing segment
   return null
 }
@@ -40,10 +49,15 @@ export function parseBeatSegments(text: string): BeatSegment[] {
     const normalized = normalize(m[1])
     const start = m.index! + m[0].length
     const end = i + 1 < matches.length ? matches[i + 1].index! : text.length
-    const body = text.slice(start, end).trim()
-    if (normalized === 'verify' || normalized === 'close' || normalized === null) {
-      // VERIFY is Tier-1 owned; CLOSE and unrecognized labels render as plain text
-      // rather than a dedicated beat card.
+    let body = text.slice(start, end).trim()
+    // The dash-qualifier, if present, is instruction ("cold, no notes"), not
+    // decoration swallowed with the label's markdown span — surface it as the
+    // segment's own lead line, ahead of whatever prose follows.
+    const qualifier = m[2]?.replace(/^\s*[—–-]\s*/, '').trim()
+    if (qualifier) body = body ? `${qualifier}\n\n${body}` : qualifier
+    if (normalized === 'close' || normalized === null) {
+      // CLOSE and unrecognized labels render as plain text rather than a
+      // dedicated beat card.
       if (body) segments.push({ beat: null, text: body })
     } else {
       segments.push({ beat: normalized, text: body })
@@ -59,7 +73,7 @@ export function parseBeatSegments(text: string): BeatSegment[] {
  * full segment split above. Same recognition rules, just returns the last
  * match instead of splitting the whole text.
  */
-export function latestBeatLabel(text: string): ProseBeat | 'verify' | 'close' | null {
+export function latestBeatLabel(text: string): ProseBeat | 'close' | null {
   const matches = [...text.matchAll(LABEL_RE)]
   if (matches.length === 0) return null
   return normalize(matches[matches.length - 1][1])
