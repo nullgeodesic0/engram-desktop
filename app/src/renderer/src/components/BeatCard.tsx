@@ -2,7 +2,9 @@ import { memo } from 'react'
 import type { ProseBeat } from '../../../shared/beatEvents'
 import { ProseMarkdown } from './ProseMarkdown'
 import { splitAroundTicket } from '../shared/ticketParser'
+import { splitAroundReceiptStrip, splitLearnCoda } from '../shared/learnReceipt'
 import { TicketCard } from './ritual/TicketCard'
+import { ReceiptStrip, LearnCodaBlock } from './ritual/ReceiptStrip'
 import { CopyButton } from './ui/CopyButton'
 
 const BEAT_STYLE: Record<ProseBeat, { label: string; icon: string; accent: string }> = {
@@ -61,6 +63,32 @@ export const PlainDialogueBlock = memo(function PlainDialogueBlock({
         {ticketSplit.before && <PlainDialogueBlock text={ticketSplit.before} />}
         <TicketCard ticket={ticketSplit.ticket} />
         {ticketSplit.after && <PlainDialogueBlock text={ticketSplit.after} trailingCaret={trailingCaret} />}
+      </div>
+    )
+  }
+  // Batch-grading receipt strip (Verdict Anatomy §4) — checked AFTER the
+  // ticket split so a session ticket is never mistaken for a strip (its
+  // header line fails learnReceipt's strict row gate anyway; the order just
+  // makes the precedence explicit). Live Learn, replayed Learn, and the
+  // history drawer all pass through this one component, so parity is free.
+  const receiptSplit = splitAroundReceiptStrip(text)
+  if (receiptSplit) {
+    return (
+      <div className="flex flex-col gap-3">
+        {receiptSplit.before && <PlainDialogueBlock text={receiptSplit.before} />}
+        <ReceiptStrip strip={receiptSplit.strip} />
+        {receiptSplit.after && <PlainDialogueBlock text={receiptSplit.after} trailingCaret={trailingCaret} />}
+      </div>
+    )
+  }
+  // The `Next time you're back:` forward-pointer coda — only meaningful once
+  // fences are out of the way (both splits above recurse back through here).
+  const codaSplit = splitLearnCoda(text)
+  if (codaSplit) {
+    return (
+      <div className="flex flex-col gap-3">
+        {codaSplit.before && <PlainDialogueBlock text={codaSplit.before} />}
+        <LearnCodaBlock text={codaSplit.coda} />
       </div>
     )
   }
