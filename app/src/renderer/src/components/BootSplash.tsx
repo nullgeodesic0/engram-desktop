@@ -1,14 +1,19 @@
 import { useEffect, useState } from 'react'
+import { NeuronMark } from './BrandMark'
 
 const MIN_VISIBLE_MS = 500
 const FADE_OUT_MS = 300
 
-/** A conventional native-app launch splash — the same consolidation-pulse mark +
- * wordmark used in the sidebar (App.tsx), just bigger and centered, fading/scaling
- * in on mount and fading out after a floor duration. No WebGL, no simulation —
- * this is the thing most desktop apps actually do at launch (Slack, VS Code, …).
- * Held for at least MIN_VISIBLE_MS even if the app underneath is ready sooner, so
- * it never reads as a flash. */
+/** A conventional native-app launch splash — the same neuron mark the sidebar
+ * wears (via BrandMark.tsx), bigger and centered. The WORDMARK treatments
+ * deliberately differ: this splash wears the hero banner's lockup (serif
+ * ENGRAM + "learn anything. keep it.") while the sidebar carries the app's
+ * own face (Space Grotesk "Engram" + night-atlas tagline) — the shared mark
+ * is what keeps the two surfaces from drifting apart. Fades/scales in on
+ * mount and out after a floor duration; no WebGL, no simulation — this is
+ * the thing most desktop apps actually do at launch (Slack, VS Code, …).
+ * Held for at least MIN_VISIBLE_MS even if the app underneath is ready
+ * sooner, so it never reads as a flash. */
 export function BootSplash() {
   const [phase, setPhase] = useState<'in' | 'hold' | 'out' | 'gone'>('in')
 
@@ -39,14 +44,11 @@ export function BootSplash() {
           transitionDuration: '400ms',
         }}
       >
-        <span className="relative inline-flex h-4 w-4">
-          <span className="absolute inline-flex h-full w-full rounded-full bg-[var(--color-ink-warm)] animate-consolidate-ping" />
-          <span className="relative inline-flex h-4 w-4 rounded-full bg-[var(--color-ink-warm)]" />
-        </span>
-        <div className="font-[var(--font-display)] text-2xl tracking-tight text-[var(--color-text-primary)] leading-none">
-          Engram
+        <NeuronMark size={48} />
+        <div className="font-serif-display font-semibold text-2xl tracking-[0.18em] text-[var(--color-text-primary)] leading-none">
+          ENGRAM
         </div>
-        <div className="text-xs text-[var(--color-text-dim)] label-data leading-none">desktop</div>
+        <div className="text-xs text-[var(--color-ink-lavender-dim)] label-data leading-none">learn anything. keep it.</div>
       </div>
     </div>
   )
