@@ -1,6 +1,6 @@
 import { memo } from 'react'
 import type { ParsedReceiptStrip } from '../../shared/learnReceipt'
-import { MathRenderer } from '../MathRenderer'
+import { ProseMarkdown } from '../ProseMarkdown'
 
 /** The batch-grading receipt strip, set as a filing stub — TicketCard's
  * field-grid idiom without the perforation (a ticket admits you; a stub
@@ -40,7 +40,7 @@ export const LearnCodaBlock = memo(function LearnCodaBlock({ text }: { text: str
         <span className="h-px flex-1 max-w-24 bg-[var(--color-hairline)]" />
       </div>
       <div className="group relative panel-raised px-5 py-4">
-        <MathRenderer text={text} className="voice-serif text-[var(--color-text-primary)]" />
+        <ProseMarkdown text={text} className="voice-serif text-[var(--color-text-primary)]" />
       </div>
     </div>
   )
