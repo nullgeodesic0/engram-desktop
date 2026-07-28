@@ -48,13 +48,32 @@ export function TopicSettingsModal({ topicId, topicTitle, onClose }: TopicSettin
   return (
     // Scrim/escape dismissal is a deliberate no-op — an accidental click or
     // Escape must not discard in-progress instructions/context edits; use
-    // the explicit Cancel/Save buttons below instead.
-    <Modal open onClose={() => {}} title="Topic settings" wide>
+    // the explicit Cancel/Save buttons in the footer instead.
+    <Modal
+      open
+      onClose={() => {}}
+      title="Topic settings"
+      subtitle={topicTitle}
+      wide
+      footer={
+        <>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="focus-ring text-xs text-[var(--color-text-faint)] px-3 py-1.5">
+              Cancel
+            </button>
+            <button
+              onClick={save}
+              disabled={saving || !loaded}
+              className="focus-ring text-xs text-[var(--color-ink-warm)] px-3 py-1.5 disabled:opacity-40"
+            >
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+          <span className="kbd-hint">↵ save</span>
+        </>
+      }
+    >
       <div className="flex flex-col gap-4">
-        <div>
-          <div className="text-base text-[var(--color-text-primary)] mt-1">{topicTitle}</div>
-        </div>
-
         <div className="flex flex-col gap-2">
           <label className="text-sm text-[var(--color-text-primary)]">Extra instructions for this topic</label>
           <p className="text-xs text-[var(--color-text-faint)]">
@@ -126,19 +145,6 @@ export function TopicSettingsModal({ topicId, topicTitle, onClose }: TopicSettin
               </button>
             )}
           </div>
-        </div>
-
-        <div className="flex justify-end gap-2">
-          <button onClick={onClose} className="focus-ring text-xs text-[var(--color-text-faint)] px-3 py-1.5">
-            Cancel
-          </button>
-          <button
-            onClick={save}
-            disabled={saving || !loaded}
-            className="focus-ring text-xs text-[var(--color-ink-warm)] px-3 py-1.5 disabled:opacity-40"
-          >
-            {saving ? 'Saving…' : 'Save'}
-          </button>
         </div>
       </div>
     </Modal>

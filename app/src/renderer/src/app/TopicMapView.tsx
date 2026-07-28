@@ -953,16 +953,23 @@ export function TopicMapView({
             )}
           </div>
 
-          {/* Node detail drawer — slides in on select, like Obsidian's file-properties pane. */}
+          {/* Node detail drawer — slides in on select, like Obsidian's file-properties pane.
+              Guardian anatomy (T3): full-bleed detail-title-band up top (title stays
+              display font, the node-state phrase becomes the italic-serif subtitle — still
+              tinted by its own warm/cool signal color via the inline style, which wins over
+              the class's dim color since inline styles out-specificity a class), a
+              hairline-dividing body (Tailwind's `divide-y` — no per-section markup needed,
+              conditionally-absent sections just don't count as siblings), and a
+              hairline-topped detail-footer holding the drawer's one primary action. */}
           {node && (
-            <div className="w-72 shrink-0 panel p-4 flex flex-col gap-3 overflow-y-auto">
-              <div className="flex items-start justify-between gap-2">
+            <div className="w-72 shrink-0 panel flex flex-col overflow-y-auto">
+              <div className="detail-title-band flex items-start justify-between gap-2 px-4 py-3 shrink-0">
                 <div>
                   <div className="text-sm font-medium text-[var(--color-text-primary)]">{humanizeNodeId(selectedNode!)}</div>
                   <div className="text-xs label-data text-[var(--color-text-faint)] uppercase tracking-wide mt-0.5">
                     {selectedNode}
                   </div>
-                  <div className="text-[11px] mt-0.5" style={{ color: 'var(--color-ink-warm)' }}>
+                  <div className="detail-subtitle text-[11px] mt-0.5" style={{ color: 'var(--color-ink-warm)' }}>
                     {node.state && stateLabel(node.state)}
                   </div>
                 </div>
@@ -970,7 +977,7 @@ export function TopicMapView({
                   <button
                     onClick={() => setOpenNode(selectedNode)}
                     title="Open full node"
-                    className="focus-ring text-[10px] label-data px-2 py-1 rounded bg-[var(--color-surface-3)] text-[var(--color-ink-warm)] hover:text-[var(--color-text-primary)]"
+                    className="focus-ring text-[10px] label-data px-2 py-1 bg-[var(--color-surface-3)] text-[var(--color-ink-warm)] hover:text-[var(--color-text-primary)]"
                   >
                     Open ↗
                   </button>
@@ -984,101 +991,105 @@ export function TopicMapView({
                 </div>
               </div>
 
-              {onGoTopic && (
-                <Button variant="ghost" onClick={() => onGoTopic(selectedTopic!)}>
-                  Continue in Learn
-                </Button>
-              )}
+              <div className="p-4 flex flex-col gap-3 divide-y divide-[var(--color-hairline)] [&>*:not(:first-child)]:pt-3">
+                <div className="flex gap-1.5 flex-wrap">
+                  {node.capstone && (
+                    <span className="text-[10px] px-1.5 py-0.5 label-data" style={{ background: 'var(--color-surface-3)', color: 'var(--color-ink-hot)' }}>
+                      ★ capstone
+                    </span>
+                  )}
+                  {node.threshold && (
+                    <span className="text-[10px] px-1.5 py-0.5 label-data" style={{ background: 'var(--color-surface-3)', color: 'var(--color-ink-hot)' }}>
+                      † threshold
+                    </span>
+                  )}
+                  {node.arbitrary && (
+                    <span className="text-[10px] px-1.5 py-0.5 label-data bg-[var(--color-surface-3)] text-[var(--color-text-dim)]">
+                      arbitrary
+                    </span>
+                  )}
+                  {node.artifact && (
+                    <span className="text-[10px] px-1.5 py-0.5 label-data bg-[var(--color-surface-3)] text-[var(--color-ink-violet)]">
+                      explorable
+                    </span>
+                  )}
+                </div>
 
-              <div className="flex gap-1.5 flex-wrap">
-                {node.capstone && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded label-data" style={{ background: 'var(--color-surface-3)', color: 'var(--color-ink-hot)' }}>
-                    ★ capstone
-                  </span>
-                )}
-                {node.threshold && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded label-data" style={{ background: 'var(--color-surface-3)', color: 'var(--color-ink-hot)' }}>
-                    † threshold
-                  </span>
-                )}
-                {node.arbitrary && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded label-data bg-[var(--color-surface-3)] text-[var(--color-text-dim)]">
-                    arbitrary
-                  </span>
-                )}
                 {node.artifact && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded label-data bg-[var(--color-surface-3)] text-[var(--color-ink-violet)]">
-                    explorable
-                  </span>
+                  <button
+                    onClick={() => setExplorableNode(selectedNode)}
+                    className="focus-ring self-start px-3 py-1.5 text-xs bg-[var(--color-surface-3)] text-[var(--color-ink-violet)] hover:bg-[var(--color-surface-2)]"
+                  >
+                    Open explorable ↗
+                  </button>
                 )}
-              </div>
 
-              {node.artifact && (
-                <button
-                  onClick={() => setExplorableNode(selectedNode)}
-                  className="focus-ring self-start px-3 py-1.5 rounded-lg text-xs bg-[var(--color-surface-3)] text-[var(--color-ink-violet)] hover:bg-[var(--color-surface-2)]"
-                >
-                  Open explorable ↗
-                </button>
-              )}
-
-              <div className={inkFlashNode === selectedNode ? 'annotation-ink-in' : undefined}>
-                <MathRenderer
-                  className="text-sm text-[var(--color-text-primary)] leading-snug"
-                  text={annotations[selectedNode!]?.latexClaim ?? node.claim}
-                />
-              </div>
-
-              <div className="panel-raised px-2.5 pt-2 pb-1.5 flex flex-col gap-1">
-                <div className="flex items-center justify-between">
-                  <span className="fig-caption">Fig. — decay, R(t)</span>
-                  <span className="label-data text-[10px] text-[var(--color-text-faint)]">
-                    s {node.fsrs.s != null ? `${node.fsrs.s.toFixed(1)}d` : '—'}
-                  </span>
+                <div className={inkFlashNode === selectedNode ? 'annotation-ink-in' : undefined}>
+                  <MathRenderer
+                    className="text-sm text-[var(--color-text-primary)] leading-snug"
+                    text={annotations[selectedNode!]?.latexClaim ?? node.claim}
+                  />
                 </div>
-                <RetentionCurve stabilityDays={node.fsrs.s} width={224} height={84} figure />
-              </div>
 
-              <div className="text-xs text-[var(--color-text-dim)]">
-                <div className="label-data uppercase tracking-wide text-[10px] text-[var(--color-text-faint)] mb-1">Probe</div>
-                <MathRenderer text={node.probe} />
-              </div>
+                <div className="panel-raised px-2.5 pt-2 pb-1.5 flex flex-col gap-1">
+                  <div className="flex items-center justify-between">
+                    <span className="fig-caption">Fig. — decay, R(t)</span>
+                    <span className="label-data text-[10px] text-[var(--color-text-faint)]">
+                      s {node.fsrs.s != null ? `${node.fsrs.s.toFixed(1)}d` : '—'}
+                    </span>
+                  </div>
+                  <RetentionCurve stabilityDays={node.fsrs.s} width={224} height={84} figure />
+                </div>
 
-              {node.rubric.length > 0 && (
                 <div className="text-xs text-[var(--color-text-dim)]">
-                  <div className="label-data uppercase tracking-wide text-[10px] text-[var(--color-text-faint)] mb-1">Rubric</div>
-                  <ul className="list-disc list-inside flex flex-col gap-0.5">
-                    {node.rubric.map((r, i) => (
-                      <li key={i}>
-                        <MathRenderer className="inline" text={r} />
-                      </li>
-                    ))}
-                  </ul>
+                  <div className="label-data uppercase tracking-wide text-[10px] text-[var(--color-text-faint)] mb-1">Probe</div>
+                  <MathRenderer text={node.probe} />
                 </div>
-              )}
 
-              <NodeMisconceptions
-                items={openMisconceptionsFor(selectedTopic, selectedNode)}
-                loaded={misconceptions !== null}
-                error={misconceptionsError}
-                compact
-              />
+                {node.rubric.length > 0 && (
+                  <div className="text-xs text-[var(--color-text-dim)]">
+                    <div className="label-data uppercase tracking-wide text-[10px] text-[var(--color-text-faint)] mb-1">Rubric</div>
+                    <ul className="list-disc list-inside flex flex-col gap-0.5">
+                      {node.rubric.map((r, i) => (
+                        <li key={i}>
+                          <MathRenderer className="inline" text={r} />
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
 
-              <NodeStructure
-                requires={selectedStructure.requires}
-                unlocks={selectedStructure.unlocks}
-                hubRequiresCount={selectedStructure.hubRequiresCount}
-                onSelect={setSelectedNode}
-                compact
-              />
-
-              {provenance === null && <div className="fig-caption">reading provenance…</div>}
-              {provenance !== null && (
-                <ProvenanceBlock
-                  entry={provenance[selectedNode!]}
-                  onOpen={(ev) => openProvenanceEvent(ev, selectedTopic!)}
+                <NodeMisconceptions
+                  items={openMisconceptionsFor(selectedTopic, selectedNode)}
+                  loaded={misconceptions !== null}
+                  error={misconceptionsError}
                   compact
                 />
+
+                <NodeStructure
+                  requires={selectedStructure.requires}
+                  unlocks={selectedStructure.unlocks}
+                  hubRequiresCount={selectedStructure.hubRequiresCount}
+                  onSelect={setSelectedNode}
+                  compact
+                />
+
+                {provenance === null && <div className="fig-caption">reading provenance…</div>}
+                {provenance !== null && (
+                  <ProvenanceBlock
+                    entry={provenance[selectedNode!]}
+                    onOpen={(ev) => openProvenanceEvent(ev, selectedTopic!)}
+                    compact
+                  />
+                )}
+              </div>
+
+              {onGoTopic && (
+                <div className="detail-footer px-4 py-3 shrink-0">
+                  <Button variant="ghost" onClick={() => onGoTopic(selectedTopic!)}>
+                    Continue in Learn
+                  </Button>
+                </div>
               )}
             </div>
           )}

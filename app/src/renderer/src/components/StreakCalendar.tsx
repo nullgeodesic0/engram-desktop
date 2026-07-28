@@ -88,7 +88,7 @@ export function StreakCalendar({ days, onSelectDay }: { days: DayActivity[]; onS
                   }}
                   onMouseLeave={() => setHover(null)}
                   onClick={() => day.count > 0 && onSelectDay?.(day)}
-                  className={`focus-ring no-press w-2.5 h-2.5 rounded-[2px] ${day.count > 0 ? 'cursor-pointer' : 'cursor-default'}`}
+                  className={`focus-ring no-press w-2.5 h-2.5 ${day.count > 0 ? 'cursor-pointer' : 'cursor-default'}`}
                   style={{ background: levelColor(day.count, max) }}
                   aria-label={`${day.date}: ${day.count} reviews`}
                 />

@@ -64,6 +64,22 @@
   --dur-fast: 120ms;
   --dur-base: 200ms;
   --ease-out-soft: cubic-bezier(0.25, 0.8, 0.35, 1);
+
+  /* Guardian geometry, by decree: every corner in the app is a right angle.
+     Zeroing the whole radius scale (plus the deprecated bare `--radius` that
+     backs the un-suffixed `rounded` utility) sharpens all 77 non-full
+     `rounded*` usages app-wide from this one block — no per-callsite edits.
+     `rounded-full` is untouched: it compiles to `calc(infinity*1px)`, not a
+     theme value, so the organic marks (dots, rings, pings) survive free. */
+  --radius: 0px;
+  --radius-xs: 0px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-2xl: 0px;
+  --radius-3xl: 0px;
+  --radius-4xl: 0px;
 }
 
 @layer base {
@@ -82,9 +98,30 @@
     background: var(--color-ink-warm-dim);
     color: var(--color-void);
   }
-  * {
-    scrollbar-width: thin;
-    scrollbar-color: var(--color-surface-3) transparent;
+  /* Chromium 121+ disables `::-webkit-scrollbar` styling entirely once
+     `scrollbar-width` is set on the same element, and falls back to its
+     always-rounded standards-mode thumb — the opposite of the Guardian
+     geometry's square scrollbars. So this app targets the webkit
+     pseudo-elements directly instead of the standards properties: 10px,
+     transparent track, a `--color-surface-3` thumb inset by a 2px
+     transparent border (`background-clip: padding-box` gives the thin,
+     floating look), `--color-ink-warm-dim` on hover. No border-radius rule
+     here — an unstyled Chromium scrollbar thumb is square by default, which
+     is exactly what radii-are-0-by-decree wants. */
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background-color: var(--color-surface-3);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-ink-warm-dim);
   }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
@@ -232,7 +269,7 @@
 
 .annotation-ink-in {
   animation: annotation-ink-in calc(var(--dur-base) * 2) var(--ease-out-soft);
-  border-radius: 6px;
+  border-radius: 0;
 }
 
 /* SessionHistoryDrawer anchored open — a one-shot warm wash on the timeline
@@ -247,7 +284,7 @@
 
 .provenance-highlight {
   animation: provenance-highlight calc(var(--dur-base) * 2) var(--ease-out-soft);
-  border-radius: 6px;
+  border-radius: 0;
 }
 
 /* Chat Instruments Wave B — grade-card <-> probe-card hover linkage. A soft
@@ -278,6 +315,27 @@
  *     cues on rows and cards.
  *   - Focus is always the shared .focus-ring utility below, never a bespoke
  *     hover-only or transition-based focus treatment.
+ *
+ * Guardian geometry additions (the Destiny 1/2 visual grammar):
+ *   - radii-are-0-by-decree: the @theme radius scale above is zeroed app-
+ *     wide, so every `rounded*` utility (and the hand-written literals this
+ *     file used to carry) resolves to a hard right angle. The one exception
+ *     is `rounded-full`, which Tailwind compiles to `calc(infinity*1px)`
+ *     rather than a theme value — it stays untouched on purpose, reserved
+ *     for the app's organic marks (dots, rings, pings, brand glyphs).
+ *   - Frame vocabulary (`.frame-hover` / `.frame-selected`): a hairline
+ *     frame drawn by a `::after` pseudo-element inset outside the element's
+ *     own border (never `outline`, since `.focus-ring` owns that channel —
+ *     a 2px focus outline must always read as stronger than a 1px hover
+ *     frame). HARD RULE: never apply a frame class to an `overflow-hidden`
+ *     host — the inset-negative `::after` gets clipped and silently
+ *     disappears. Give the frame its own unclipped wrapper, or skip it on
+ *     that surface.
+ *   - Dogear vocabulary (`.dogear`): a `::before` border-triangle folding
+ *     the top-right corner, marking "this is the one you're in" (the
+ *     continuing topic, the current probe, the active nav item). Scarce by
+ *     decree — ACTIVE ONLY. A dogear on every card in a list is just
+ *     wallpaper; it only means something because most cards don't have one.
  */
 @layer components {
   /* The sidebar's hero-nocturne wash: indigo deepening downward, with a faint
@@ -314,7 +372,7 @@
   .panel {
     background: color-mix(in srgb, var(--color-surface) 94%, transparent);
     border: 1px solid var(--color-hairline);
-    border-radius: 10px;
+    border-radius: 0;
     box-shadow: inset 0 1px 0 rgba(228, 231, 237, 0.04), 0 8px 20px -12px rgba(0, 0, 0, 0.5);
     transition: border-color var(--dur-base) var(--ease-out-soft), box-shadow var(--dur-base) var(--ease-out-soft);
     backdrop-filter: blur(6px);
@@ -322,7 +380,7 @@
   .panel-raised {
     background: color-mix(in srgb, var(--color-surface-2) 94%, transparent);
     border: 1px solid var(--color-hairline);
-    border-radius: 10px;
+    border-radius: 0;
     box-shadow: inset 0 1px 0 rgba(228, 231, 237, 0.05), 0 8px 20px -12px rgba(0, 0, 0, 0.5);
     transition: border-color var(--dur-base) var(--ease-out-soft), box-shadow var(--dur-base) var(--ease-out-soft);
     backdrop-filter: blur(6px);
@@ -335,7 +393,7 @@
   .panel-plate {
     background: color-mix(in srgb, var(--color-surface) 94%, transparent);
     border: 1px solid var(--color-hairline);
-    border-radius: 10px;
+    border-radius: 0;
     box-shadow: inset 0 0 0 1px var(--color-ink-warm-dim), inset 0 1px 0 rgba(228, 231, 237, 0.04), 0 8px 20px -12px rgba(0, 0, 0, 0.5);
     transition: border-color var(--dur-base) var(--ease-out-soft), box-shadow var(--dur-base) var(--ease-out-soft);
     backdrop-filter: blur(6px);
@@ -364,6 +422,180 @@
     font-family: var(--font-serif);
   }
 
+  /* Guardian vocabulary — the Destiny 1/2 grammar's shared atoms. Every
+     surface in the app draws its section headers, hover/selection frames,
+     "you are here" marks, fractions, and modal-detail chrome from this one
+     set of classes rather than bespoke per-component CSS. */
+
+  /* Extreme-tracked section header: mono, small, uppercase, hairline rules
+     above AND below so it reads as a plate divider rather than a heading.
+     See ui/SectionBanner.tsx. */
+  .section-banner {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding-block: 0.4rem;
+    border-top: 1px solid var(--color-hairline);
+    border-bottom: 1px solid var(--color-hairline);
+    font-family: var(--font-data);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.4em;
+    color: var(--color-text-dim);
+  }
+  .banner-count {
+    font-family: var(--font-data);
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    color: var(--color-text-faint);
+    white-space: nowrap;
+  }
+
+  /* Hover/selection frame — a hairline rectangle drawn OUTSIDE the element's
+     own border via ::after (never `outline`; .focus-ring owns that channel,
+     and a 2px focus outline must always read stronger than this 1px frame).
+     inset: -3px reads as a 2px gap + 1px line floating just off the card.
+     HARD RULE (see the interaction-vocabulary doctrine comment above): never
+     apply these to an overflow-hidden host — the negative inset clips away
+     and the frame silently vanishes. Give the frame its own wrapper instead. */
+  .frame-hover,
+  .frame-selected {
+    position: relative;
+  }
+  .frame-hover::after,
+  .frame-selected::after {
+    content: '';
+    position: absolute;
+    inset: -3px;
+    border: 1px solid transparent;
+    pointer-events: none;
+    transition: border-color var(--dur-fast) ease-out;
+  }
+  .frame-hover:hover::after {
+    border-color: var(--color-ink-warm);
+  }
+  .frame-hover:hover {
+    /* One surface-step lighter, achieved as a translucent surface-3 wash so
+       it reads as "lighter" regardless of which surface tier sits beneath
+       (surface, surface-2, or a panel already at surface-3). */
+    background-color: color-mix(in srgb, var(--color-surface-3) 55%, transparent);
+  }
+  .frame-selected::after {
+    border-color: var(--color-ink-warm);
+  }
+
+  /* Dogear — folded top-right corner marking "this is the one you're in".
+     Border-triangle over clip-path: crisper anti-aliasing, and it never
+     clips the element's own content the way a clip-path corner cut would.
+     ACTIVE ONLY by decree — see the doctrine comment above; scattering this
+     across every card in a list turns it into wallpaper. */
+  .dogear {
+    position: relative;
+  }
+  .dogear::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 0;
+    height: 0;
+    border-top: 9px solid var(--color-ink-warm);
+    border-left: 9px solid transparent;
+    pointer-events: none;
+  }
+
+  /* Corner brackets — ⌐-shaped crop marks at all four corners, drawn as 8
+     hairline background-image layers (two per corner: one horizontal tick,
+     one vertical tick) so there's zero extra DOM and the marks never
+     interfere with the element's own content or padding. Reserved for THREE
+     placements only (map right column, chat transcript region host,
+     Dashboard main pane) — see the per-surface plan, not a default for every
+     panel. */
+  .corner-brackets {
+    position: relative;
+    background-repeat: no-repeat;
+    background-image:
+      linear-gradient(var(--color-ink-warm-dim), var(--color-ink-warm-dim)),
+      linear-gradient(var(--color-ink-warm-dim), var(--color-ink-warm-dim)),
+      linear-gradient(var(--color-ink-warm-dim), var(--color-ink-warm-dim)),
+      linear-gradient(var(--color-ink-warm-dim), var(--color-ink-warm-dim)),
+      linear-gradient(var(--color-ink-warm-dim), var(--color-ink-warm-dim)),
+      linear-gradient(var(--color-ink-warm-dim), var(--color-ink-warm-dim)),
+      linear-gradient(var(--color-ink-warm-dim), var(--color-ink-warm-dim)),
+      linear-gradient(var(--color-ink-warm-dim), var(--color-ink-warm-dim));
+    background-size:
+      12px 1px,
+      1px 12px,
+      12px 1px,
+      1px 12px,
+      12px 1px,
+      1px 12px,
+      12px 1px,
+      1px 12px;
+    background-position:
+      top left,
+      top left,
+      top right,
+      top right,
+      bottom left,
+      bottom left,
+      bottom right,
+      bottom right;
+  }
+
+  /* Stat fraction — bold-primary numerator over a faint denominator, the
+     Destiny "n/m" readout. See ui/StatFraction.tsx; StatBlock also parses
+     `n/m`-shaped values into this markup so existing callers upgrade for
+     free (see StatBlock.tsx). */
+  .stat-fraction {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.15em;
+    font-family: var(--font-data);
+  }
+  .stat-fraction .frac-n {
+    color: var(--color-text-primary);
+    font-weight: 600;
+  }
+  .stat-fraction .frac-slash {
+    color: var(--color-text-faint);
+  }
+  .stat-fraction .frac-d {
+    color: var(--color-text-faint);
+  }
+
+  /* Modal/drawer detail anatomy (T3): an opaque title band (never blurred —
+     it's a solid plate, not a floating glass panel), an italic-serif
+     subtitle in-band, and a hairline-topped footer for actions + kbd hints. */
+  .detail-title-band {
+    background: var(--color-surface-3);
+    border-bottom: 1px solid var(--color-hairline);
+  }
+  .detail-subtitle {
+    font-family: var(--font-serif);
+    font-style: italic;
+    color: var(--color-text-dim);
+  }
+  .detail-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    border-top: 1px solid var(--color-hairline);
+  }
+
+  /* Keyboard hint chip — mono, bordered, small — "esc — close", "↵ save". */
+  .kbd-hint {
+    font-family: var(--font-data);
+    font-size: 10px;
+    letter-spacing: 0.02em;
+    color: var(--color-text-dim);
+    border: 1px solid var(--color-hairline);
+    padding: 0.1em 0.4em;
+    white-space: nowrap;
+  }
+
   /* GrowthScrubber's range input — Night Atlas track/thumb, tokens only.
      Firefox gets the standards track/thumb pseudo-elements; the webkit ones
      are what actually render in this Electron/Chromium shell. */
@@ -376,7 +608,7 @@
   }
   .scrubber-range::-webkit-slider-runnable-track {
     height: 3px;
-    border-radius: 2px;
+    border-radius: 0;
     background: var(--color-hairline);
   }
   .scrubber-range::-webkit-slider-thumb {
@@ -385,7 +617,7 @@
     margin-top: -5.5px;
     width: 14px;
     height: 14px;
-    border-radius: 50%;
+    border-radius: 0;
     background: var(--color-ink-warm);
     border: 1px solid var(--color-void);
     box-shadow: 0 0 0 1px var(--color-ink-warm-dim);
@@ -396,13 +628,13 @@
   }
   .scrubber-range::-moz-range-track {
     height: 3px;
-    border-radius: 2px;
+    border-radius: 0;
     background: var(--color-hairline);
   }
   .scrubber-range::-moz-range-thumb {
     width: 12px;
     height: 12px;
-    border-radius: 50%;
+    border-radius: 0;
     background: var(--color-ink-warm);
     border: 1px solid var(--color-void);
     box-shadow: 0 0 0 1px var(--color-ink-warm-dim);
@@ -410,7 +642,7 @@
   .scrubber-range:focus-visible {
     outline: 2px solid var(--color-ink-warm);
     outline-offset: 3px;
-    border-radius: 4px;
+    border-radius: 0;
   }
 
   /* The transcript reads as a set page, not a chat log — one reading measure,
@@ -488,7 +720,7 @@
    * stylesheet, so the glyph below needs nothing extra to anchor to it. */
   .katex-copy-scope .katex {
     cursor: pointer;
-    border-radius: 4px;
+    border-radius: 0;
     transition: background-color var(--dur-fast) ease-out, box-shadow var(--dur-fast) ease-out;
   }
   .katex-copy-scope .katex:hover {
@@ -600,12 +832,12 @@
     font-size: 0.85em;
     background: var(--color-surface-3);
     padding: 0.1em 0.35em;
-    border-radius: 4px;
+    border-radius: 0;
   }
   :is(.md-preview, .md-prose) pre {
     background: var(--color-surface-3);
     border: 1px solid var(--color-hairline);
-    border-radius: 8px;
+    border-radius: 0;
     padding: 0.6em 0.8em;
     overflow-x: auto;
     margin: 0.5em 0;

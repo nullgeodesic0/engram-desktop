@@ -37,6 +37,29 @@ export function AskDialog({ request, onAnswer }: AskDialogProps) {
       onClose={() => {}}
       title={request.header}
       panelClassName={isConfidence ? 'border-[var(--color-ink-warm-dim)]' : ''}
+      // Footer only appears for the free-text "Other…" sub-view — the
+      // confidence grid and the option list are themselves the actions, so
+      // a footer there would just be an empty hairline. In the free-text
+      // view the Skip/Submit pair moves here, same convention as every
+      // other retrofit Modal (action left, kbd-hint right).
+      footer={
+        showOther ? (
+          <>
+            <div className="flex gap-2">
+              <button onClick={() => onAnswer(null)} className="focus-ring text-xs text-[var(--color-text-faint)] px-3 py-1.5">
+                Skip
+              </button>
+              <button
+                onClick={() => onAnswer(otherText ? [otherText] : null)}
+                className="focus-ring text-xs text-[var(--color-ink-warm)] px-3 py-1.5"
+              >
+                Submit
+              </button>
+            </div>
+            <span className="kbd-hint">↵ submit</span>
+          </>
+        ) : undefined
+      }
     >
       <div className="flex flex-col gap-4">
         <div>
@@ -94,20 +117,6 @@ export function AskDialog({ request, onAnswer }: AskDialogProps) {
               placeholder="Type an answer, or leave blank to skip"
               className="focus-ring panel px-3 py-2 text-sm bg-[var(--color-surface-2)] text-[var(--color-text-primary)]"
             />
-            <div className="flex gap-2 justify-end">
-              <button
-                onClick={() => onAnswer(null)}
-                className="focus-ring text-xs text-[var(--color-text-faint)] px-3 py-1.5"
-              >
-                Skip
-              </button>
-              <button
-                onClick={() => onAnswer(otherText ? [otherText] : null)}
-                className="focus-ring text-xs text-[var(--color-ink-warm)] px-3 py-1.5"
-              >
-                Submit
-              </button>
-            </div>
           </div>
         )}
       </div>

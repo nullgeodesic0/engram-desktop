@@ -14,17 +14,18 @@ export function HelpSheet({ open, onClose }: { open: boolean; onClose: () => voi
       onClose={onClose}
       title="Help"
       wide
-      // An explicit dismiss button, not just decoration: this sheet is
+      // An explicit dismiss control, not just decoration: this sheet is
       // read-only reference material with no other focusable content, so
       // without a real button here the focus trap has nothing to land on
-      // and Escape/scrim-click would be the only way out.
-      headerExtra={
+      // and Escape/scrim-click would be the only way out. Guardian anatomy
+      // moves it from the header into the footer, styled as the kbd-hint
+      // affordance — still a real <button> wired to onClose, not decoration.
+      footer={
         <button
           onClick={onClose}
-          aria-label="Close"
-          className="focus-ring shrink-0 text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] text-lg leading-none"
+          className="focus-ring kbd-hint ml-auto hover:text-[var(--color-text-primary)] hover:border-[var(--color-ink-warm-dim)]"
         >
-          ×
+          esc — close
         </button>
       }
     >
