@@ -3,6 +3,7 @@ import type { ArtifactEntry, NodeProvenance, ProvenanceEvent, TopicListEntry } f
 import { SkeletonCard } from '../components/Skeleton'
 import { ArtifactTile } from '../components/ArtifactTile'
 import { Button } from '../components/ui/Button'
+import { PageHeader } from '../components/ui/PageHeader'
 import { friendlyErrorText } from '../shared/friendlyError'
 import { ExplorableViewer } from '../components/ExplorableViewer'
 import { SessionHistoryDrawer } from '../components/SessionHistoryDrawer'
@@ -119,13 +120,11 @@ export function ArtifactGalleryView({ onGoLearn, onOpenNode }: ArtifactGalleryVi
 
   return (
     <div className="p-8 flex flex-col gap-6 h-full overflow-y-auto">
-      <header className="flex flex-col gap-3">
-        <div>
-          <h1 className="font-[var(--font-display)] text-2xl text-[var(--color-text-primary)]">Artifacts</h1>
-          <p className="text-sm text-[var(--color-text-dim)] mt-1">
-            Interactive explorables the artifact-smith has built for threshold concepts.
-          </p>
-        </div>
+      <div className="flex flex-col gap-3">
+        <PageHeader
+          title="Artifacts"
+          subtitle="Interactive explorables the artifact-smith has built for threshold concepts."
+        />
         {totalCount > 0 && (
           <input
             type="text"
@@ -136,7 +135,7 @@ export function ArtifactGalleryView({ onGoLearn, onOpenNode }: ArtifactGalleryVi
             className="w-full max-w-sm px-3 py-2 text-sm bg-transparent border border-[var(--color-hairline)] rounded-lg text-[var(--color-text-primary)] placeholder:text-[var(--color-text-faint)] focus-ring"
           />
         )}
-      </header>
+      </div>
 
       {error && (() => {
         const fe = friendlyErrorText(error)

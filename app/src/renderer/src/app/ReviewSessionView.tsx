@@ -29,8 +29,8 @@ import { SkeletonBar } from '../components/Skeleton'
 import { SessionCeremony } from '../components/ritual/Bookends'
 import { ScheduleDelta } from '../components/ritual/ScheduleDelta'
 import { SessionHistoryDrawer, exportSittingTranscript, buildHistoryTimeline, type GradeBatch } from '../components/SessionHistoryDrawer'
-import { Button } from '../components/ui/Button'
-import { friendlyErrorText } from '../shared/friendlyError'
+import { PageHeader } from '../components/ui/PageHeader'
+import { ErrorPanel } from '../components/ErrorPanel'
 import { recordConfidence, latestPickFor } from '../shared/calibrationStore'
 import { extractTicketFromMessages } from '../shared/ticketParser'
 import { TicketCard } from '../components/ritual/TicketCard'
@@ -1009,80 +1009,63 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
     // window chrome and the transcript gets the reclaimed height; the gap
     // does the separating.
     <div className="h-full min-h-0 flex flex-col px-8 pt-3 pb-6 gap-3 w-full">
-      <header className="shrink-0 flex items-center justify-between">
-        <div>
-          <h1 className="font-[var(--font-display)] text-2xl text-[var(--color-text-primary)]">Review</h1>
-          <p className="text-sm text-[var(--color-text-dim)] mt-1">{queue.length} due</p>
-        </div>
-        <div className="flex items-center gap-3">
-          {phase === 'in-session' && momentumOn && <FlowChain chain={trailingRecalled(sessionGrades)} />}
-          {phase === 'in-session' && momentumOn && sessionGrades.length > 0 && <InkWell results={sessionGrades} />}
-          {(phase === 'in-session' || phase === 'done') && contextUsage && (
-            <ContextGauge usedTokens={contextUsage.usedTokens} contextWindow={contextUsage.contextWindow} />
-          )}
-          {exportStatus && (
-            <span
-              className={`text-xs truncate max-w-[12rem] ${exportStatus.failed ? 'text-[var(--color-ink-danger)]' : 'text-[var(--color-text-faint)]'}`}
-              title={exportStatus.text}
-            >
-              {exportStatus.text}
-            </span>
-          )}
-          {sessionId && (phase === 'in-session' || phase === 'done') && (
-            <button
-              onClick={() => exportCurrentSitting('md')}
-              disabled={exportingFormat !== null}
-              title="Export this sitting as a Markdown file"
-              className="focus-ring text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] disabled:opacity-50"
-            >
-              {exportingFormat === 'md' ? 'Exporting…' : 'Export .md'}
-            </button>
-          )}
-          {sessionId && (phase === 'in-session' || phase === 'done') && (
-            <button
-              onClick={() => exportCurrentSitting('pdf')}
-              disabled={exportingFormat !== null}
-              title="Export this sitting as a PDF"
-              className="focus-ring text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] disabled:opacity-50"
-            >
-              {exportingFormat === 'pdf' ? 'Exporting…' : 'Export .pdf'}
-            </button>
-          )}
-          {phase !== 'loading' && (
-            <button
-              onClick={() => setHistoryDrawerOpen(true)}
-              className="focus-ring text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]"
-            >
-              History
-            </button>
-          )}
-        </div>
-      </header>
+      <PageHeader
+        className="shrink-0"
+        title="Review"
+        subtitle={`${queue.length} due`}
+        right={
+          <>
+            {phase === 'in-session' && momentumOn && <FlowChain chain={trailingRecalled(sessionGrades)} />}
+            {phase === 'in-session' && momentumOn && sessionGrades.length > 0 && <InkWell results={sessionGrades} />}
+            {(phase === 'in-session' || phase === 'done') && contextUsage && (
+              <ContextGauge usedTokens={contextUsage.usedTokens} contextWindow={contextUsage.contextWindow} />
+            )}
+            {exportStatus && (
+              <span
+                className={`text-xs truncate max-w-[12rem] ${exportStatus.failed ? 'text-[var(--color-ink-danger)]' : 'text-[var(--color-text-faint)]'}`}
+                title={exportStatus.text}
+              >
+                {exportStatus.text}
+              </span>
+            )}
+            {sessionId && (phase === 'in-session' || phase === 'done') && (
+              <button
+                onClick={() => exportCurrentSitting('md')}
+                disabled={exportingFormat !== null}
+                title="Export this sitting as a Markdown file"
+                className="focus-ring text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] disabled:opacity-50"
+              >
+                {exportingFormat === 'md' ? 'Exporting…' : 'Export .md'}
+              </button>
+            )}
+            {sessionId && (phase === 'in-session' || phase === 'done') && (
+              <button
+                onClick={() => exportCurrentSitting('pdf')}
+                disabled={exportingFormat !== null}
+                title="Export this sitting as a PDF"
+                className="focus-ring text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] disabled:opacity-50"
+              >
+                {exportingFormat === 'pdf' ? 'Exporting…' : 'Export .pdf'}
+              </button>
+            )}
+            {phase !== 'loading' && (
+              <button
+                onClick={() => setHistoryDrawerOpen(true)}
+                className="focus-ring text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]"
+              >
+                History
+              </button>
+            )}
+          </>
+        }
+      />
 
       {rateLimit && (
         <div className="shrink-0">
           <RateLimitBanner status={rateLimit.status} resetsAt={rateLimit.resetsAt} onRetry={() => setRateLimit(null)} />
         </div>
       )}
-      {error && (() => {
-        const fe = friendlyErrorText(error)
-        return (
-        <div className="shrink-0 panel border-[var(--color-ink-danger-dim)] px-4 py-3 text-sm text-[var(--color-ink-danger)] flex items-start justify-between gap-3">
-          <div className="flex-1 min-w-0">
-            <div>{fe.headline}</div>
-            {fe.detail && (
-              <details className="mt-1 text-xs text-[var(--color-text-faint)]">
-                <summary className="cursor-pointer">raw error</summary>
-                <div className="mt-1">{fe.detail}</div>
-              </details>
-            )}
-          </div>
-          <Button variant="ghost" onClick={() => setError(null)} aria-label="Dismiss error" className="shrink-0 px-2 py-1">
-            ×
-          </Button>
-        </div>
-        )
-      })()}
+      {error && <ErrorPanel error={error} onDismiss={() => setError(null)} />}
 
       {phase === 'loading' && (
         <div className="panel px-5 py-4 flex flex-col gap-3">

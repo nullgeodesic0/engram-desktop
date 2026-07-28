@@ -12,6 +12,7 @@ import { humanizeNodeId } from '../../../shared/humanizeId'
 import { StatBlock } from '../components/ui/StatBlock'
 import { DendriteDivider } from '../components/ui/DendriteDivider'
 import { Button } from '../components/ui/Button'
+import { PageHeader } from '../components/ui/PageHeader'
 import { allPicks } from '../shared/calibrationStore'
 import { computeWeekDigest } from '../shared/weekDigest'
 import { friendlyErrorText } from '../shared/friendlyError'
@@ -300,14 +301,14 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts, coachHomeSi
 
   return (
     <div className="p-8 flex flex-col gap-8 w-full h-full overflow-y-auto">
-      <header className="flex flex-col gap-3">
-        <h1 className="font-[var(--font-display)] text-2xl text-[var(--color-text-primary)]">Coach</h1>
+      <div className="flex flex-col gap-3">
+        <PageHeader title="Coach" />
         <div className="grid grid-cols-3 gap-3">
           <StatBlock label="Due now" value={String(stats.due_now)} />
           <StatBlock label="Pending grading" value={String(stats.pending_verify)} />
           <StatBlock label="Streak" value={`${stats.streak_days}d`} />
         </div>
-      </header>
+      </div>
 
       <ExperimentBanner experiment={activeExperiment} />
 

@@ -6,7 +6,8 @@ import { humanizeNodeId } from '../../../shared/humanizeId'
 import { ACHIEVEMENTS, type AchievementDef } from '../../../shared/achievements'
 import { AchievementToast } from '../components/AchievementToast'
 import { InkNode } from '../components/ui/InkNode'
-import { HealthRing } from '../components/ui/HealthRing'
+import { TopicCard } from '../components/TopicCard'
+import { topicBucket } from '../shared/topicShelf'
 import { DueForecast } from '../components/DueForecast'
 import { DendriteDivider } from '../components/ui/DendriteDivider'
 import { StatBlock } from '../components/ui/StatBlock'
@@ -94,63 +95,6 @@ function greeting(): string {
   return 'Good evening'
 }
 
-/**
- * A topic's node counts sort it into exactly one of three states — never
- * zero, never two. `notStarted` and `consolidated` are the two extremes
- * (all-new, all-review); `active` is everything between, which includes a
- * topic that is only mid-encoding with no review nodes yet. Written as an
- * if/else-if/else specifically so the three predicates can never overlap
- * or leave a topic uncategorized, which is what let the old single
- * `states.new > 0 || states.learning > 0` filter silently drop an
- * all-review topic in the first place.
- */
-type TopicBucket = 'notStarted' | 'consolidated' | 'active'
-
-function topicBucket(t: TopicListEntry): TopicBucket {
-  if (t.states.review === 0 && t.states.learning === 0) return 'notStarted'
-  if (t.states.new === 0 && t.states.learning === 0) return 'consolidated'
-  return 'active'
-}
-
-/** Only the node states actually present, review-first — so a fully-encoded
- * topic reads as "16 review" instead of a padded "16 review · 0 new", and an
- * actively-encoding one shows its mid-flight `learning` count instead of
- * hiding it (the original card never rendered `states.learning` at all). */
-function topicChips(t: TopicListEntry): { label: string; className: string }[] {
-  const chips: { label: string; className: string }[] = []
-  if (t.states.review > 0) chips.push({ label: `${t.states.review} review`, className: 'text-[var(--color-ink-warm)]' })
-  if (t.states.learning > 0) chips.push({ label: `${t.states.learning} encoding`, className: 'text-[var(--color-ink-cool)]' })
-  if (t.states.new > 0) chips.push({ label: `${t.states.new} new`, className: 'text-[var(--color-ink-cool-dim)]' })
-  return chips
-}
-
-/** One topic tile, shared by all three groups below — same card, different
- * bucket, different chips. */
-function TopicTile({ t, onGoTopic }: { t: TopicListEntry; onGoTopic: (topicId: string) => void }) {
-  return (
-    <button
-      onClick={() => onGoTopic(t.topic)}
-      className="focus-ring panel text-left px-4 py-3 flex flex-col gap-2 hover:bg-[var(--color-surface-2)] hover:border-[var(--color-ink-warm-dim)] transition-colors duration-[var(--dur-base)]"
-    >
-      <div className="flex items-center gap-2 text-sm text-[var(--color-text-primary)]">
-        <InkNode id={t.topic} variant={t.states.review > 0 ? 'filled' : 'outlined'} size={16} />
-        <HealthRing
-          consolidated={t.states.review}
-          total={t.states.new + t.states.learning + t.states.review}
-          due={t.due}
-          size={18}
-        />
-        <span className="line-clamp-1">{t.title}</span>
-      </div>
-      <div className="flex gap-3 text-xs label-data">
-        {topicChips(t).map((c) => (
-          <span key={c.label} className={c.className}>{c.label}</span>
-        ))}
-      </div>
-    </button>
-  )
-}
-
 /** A group of topic tiles under a small subheading — hidden entirely (no
  * heading, no empty grid) when the bucket is empty, same discipline as the
  * rest of Home. */
@@ -174,7 +118,7 @@ function TopicGroup({
       </div>
       <div className="grid grid-cols-3 gap-3">
         {topics.map((t) => (
-          <TopicTile key={t.topic} t={t} onGoTopic={onGoTopic} />
+          <TopicCard key={t.topic} variant="tile" topic={t} onOpen={() => onGoTopic(t.topic)} />
         ))}
       </div>
     </div>

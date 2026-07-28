@@ -9,14 +9,29 @@ const VARIANT: Record<string, string> = {
     'border border-[var(--color-ink-danger-dim)] text-[var(--color-ink-danger)] hover:bg-[var(--color-ink-danger-dim)]/30 bg-transparent',
 }
 
+/** `md` is the original, unchanged geometry (px-3 py-1.5 text-sm) — every
+ * existing call site that doesn't pass `size` renders byte-identical to
+ * before this scale existed. `sm` is for dense inline affordances, `lg` for
+ * full-width hero CTAs (Home's "Clear today's reviews" / Review's "Start")
+ * that used to hand-roll bang-prefixed padding overrides past this component. */
+const SIZE: Record<string, string> = {
+  sm: 'px-2.5 py-1 text-xs',
+  md: 'px-3 py-1.5 text-sm',
+  lg: 'px-6 py-4 text-base',
+}
+
 export function Button({
   variant = 'ghost',
+  size = 'md',
   className = '',
   ...rest
-}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'ghost' | 'danger' }) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: 'primary' | 'ghost' | 'danger'
+  size?: 'sm' | 'md' | 'lg'
+}) {
   return (
     <button
-      className={`focus-ring rounded-lg px-3 py-1.5 text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${VARIANT[variant]} ${className}`}
+      className={`focus-ring rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${SIZE[size]} ${VARIANT[variant]} ${className}`}
       {...rest}
     />
   )

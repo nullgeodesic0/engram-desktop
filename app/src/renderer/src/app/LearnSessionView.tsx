@@ -57,12 +57,12 @@ import { MarkView, type RitualMark } from '../components/ritual/Marks'
 import { ActionChips, type SuggestedAction } from '../components/ritual/ActionChips'
 import { SessionOpenPlate, SessionCeremony } from '../components/ritual/Bookends'
 import { Button } from '../components/ui/Button'
+import { ErrorPanel } from '../components/ErrorPanel'
 import { Card } from '../components/ui/Card'
 import { SkeletonBar } from '../components/Skeleton'
 import { InkNode } from '../components/ui/InkNode'
 import { PinTackIcon } from '../components/ui/PinTackIcon'
-import { HealthRing } from '../components/ui/HealthRing'
-import { friendlyErrorText } from '../shared/friendlyError'
+import { TopicCard } from '../components/TopicCard'
 import { extractTicketFromMessages } from '../shared/ticketParser'
 import { TicketCard } from '../components/ritual/TicketCard'
 import { InkWell } from '../components/ritual/InkWell'
@@ -142,68 +142,7 @@ function looksLikeTopicGraph(v: unknown): v is TopicGraph {
   return typeof nodes === 'object' && nodes !== null
 }
 
-function TopicCard({
-  topic,
-  resumable,
-  onOpen,
-  onSettings,
-  onStartFresh,
-}: {
-  topic: TopicListEntry
-  resumable: boolean
-  onOpen: () => void
-  onSettings: () => void
-  onStartFresh: () => void
-}) {
-  return (
-    <div className="panel px-5 py-4 flex items-center justify-between gap-4 hover:bg-[var(--color-surface-2)] hover:border-[var(--color-ink-warm-dim)] transition-colors duration-[var(--dur-base)]">
-      <HealthRing
-        consolidated={topic.states.review}
-        total={topic.states.new + topic.states.learning + topic.states.review}
-        due={topic.due}
-      />
-      <button onClick={onOpen} className="focus-ring flex-1 min-w-0 text-left flex flex-col gap-1">
-        <div className="text-sm text-[var(--color-text-primary)] flex items-center gap-2">
-          {topic.title}
-          {resumable && (
-            <span className="label-data text-[10px] px-1.5 py-0.5 rounded text-[var(--color-ink-cool)] bg-[var(--color-surface-3)]">
-              continuing
-            </span>
-          )}
-        </div>
-        <div className="text-xs text-[var(--color-text-faint)] line-clamp-1">{topic.goal}</div>
-        <div className="flex gap-3 text-xs label-data mt-1">
-          <span className="text-[var(--color-ink-warm)]">{topic.states.review} review</span>
-          <span className="text-[var(--color-ink-cool)]">{topic.states.new} new</span>
-          {topic.due > 0 && <span className="text-[var(--color-ink-danger)]">{topic.due} due</span>}
-        </div>
-      </button>
-      {resumable && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation()
-            onStartFresh()
-          }}
-          title="Abandon the in-progress session and start this topic over from scratch"
-          aria-label="Start topic over"
-          className="focus-ring shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-[var(--color-text-faint)] hover:text-[var(--color-ink-warm)] hover:bg-[var(--color-surface-3)]"
-        >
-          <span aria-hidden="true">↻</span>
-        </button>
-      )}
-      <button
-        onClick={onSettings}
-        title="Topic settings"
-        aria-label="Topic settings"
-        className="focus-ring shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-3)]"
-      >
-        <span aria-hidden="true">⚙</span>
-      </button>
-    </div>
-  )
-}
-
-/** Matches TopicCard's geometry (panel, HealthRing-sized leading circle, title +
+/** Matches the shared shelf TopicCard's geometry (panel, HealthRing-sized leading circle, title +
  * goal + tag row) so the topic list doesn't jump in height once real data lands. */
 function TopicListSkeleton() {
   return (
@@ -1509,7 +1448,7 @@ export function LearnSessionView({
               )}
             </div>
           ) : (
-            <h1 className="font-[var(--font-display)] text-2xl text-[var(--color-text-primary)]">Learn</h1>
+            <h1 className="font-[var(--font-serif)] text-[length:var(--text-display)] text-[var(--color-text-primary)]">Learn</h1>
           )}
           <div className="flex items-center gap-4">
             {started && momentumOn && <FlowChain chain={trailingRecalled(sessionGrades)} />}
@@ -1622,25 +1561,7 @@ export function LearnSessionView({
           <RateLimitBanner status={rateLimit.status} resetsAt={rateLimit.resetsAt} onRetry={() => setRateLimit(null)} />
         </div>
       )}
-      {error && (() => {
-        const fe = friendlyErrorText(error)
-        return (
-        <div className="shrink-0 panel border-[var(--color-ink-danger-dim)] px-4 py-3 text-sm text-[var(--color-ink-danger)] flex items-start justify-between gap-3">
-          <div className="flex-1 min-w-0">
-            <div>{fe.headline}</div>
-            {fe.detail && (
-              <details className="mt-1 text-xs text-[var(--color-text-faint)]">
-                <summary className="cursor-pointer">raw error</summary>
-                <div className="mt-1">{fe.detail}</div>
-              </details>
-            )}
-          </div>
-          <Button variant="ghost" onClick={() => setError(null)} aria-label="Dismiss error" className="shrink-0 px-2 py-1">
-            ×
-          </Button>
-        </div>
-        )
-      })()}
+      {error && <ErrorPanel error={error} onDismiss={() => setError(null)} />}
 
       {!started && (
         <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-3">
@@ -1659,6 +1580,7 @@ export function LearnSessionView({
           {topics?.map((t) => (
             <TopicCard
               key={t.topic}
+              variant="shelf"
               topic={t}
               resumable={resumableTopics.has(t.topic)}
               onOpen={() => openTopic(t)}
