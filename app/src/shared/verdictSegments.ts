@@ -728,3 +728,67 @@ export function verdictRegionMessageTexts(messages: ChatMessage[], region: Verdi
   }
   return out
 }
+
+// ===========================================================================
+// Rendering (Wave 2) — per-message segment lists, and the region-wide
+// "which message holds the eyebrow" decision
+// ===========================================================================
+
+/** One region-participating message's own render input: its segmented text,
+ * plus (at most once per region — see `verdictRegionMessageRenders`) which
+ * segment index is the VERDICT eyebrow anchor. */
+export interface VerdictMessageRender {
+  /** Index into the `messages` array this render was derived from — NOT an
+   * offset into this region's own message list. */
+  messageIndex: number
+  segments: VerdictSegment[]
+  /** Index into `segments` of the region's own FIRST `prose` segment, iff it
+   * lands in THIS message; `null` on every other message in the region (and
+   * on this one too, if this region carries no prose at all). */
+  eyebrowSegmentIndex: number | null
+}
+
+/** Per-message segments for one region, plus the region-WIDE (never
+ * per-message) decision of which single segment — in which single message —
+ * is "the first prose of the region" and therefore gets the quiet VERDICT
+ * eyebrow rail (`components/ritual/VerdictRows.tsx`'s `VerdictEyebrowRail`).
+ * A verdict commentary regularly spans several messages (this module's own
+ * doctrine comment: >=2 messages in 41/50 sittings), so "first prose" can
+ * land on any one of them — resolving it here, ONCE, off the exact same
+ * per-message segment lists both the live view and transcript replay already
+ * need to render is what keeps two messages from ever both claiming the
+ * eyebrow, or the eyebrow landing in different places live vs. replayed.
+ * `ReviewSessionView.tsx` and `SessionHistoryDrawer.tsx` both call this
+ * verbatim rather than re-deriving the per-message split themselves.
+ *
+ * Mirrors `verdictRegionMessageTexts`'s own loop (rather than calling it and
+ * assuming the returned array's index lines up with `messages`) so a message
+ * this region's range technically spans but that doesn't exist in `messages`
+ * — defensively guarded there, never actually reachable for a `region` this
+ * module itself derived from the same `messages` array — can never desync
+ * `messageIndex` from the text it segments. */
+export function verdictRegionMessageRenders(messages: ChatMessage[], region: VerdictRegion): VerdictMessageRender[] {
+  if (region.endIndex < region.startIndex) return []
+  const out: VerdictMessageRender[] = []
+  for (let i = region.startIndex; i <= region.endIndex; i++) {
+    const message = messages[i]
+    if (!message) continue
+    let text: string
+    if (i === region.endIndex && region.boundaryPrefixOnly) {
+      const split = splitAroundProbeHeader(message.text)
+      text = split ? split.before : message.text
+    } else {
+      text = message.text
+    }
+    out.push({ messageIndex: i, segments: segmentVerdictText(text), eyebrowSegmentIndex: null })
+  }
+  outer: for (const entry of out) {
+    for (let si = 0; si < entry.segments.length; si++) {
+      if (entry.segments[si].kind === 'prose') {
+        entry.eyebrowSegmentIndex = si
+        break outer
+      }
+    }
+  }
+  return out
+}
