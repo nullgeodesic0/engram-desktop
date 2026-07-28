@@ -15,6 +15,17 @@
   --color-surface-2: #1c1e28;
   --color-surface-3: #262937;
   --color-hairline: #262a36;
+  /* Card edge ink — the outline every panel-class card draws. The bare
+     hairline reads at only ~1.3:1 against the void/surface fills — below the
+     visibility floor for a 1px line, so cards read as floating shadows with
+     no drawn boundary. Mixing it halfway toward the sepia text-faint lands at
+     #3d3e3f: ~1.8:1 vs the void, ~1.7:1 vs a panel's own fill — clearly a
+     drawn line, still a full step quieter than faint text (~2.5:1), and the
+     mix pulls the cool hairline toward the paper-ink warmth so the edge
+     belongs to the sepia atlas rather than reading as a neutral gray stroke.
+     Interior dividers (section banners, detail bands, kbd chips) deliberately
+     stay on the plain hairline — outer edge > inner rule keeps hierarchy. */
+  --color-edge: color-mix(in srgb, var(--color-hairline) 50%, var(--color-text-faint));
 
   /* Node-state duality: cool = not yet consolidated, warm = the surviving
      signal (an oscilloscope-phosphor amber, not a generic accent). */
@@ -393,11 +404,49 @@
 @layer components {
   /* The sidebar's hero-nocturne wash: indigo deepening downward, with a faint
      lavender bloom at the top under the brand lockup. The dendrite
-     constellation footer (App.tsx) sits over this at z-0, content at z-10. */
+     constellation footer (App.tsx) sits over this at z-0, content at z-10.
+     TRANSLUCENT since the glass-rail pass: the wash carries alpha (78% at the
+     top easing to 84% at the foot) over a backdrop blur, so the NeuralField
+     ambient reads through the rail as soft luminous weather instead of being
+     walled off — the same glass idiom `.panel`'s 94%-fill + blur(6px) already
+     established, just deeper blur because the field's bright synapse specks
+     sit directly behind this surface at full brilliance. Legibility floor,
+     computed against a deliberately generous "blurred bright cluster" patch
+     behind the rail: at 78% wash the dim nav labels hold ≈4.6:1 and primary/
+     warm text ≥8:1 — the worst case stays comfortably above the 4.5:1 body-
+     text line, and the common case (near-void backdrop) is ~5:1, essentially
+     the old opaque read. The last four background layers are corner-bracket
+     ticks (12px crop marks, top-right + bottom-right only) marking the rail's
+     working edge — lavender-dim, since sidebar structure is brand-ambient by
+     doctrine (warm always means "you are here", never chrome). */
   .sidebar-nocturne {
-    background:
+    background-image:
+      linear-gradient(var(--color-ink-lavender-dim), var(--color-ink-lavender-dim)),
+      linear-gradient(var(--color-ink-lavender-dim), var(--color-ink-lavender-dim)),
+      linear-gradient(var(--color-ink-lavender-dim), var(--color-ink-lavender-dim)),
+      linear-gradient(var(--color-ink-lavender-dim), var(--color-ink-lavender-dim)),
       radial-gradient(140% 50% at 50% 0%, color-mix(in srgb, var(--color-ink-lavender) 6%, transparent), transparent 62%),
-      linear-gradient(to bottom, var(--color-nocturne-hi), var(--color-nocturne-lo));
+      linear-gradient(
+        to bottom,
+        color-mix(in srgb, var(--color-nocturne-hi) 78%, transparent),
+        color-mix(in srgb, var(--color-nocturne-lo) 84%, transparent)
+      );
+    background-repeat: no-repeat;
+    background-size:
+      12px 1px,
+      1px 12px,
+      12px 1px,
+      1px 12px,
+      auto,
+      auto;
+    background-position:
+      top right,
+      top right,
+      bottom right,
+      bottom right,
+      0 0,
+      0 0;
+    backdrop-filter: blur(14px);
   }
   /* Sidebar nav item accent doctrine, tokenized (App.tsx used to carry these
      as raw inline color-mix classes per button — one source now).
@@ -438,7 +487,7 @@
   }
   .panel {
     background: color-mix(in srgb, var(--color-surface) 94%, transparent);
-    border: 1px solid var(--color-hairline);
+    border: 1px solid var(--color-edge);
     border-radius: 0;
     box-shadow: inset 0 1px 0 rgba(228, 231, 237, 0.04), 0 8px 20px -12px rgba(0, 0, 0, 0.5);
     transition: border-color var(--dur-base) var(--ease-out-soft), box-shadow var(--dur-base) var(--ease-out-soft);
@@ -446,7 +495,7 @@
   }
   .panel-raised {
     background: color-mix(in srgb, var(--color-surface-2) 94%, transparent);
-    border: 1px solid var(--color-hairline);
+    border: 1px solid var(--color-edge);
     border-radius: 0;
     box-shadow: inset 0 1px 0 rgba(228, 231, 237, 0.05), 0 8px 20px -12px rgba(0, 0, 0, 0.5);
     transition: border-color var(--dur-base) var(--ease-out-soft), box-shadow var(--dur-base) var(--ease-out-soft);
@@ -459,7 +508,7 @@
      column" the way a beat or probe is — it's the fixed, published answer. */
   .panel-plate {
     background: color-mix(in srgb, var(--color-surface) 94%, transparent);
-    border: 1px solid var(--color-hairline);
+    border: 1px solid var(--color-edge);
     border-radius: 0;
     box-shadow: inset 0 0 0 1px var(--color-ink-warm-dim), inset 0 1px 0 rgba(228, 231, 237, 0.04), 0 8px 20px -12px rgba(0, 0, 0, 0.5);
     transition: border-color var(--dur-base) var(--ease-out-soft), box-shadow var(--dur-base) var(--ease-out-soft);
@@ -487,6 +536,21 @@
   }
   .font-serif-display {
     font-family: var(--font-serif);
+  }
+
+  /* Briefing-figure display — the ONE big serif number a decision-moment
+     surface leads with (the Review ready-room plate's signature, generalized).
+     Always paired with the PlateFigure anatomy (ui/PlateFigure.tsx): figure →
+     title line → optional label-data note, then the caller's own rows,
+     fig-caption, and action row. One size by decree so the surfaces rhyme —
+     a smaller "sub-figure" scale would just be a stat block, which already
+     exists. Tabular numerals so a live count (Home's due figure pulsing up)
+     never reflows its neighbors. */
+  .figure-display {
+    font-family: var(--font-serif);
+    font-size: 3.5rem;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
   }
 
   /* Guardian vocabulary — the Destiny 1/2 grammar's shared atoms. Every

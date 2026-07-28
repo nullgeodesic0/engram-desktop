@@ -3,6 +3,7 @@ import type { DueItem } from '../../../../shared/types'
 import { humanizeNodeId } from '../../../../shared/humanizeId'
 import { InkNode } from '../ui/InkNode'
 import { Button } from '../ui/Button'
+import { PlateFigure } from '../ui/PlateFigure'
 
 /** Matches SKILL.md's own standard-mode cap (~12, most-overdue first) — the
  * "estimated length" line states this heuristic in prose rather than a
@@ -82,22 +83,21 @@ export const ReadyRoomPlate = memo(function ReadyRoomPlate({
           `totalDue` (the true, uncapped debt), never `dueItems.length` — the
           headline must never understate what's actually owed. The sitting
           still only covers a capped subset, most-overdue first; that's
-          explained by the caption below, not by shrinking this figure. */}
-      <div className="flex items-baseline gap-3">
-        <span className="font-[var(--font-serif)] text-[length:3.5rem] leading-none text-[var(--color-ink-warm)]">
-          {totalDue}
-        </span>
-        <div className="flex flex-col gap-0.5 min-w-0">
-          <span className="text-sm text-[var(--color-text-primary)]">
-            due across {topics.length} {topics.length === 1 ? 'topic' : 'topics'}
-          </span>
-          {oldestDays > 0 && (
-            <span className="label-data text-xs text-[var(--color-ink-warm)]">
+          explained by the caption below, not by shrinking this figure.
+          Rendered through the shared PlateFigure anatomy — this plate is the
+          origin of that grammar, and now its first consumer. */}
+      <PlateFigure
+        value={totalDue}
+        tone="warm"
+        title={`due across ${topics.length} ${topics.length === 1 ? 'topic' : 'topics'}`}
+        note={
+          oldestDays > 0 ? (
+            <span className="text-[var(--color-ink-warm)]">
               oldest overdue by {oldestDays} {oldestDays === 1 ? 'day' : 'days'}
             </span>
-          )}
-        </div>
-      </div>
+          ) : undefined
+        }
+      />
 
       {/* Amnesty — folded in as a register shift inside this one document
           rather than a sibling panel (ReviewSessionView used to render this

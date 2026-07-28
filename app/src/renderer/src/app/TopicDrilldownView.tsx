@@ -5,6 +5,7 @@ import { ActivityStrip } from '../components/charts/ActivityStrip'
 import { CalibrationScatter } from '../components/charts/CalibrationScatter'
 import { NodeTable } from '../components/NodeTable'
 import { StatBlock } from '../components/ui/StatBlock'
+import { PlateFigure } from '../components/ui/PlateFigure'
 import { Button } from '../components/ui/Button'
 import { SegmentedControl } from '../components/ui/SegmentedControl'
 import { ArtifactTile } from '../components/ArtifactTile'
@@ -242,11 +243,22 @@ export function TopicDrilldownView({ topic, topicSummary, due, history, graphs, 
             </h1>
             <div className="label-data text-xs text-[var(--color-text-faint)] mt-1">{topic}</div>
           </div>
-          <div className="flex gap-4 text-xs label-data">
-            <span className="text-[var(--color-ink-warm)]">{topicSummary.states.review} review</span>
-            <span className="text-[var(--color-ink-cool)]">{topicSummary.states.new} new</span>
-            {due > 0 && <span className="text-[var(--color-ink-danger)]">{due} due</span>}
-          </div>
+          {/* The topic's key number as the briefing figure (ui/PlateFigure):
+              how much of this territory is held in review — the warm,
+              surviving-signal count — with the cool not-yet count on its
+              title line and the danger due count as the note. Same three
+              numbers the old label-data strip showed, same inks, re-set into
+              the plate grammar. */}
+          <PlateFigure
+            value={topicSummary.states.review}
+            tone="warm"
+            title={
+              <>
+                in review · <span className="text-[var(--color-ink-cool)]">{topicSummary.states.new} new</span>
+              </>
+            }
+            note={due > 0 ? <span className="text-[var(--color-ink-danger)]">{due} due now</span> : undefined}
+          />
         </div>
         {hasActivity && (
           <div className="flex items-center justify-between gap-3 flex-wrap">

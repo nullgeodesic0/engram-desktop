@@ -303,11 +303,14 @@ export default function App() {
       <TitleBar />
       <div className="flex flex-1 min-h-0 relative">
       <aside
-        className={`shrink-0 border-r border-[var(--color-hairline)] sidebar-nocturne flex flex-col transition-[width] duration-[var(--dur-base)] ease-out ${
+        className={`shrink-0 border-r border-[var(--color-edge)] sidebar-nocturne flex flex-col transition-[width] duration-[var(--dur-base)] ease-out ${
           collapsed ? 'w-14' : 'w-48'
         } ${narrow ? 'absolute inset-y-0 left-0 z-20 shadow-[8px_0_24px_rgba(0,0,0,0.4)]' : 'relative'}`}
       >
-        <div className={`relative z-10 flex items-center gap-2.5 px-4 py-5 ${collapsed ? 'justify-center px-0' : ''}`}>
+        {/* Brand lockup — separated from the nav by a full-width hairline
+            (the plain hairline, not the card edge: this is an interior rule
+            on the rail's own surface, same register as a section banner). */}
+        <div className={`relative z-10 flex items-center gap-2.5 px-4 py-5 border-b border-[var(--color-hairline)] mb-2 ${collapsed ? 'justify-center px-0' : ''}`}>
           <NeuronMark size={22} />
           {!collapsed && (
             <div>
