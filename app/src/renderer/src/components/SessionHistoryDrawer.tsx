@@ -365,7 +365,10 @@ export async function fetchAllHistory(): Promise<AllHistoryEntry[]> {
  *     the sitting's real start, never a fabricated date. `kind` is left
  *     unset deliberately: the app never recorded what kind of sitting this
  *     was, and the default rendering (grade cards at their chronological
- *     positions) is the honest one for an unknown.
+ *     positions) is the honest one for an unknown. The entry's `key` IS
+ *     fabricated (from `historyKey` — the type requires one), which is why
+ *     `isReviewSitting` below excludes this row via the `unrecorded` flag
+ *     instead of trusting its `key`.
  *
  * Returns null when neither applies — the transcript is gone or empty — and
  * the caller keeps the "isn't in the app's recorded history" banner plus
@@ -658,7 +661,23 @@ export function SessionHistoryDrawer({
   // reliable structured data, not text parsing) and its grades render as a
   // stack/tally outside the transcript rather than per-message, so it never
   // had this bug to begin with — see LearnSessionView's doctrine comment.
-  const isReviewSitting = selectedEntry?.kind === 'review'
+  //
+  // Review-ness is the ROW's, never the drawer mode's. `kind` is only tagged
+  // on ALL_HISTORY_KEY rows and linked rows resolved through fetchAllHistory;
+  // the plain review-key list (`historyKey === 'review'`) hands over raw
+  // index entries, whose recorded `key` IS 'review' (recordSession files them
+  // under exactly that key), so either recorded field attests the same fact —
+  // checking `kind` alone left every row of the review-key drawer on the
+  // default rendering, i.e. the same sitting rendered differently there than
+  // in "everything" mode. Deriving from the row (never from `historyKey`)
+  // keeps one sitting rendering identically through every door it can be
+  // opened from. The one `key` that attests nothing is the unrecorded linked
+  // sitting's — resolveLinkedSitting fabricates it from `historyKey` (case 2
+  // of its doc) — so that row is excluded, staying on the default rendering
+  // its doctrine promises for an unknown, in review mode and everywhere else
+  // alike.
+  const isUnrecordedLinked = linkedSitting?.unrecorded === true && linkedSitting.entry.sessionId === selectedId
+  const isReviewSitting = !isUnrecordedLinked && (selectedEntry?.kind === 'review' || selectedEntry?.key === 'review')
   const reviewCrossings = useMemo(
     () => (isReviewSitting && timeline ? deriveReviewCrossings(timeline.messages) : []),
     [isReviewSitting, timeline],
