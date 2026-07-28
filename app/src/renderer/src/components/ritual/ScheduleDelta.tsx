@@ -64,7 +64,7 @@ export function ScheduleDelta({
     const allLapsed = results.length > 0 && results.every((r) => r.grade === 'lapsed')
     if (!allLapsed) return null
     return (
-      <div className="panel-raised p-4 max-w-md">
+      <div className="tilt-card panel-raised p-4 max-w-md">
         <div className="fig-caption">Fig. — every node in this sitting lapsed; no schedule moved forward.</div>
       </div>
     )
@@ -75,7 +75,7 @@ export function ScheduleDelta({
   const crossed = rows.filter((r) => r.before <= CROSSED_THRESHOLD_DAYS && r.after > CROSSED_THRESHOLD_DAYS).length
 
   return (
-    <div className="panel-raised p-4 max-w-md flex flex-col gap-1.5">
+    <div className="tilt-card panel-raised p-4 max-w-md flex flex-col gap-1.5">
       <div className="flex flex-col gap-1">
         {/* Index-suffixed for the same reason as StabilityMovement: one node
             can be graded more than once in a single sitting. */}

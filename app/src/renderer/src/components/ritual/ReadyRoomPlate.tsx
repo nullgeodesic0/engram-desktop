@@ -77,7 +77,7 @@ export const ReadyRoomPlate = memo(function ReadyRoomPlate({
   const topics = [...topicGroups.entries()].sort((a, b) => b[1].length - a[1].length)
 
   return (
-    <div className="panel px-6 py-6 flex flex-col gap-4">
+    <div className="tilt-card panel px-6 py-6 flex flex-col gap-4">
       {/* ONE count, said once, big — the plate's signature. Deliberately
           `totalDue` (the true, uncapped debt), never `dueItems.length` — the
           headline must never understate what's actually owed. The sitting

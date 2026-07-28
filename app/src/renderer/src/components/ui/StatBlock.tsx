@@ -37,7 +37,7 @@ export function StatBlock({
 }) {
   const fraction = FRACTION_RE.exec(value)
   return (
-    <div className={`panel ${compact ? 'p-2 min-w-0' : 'p-3'}`}>
+    <div className={`tilt-card panel ${compact ? 'p-2 min-w-0' : 'p-3'}`}>
       <div
         className={`text-[var(--color-text-dim)] label-data uppercase truncate ${
           compact ? 'text-[9px] tracking-wide' : 'text-[length:var(--text-caption)] tracking-wider'

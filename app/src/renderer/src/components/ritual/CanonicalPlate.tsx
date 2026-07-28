@@ -20,7 +20,7 @@ import { MathRenderer } from '../MathRenderer'
  * reveal, never truncated. */
 export const CanonicalPlate = memo(function CanonicalPlate({ segment }: { segment: CanonicalSegment }) {
   return (
-    <div className="panel-plate px-5 py-4 flex flex-col gap-2.5">
+    <div className="tilt-card panel-plate px-5 py-4 flex flex-col gap-2.5">
       <span className="label-data text-[10px] tracking-[0.22em] uppercase text-[var(--color-ink-warm)]">
         {segment.marker}
       </span>

@@ -57,7 +57,7 @@ export function ArtifactTile({
 
   return (
     <div
-      className={`panel flex flex-col gap-2 px-4 py-3 transition-colors duration-[var(--dur-base)] ${
+      className={`tilt-card panel flex flex-col gap-2 px-4 py-3 transition-colors duration-[var(--dur-base)] ${
         a.exists ? 'hover:bg-[var(--color-surface-2)] hover:border-[var(--color-ink-warm-dim)]' : 'opacity-40'
       }`}
     >

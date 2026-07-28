@@ -11,6 +11,7 @@ import { SkeletonBar, SkeletonGrid } from './components/Skeleton'
 import { HelpSheet } from './components/HelpSheet'
 import { NeuronMark } from './components/BrandMark'
 import { DendriteConstellation } from './components/ui/DendriteConstellation'
+import { useCardPhysics } from './components/useCardPhysics'
 
 // Code-split: both views unmount on tab switch already (they're not inside
 // KeepMounted — see the comment on `main` below), so there's no "resolve once,
@@ -290,8 +291,14 @@ export default function App() {
 
   const collapsed = narrow && !pinnedOpen
 
+  // Card physics — ONE container wires the whole app: every `.tilt-card`
+  // anywhere in this subtree (present or future, including inside modals'
+  // children and KeepMounted views) is discovered and driven by the shared
+  // manager. Delegated listeners + one rAF loop; no per-card wiring anywhere.
+  const cardPhysicsRef = useCardPhysics()
+
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full" ref={cardPhysicsRef}>
       <TitleBar />
       <div className="flex flex-1 min-h-0 relative">
       <aside
