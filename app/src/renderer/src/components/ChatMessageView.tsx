@@ -1,11 +1,14 @@
 import { Fragment, memo, useMemo, type ReactNode } from 'react'
 import type { ChatMessage } from '../../../shared/chatMessages'
 import { parseBeatSegments } from '../../../shared/beatLabelParser'
+import type { VerdictSegment, ScheduleSegment } from '../../../shared/verdictSegments'
 import { BeatCard, PlainDialogueBlock } from './BeatCard'
 import { ProseMarkdown } from './ProseMarkdown'
 import { InkNode } from './ui/InkNode'
 import { splitAroundProbeHeader } from '../../../shared/probeHeader'
 import { ProbeCard } from './ritual/ProbeCard'
+import { CanonicalPlate } from './ritual/CanonicalPlate'
+import { VerdictEyebrowRail, RatingEchoRow, ScheduleEchoRow, ConfidenceEchoRow } from './ritual/VerdictRows'
 
 export function fileName(path: string): string {
   return path.split('/').pop() ?? path
@@ -35,6 +38,36 @@ interface ChatMessageViewProps {
    * render simply omits the prop). Ignored on user messages (the caret is a
    * "the tutor is composing" signal, never shown on the learner's own turn). */
   trailingCaret?: boolean
+  /** Verdict Anatomy (Wave 2) — when present, this message's assistant text
+   * is entirely owned by a `deriveVerdictRegions` region: `parseBeatSegments`
+   * is skipped (Review never emits beat labels, so this can never collide
+   * with Learn's rendering) and this pre-segmented list renders instead, via
+   * `segmentVerdictText` on the region's own clip of this message's text
+   * (`shared/verdictSegments.ts`'s `verdictRegionMessageRenders` — the ONE
+   * place live and replay both compute it, so they can never disagree).
+   * `undefined` (the default, and Learn's/Coach's only state) renders
+   * byte-identically to before this wave. May legitimately be `[]` (not
+   * `undefined`) for a boundary message whose entire text IS its own probe
+   * header, with nothing before it to segment — the probe-header flow below
+   * still renders correctly in that case (see `verdictRegionMessageTexts`'s
+   * `boundaryPrefixOnly` clip). */
+  verdictSegments?: VerdictSegment[]
+  /** The index into `verdictSegments` of the region's own FIRST `prose`
+   * segment — "first prose of the region" is a region-wide fact that lands
+   * on exactly one message across a (usually multi-message) span, so the
+   * caller resolves it once and threads it here; every other message in the
+   * same region gets `undefined`/`null`, and every later `prose` segment in
+   * THIS message (if `verdictSegments` holds more than one) stays
+   * unornamented too — only this one index ever gets the VERDICT eyebrow. */
+  verdictEyebrowIndex?: number | null
+  /** THE shared dedupe predicate (`shouldSuppressSchedule`,
+   * `shared/verdictSegments.ts`), pre-bound by the caller to this segment's
+   * own region/batch/anchor-date/streaming-tail context — ChatMessageView
+   * itself never reaches into grade batches or dates, it just asks "does
+   * this one segment stay suppressed." A suppressed schedule segment renders
+   * nothing at all (not even a placeholder); see the empty-bubble guard
+   * below for what happens when THAT was the message's only content. */
+  suppressSchedule?: (segment: ScheduleSegment) => boolean
 }
 
 /** One turn, rendered like a normal chat exchange — a right-aligned bubble for
@@ -50,10 +83,13 @@ export const ChatMessageView = memo(function ChatMessageView({
   onEditResend,
   beforeProbeHeader,
   trailingCaret,
+  verdictSegments,
+  verdictEyebrowIndex,
+  suppressSchedule,
 }: ChatMessageViewProps) {
   const segments = useMemo(
-    () => (message.role === 'user' ? [] : parseBeatSegments(message.text)),
-    [message.role, message.text],
+    () => (message.role === 'user' || verdictSegments !== undefined ? [] : parseBeatSegments(message.text)),
+    [message.role, message.text, verdictSegments],
   )
 
   if (message.role === 'user') {
@@ -91,6 +127,83 @@ export const ChatMessageView = memo(function ChatMessageView({
       </div>
     )
   }
+
+  if (verdictSegments !== undefined) {
+    // Verdict Anatomy (Wave 2) — see the prop doctrine comments above. The
+    // probe-header flow is UNTOUCHED: `verdictSegments` already covers only
+    // the region's own clip of this message's text (never the header, which
+    // `verdictRegionMessageTexts`'s `boundaryPrefixOnly` split excludes at
+    // the source — see shared/verdictSegments.ts), so this message's own
+    // header is located directly off `message.text`, exactly the same
+    // `splitAroundProbeHeader` call the non-verdict path below makes off
+    // `seg.text` (which, for a beat-less /review message, IS `message.text`
+    // — `parseBeatSegments` returns a single `{ text: message.text }`
+    // segment when no beat label is present, so this is the same lookup,
+    // never a different one).
+    const probe = splitAroundProbeHeader(message.text)
+    const renderedSegments = verdictSegments.map((seg, i) => {
+      // Same caret discipline as the non-verdict path below: never on any
+      // segment when this message ends in a probe header (the header line
+      // is what "still growing" would apply to, not the verdict prose
+      // before it — and a message that already resolved its next probe
+      // isn't the live tail anyway), otherwise only the truly last segment.
+      const isLastSegment = i === verdictSegments.length - 1 && !probe
+      const caret = isLastSegment && trailingCaret
+      if (seg.kind === 'canonical') return <CanonicalPlate key={i} segment={seg} />
+      if (seg.kind === 'rating') return <RatingEchoRow key={i} segment={seg} />
+      if (seg.kind === 'confidence') return <ConfidenceEchoRow key={i} segment={seg} />
+      if (seg.kind === 'schedule') {
+        // A suppressed schedule paragraph renders NOTHING — the dedupe rule
+        // (shouldSuppressSchedule) already established the same fact is
+        // stated structurally by this region's own GradeResultCard; see the
+        // empty-bubble guard below for what happens when that was this
+        // message's only content.
+        if (suppressSchedule?.(seg)) return null
+        return <ScheduleEchoRow key={i} segment={seg} />
+      }
+      // prose — the region's own first prose segment (at most one message,
+      // at most one segment index, across the whole region) gets the quiet
+      // VERDICT eyebrow immediately above it; every other prose segment
+      // (including later ones in THIS message) renders completely
+      // unornamented, same PlainDialogueBlock either way.
+      if (i === verdictEyebrowIndex) {
+        return (
+          <Fragment key={i}>
+            <VerdictEyebrowRail />
+            <PlainDialogueBlock text={seg.raw} trailingCaret={caret} />
+          </Fragment>
+        )
+      }
+      return <PlainDialogueBlock key={i} text={seg.raw} trailingCaret={caret} />
+    })
+    // Empty-bubble guard — a message whose every segment is a suppressed
+    // schedule paragraph (real corpus shape: a region-spanning message
+    // whose ENTIRE text is one bare "Back in N days." paragraph, already
+    // stated by the region's own GradeResultCard) has nothing left to show.
+    // Never true when this message carries its own probe header (`probe`)
+    // or the caller resolved other marks/crossings to render here
+    // (`beforeProbeHeader`) — both always render something regardless of
+    // `verdictSegments`.
+    const hasVisibleContent = renderedSegments.some((node) => node !== null)
+    if (!hasVisibleContent && !probe && !beforeProbeHeader) return null
+    return (
+      <div className="flex items-start gap-2 max-w-[97%]">
+        <div className="mt-1 shrink-0">
+          <InkNode id="voice-tutor" variant="filled" size={12} />
+        </div>
+        <div className="flex flex-col gap-3 flex-1 min-w-0">
+          {renderedSegments}
+          {probe && (
+            <Fragment>
+              {beforeProbeHeader}
+              <ProbeCard header={probe.header} />
+            </Fragment>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex items-start gap-2 max-w-[97%]">
       <div className="mt-1 shrink-0">

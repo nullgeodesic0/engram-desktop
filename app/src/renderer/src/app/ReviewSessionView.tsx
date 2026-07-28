@@ -52,6 +52,13 @@ import {
 import { QueueRail } from '../components/ritual/QueueRail'
 import { NodeCrossingDivider } from '../components/ritual/Marks'
 import { deriveReviewCrossings, latestProbeHeader, nextProbeHeaderAt } from '../../../shared/reviewCrossing'
+import {
+  deriveVerdictRegions,
+  verdictRegionMessageRenders,
+  shouldSuppressSchedule,
+  type VerdictSegment,
+  type ScheduleSegment,
+} from '../../../shared/verdictSegments'
 
 type Phase = 'loading' | 'empty' | 'ready' | 'in-session' | 'done' | 'closed-unexpectedly'
 
@@ -823,6 +830,72 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
         .map((m) => ({ mark: m, resolvedIndex: nextProbeHeaderAt(messages, m.atIndex) })),
     [marks, messages],
   )
+  /** Verdict Anatomy (Wave 2) — the message-index range each grade batch's
+   * own verdict commentary occupies (shared/verdictSegments.ts's doctrine
+   * comment has the full boundary-algorithm rationale). `gradeBatches`
+   * (GradeBatch[], imported from SessionHistoryDrawer.tsx) is structurally a
+   * superset of the `VerdictRegionBatch{id,atIndex}` shape this expects —
+   * the same "assignable as-is, never a renderer import into shared/"
+   * convention `deriveVerdictRegions`'s own doctrine comment documents.
+   * Recomputed from `messages`/`gradeBatches` on every change, same "never
+   * baked in at tool_result time" discipline `resolvedGradeBatches` above
+   * already follows. */
+  const verdictRegions = useMemo(() => deriveVerdictRegions(messages, gradeBatches), [messages, gradeBatches])
+  /** Per-message render input (this message's own segmented text, plus
+   * which single segment — across the WHOLE region, never per-message — is
+   * the VERDICT eyebrow anchor), keyed by message index for O(1) lookup
+   * while rendering the transcript below, alongside which batch each
+   * region's messages belong to (needed for `shouldSuppressSchedule`'s own
+   * `batchResults` argument). `verdictRegionMessageRenders` is the SAME
+   * derivation SessionHistoryDrawer's replay wiring calls, so a resumed or
+   * later-reopened sitting can never disagree with what rendered live. */
+  const verdictRenderByMessage = useMemo(() => {
+    const map = new Map<number, { segments: VerdictSegment[]; eyebrowIndex: number | null; batchId: string }>()
+    for (const region of verdictRegions) {
+      for (const render of verdictRegionMessageRenders(messages, region)) {
+        map.set(render.messageIndex, { segments: render.segments, eyebrowIndex: render.eyebrowSegmentIndex, batchId: region.batchId })
+      }
+    }
+    return map
+  }, [verdictRegions, messages])
+  const gradeBatchById = useMemo(() => new Map(gradeBatches.map((b) => [b.id, b] as const)), [gradeBatches])
+  /** Review's LIVE view always anchors `shouldSuppressSchedule`'s date check
+   * to TODAY's local calendar date (getFullYear/Month/Date — never
+   * `toISOString`, same discipline `daysOverdueLocal` above already uses),
+   * never a batch's own `date` field — freshly-graded batches never set one
+   * (see the `setGradeBatches` call in the `tool_result` handler above,
+   * `date: null` always) and a RESUMED sitting's earlier batches carry a
+   * historical one from `buildHistoryTimeline`, but this view is still being
+   * looked at live, today. Same "now is correct for the live push" split
+   * `shared/gradeResult.ts`'s `lapseReturnDate` doctrine comment establishes
+   * elsewhere in this codebase; SessionHistoryDrawer's replay wiring is the
+   * one that anchors to each batch's own recorded date instead. Computed
+   * once per mount rather than on every render — a live session spanning
+   * local midnight mid-sitting is a real but vanishingly rare edge case, not
+   * worth re-deriving on every keystroke for. */
+  const todayLocal = useMemo(() => {
+    const now = new Date()
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  }, [])
+  /** This message's own Verdict Anatomy render props, or `undefined` for
+   * the common case of a message no region claims (byte-identical current
+   * behavior — see ChatMessageView's own prop doctrine comment). The
+   * streaming-tail flag mirrors `trailingCaret`'s own condition below
+   * (`busy && i === messages.length - 1`) — a still-growing message's last
+   * paragraph hasn't finished, so `shouldSuppressSchedule` must never
+   * suppress it out from under the reader mid-stream. */
+  function verdictPropsForMessage(i: number) {
+    const entry = verdictRenderByMessage.get(i)
+    if (!entry) return undefined
+    const batch = gradeBatchById.get(entry.batchId)
+    const isLiveStreamingTail = busy && i === messages.length - 1
+    return {
+      segments: entry.segments,
+      eyebrowIndex: entry.eyebrowIndex,
+      suppressSchedule: (seg: ScheduleSegment) =>
+        batch ? shouldSuppressSchedule(seg, batch.results, todayLocal, isLiveStreamingTail) : false,
+    }
+  }
   function renderGradeBatch(b: GradeBatch) {
     return b.results.map((r, ri) => (
       <GradeResultCard
@@ -1124,7 +1197,13 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
                   .map((k) => (
                     <MarkView key={k.id} mark={k} onAnswerAsk={answerAsk} suppressBeatExcerpt={messages[k.atIndex]?.role === 'assistant'} />
                   ))}
-                {messages.map((m, i) => (
+                {messages.map((m, i) => {
+                  // Verdict Anatomy (Wave 2) — undefined for the common case
+                  // of a message no region claims, which renders byte-
+                  // identically to before this wave (see ChatMessageView's
+                  // own prop doctrine comment).
+                  const verdictProps = verdictPropsForMessage(i)
+                  return (
                   <Fragment key={m.id}>
                     <ChatMessageView
                       message={m}
@@ -1140,6 +1219,9 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
                       // very last message, only while it's the live growing
                       // assistant bubble.
                       trailingCaret={busy && i === messages.length - 1 && m.role === 'assistant' && tutorActivity.activity.kind === 'streaming'}
+                      verdictSegments={verdictProps?.segments}
+                      verdictEyebrowIndex={verdictProps?.eyebrowIndex}
+                      suppressSchedule={verdictProps?.suppressSchedule}
                     />
                     {marks
                       .filter(
@@ -1152,7 +1234,8 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
                         <MarkView key={k.id} mark={k} onAnswerAsk={answerAsk} suppressBeatExcerpt={messages[k.atIndex]?.role === 'assistant'} />
                       ))}
                   </Fragment>
-                ))}
+                  )
+                })}
                 {/* Grade batches, and the re-anchored lapse/milestone marks,
                     whose next probe header never arrived — the tail case
                     (the sitting's last graded item, or a session that closed

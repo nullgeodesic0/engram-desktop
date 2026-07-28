@@ -5,7 +5,13 @@ import { InkNode } from './ui/InkNode'
 import { IntervalLadder } from './IntervalLadder'
 import { warmTone } from '../shared/soundscape'
 
-const GRADE_STYLE: Record<GradeResult['grade'], { label: string; color: string; bg: string }> = {
+/** Exported for Verdict Anatomy's `RatingEchoRow` (components/ritual/
+ * VerdictRows.tsx) — the single source of the grade-badge color/label
+ * treatment, so a verdict's echoed `Rating **good**` line reuses the exact
+ * same visual language as the real GradeResultCard rendered elsewhere in
+ * the same region, rather than inventing a second palette for the same
+ * concept. */
+export const GRADE_STYLE: Record<GradeResult['grade'], { label: string; color: string; bg: string }> = {
   recalled: { label: 'Recalled', color: 'var(--color-ink-warm)', bg: 'var(--color-ink-warm-dim)' },
   partial: { label: 'Partial', color: 'var(--color-ink-cool)', bg: 'var(--color-ink-cool-dim)' },
   lapsed: { label: 'Lapsed', color: 'var(--color-ink-danger)', bg: 'var(--color-ink-danger-dim)' },

@@ -19,8 +19,13 @@ export interface GradeResult {
   daysSinceEncode: number | null
 }
 
-// Literal port of engram.py's GRADE_OF_RATING table.
-const GRADE_OF_RATING: Record<string, GradeResult['grade']> = {
+// Literal port of engram.py's GRADE_OF_RATING table. Exported for Verdict
+// Anatomy's `RatingEchoRow` (components/ritual/VerdictRows.tsx), which needs
+// to resolve a verdict's own echoed `rating` word to the same `grade` key
+// GradeResultCard's exported `GRADE_STYLE` is keyed by — reusing this table
+// rather than a second local copy keeps both readings of "which grade does
+// this rating mean" from ever drifting apart.
+export const GRADE_OF_RATING: Record<string, GradeResult['grade']> = {
   again: 'lapsed',
   hard: 'partial',
   good: 'recalled',

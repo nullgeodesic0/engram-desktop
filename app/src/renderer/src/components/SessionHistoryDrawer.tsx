@@ -4,6 +4,13 @@ import type { ChatMessage } from '../../../shared/chatMessages'
 import { parseGradeResult, parseGradeResults, type GradeResult } from '../../../shared/gradeResult'
 import { deriveRitualMarks, type DerivedRitualMark } from '../../../shared/ritualFromTranscript'
 import { deriveReviewCrossings, nextProbeHeaderAt } from '../../../shared/reviewCrossing'
+import {
+  deriveVerdictRegions,
+  verdictRegionMessageRenders,
+  shouldSuppressSchedule,
+  type VerdictSegment,
+  type ScheduleSegment,
+} from '../../../shared/verdictSegments'
 import { isTaskNotificationContent } from '../../../shared/taskNotification'
 import { isMarkBoundaryToolUse } from '../../../shared/signals/tutorSignals'
 import { sittingToMarkdown, sittingToPrintHtml, type SittingMeta } from '../shared/sittingToMarkdown'
@@ -34,6 +41,20 @@ function localDateFromIso(ts: string | undefined): string | null {
   const d = new Date(ts)
   if (Number.isNaN(d.getTime())) return null
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/** The inverse of `localDateFromIso` above — GradeBatch.date's own
+ * 'YYYY-MM-DD' shape parsed back into a local-midnight Date, same local-date
+ * discipline as `lapseReturnDate` (shared/gradeResult.ts). `null` on
+ * anything that doesn't match — never a fabricated fallback to wall-clock
+ * "now". Feeds Verdict Anatomy's replay wiring below (`shouldSuppressSchedule`'s
+ * `anchorDate` argument) — a reopened sitting must anchor its dedupe check to
+ * the date the sitting actually happened on, never to today. */
+function isoLocalDateToAnchor(iso: string | null): Date | null {
+  if (!iso) return null
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso)
+  if (!m) return null
+  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
 }
 
 export interface GradeBatch {
@@ -551,6 +572,52 @@ export function SessionHistoryDrawer({
       .filter((m) => m.kind === 'lapse' || m.kind === 'milestone')
       .map((m) => ({ mark: m, resolvedIndex: nextProbeHeaderAt(timeline.messages, m.atIndex) }))
   }, [timeline, isReviewSitting])
+  /** Verdict Anatomy (Wave 2), replay — review sittings only, the same gate
+   * `reviewCrossings`/`resolvedGrades`/`resolvedOtherMarks` above use: a
+   * Learn transcript never carries a verdict region to begin with (its
+   * grades render as a stack/tally outside the transcript, not per-message
+   * — see the `isReviewSitting` doctrine comment above), so this is always
+   * `[]` for any other `kind`. `timeline.grades` (GradeBatch[]) is
+   * structurally a superset of the `VerdictRegionBatch{id,atIndex}` shape
+   * `deriveVerdictRegions` expects — same convention its own doctrine
+   * comment documents. */
+  const verdictRegions = useMemo(
+    () => (isReviewSitting && timeline ? deriveVerdictRegions(timeline.messages, timeline.grades) : []),
+    [isReviewSitting, timeline],
+  )
+  /** Per-message render input, keyed by message index — the SAME
+   * derivation (`verdictRegionMessageRenders`) ReviewSessionView's live
+   * wiring calls, so a reopened sitting can never disagree with how it
+   * rendered live (or with a different open of this same drawer). */
+  const verdictRenderByMessage = useMemo(() => {
+    const map = new Map<number, { segments: VerdictSegment[]; eyebrowIndex: number | null; batchId: string }>()
+    if (!timeline) return map
+    for (const region of verdictRegions) {
+      for (const render of verdictRegionMessageRenders(timeline.messages, region)) {
+        map.set(render.messageIndex, { segments: render.segments, eyebrowIndex: render.eyebrowSegmentIndex, batchId: region.batchId })
+      }
+    }
+    return map
+  }, [verdictRegions, timeline])
+  const gradeBatchById = useMemo(() => new Map((timeline?.grades ?? []).map((b) => [b.id, b] as const)), [timeline])
+  /** This message's own Verdict Anatomy render props, or `undefined` for a
+   * message no region claims (byte-identical current behavior — see
+   * ChatMessageView's own prop doctrine comment). Anchored to the batch's
+   * OWN recorded `date` (never wall-clock "now" — a replayed sitting from
+   * months ago must never fabricate a today-relative date; see
+   * `isoLocalDateToAnchor` above), and `isLiveStreamingTail` is always
+   * `false` — a replayed transcript is never still growing. */
+  function verdictPropsForMessage(i: number) {
+    const entry = verdictRenderByMessage.get(i)
+    if (!entry) return undefined
+    const batch = gradeBatchById.get(entry.batchId)
+    const anchorDate = isoLocalDateToAnchor(batch?.date ?? null)
+    return {
+      segments: entry.segments,
+      eyebrowIndex: entry.eyebrowIndex,
+      suppressSchedule: (seg: ScheduleSegment) => (batch ? shouldSuppressSchedule(seg, batch.results, anchorDate, false) : false),
+    }
+  }
   function renderGradeBatch(g: GradeBatch) {
     return g.results.map((r, j) => (
       <div key={`${g.id}-${j}`} className="contents" data-anchor-index={g.sourceIndex}>
@@ -647,7 +714,13 @@ export function SessionHistoryDrawer({
                   .map((k) => (
                     <MarkView key={k.id} mark={k} suppressBeatExcerpt={timeline.messages[k.atIndex]?.role === 'assistant'} />
                   ))}
-                {timeline.messages.map((m, i) => (
+                {timeline.messages.map((m, i) => {
+                  // Verdict Anatomy (Wave 2), replay — undefined for the
+                  // common case of a message no region claims (or any Learn
+                  // sitting, always), which renders byte-identically to
+                  // before this wave.
+                  const verdictProps = verdictPropsForMessage(i)
+                  return (
                   <div key={m.id} className="contents">
                     <div className="contents" data-anchor-index={timeline.messageSourceIndex[i]}>
                       <ChatMessageView
@@ -677,6 +750,9 @@ export function SessionHistoryDrawer({
                             </>
                           ) : undefined
                         }
+                        verdictSegments={verdictProps?.segments}
+                        verdictEyebrowIndex={verdictProps?.eyebrowIndex}
+                        suppressSchedule={verdictProps?.suppressSchedule}
                       />
                     </div>
                     {!isReviewSitting &&
@@ -699,7 +775,8 @@ export function SessionHistoryDrawer({
                         <MarkView key={k.id} mark={k} suppressBeatExcerpt={timeline.messages[k.atIndex]?.role === 'assistant'} />
                       ))}
                   </div>
-                ))}
+                  )
+                })}
                 {/* Review only: grade batches, and the re-anchored lapse/
                     milestone marks, whose next probe header never arrived —
                     the sitting's last graded item, or one that closed before
