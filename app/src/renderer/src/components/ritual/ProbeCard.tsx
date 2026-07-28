@@ -61,6 +61,16 @@ export const ProbeCard = memo(function ProbeCard({
             threshold
           </span>
         )}
+        {/* Addition C (chat refine round) — a faint mono whisper of how
+            overdue this item is, straight off the tutor's own header line
+            (see ProbeHeader.daysOverdue's doctrine comment) — never a new
+            fetch, never `due()`'s own numbers recomputed here. Absent for
+            the common case of a header with no overdue clause at all. */}
+        {header.daysOverdue !== null && (
+          <span className="label-data text-[10px] font-mono text-[var(--color-text-faint)]">
+            {header.daysOverdue} {header.daysOverdue === 1 ? 'day' : 'days'} overdue
+          </span>
+        )}
       </div>
       {header.body && (
         <MathRenderer

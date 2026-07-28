@@ -425,6 +425,23 @@
      them. A mask (not an overlay gradient) so it works over the void, over a
      panel, and under the floating session cards alike — nothing has to know
      what colour is behind it. */
+  /* Fix (Chat Instruments follow-up): the minimap's click-to-jump resolves
+     the real DOM node via `[data-msg-index]` and calls
+     `scrollIntoView({ block: 'start' })` — never index-proportional math, so
+     virtualized/unmeasured blocks can't drift it. `block: 'start'` alone
+     would still land the message flush against the viewport top, which is
+     exactly where `.scroll-fade-top`'s 28px mask dims it and where a peeked/
+     pinned TicketCard (`absolute top-*, left-0, w-72`, LearnSessionView.tsx /
+     ReviewSessionView.tsx) floats over the transcript's left column. A fixed
+     `scroll-margin-top` big enough to clear both — the 28px fade plus the
+     ticket's own typical height — makes `scrollIntoView` stop short of that
+     band instead, so the jumped-to message always lands fully visible and
+     un-occluded. Applied to the same three `data-msg-index` root `<div>`s in
+     ChatMessageView.tsx that the jump already targets. */
+  .scroll-anchor-top {
+    scroll-margin-top: 140px;
+  }
+
   .scroll-fade-top {
     -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 28px, #000 calc(100% - 28px), transparent 100%);
     mask-image: linear-gradient(to bottom, transparent 0, #000 28px, #000 calc(100% - 28px), transparent 100%);

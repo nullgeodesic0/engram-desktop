@@ -22,9 +22,27 @@ export interface ProbeHeader {
   threshold: boolean
   /** Present only when the tutor annotated the topic; never invented here. */
   topic: string | null
+  /** Addition C (chat refine round) — present when the tutor's own header
+   * line states how overdue this item is ("· 5 days overdue"), parsed
+   * tolerantly (see `OVERDUE_RE` below) from that line's own text — never
+   * invented, never recomputed from `due()`'s numbers elsewhere. Real
+   * headers state this in more than one shape (a parenthetical topic before
+   * it, an em-dash topic before it — see `chat-ordering-fix-report.md`'s own
+   * captured real line, `**[3/12] · \`economism-tendency\`** — lenin-what-
+   * is-to-be-done · 1 day overdue` — or nothing at all), so this is matched
+   * independently of the structural marker/node/topic captures above rather
+   * than threaded into one fixed position in `HEADER_RE`. `null` when
+   * absent, the common case. */
+  daysOverdue: number | null
   /** Everything after the marker line — the probe itself. */
   body: string
 }
+
+// Tolerant, independent of HEADER_RE's own capture order — real headers put
+// the overdue clause in different positions/shapes (see `daysOverdue`'s own
+// doctrine comment), so this is applied to the header LINE's own matched
+// text (`m[0]`) rather than woven into the structural regex above.
+const OVERDUE_RE = /(\d+)\s*days?\s*overdue/i
 
 // `[3/6] ·` or `node 3/6 ·`, then the node id, an optional dagger, and an
 // optional *(topic)*. Anchored to the start of a LINE (multiline), not the
@@ -56,6 +74,7 @@ export function splitAroundProbeHeader(text: string): { before: string; header: 
   const index = Number(m[1] ?? m[3])
   const total = Number(m[2] ?? m[4])
   if (!Number.isFinite(index) || !Number.isFinite(total) || total <= 0) return null
+  const overdueMatch = OVERDUE_RE.exec(m[0])
   return {
     before: text.slice(0, m.index).trim(),
     header: {
@@ -64,6 +83,7 @@ export function splitAroundProbeHeader(text: string): { before: string; header: 
       node: m[5],
       threshold: Boolean(m[6]),
       topic: m[7]?.trim() || null,
+      daysOverdue: overdueMatch ? Number(overdueMatch[1]) : null,
       body: text.slice(m.index + m[0].length).trim(),
     },
   }

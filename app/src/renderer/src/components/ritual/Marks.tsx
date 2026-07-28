@@ -181,15 +181,25 @@ export const BeatMarkCard = memo(function BeatMarkCard({ beat, content }: { beat
 export const NodeCrossingDivider = memo(function NodeCrossingDivider({
   nodeId,
   verb = 'entering',
+  topicCrossing,
 }: {
   nodeId: string
   verb?: string
+  /** Addition A (chat refine round) — the destination topic's real title,
+   * present only when `shared/reviewCrossing.ts`'s `deriveReviewCrossings`
+   * found the tutor's own header annotation actually changed (never a guess
+   * from node ids). States "crossing into <Topic Title>" instead of the
+   * ordinary node-name text, so a mixed review queue's real topic switch
+   * reads distinctly from an everyday same-topic node sweep. Undefined/null
+   * for every other caller (Learn's own crossings, which are always
+   * single-topic) — byte-identical to before this addition. */
+  topicCrossing?: string | null
 }) {
   return (
     <div className="flex items-center gap-3 my-3 ritual-crossing">
       <span className="h-px flex-1 bg-[var(--color-ink-warm-dim)] origin-left ritual-crossing-line" />
       <span className="fig-caption shrink-0 text-[var(--color-ink-warm)]">
-        {verb} {humanizeNodeId(nodeId)}
+        {topicCrossing ? `crossing into ${topicCrossing}` : `${verb} ${humanizeNodeId(nodeId)}`}
       </span>
       <span className="h-px flex-1 bg-[var(--color-ink-warm-dim)] origin-right ritual-crossing-line" />
     </div>
@@ -248,6 +258,7 @@ export function MarkView({
   mark,
   onAnswerAsk,
   suppressBeatExcerpt,
+  milestonePairedWithGradeCard,
 }: {
   mark: RitualMark
   /** Only meaningful for `kind: 'ask'` marks — omit at any call site that
@@ -269,6 +280,14 @@ export function MarkView({
    * transcript that ends here), the excerpt stays: it's the only record of
    * the beat's content. */
   suppressBeatExcerpt?: boolean
+  /** Only meaningful for `kind: 'milestone'` marks (Fix 2, chat refine
+   * round) — true when the caller is rendering this milestone at the SAME
+   * resolved position as a grade batch containing its own `node` (see
+   * MilestoneCard's own doctrine comment). Every other mark kind, and a
+   * milestone with no adjacent grade card, simply omit this (undefined),
+   * which `MilestoneCard` treats as `false` — its original, numbers-shown
+   * behavior, byte-identical to before this fix. */
+  milestonePairedWithGradeCard?: boolean
 }) {
   if (mark.kind === 'beat') return <BeatMarkCard beat={mark.beat} content={suppressBeatExcerpt ? '' : mark.content} />
   if (mark.kind === 'crossing') return <NodeCrossingDivider nodeId={mark.nodeId} verb={mark.verb} />
@@ -282,7 +301,16 @@ export function MarkView({
   if (mark.kind === 'lapse') return <LapseRite node={mark.node} returnDate={mark.returnDate} />
   if (mark.kind === 'docket') return <ReviewDocket items={mark.items} />
   if (mark.kind === 'audit') return <AuditCard itemCount={mark.itemCount} verdict={mark.verdict} disputedNodes={mark.disputedNodes} />
-  if (mark.kind === 'milestone') return <MilestoneCard node={mark.node} scale={mark.scale} sBefore={mark.sBefore} sAfter={mark.sAfter} />
+  if (mark.kind === 'milestone')
+    return (
+      <MilestoneCard
+        node={mark.node}
+        scale={mark.scale}
+        sBefore={mark.sBefore}
+        sAfter={mark.sAfter}
+        pairedWithGradeCard={milestonePairedWithGradeCard ?? false}
+      />
+    )
   if (mark.kind === 'tool-failure') return <ToolFailureCard failureKind={mark.failureKind} />
   if (mark.kind === 'ask') {
     return (
