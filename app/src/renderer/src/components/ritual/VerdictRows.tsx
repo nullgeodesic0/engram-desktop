@@ -47,7 +47,7 @@ export const RatingEchoRow = memo(function RatingEchoRow({ segment }: { segment:
   const style = GRADE_STYLE[GRADE_OF_RATING[segment.rating]]
   const badge = (
     <span
-      className="label-data text-[10px] px-2 py-0.5 rounded-full inline-block shrink-0"
+      className="label-data text-[10px] px-2 py-0.5 inline-block shrink-0"
       style={{ color: style.color, background: style.bg }}
     >
       {segment.rating}

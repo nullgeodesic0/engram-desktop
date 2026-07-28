@@ -55,15 +55,15 @@ export function StabilityMovement({ results }: { results: GradeResult[] }) {
                 {humanizeNodeId(r.node)}
               </span>
               <div className="flex-1 flex flex-col gap-[2px] min-w-0">
-                <div className="h-[3px] rounded-full bg-[var(--color-surface-2)] overflow-hidden">
+                <div className="h-[3px] bg-[var(--color-surface-2)] overflow-hidden">
                   <div
-                    className="h-full rounded-full bg-[var(--color-ink-cool-dim)]"
+                    className="h-full bg-[var(--color-ink-cool-dim)]"
                     style={{ width: `${beforePct}%` }}
                   />
                 </div>
-                <div className="h-[3px] rounded-full bg-[var(--color-surface-2)] overflow-hidden">
+                <div className="h-[3px] bg-[var(--color-surface-2)] overflow-hidden">
                   <div
-                    className="h-full rounded-full"
+                    className="h-full"
                     style={{ width: `${afterPct}%`, background: GRADE_COLOR[r.grade] }}
                   />
                 </div>

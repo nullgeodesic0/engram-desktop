@@ -34,6 +34,8 @@ import { SessionCeremony } from '../components/ritual/Bookends'
 import { ScheduleDelta } from '../components/ritual/ScheduleDelta'
 import { SessionHistoryDrawer, exportSittingTranscript, buildHistoryTimeline, type GradeBatch } from '../components/SessionHistoryDrawer'
 import { PageHeader } from '../components/ui/PageHeader'
+import { SectionBanner } from '../components/ui/SectionBanner'
+import { StatFraction } from '../components/ui/StatFraction'
 import { ErrorPanel } from '../components/ErrorPanel'
 import { recordConfidence, latestPickFor } from '../shared/calibrationStore'
 import { extractTicketFromMessages } from '../shared/ticketParser'
@@ -1166,6 +1168,12 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
           second time above it. See ReadyRoomPlate's own totalDue>24 branch. */}
       {phase === 'ready' && current && (
         <>
+          {/* "REVIEWS — n/m": this sitting's capped queue (`queue`, already
+              `due(12)`) over the true uncapped backlog (`totalDue`) — the same
+              honest-subset framing ReadyRoomPlate's own caption states in
+              prose ("a normal sitting covers about 12"), read here as a
+              readout instead. */}
+          <SectionBanner label="REVIEWS" count={<StatFraction n={queue.length} d={totalDue} />} />
           <ReadyRoomPlate
             dueItems={queue}
             totalDue={totalDue}
@@ -1225,7 +1233,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
                         onClick={() => setTicketPinned((v) => !v)}
                         aria-label={ticketPinned ? 'Unpin session ticket' : 'Pin session ticket'}
                         title={ticketPinned ? 'Unpin — tuck away unless the cursor visits the left edge' : 'Pin — keep the ticket out'}
-                        className={`focus-ring no-press absolute bottom-1.5 right-1.5 h-5 w-5 rounded-full flex items-center justify-center transition-colors duration-[var(--dur-fast)] ${
+                        className={`focus-ring no-press absolute bottom-1.5 right-1.5 h-5 w-5 flex items-center justify-center transition-colors duration-[var(--dur-fast)] ${
                           ticketPinned
                             ? 'text-[var(--color-ink-warm)] bg-[var(--color-surface-3)]'
                             : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]'
@@ -1268,7 +1276,13 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
                           : 'duration-[var(--dur-base)] ease-[var(--ease-out-soft)] opacity-100'
                       }`}
                     >
-                      <div key={current.id} className="relative panel px-5 py-4 flex flex-col gap-3 mb-2">
+                      {/* `.dogear` — the CURRENT item only ("you are here" on
+                          the one probe actually being sat with right now); a
+                          replayed/history probe card (ChatMessageView's own
+                          `ProbeCard`, past turns in this same transcript or in
+                          SessionHistoryDrawer) never carries it — scarcity by
+                          decree, see index.css's dogear doctrine comment. */}
+                      <div key={current.id} className="relative panel dogear px-5 py-4 flex flex-col gap-3 mb-2">
                         <div className="flex items-center justify-between gap-2">
                           <div className="min-w-0">
                             <div className="text-sm font-medium text-[var(--color-text-primary)] truncate">
@@ -1292,7 +1306,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
                           onClick={() => setProbePinned((v) => !v)}
                           aria-label={probePinned ? 'Unpin probe' : 'Pin probe'}
                           title={probePinned ? 'Unpin — tuck away unless the cursor visits the top' : 'Pin — keep the probe out'}
-                          className={`focus-ring no-press absolute bottom-1.5 right-1.5 h-5 w-5 rounded-full flex items-center justify-center transition-colors duration-[var(--dur-fast)] ${
+                          className={`focus-ring no-press absolute bottom-1.5 right-1.5 h-5 w-5 flex items-center justify-center transition-colors duration-[var(--dur-fast)] ${
                             probePinned
                               ? 'text-[var(--color-ink-warm)] bg-[var(--color-surface-3)]'
                               : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]'

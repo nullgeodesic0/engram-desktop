@@ -10,9 +10,9 @@ import { CalibrationScatter } from '../components/charts/CalibrationScatter'
 import { WeekDigest } from '../components/WeekDigest'
 import { humanizeNodeId } from '../../../shared/humanizeId'
 import { StatBlock } from '../components/ui/StatBlock'
-import { DendriteDivider } from '../components/ui/DendriteDivider'
 import { Button } from '../components/ui/Button'
 import { PageHeader } from '../components/ui/PageHeader'
+import { SectionBanner } from '../components/ui/SectionBanner'
 import { allPicks } from '../shared/calibrationStore'
 import { computeWeekDigest } from '../shared/weekDigest'
 import { friendlyErrorText } from '../shared/friendlyError'
@@ -60,8 +60,13 @@ function StatCard({ label, value, sub, tone = 'default' }: { label: string; valu
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="flex flex-col gap-3">
-      <h2 className="text-sm font-medium text-[var(--color-text-dim)] uppercase tracking-wide">{title}</h2>
-      <DendriteDivider className="mb-3" />
+      {/* `contents`: keeps the real `<h2>` landmark (this used to be a plain
+          heading tag, unlike every other SectionBanner call site, which
+          replaced a bare `<span>`) without it introducing a box of its own —
+          SectionBanner supplies every visual rule. */}
+      <h2 className="contents">
+        <SectionBanner label={title} />
+      </h2>
       {children}
     </section>
   )
@@ -300,7 +305,11 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts, coachHomeSi
   const loopClosure = stats.adherence.loop_closure
 
   return (
-    <div className="p-8 flex flex-col gap-8 w-full h-full overflow-y-auto">
+    // `.corner-brackets` — Dashboard's main pane, one of the restyle's three
+    // placements (the other two: TopicMapView's node drawer, ChatScrollRegion's
+    // host). Only this, the real "Coach" content pane — not the loading
+    // skeleton above or the topic-drilldown swap-in, which is its own view.
+    <div className="p-8 flex flex-col gap-8 w-full h-full overflow-y-auto corner-brackets">
       <div className="flex flex-col gap-3">
         <PageHeader title="Coach" />
         <div className="grid grid-cols-3 gap-3">

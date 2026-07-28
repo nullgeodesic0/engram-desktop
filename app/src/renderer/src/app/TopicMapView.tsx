@@ -962,7 +962,7 @@ export function TopicMapView({
               conditionally-absent sections just don't count as siblings), and a
               hairline-topped detail-footer holding the drawer's one primary action. */}
           {node && (
-            <div className="w-72 shrink-0 panel flex flex-col overflow-y-auto">
+            <div className="w-72 shrink-0 panel corner-brackets flex flex-col overflow-y-auto">
               <div className="detail-title-band flex items-start justify-between gap-2 px-4 py-3 shrink-0">
                 <div>
                   <div className="text-sm font-medium text-[var(--color-text-primary)]">{humanizeNodeId(selectedNode!)}</div>

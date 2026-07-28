@@ -206,7 +206,7 @@ export function GradeResultCard({
         <span className="relative shrink-0">
           {showBurst && <InkBurst />}
           <span
-            className={`label-data text-[10px] px-2 py-0.5 rounded-full inline-block ${result.grade === 'partial' ? 'badge-pulse' : ''}`}
+            className={`label-data text-[10px] px-2 py-0.5 inline-block ${result.grade === 'partial' ? 'badge-pulse' : ''}`}
             style={{ color: style.color, background: style.bg }}
           >
             {style.label}
@@ -215,13 +215,13 @@ export function GradeResultCard({
       </div>
       {result.sBefore !== null && (
         <div className="flex items-center gap-2">
-          <div className="relative flex-1 h-1.5 rounded-full bg-[var(--color-surface-2)] overflow-hidden">
+          <div className="relative flex-1 h-1.5 border border-[var(--color-hairline)] bg-[var(--color-surface-2)] overflow-hidden">
             <div
-              className="absolute inset-y-0 left-0 rounded-full bg-[var(--color-ink-cool-dim)] transition-all duration-500"
+              className="absolute inset-y-0 left-0 bg-[var(--color-ink-cool-dim)] transition-all duration-500"
               style={{ width: `${beforePct}%` }}
             />
             <div
-              className="absolute inset-y-0 left-0 rounded-full transition-all duration-700"
+              className="absolute inset-y-0 left-0 transition-all duration-700"
               style={{ width: `${afterPct}%`, background: style.color }}
             />
           </div>
@@ -241,7 +241,7 @@ export function GradeResultCard({
           d-values; the chip carries interval + s movement). */}
       {chipText ? (
         <span
-          className="label-data text-[10px] self-start px-2 py-0.5 rounded-full inline-block"
+          className="label-data text-[10px] self-start px-2 py-0.5 inline-block"
           style={{ color: style.color, background: style.bg }}
         >
           {chipText}

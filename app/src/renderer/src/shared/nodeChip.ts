@@ -19,13 +19,13 @@ function escapeText(s: string): string {
 }
 
 // Tailwind utility classes, not a bespoke `.node-chip` CSS rule — reusing
-// ActionChips' own exact "quiet chip" language (rounded-full, hairline
-// border, faint text warming to ink-warm on hover, `--dur-fast`) rather than
-// inventing a second chip visual style. `inline-flex` (not `flex`) so it
-// sits correctly mid-paragraph; `align-middle` keeps its baseline from
-// dropping the surrounding text line.
+// ActionChips' own exact "quiet chip" language (sharp hairline border, faint
+// text warming to ink-warm on hover, `--dur-fast`) rather than inventing a
+// second chip visual style. `inline-flex` (not `flex`) so it sits correctly
+// mid-paragraph; `align-middle` keeps its baseline from dropping the
+// surrounding text line.
 const CHIP_CLASS =
-  'node-chip focus-ring inline-flex items-center gap-1 align-middle rounded-full border border-[var(--color-hairline)] px-2 py-0.5 mx-0.5 text-[0.85em] leading-none text-[var(--color-text-faint)] hover:text-[var(--color-ink-warm)] hover:border-[var(--color-ink-warm-dim)] transition-colors duration-[var(--dur-fast)] cursor-pointer'
+  'node-chip focus-ring inline-flex items-center gap-1 align-middle border border-[var(--color-hairline)] px-2 py-0.5 mx-0.5 text-[0.85em] leading-none text-[var(--color-text-faint)] hover:text-[var(--color-ink-warm)] hover:border-[var(--color-ink-warm-dim)] transition-colors duration-[var(--dur-fast)] cursor-pointer'
 
 /** The chip's own static HTML — a real `<button>` (not a `<span
  * role="button">`) specifically so Enter/Space activation dispatches a real

@@ -60,7 +60,15 @@ export function ChatScrollRegion({
   }
 
   return (
-    <div className="relative flex-1 min-h-0">
+    // `.corner-brackets` — one of the Guardian restyle's three placements
+    // (the other two: TopicMapView's node drawer, DashboardView's main
+    // pane). Applied here, at the shared component's own root, rather than
+    // duplicated in every session view that hosts a transcript (Learn,
+    // Review) — both get it for free. The minimap rail (`railSlot`, a
+    // sibling below) hugs this same box's right edge, so its top/bottom ends
+    // sit near this element's own corner marks; both are thin, low-opacity
+    // hairline elements, and in practice they don't visually compete.
+    <div className="relative flex-1 min-h-0 corner-brackets">
       {/* `scroll-fade-top`: content dissolves into the top edge instead of
           being guillotined by it, so the transcript reads as continuing past
           the viewport rather than being clipped at an arbitrary line — and

@@ -3,6 +3,7 @@ import type { EngramNode, NodeState, TopicGraph } from '../../../shared/types'
 import { humanizeNodeId } from '../../../shared/humanizeId'
 import { stateLabel, formatMonthDay } from '../shared/nodeDisplay'
 import { DUE_LENS_COLOR, STATE_COLOR, dueStatusFor } from './GraphView'
+import { StatFraction } from './ui/StatFraction'
 
 type SortKey = 'node' | 'state' | 'stability' | 'due' | 'reps' | 'threshold'
 type SortDir = 'asc' | 'desc'
@@ -155,7 +156,7 @@ export function NodeTable({
               key={key}
               onClick={() => toggleFilter(key)}
               aria-pressed={pressed}
-              className={`focus-ring label-data text-[10px] uppercase tracking-wide px-2 py-1 rounded-full border transition-colors ${
+              className={`focus-ring label-data text-[10px] uppercase tracking-wide px-2 py-1 border transition-colors ${
                 pressed
                   ? 'bg-[var(--color-surface-3)] border-[var(--color-ink-warm)] text-[var(--color-ink-warm)]'
                   : 'border-[var(--color-hairline)] text-[var(--color-text-dim)] hover:text-[var(--color-text-primary)]'
@@ -174,7 +175,7 @@ export function NodeTable({
           </button>
         )}
         <span className="label-data text-[10px] text-[var(--color-text-faint)] ml-auto">
-          {rows.length}/{territoryIds.length}
+          <StatFraction n={rows.length} d={territoryIds.length} />
         </span>
       </div>
 

@@ -25,7 +25,7 @@ export function ActionChips({
         <button
           key={i}
           onClick={() => onAct(a)}
-          className="focus-ring rounded-full border border-[var(--color-hairline)] px-3 py-1 text-xs text-[var(--color-text-dim)] hover:text-[var(--color-ink-warm)] hover:border-[var(--color-ink-warm-dim)]"
+          className="focus-ring border border-[var(--color-hairline)] px-3 py-1 text-xs text-[var(--color-text-dim)] hover:text-[var(--color-ink-warm)] hover:border-[var(--color-ink-warm-dim)]"
         >
           <MathRenderer text={a.label} inlineOnly />
         </button>

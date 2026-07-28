@@ -14,6 +14,7 @@ import { Modal } from '../components/ui/Modal'
 import { DendriteDivider } from '../components/ui/DendriteDivider'
 import { CopyButton } from '../components/ui/CopyButton'
 import { PageHeader } from '../components/ui/PageHeader'
+import { SectionBanner } from '../components/ui/SectionBanner'
 import { soundOn, setSoundOn } from '../shared/soundscape'
 import { friendlyErrorText } from '../shared/friendlyError'
 
@@ -604,7 +605,7 @@ export function SettingsView() {
       </div>
 
       <div className="panel px-5 py-5 flex flex-col gap-3">
-        <div className="text-sm text-[var(--color-text-primary)]">Return commitment</div>
+        <SectionBanner label="Return commitment" className="border-t-0" />
         <DendriteDivider />
         {model.settings.commitment && !editingCommitment ? (
           <>
@@ -664,7 +665,7 @@ export function SettingsView() {
       </div>
 
       <div className="panel px-5 py-5 flex flex-col gap-3">
-        <div className="text-sm text-[var(--color-text-primary)]">Interests</div>
+        <SectionBanner label="Interests" className="border-t-0" />
         <DendriteDivider />
         <div className="text-xs text-[var(--color-text-faint)]">
           The tutor leans on these for analogies and examples. Adding is instant; the intake conversation is where they
@@ -696,7 +697,7 @@ export function SettingsView() {
       </div>
 
       <div className="panel px-5 py-5 flex flex-col gap-3">
-        <div className="text-sm text-[var(--color-text-primary)]">Goals</div>
+        <SectionBanner label="Goals" className="border-t-0" />
         <DendriteDivider />
         <div className="fig-caption">
           Fig. — standing aims the tutor mines for examples and relevance, same as interests above.
@@ -717,7 +718,7 @@ export function SettingsView() {
       </div>
 
       <div className="panel px-5 py-5 flex flex-col gap-3">
-        <div className="text-sm text-[var(--color-text-primary)]">Accessibility</div>
+        <SectionBanner label="Accessibility" className="border-t-0" />
         <DendriteDivider />
         <div className="fig-caption">
           Fig. — declared needs (dyslexia, ADHD, color vision, and the like) the tutor always honors as dials — a
@@ -739,7 +740,7 @@ export function SettingsView() {
       </div>
 
       <div className="panel px-5 py-5 flex flex-col gap-3">
-        <div className="text-sm text-[var(--color-text-primary)]">Rhythms</div>
+        <SectionBanner label="Rhythms" className="border-t-0" />
         <DendriteDivider />
         <div className="fig-caption">
           Fig. — session telemetry (length, cadence, time-of-day yield) the coach reads alongside your session log
@@ -777,7 +778,7 @@ export function SettingsView() {
       </div>
 
       <div className="panel px-5 py-5 flex flex-col gap-5">
-        <div className="text-sm text-[var(--color-text-primary)]">Background &amp; notifications</div>
+        <SectionBanner label="Background & notifications" className="border-t-0" />
         <DendriteDivider />
         <ToggleRow
           label="Launch at login"
@@ -837,8 +838,8 @@ export function SettingsView() {
 
       <div className="panel px-5 py-5 flex flex-col gap-3">
         <div>
-          <div className="text-sm text-[var(--color-text-primary)]">Data</div>
-          <div className="text-xs text-[var(--color-text-faint)] mt-0.5">
+          <SectionBanner label="Data" className="border-t-0" />
+          <div className="text-xs text-[var(--color-text-faint)] mt-1.5">
             Every topic, receipt, and artifact lives under your Engram plugin’s own storage — this copies the whole
             thing to a folder you choose, as a plain snapshot in time.
           </div>
@@ -854,8 +855,8 @@ export function SettingsView() {
 
       <div className="panel px-5 py-5 flex flex-col gap-3">
         <div>
-          <div className="text-sm text-[var(--color-text-primary)]">Backup</div>
-          <div className="text-xs text-[var(--color-text-faint)] mt-0.5">
+          <SectionBanner label="Backup" className="border-t-0" />
+          <div className="text-xs text-[var(--color-text-faint)] mt-1.5">
             A single archive of everything — your learning data plus this app’s own settings — for moving to a new
             machine or recovering from a mistake. Restore replaces what’s currently here; a safety snapshot is
             always taken first.
@@ -880,8 +881,8 @@ export function SettingsView() {
 
       <div className="panel px-5 py-5 flex flex-col gap-3">
         <div>
-          <div className="text-sm text-[var(--color-text-primary)]">Software</div>
-          <div className="text-xs text-[var(--color-text-faint)] mt-0.5">
+          <SectionBanner label="Software" className="border-t-0" />
+          <div className="text-xs text-[var(--color-text-faint)] mt-1.5">
             Compares this build against the repo’s <span className="label-data">main</span> branch via your own
             authenticated <span className="label-data">gh</span> CLI — nothing is sent anywhere, no embedded token.
           </div>
@@ -900,8 +901,8 @@ export function SettingsView() {
 
       <div className="panel px-5 py-5 flex flex-col gap-3">
         <div>
-          <div className="text-sm text-[var(--color-text-primary)]">Diagnostics</div>
-          <div className="text-xs text-[var(--color-text-faint)] mt-0.5">
+          <SectionBanner label="Diagnostics" className="border-t-0" />
+          <div className="text-xs text-[var(--color-text-faint)] mt-1.5">
             Runs the engine's own health check — state-dir writability, the learner model, and every topic graph on
             disk. Nothing runs until you ask for it below.
           </div>
@@ -919,7 +920,7 @@ export function SettingsView() {
       </div>
 
       <div className="panel px-5 py-5 flex flex-col gap-3">
-        <div className="text-sm text-[var(--color-text-primary)]">Achievements</div>
+        <SectionBanner label="Achievements" className="border-t-0" />
         <DendriteDivider />
         <AchievementsPanel />
       </div>
