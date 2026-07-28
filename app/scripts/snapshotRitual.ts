@@ -53,6 +53,8 @@ import { readFileSync, readdirSync, statSync, mkdirSync, writeFileSync, existsSy
 import { join, resolve, dirname, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { homedir } from 'node:os'
+import type { ChatMessage } from '../src/shared/chatMessages'
+import type { GradeResult } from '../src/shared/gradeResult'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const PROJECTS_ROOT = join(homedir(), '.claude', 'projects')
@@ -63,6 +65,59 @@ const SCRATCHPAD =
 const SNAPSHOT_ROOT = join(SCRATCHPAD, 'ritual-snapshots')
 const LATEST_POINTER = join(SNAPSHOT_ROOT, 'LATEST')
 
+/** Verdict Anatomy (Wave 1) — per-file fingerprint proving `verdictSegments.ts`
+ * behaves against every real transcript on this machine, the same standing
+ * this file already gives `deriveRitualMarks`/`buildHistoryTimeline`. A NEW,
+ * ADDITIVE field: nothing above (`derivedMarks`, `historyMarkKinds`,
+ * `historyMessageCount`, `historyGradeCount`) is touched by computing this,
+ * and `diffAgainst` below only ever compares it when BOTH sides of a diff
+ * carry it — so a `--diff` run against a baseline taken BEFORE this field
+ * existed still proves the pre-existing fields are byte-for-byte unchanged
+ * (the actual regression proof Wave 1 needs), while a `--diff` run against a
+ * baseline taken AFTER it exists also catches any future regression in
+ * Wave 1's own module. */
+interface VerdictFingerprint {
+  /** Every `deriveVerdictRegions` region across every GradeBatch in this
+   * transcript (including empty ones — see `emptyRegionCount`). */
+  regionCount: number
+  /** Regions whose `endIndex < startIndex` (a learner interjection landed
+   * immediately at the left boundary, leaving nothing to segment). */
+  emptyRegionCount: number
+  /** Regions whose boundary message only contributed its
+   * `splitAroundProbeHeader(...).before` prefix (see VerdictRegion's
+   * doctrine comment). */
+  boundaryPrefixOnlyCount: number
+  /** `segmentVerdictText` segment-kind counts, summed across every
+   * region-touched message in this transcript. */
+  segmentKindCounts: Record<string, number>
+  /** The RAW text of every schedule paragraph `shouldSuppressSchedule` would
+   * hide on screen — listed individually (not just counted), so a diff shows
+   * exactly WHICH paragraph a change newly suppresses or newly reveals, not
+   * just a count that could hide a wash (one gained, one lost). Anchored to
+   * each GradeBatch's own recorded `date` (never wall-clock "now" — same
+   * replay discipline `ritualFromTranscript.ts`'s lapse-rite anchor uses);
+   * a batch with no usable date can never suppress a date-stating paragraph,
+   * by `scheduleMatchesReceipt`'s own "null anchorDate fails the check" rule. */
+  suppressedParagraphRaws: string[]
+  /** True iff `segmentVerdictText`'s byte-conservation invariant
+   * (`segments.map(s => s.raw).join('') === input`) held for every
+   * region-touched message in this transcript — a violation is ALSO pushed
+   * to the run's hard assertion failures (see `main()`), which fails the
+   * whole script; this field additionally makes the violation visible
+   * per-file in the diff. */
+  byteConservationOk: boolean
+  /** True iff `shared/chatMessages.ts`'s `parseTranscriptToMessages` (the
+   * LIVE message-shaping path) and `SessionHistoryDrawer.tsx`'s
+   * `buildHistoryTimeline` (the REPLAY path) agree on this transcript's
+   * message list (role + text, in order) — the two are meant to be kept in
+   * careful sync by construction (see `buildHistoryTimeline`'s own doctrine
+   * comment), and Verdict Anatomy's regions/segments are only ever as
+   * trustworthy as that agreement, since a live sitting and a reopened one
+   * must segment identically. A violation is ALSO pushed to the run's hard
+   * assertion failures. */
+  liveReplayParityOk: boolean
+}
+
 interface FileSnapshot {
   file: string
   lineCount: number
@@ -71,6 +126,105 @@ interface FileSnapshot {
   historyMarkKinds: string[]
   historyMessageCount: number
   historyGradeCount: number
+  verdictFingerprint: VerdictFingerprint
+}
+
+/** 'YYYY-MM-DD' (GradeBatch.date's own format — see SessionHistoryDrawer.tsx's
+ * `localDateFromIso`) parsed back into a local-midnight Date, the same
+ * local-date discipline `lapseReturnDate` itself uses. Null on anything that
+ * doesn't match — never a fabricated fallback to wall-clock "now". */
+function isoLocalDateToAnchor(iso: string | null): Date | null {
+  if (!iso) return null
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso)
+  if (!m) return null
+  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+}
+
+/** Computes one transcript's `VerdictFingerprint` and pushes a human-readable
+ * line to `assertionFailures` for every byte-conservation or live/replay-
+ * parity violation found — the hard assertions `main()` fails the whole run
+ * on, regardless of baseline vs `--diff` mode. */
+function computeVerdictFingerprint(
+  fileLabel: string,
+  liveMessages: ChatMessage[],
+  replayMessages: ChatMessage[],
+  grades: Array<{ id: string; atIndex: number; results: GradeResult[]; date: string | null }>,
+  deriveVerdictRegions: (messages: ChatMessage[], gradeBatches: Array<{ id: string; atIndex: number }>) => Array<{
+    batchId: string
+    startIndex: number
+    endIndex: number
+    boundaryPrefixOnly: boolean
+  }>,
+  verdictRegionMessageTexts: (
+    messages: ChatMessage[],
+    region: { batchId: string; startIndex: number; endIndex: number; boundaryPrefixOnly: boolean },
+  ) => string[],
+  segmentVerdictText: (text: string) => Array<{ kind: string; raw: string }>,
+  shouldSuppressSchedule: (segment: any, batchResults: GradeResult[], anchorDate: Date | null, isLiveStreamingTail: boolean) => boolean,
+  assertionFailures: string[],
+): VerdictFingerprint {
+  let liveReplayParityOk = true
+  if (liveMessages.length !== replayMessages.length) {
+    liveReplayParityOk = false
+  } else {
+    for (let i = 0; i < liveMessages.length; i++) {
+      if (liveMessages[i].role !== replayMessages[i].role || liveMessages[i].text !== replayMessages[i].text) {
+        liveReplayParityOk = false
+        break
+      }
+    }
+  }
+  if (!liveReplayParityOk) {
+    assertionFailures.push(
+      `LIVE/REPLAY PARITY VIOLATION in ${fileLabel}: parseTranscriptToMessages and buildHistoryTimeline disagree on this transcript's message list.`,
+    )
+  }
+
+  const regions = deriveVerdictRegions(replayMessages, grades)
+  const gradeById = new Map(grades.map((g) => [g.id, g] as const))
+  const segmentKindCounts: Record<string, number> = {}
+  const suppressedParagraphRaws: string[] = []
+  let emptyRegionCount = 0
+  let boundaryPrefixOnlyCount = 0
+  let byteConservationOk = true
+
+  for (const region of regions) {
+    if (region.endIndex < region.startIndex) {
+      emptyRegionCount++
+      continue
+    }
+    if (region.boundaryPrefixOnly) boundaryPrefixOnlyCount++
+    const batch = gradeById.get(region.batchId)
+    const anchorDate = isoLocalDateToAnchor(batch?.date ?? null)
+    const texts = verdictRegionMessageTexts(replayMessages, region)
+    for (const text of texts) {
+      const segments = segmentVerdictText(text)
+      const rebuilt = segments.map((s) => s.raw).join('')
+      if (rebuilt !== text) {
+        byteConservationOk = false
+        assertionFailures.push(
+          `BYTE-CONSERVATION VIOLATION in ${fileLabel} (batch ${region.batchId}): segmentVerdictText output does not reconstruct its input exactly.`,
+        )
+      }
+      for (const seg of segments) {
+        segmentKindCounts[seg.kind] = (segmentKindCounts[seg.kind] ?? 0) + 1
+        if (seg.kind === 'schedule' && batch) {
+          const suppressed = shouldSuppressSchedule(seg, batch.results, anchorDate, false)
+          if (suppressed) suppressedParagraphRaws.push(seg.raw)
+        }
+      }
+    }
+  }
+
+  return {
+    regionCount: regions.length,
+    emptyRegionCount,
+    boundaryPrefixOnlyCount,
+    segmentKindCounts,
+    suppressedParagraphRaws,
+    byteConservationOk,
+    liveReplayParityOk,
+  }
 }
 
 /** Every real transcript on this machine, read-only. */
@@ -109,27 +263,46 @@ function readTranscriptLines(path: string): { lines: unknown[]; parseErrors: num
   return { lines, parseErrors }
 }
 
-async function computeSnapshots(): Promise<FileSnapshot[]> {
+async function computeSnapshots(): Promise<{ snapshots: FileSnapshot[]; assertionFailures: string[] }> {
   const { deriveRitualMarks } = await import('../src/shared/ritualFromTranscript')
   const { buildHistoryTimeline } = await import('../src/renderer/src/components/SessionHistoryDrawer')
+  const { parseTranscriptToMessages } = await import('../src/shared/chatMessages')
+  const { deriveVerdictRegions, verdictRegionMessageTexts, segmentVerdictText, shouldSuppressSchedule } = await import(
+    '../src/shared/verdictSegments'
+  )
 
   const files = findTranscripts()
   const snapshots: FileSnapshot[] = []
+  const assertionFailures: string[] = []
   for (const file of files) {
     const { lines, parseErrors } = readTranscriptLines(file)
     const derivedMarks = deriveRitualMarks(lines)
     const timeline = buildHistoryTimeline(lines)
+    const liveMessages = parseTranscriptToMessages(lines)
+    const fileLabel = relative(PROJECTS_ROOT, file)
+    const verdictFingerprint = computeVerdictFingerprint(
+      fileLabel,
+      liveMessages,
+      timeline.messages,
+      timeline.grades,
+      deriveVerdictRegions,
+      verdictRegionMessageTexts,
+      segmentVerdictText,
+      shouldSuppressSchedule,
+      assertionFailures,
+    )
     snapshots.push({
-      file: relative(PROJECTS_ROOT, file),
+      file: fileLabel,
       lineCount: lines.length,
       parseErrors,
       derivedMarks,
       historyMarkKinds: timeline.marks.map((m) => m.kind),
       historyMessageCount: timeline.messages.length,
       historyGradeCount: timeline.grades.length,
+      verdictFingerprint,
     })
   }
-  return snapshots
+  return { snapshots, assertionFailures }
 }
 
 function snapshotDirFor(timestamp: string): string {
@@ -221,14 +394,59 @@ function diffAgainst(baselineDir: string, current: FileSnapshot[]): { diffs: str
       )
     }
   }
+
+  // Verdict Anatomy (Wave 1) fingerprint — a SEPARATE, ADDITIVE comparison.
+  // Only diffed when BOTH sides carry it: a baseline taken before this field
+  // existed has `before.verdictFingerprint === undefined`, and that must
+  // never itself count as a diff line — it's the exact case Wave 1's own
+  // acceptance proof depends on (an empty diff against a PRE-CHANGE baseline
+  // proves tasks 1-2 changed no PRE-EXISTING behavior; the fingerprint field
+  // not existing yet on that baseline is expected, not a regression).
+  for (const file of [...allFiles].sort()) {
+    const before = baseline.get(file)?.verdictFingerprint
+    const after = currentByFile.get(file)?.verdictFingerprint
+    if (!before || !after) continue
+    const beforeStr = JSON.stringify(before)
+    const afterStr = JSON.stringify(after)
+    if (beforeStr === afterStr) continue
+    diffs.push(
+      `${file}: verdictFingerprint changed — regions ${before.regionCount}->${after.regionCount} ` +
+        `(empty ${before.emptyRegionCount}->${after.emptyRegionCount}, prefixOnly ${before.boundaryPrefixOnlyCount}->${after.boundaryPrefixOnlyCount}), ` +
+        `segments ${formatCounts(before.segmentKindCounts)} -> ${formatCounts(after.segmentKindCounts)}, ` +
+        `suppressed ${before.suppressedParagraphRaws.length}->${after.suppressedParagraphRaws.length}, ` +
+        `byteConservationOk ${before.byteConservationOk}->${after.byteConservationOk}, ` +
+        `liveReplayParityOk ${before.liveReplayParityOk}->${after.liveReplayParityOk}`,
+    )
+  }
+
   return { diffs, filesCompared: allFiles.size }
 }
 
 async function main(): Promise<void> {
   const isDiff = process.argv.includes('--diff')
   console.log(`scanning ${PROJECTS_ROOT} for real transcripts (read-only)...`)
-  const snapshots = await computeSnapshots()
-  console.log(`computed derived marks + history timelines for ${snapshots.length} transcript(s).`)
+  const { snapshots, assertionFailures } = await computeSnapshots()
+  console.log(`computed derived marks + history timelines + verdict fingerprints for ${snapshots.length} transcript(s).`)
+
+  // Verdict Anatomy's two HARD invariants — byte conservation and
+  // live/replay parity — fail the run outright, in EITHER mode (baseline or
+  // --diff), independent of whatever the diff mechanism below finds. A
+  // baseline taken while either invariant is broken would just enshrine the
+  // breakage as the new "expected" shape, which defeats the point of an
+  // assertion; failing here instead means a broken invariant can never
+  // silently become the new baseline.
+  if (assertionFailures.length > 0) {
+    console.error(`FAIL — ${assertionFailures.length} verdict-anatomy assertion violation(s):`)
+    for (const f of assertionFailures) console.error(`  - ${f}`)
+    process.exitCode = 1
+    return
+  }
+  const totalRegions = snapshots.reduce((n, s) => n + s.verdictFingerprint.regionCount, 0)
+  const totalSuppressed = snapshots.reduce((n, s) => n + s.verdictFingerprint.suppressedParagraphRaws.length, 0)
+  console.log(
+    `verdict anatomy: ${totalRegions} region(s) derived, 0 byte-conservation violations, ` +
+      `0 live/replay-parity violations, ${totalSuppressed} schedule paragraph(s) would be suppressed on screen.`,
+  )
 
   if (!isDiff) {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
