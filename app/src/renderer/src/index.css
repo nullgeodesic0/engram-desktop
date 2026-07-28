@@ -352,14 +352,28 @@
      constellation footer's family, so on a nav row it only ever means
      "nearby" (hover). Warm means "you are here" — active text, the existing
      accent bar (still inline in App.tsx, unchanged), and this background. */
+  /* Rail-list border treatment (T4): every nav row reserves a 1px border so
+     the transparent→hairline→warm-dim progression never shifts layout —
+     transparent at rest, a plain hairline on hover (matching the frame
+     vocabulary's own hover-frame color, but drawn ON the row itself since a
+     nav item's own border already reads as "the rectangle", no floating
+     ::after needed), `--color-ink-warm-dim` + the existing filled wash when
+     active. The button's own transition (see the base-layer `button` rule)
+     already covers border-color/background-color/color at --dur-fast — no
+     separate transition declared here. */
   .nav-item {
+    position: relative;
+    border: 1px solid transparent;
     color: var(--color-text-dim);
   }
   .nav-item:hover {
     color: var(--color-text-primary);
     background-color: color-mix(in srgb, var(--color-ink-lavender) 8%, transparent);
+    border-color: var(--color-hairline);
   }
   .nav-item-active {
+    position: relative;
+    border: 1px solid var(--color-ink-warm-dim);
     color: var(--color-ink-warm);
     background-color: color-mix(in srgb, var(--color-ink-warm) 9%, transparent);
   }

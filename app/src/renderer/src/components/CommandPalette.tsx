@@ -3,6 +3,7 @@ import { useFocusTrap } from './useFocusTrap'
 import { buildSearchIndex, fetchTopicEntries, searchEntries, type SearchEntry } from '../shared/searchIndex'
 import { recentViews, type RecentView } from '../shared/recentlyViewed'
 import { InkNode } from './ui/InkNode'
+import { SectionBanner } from './ui/SectionBanner'
 
 interface Command {
   id: string
@@ -213,12 +214,25 @@ export function CommandPalette({ open, onClose, navCommands, onGoTopic, onGoNode
             const prevGroup = i > 0 ? filtered[i - 1].group ?? 'Views' : null
             return (
               <div key={cmd.id}>
-                {group !== prevGroup && <div className="fig-caption px-3 pt-2 pb-1">{group}</div>}
+                {/* Mini section-banner — same hairline-rules-above-and-below
+                    grammar as every other group header in the app, just
+                    tucked to the row's own px-4. The very first group sits
+                    flush under the search input's own border-bottom, so its
+                    top rule is dropped (a utility class, not a components-
+                    layer override — Tailwind's utilities layer always wins
+                    over @layer components regardless of source order, so
+                    `border-t-0` reliably beats `.section-banner`'s own
+                    border-top here). */}
+                {group !== prevGroup && (
+                  <SectionBanner label={group} className={`px-4 ${i === 0 ? 'border-t-0' : 'mt-1'}`} />
+                )}
                 <button
                   onClick={() => run(cmd)}
                   onMouseEnter={() => setActiveIdx(i)}
-                  className={`focus-ring no-press w-full flex items-center justify-between px-4 py-2.5 text-left text-sm ${
-                    i === activeIdx ? 'bg-[var(--color-surface-3)] text-[var(--color-ink-warm)]' : 'text-[var(--color-text-primary)]'
+                  className={`focus-ring no-press w-full flex items-center justify-between px-4 py-2.5 text-left text-sm border ${
+                    i === activeIdx
+                      ? 'bg-[var(--color-surface-3)] border-[var(--color-ink-warm)] text-[var(--color-ink-warm)]'
+                      : 'border-transparent text-[var(--color-text-primary)]'
                   }`}
                 >
                   <span className="flex items-center gap-2 min-w-0 truncate">
@@ -235,6 +249,15 @@ export function CommandPalette({ open, onClose, navCommands, onGoTopic, onGoNode
               </div>
             )
           })}
+        </div>
+        <div className="detail-footer px-4 py-2 shrink-0">
+          <span className="flex items-center gap-2 flex-wrap">
+            <span className="kbd-hint">↑↓ navigate</span>
+            <span className="text-[var(--color-text-faint)]">·</span>
+            <span className="kbd-hint">↵ run</span>
+            <span className="text-[var(--color-text-faint)]">·</span>
+            <span className="kbd-hint">esc close</span>
+          </span>
         </div>
       </div>
     </div>
