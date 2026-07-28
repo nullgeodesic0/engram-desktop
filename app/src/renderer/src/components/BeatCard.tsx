@@ -7,7 +7,12 @@ import { TicketCard } from './ritual/TicketCard'
 import { ReceiptStrip, LearnCodaBlock } from './ritual/ReceiptStrip'
 import { CopyButton } from './ui/CopyButton'
 
-const BEAT_STYLE: Record<ProseBeat, { label: string; icon: string; accent: string }> = {
+// Exported — Chat Instruments Wave B's transcript minimap reuses these exact
+// icon/accent pairs for beat moments (see shared/instrumentMoments.ts) rather
+// than inventing a parallel glyph per beat: this IS the vocabulary a beat
+// already renders in, live in the transcript, right above wherever a minimap
+// glyph for it would point.
+export const BEAT_STYLE: Record<ProseBeat, { label: string; icon: string; accent: string }> = {
   open_gap: { label: 'The gap', icon: '◆', accent: 'var(--color-ink-cool)' },
   predict: { label: 'Predict', icon: '?', accent: 'var(--color-ink-cool)' },
   struggle: { label: 'Hint', icon: '△', accent: 'var(--color-ink-danger)' },
@@ -25,11 +30,17 @@ export const BeatCard = memo(function BeatCard({
   beat,
   text,
   trailingCaret,
+  nodeIds,
+  nodeChipTopic,
 }: {
   beat: ProseBeat
   text: string
   /** Chat Presence Wave D Task 9 — see ChatMessageView's doctrine comment. */
   trailingCaret?: boolean
+  /** Chat Instruments Wave B — see ProseMarkdown's own doctrine comment;
+   * threaded straight through, both undefined renders byte-identically. */
+  nodeIds?: Set<string>
+  nodeChipTopic?: string
 }) {
   const style = BEAT_STYLE[beat]
   return (
@@ -41,7 +52,7 @@ export const BeatCard = memo(function BeatCard({
         </div>
         <CopyButton text={text} />
       </div>
-      <ProseMarkdown text={text} className="voice-serif text-[var(--color-text-primary)]" />
+      <ProseMarkdown text={text} className="voice-serif text-[var(--color-text-primary)]" nodeIds={nodeIds} nodeChipTopic={nodeChipTopic} />
       {trailingCaret && <span className="streaming-caret" aria-hidden="true" />}
     </div>
   )
@@ -54,20 +65,32 @@ export const BeatCard = memo(function BeatCard({
 export const PlainDialogueBlock = memo(function PlainDialogueBlock({
   text,
   trailingCaret,
+  nodeIds,
+  nodeChipTopic,
 }: {
   text: string
   /** Chat Presence Wave D Task 9 — see ChatMessageView's doctrine comment.
    * Only meaningful on this call's OWN text (never forwarded to the
    * before/after halves of a ticket split — the ticket sits between them). */
   trailingCaret?: boolean
+  /** Chat Instruments Wave B — see ProseMarkdown's own doctrine comment;
+   * threaded through every recursive split below (ticket/receipt-strip/coda
+   * all carve `text` into prose fragments that still deserve chips) and into
+   * the final plain render. Both undefined renders byte-identically. */
+  nodeIds?: Set<string>
+  nodeChipTopic?: string
 }) {
   const ticketSplit = splitAroundTicket(text)
   if (ticketSplit) {
     return (
       <div className="flex flex-col gap-3">
-        {ticketSplit.before && <PlainDialogueBlock text={ticketSplit.before} />}
+        {ticketSplit.before && (
+          <PlainDialogueBlock text={ticketSplit.before} nodeIds={nodeIds} nodeChipTopic={nodeChipTopic} />
+        )}
         <TicketCard ticket={ticketSplit.ticket} />
-        {ticketSplit.after && <PlainDialogueBlock text={ticketSplit.after} trailingCaret={trailingCaret} />}
+        {ticketSplit.after && (
+          <PlainDialogueBlock text={ticketSplit.after} trailingCaret={trailingCaret} nodeIds={nodeIds} nodeChipTopic={nodeChipTopic} />
+        )}
       </div>
     )
   }
@@ -80,9 +103,13 @@ export const PlainDialogueBlock = memo(function PlainDialogueBlock({
   if (receiptSplit) {
     return (
       <div className="flex flex-col gap-3">
-        {receiptSplit.before && <PlainDialogueBlock text={receiptSplit.before} />}
+        {receiptSplit.before && (
+          <PlainDialogueBlock text={receiptSplit.before} nodeIds={nodeIds} nodeChipTopic={nodeChipTopic} />
+        )}
         <ReceiptStrip strip={receiptSplit.strip} />
-        {receiptSplit.after && <PlainDialogueBlock text={receiptSplit.after} trailingCaret={trailingCaret} />}
+        {receiptSplit.after && (
+          <PlainDialogueBlock text={receiptSplit.after} trailingCaret={trailingCaret} nodeIds={nodeIds} nodeChipTopic={nodeChipTopic} />
+        )}
       </div>
     )
   }
@@ -92,7 +119,7 @@ export const PlainDialogueBlock = memo(function PlainDialogueBlock({
   if (codaSplit) {
     return (
       <div className="flex flex-col gap-3">
-        {codaSplit.before && <PlainDialogueBlock text={codaSplit.before} />}
+        {codaSplit.before && <PlainDialogueBlock text={codaSplit.before} nodeIds={nodeIds} nodeChipTopic={nodeChipTopic} />}
         <LearnCodaBlock text={codaSplit.coda} />
       </div>
     )
@@ -102,7 +129,12 @@ export const PlainDialogueBlock = memo(function PlainDialogueBlock({
       <div className="absolute top-3 right-3">
         <CopyButton text={text} />
       </div>
-      <ProseMarkdown text={text} className="voice-serif text-[var(--color-text-primary)] pr-5" />
+      <ProseMarkdown
+        text={text}
+        className="voice-serif text-[var(--color-text-primary)] pr-5"
+        nodeIds={nodeIds}
+        nodeChipTopic={nodeChipTopic}
+      />
       {trailingCaret && <span className="streaming-caret" aria-hidden="true" />}
     </div>
   )

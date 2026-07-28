@@ -110,6 +110,41 @@ interface ChatMessageViewProps {
    * hover clock needs a date prefix (see `formatMessageClock`) — `undefined`
    * for the transcript's first message, or when the caller doesn't track it. */
   previousTimestamp?: number
+  /** Chat Instruments Wave B — this message's own index into the caller's
+   * `messages` array, stamped onto the rendered root as `data-msg-index` so
+   * the transcript minimap's click-to-jump can locate a message's real DOM
+   * node without any parallel bookkeeping of its own (`element.closest`/
+   * `querySelector('[data-msg-index="n"]')` from the scroll container the
+   * minimap already holds a reference to). `undefined` renders no attribute —
+   * a caller that never wires the minimap pays nothing for this. */
+  dataIndex?: number
+  /** Chat Instruments Wave B — the grade-card ↔ probe-card hover linkage.
+   * `probeHighlighted` true when a GradeResultCard for the SAME node
+   * (matched by the caller, which already resolves grade-batch node vs
+   * probe-header node for other reasons — see ReviewSessionView's/
+   * SessionHistoryDrawer's own `hoveredPairNode` wiring) is currently
+   * hovered elsewhere in the transcript; forwarded straight to this
+   * message's own `ProbeCard`, if it has one. `onProbeHoverChange` reports
+   * this card's OWN hover state back up, so the caller can highlight ITS
+   * partner grade card in turn. Both undefined for any caller that never
+   * wires the linkage (Learn's live view — see instrumentMoments.ts's own
+   * doctrine comment on why Learn never renders GradeResultCard inline). */
+  probeHighlighted?: boolean
+  onProbeHoverChange?: (hovering: boolean) => void
+  /** Chat Instruments Wave B — node-name chips. The CURRENTLY LOADED topic
+   * graph's own node ids (exact-match only, never fuzzy) and the topic they
+   * belong to, threaded down to every assistant-prose renderer this message
+   * uses (ProseMarkdown via PlainDialogueBlock/BeatCard) so a backticked
+   * token matching one chips instead of rendering as plain inline code. Both
+   * undefined (or an empty set) renders byte-identically to before this
+   * wave — see ProseMarkdown's own doctrine comment for the chip mechanics,
+   * and LearnSessionView's for where `nodeIds` actually comes from (nothing
+   * new is fetched for this: the topic graph cache the why-chain panel
+   * already holds). Never threaded to the user's OWN bubble — chips are a
+   * reading aid for the tutor's prose, not something to detect in a
+   * learner's own typed text. */
+  nodeIds?: Set<string>
+  nodeChipTopic?: string
 }
 
 /** One turn, rendered like a normal chat exchange — a right-aligned bubble for
@@ -129,6 +164,11 @@ export const ChatMessageView = memo(function ChatMessageView({
   verdictEyebrowIndex,
   suppressSchedule,
   previousTimestamp,
+  dataIndex,
+  probeHighlighted,
+  onProbeHoverChange,
+  nodeIds,
+  nodeChipTopic,
 }: ChatMessageViewProps) {
   const segments = useMemo(
     () => (message.role === 'user' || verdictSegments !== undefined ? [] : parseBeatSegments(message.text)),
@@ -138,7 +178,7 @@ export const ChatMessageView = memo(function ChatMessageView({
 
   if (message.role === 'user') {
     return (
-      <div className="group flex justify-end items-start gap-1.5">
+      <div className="group flex justify-end items-start gap-1.5" data-msg-index={dataIndex}>
         <div className="mt-3.5 shrink-0 relative">
           <InkNode id="voice-learner" variant="outlined" color="var(--color-ink-cool)" size={12} />
           {clockLabel && <MessageClock label={clockLabel} />}
@@ -215,11 +255,11 @@ export const ChatMessageView = memo(function ChatMessageView({
         return (
           <Fragment key={i}>
             <VerdictEyebrowRail />
-            <PlainDialogueBlock text={seg.raw} trailingCaret={caret} />
+            <PlainDialogueBlock text={seg.raw} trailingCaret={caret} nodeIds={nodeIds} nodeChipTopic={nodeChipTopic} />
           </Fragment>
         )
       }
-      return <PlainDialogueBlock key={i} text={seg.raw} trailingCaret={caret} />
+      return <PlainDialogueBlock key={i} text={seg.raw} trailingCaret={caret} nodeIds={nodeIds} nodeChipTopic={nodeChipTopic} />
     })
     // Empty-bubble guard — a message whose every segment is a suppressed
     // schedule paragraph (real corpus shape: a region-spanning message
@@ -232,7 +272,7 @@ export const ChatMessageView = memo(function ChatMessageView({
     const hasVisibleContent = renderedSegments.some((node) => node !== null)
     if (!hasVisibleContent && !probe && !beforeProbeHeader) return null
     return (
-      <div className="group flex items-start gap-2 max-w-[97%]">
+      <div className="group flex items-start gap-2 max-w-[97%]" data-msg-index={dataIndex}>
         <div className="mt-1 shrink-0 relative">
           <InkNode id="voice-tutor" variant="filled" size={12} />
           {clockLabel && <MessageClock label={clockLabel} />}
@@ -242,7 +282,7 @@ export const ChatMessageView = memo(function ChatMessageView({
           {probe && (
             <Fragment>
               {beforeProbeHeader}
-              <ProbeCard header={probe.header} />
+              <ProbeCard header={probe.header} highlighted={probeHighlighted} onHoverChange={onProbeHoverChange} />
             </Fragment>
           )}
         </div>
@@ -251,7 +291,7 @@ export const ChatMessageView = memo(function ChatMessageView({
   }
 
   return (
-    <div className="group flex items-start gap-2 max-w-[97%]">
+    <div className="group flex items-start gap-2 max-w-[97%]" data-msg-index={dataIndex}>
       <div className="mt-1 shrink-0 relative">
         <InkNode id="voice-tutor" variant="filled" size={12} />
         {clockLabel && <MessageClock label={clockLabel} />}
@@ -263,7 +303,11 @@ export const ChatMessageView = memo(function ChatMessageView({
           // text, even mid-stream.
           const isLastSegment = i === segments.length - 1
           const caret = isLastSegment && trailingCaret
-          if (seg.beat) return <BeatCard key={i} beat={seg.beat} text={seg.text} trailingCaret={caret} />
+          if (seg.beat) {
+            return (
+              <BeatCard key={i} beat={seg.beat} text={seg.text} trailingCaret={caret} nodeIds={nodeIds} nodeChipTopic={nodeChipTopic} />
+            )
+          }
           // A per-item progress marker means this is the moment of asking —
           // set it as a probe card. The marker doesn't have to open the
           // segment (a tutor often leads with a line of transition), so any
@@ -273,13 +317,15 @@ export const ChatMessageView = memo(function ChatMessageView({
           if (probe) {
             return (
               <Fragment key={i}>
-                {probe.before && <PlainDialogueBlock text={probe.before} />}
+                {probe.before && <PlainDialogueBlock text={probe.before} nodeIds={nodeIds} nodeChipTopic={nodeChipTopic} />}
                 {beforeProbeHeader}
-                <ProbeCard header={probe.header} />
+                <ProbeCard header={probe.header} highlighted={probeHighlighted} onHoverChange={onProbeHoverChange} />
               </Fragment>
             )
           }
-          return <PlainDialogueBlock key={i} text={seg.text} trailingCaret={caret} />
+          return (
+            <PlainDialogueBlock key={i} text={seg.text} trailingCaret={caret} nodeIds={nodeIds} nodeChipTopic={nodeChipTopic} />
+          )
         })}
       </div>
     </div>

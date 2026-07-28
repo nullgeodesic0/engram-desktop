@@ -27,8 +27,13 @@ import { parseProbeHeader, type ProbeHeader } from './probeHeader'
 /** Every probe header in `messages`, in order, alongside the message index it
  * lives in. A message carries at most one — `parseProbeHeader` matches only
  * the first marker line, mirroring the dialogue grammar (one probe posed per
- * turn). */
-function probeHeadersOf(messages: ChatMessage[]): Array<{ index: number; header: ProbeHeader }> {
+ * turn). Exported as `allProbeHeaders` — Chat Instruments Wave B reuses this
+ * exact walk for both the transcript minimap (every probe is a "notable
+ * moment," in Learn as much as Review — this function has never been
+ * Review-specific, only its two callers below were) and the grade-card ↔
+ * probe-card hover linkage (matching a message index to the node it probed,
+ * without re-deriving `splitAroundProbeHeader` a second time). */
+export function allProbeHeaders(messages: ChatMessage[]): Array<{ index: number; header: ProbeHeader }> {
   const out: Array<{ index: number; header: ProbeHeader }> = []
   for (let i = 0; i < messages.length; i++) {
     if (messages[i].role !== 'assistant') continue
@@ -42,7 +47,7 @@ function probeHeadersOf(messages: ChatMessage[]): Array<{ index: number; header:
  * asked right now" (replaces matching `queue` probe text against recent
  * messages). Null before any probe header has appeared yet. */
 export function latestProbeHeader(messages: ChatMessage[]): { index: number; header: ProbeHeader } | null {
-  const headers = probeHeadersOf(messages)
+  const headers = allProbeHeaders(messages)
   return headers.length > 0 ? headers[headers.length - 1] : null
 }
 
@@ -62,7 +67,7 @@ export interface ReviewCrossing {
 }
 
 export function deriveReviewCrossings(messages: ChatMessage[]): ReviewCrossing[] {
-  const headers = probeHeadersOf(messages)
+  const headers = allProbeHeaders(messages)
   const out: ReviewCrossing[] = []
   for (let i = 1; i < headers.length; i++) {
     const prevNode = headers[i - 1].header.node

@@ -20,10 +20,23 @@ import { renderMarkdownWithMath } from '../shared/markdownWithMath'
 export const ProseMarkdown = memo(function ProseMarkdown({
   text,
   className = '',
+  nodeIds,
+  nodeChipTopic,
 }: {
   text: string
   className?: string
+  /** Chat Instruments Wave B — node-name chips. The currently loaded topic
+   * graph's own node ids (exact match only) plus the topic they belong to;
+   * see markdownWithMath.ts's `renderMarkdownWithMath` doctrine comment for
+   * the render-side mechanics. Both undefined is the common case (every
+   * surface this component renders before this wave, plus every Wave-B
+   * surface with no graph in scope) and renders byte-identically. */
+  nodeIds?: Set<string>
+  nodeChipTopic?: string
 }) {
-  const html = useMemo(() => renderMarkdownWithMath(text), [text])
+  const html = useMemo(
+    () => renderMarkdownWithMath(text, nodeIds && nodeChipTopic ? { nodeIds, topicId: nodeChipTopic } : undefined),
+    [text, nodeIds, nodeChipTopic],
+  )
   return <div className={`md-prose ${className}`.trim()} dangerouslySetInnerHTML={{ __html: html }} />
 })

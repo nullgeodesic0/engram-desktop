@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { SessionEvent } from '../../../shared/sessionEvents'
 import type { TopicListEntry, ArtifactEntry, TopicGraph, ExportSittingFormat } from '../../../shared/types'
 import { RateLimitBanner } from '../components/RateLimitBanner'
@@ -14,6 +14,10 @@ import { BeatStepper, type BeatOutcome } from '../components/BeatStepper'
 import { ActivityLine } from '../components/ActivityLine'
 import { ChatScrollRegion } from '../components/ChatScrollRegion'
 import { useEquationCopy } from '../components/useEquationCopy'
+import { useNodeChipClick } from '../components/useNodeChipClick'
+import { TranscriptMinimap } from '../components/TranscriptMinimap'
+import { deriveInstrumentMoments } from '../shared/instrumentMoments'
+import { allProbeHeaders } from '../../../shared/reviewCrossing'
 import { useTutorActivity, composerDisabledReason } from '../shared/tutorActivity'
 import { parseTranscriptToMessages, type ChatMessage } from '../../../shared/chatMessages'
 import { extractLastUsageFromTranscript } from '../../../shared/sessionUsage'
@@ -234,6 +238,17 @@ interface LearnSessionViewProps {
   /** Bumped by App.tsx (via the ⌘N menu item / 'learn:new-topic' deep link) to
    * pop the New Topic modal open — only the change matters, not the value. */
   openNewTopicSignal?: number
+  /** Chat Instruments Wave B — node-name chips' deep link. App.tsx's own
+   * `goToNode` (the SAME callback ArtifactGalleryView's `onOpenNode` and
+   * TopicDrilldownView's `onGoNode` already use for "a click landed on a
+   * specific node, take me there") — a real navigation (switches to the
+   * Topic Map, selects the topic, opens the node), not the softer
+   * `onSpotlight` nudge above: a chip is a deliberate click on a link-shaped
+   * thing, not an ambient tutor signal, and `onSpotlight`'s own doctrine
+   * comment in TopicMapView.tsx is explicit that it only pans an ALREADY-
+   * open map, never switches topics — which would silently no-op a chip
+   * click for any node outside whatever topic the map last had open. */
+  onOpenNode?: (topicId: string, nodeId: string) => void
 }
 
 export function LearnSessionView({
@@ -243,6 +258,7 @@ export function LearnSessionView({
   onSpotlight,
   onGoReview,
   openNewTopicSignal,
+  onOpenNode,
 }: LearnSessionViewProps = {}) {
   // Topic-list state
   const [topics, setTopics] = useState<TopicListEntry[] | null>(null)
@@ -1395,6 +1411,45 @@ export function LearnSessionView({
   // remounts across "back to topics" / re-open — exactly the case
   // `useEquationCopy`'s callback-ref design exists for.
   const equationCopyRef = useEquationCopy()
+  // Chat Instruments Wave B — node-name chips' click delegation, same pane
+  // root as equation-copy above (same remount reasoning), merged onto the
+  // same DOM node via `setSessionPaneRef` below (a node only accepts one
+  // `ref` prop). No-ops harmlessly if `onOpenNode` was never passed in.
+  const nodeChipClickRef = useNodeChipClick((topicId, nodeId) => onOpenNode?.(topicId, nodeId))
+  const setSessionPaneRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      equationCopyRef(node)
+      nodeChipClickRef(node)
+    },
+    [equationCopyRef, nodeChipClickRef],
+  )
+  // The currently loaded topic graph's own node ids — EXACT match only, no
+  // fuzzy/cross-topic guessing (see nodeChip.ts/markdownWithMath.ts). No new
+  // fetch: `topicGraphCache` already exists for the why-chain panel above,
+  // fetched once per topic open (`fetchTopicGraphCache`) and cleared on
+  // every session reset/crossing — this just reads its `nodes` keys.
+  const chipNodeIds = useMemo(
+    () => (topicGraphCache ? new Set(Object.keys(topicGraphCache.nodes)) : new Set<string>()),
+    [topicGraphCache],
+  )
+
+  // Chat Instruments Wave B — the transcript minimap. `learnProbes` is
+  // reused as-is by `deriveInstrumentMoments` below (never re-parsed a
+  // second time for a different purpose). Learn passes no `gradeBatches`/
+  // `crossings` of its own: it never renders GradeResultCard inline (grades
+  // surface only in the SessionCeremony stack/tally — see that component's
+  // own render below), and its node-crossings arrive through `marks`
+  // (`kind: 'crossing'`, pushed by `crossToNode`) rather than a separately
+  // derived list the way Review's `deriveReviewCrossings` works.
+  const learnProbes = useMemo(() => allProbeHeaders(messages), [messages])
+  const minimapMoments = useMemo(() => deriveInstrumentMoments({ marks, probes: learnProbes }), [marks, learnProbes])
+  const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null)
+  function jumpToMessage(atIndex: number) {
+    if (!scrollEl || messages.length === 0) return
+    const idx = Math.min(Math.max(atIndex, 0), messages.length - 1)
+    const target = scrollEl.querySelector<HTMLElement>(`[data-msg-index="${idx}"]`)
+    target?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }
 
   return (
     // h-full from <main>'s flex-1 (see App.tsx); min-h-0 is required for the flex
@@ -1625,7 +1680,7 @@ export function LearnSessionView({
       )}
 
       {started && (
-        <div ref={equationCopyRef} className="flex-1 min-h-0 flex flex-col gap-4">
+        <div ref={setSessionPaneRef} className="flex-1 min-h-0 flex flex-col gap-4">
           {sessionGrades.length > 0 && (
             <div className="shrink-0">
               <SessionCeremony
@@ -1692,7 +1747,18 @@ export function LearnSessionView({
                 </>
               )
             })()}
-            <ChatScrollRegion deps={[messages, busy, marks]}>
+            <ChatScrollRegion
+              deps={[messages, busy, marks]}
+              onContainerRef={setScrollEl}
+              railSlot={
+                <TranscriptMinimap
+                  moments={minimapMoments}
+                  totalMessages={messages.length}
+                  containerEl={scrollEl}
+                  onJump={jumpToMessage}
+                />
+              }
+            >
               <div className="transcript-measure flex flex-col gap-5">
                 {activeTopic != null && sessionPhase !== 'intake' && (
                   <SessionOpenPlate walkNumber={walkNumber} date={new Date()} recap={lastWalk} />
@@ -1710,6 +1776,9 @@ export function LearnSessionView({
                       // assistant bubble.
                       trailingCaret={busy && i === messages.length - 1 && m.role === 'assistant' && tutorActivity.activity.kind === 'streaming'}
                       previousTimestamp={messages[i - 1]?.timestamp}
+                      dataIndex={i}
+                      nodeIds={chipNodeIds}
+                      nodeChipTopic={activeTopic?.topic}
                     />
                     {marks
                       .filter((k) => k.atIndex === i + 1 || (i === messages.length - 1 && k.atIndex > messages.length))

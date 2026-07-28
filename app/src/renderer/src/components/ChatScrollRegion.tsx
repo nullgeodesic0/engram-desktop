@@ -4,9 +4,39 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
  * bottom as new content streams in — but only while you're already at the
  * bottom; if you've scrolled up to reread something, new content no longer
  * yanks you back down, and a "Jump to latest" pill appears instead. */
-export function ChatScrollRegion({ children, deps }: { children: ReactNode; deps: unknown[] }) {
+export function ChatScrollRegion({
+  children,
+  deps,
+  railSlot,
+  onContainerRef,
+}: {
+  children: ReactNode
+  deps: unknown[]
+  /** Chat Instruments Wave B — the transcript minimap, rendered as a sibling
+   * of the scrollable div INSIDE this component's own `relative` wrapper, so
+   * it can sit `absolute` at the scroll region's right edge without stealing
+   * width from `.transcript-measure`, and without this component needing to
+   * know anything about what a minimap is. Undefined renders nothing extra —
+   * byte-identical to before this wave. */
+  railSlot?: ReactNode
+  /** Reports the scrollable div itself (not just a ref object) — the minimap
+   * needs the real DOM node to read scroll position and to `scrollIntoView`
+   * on a jump; `null` on unmount, same callback-ref convention
+   * `useEquationCopy` already established elsewhere in this codebase, chosen
+   * for the same reason: this pane's own root can unmount/remount across a
+   * session's lifecycle (see that hook's doctrine comment), so a callback
+   * fired on every mount/unmount is what stays correct across a remount,
+   * where a plain `useEffect(() => ..., [])` handed a `RefObject` would not. */
+  onContainerRef?: (el: HTMLDivElement | null) => void
+}) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [stick, setStick] = useState(true)
+
+  useEffect(() => {
+    onContainerRef?.(containerRef.current)
+    return () => onContainerRef?.(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   function onScroll() {
     const el = containerRef.current
@@ -43,6 +73,7 @@ export function ChatScrollRegion({ children, deps }: { children: ReactNode; deps
       <div ref={containerRef} onScroll={onScroll} className="h-full overflow-y-auto flex flex-col gap-4 pb-7 scroll-fade-top">
         {children}
       </div>
+      {railSlot}
       {!stick && (
         <button
           onClick={jumpToBottom}
