@@ -49,12 +49,12 @@ function Row({ row, onGoNode }: { row: Misconception; onGoNode?: (topicId: strin
     </div>
   )
   if (!onGoNode) {
-    return <div className="panel px-3 py-2.5">{body}</div>
+    return <div className="tilt-card panel px-3 py-2.5">{body}</div>
   }
   return (
     <button
       onClick={() => onGoNode(row.topic, row.node)}
-      className="focus-ring panel px-3 py-2.5 text-left w-full hover:border-[var(--color-text-faint)] transition-colors"
+      className="focus-ring tilt-card panel px-3 py-2.5 text-left w-full hover:border-[var(--color-text-faint)] transition-colors"
     >
       {body}
     </button>

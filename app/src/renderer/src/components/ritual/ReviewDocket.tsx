@@ -26,7 +26,7 @@ export const ReviewDocket = memo(function ReviewDocket({ items }: { items: Revie
   const shown = items.slice(0, DOCKET_CAP)
   const overflow = items.length - shown.length
   return (
-    <div className="tilt-card panel px-4 py-3 max-w-md flex flex-col gap-2 ritual-diagnostic-in">
+    <div className="tilt-card-soft panel px-4 py-3 max-w-md flex flex-col gap-2 ritual-diagnostic-in">
       <div className="flex flex-col gap-1.5">
         {shown.map((it) => (
           <div key={it.id} className="flex items-center gap-2.5">

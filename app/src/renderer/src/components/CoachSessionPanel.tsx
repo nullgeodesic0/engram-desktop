@@ -102,7 +102,7 @@ export function CoachSessionPanel() {
   const equationCopyRef = useEquationCopy()
 
   return (
-    <div ref={equationCopyRef} className="panel px-5 py-5 flex flex-col gap-4">
+    <div ref={equationCopyRef} className="tilt-card panel px-5 py-5 flex flex-col gap-4">
       <div className="text-sm text-[var(--color-text-primary)]">Coach actions</div>
       <div className="flex flex-wrap gap-2">
         {QUICK_ACTIONS.map((a) => (

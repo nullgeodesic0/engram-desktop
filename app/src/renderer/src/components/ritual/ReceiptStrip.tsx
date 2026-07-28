@@ -8,10 +8,11 @@ import { ProseMarkdown } from '../ProseMarkdown'
  * grid: receipt values ("moment-of-inertia-integration, impulsive-collision-
  * rigid-body → tomorrow") run long, and wrapping inside a half-column would
  * shear them. Every byte of the strip renders — this is a re-setting of the
- * fence, never a summary of it. */
+ * fence, never a summary of it. `.tilt-card-soft` — a chat-transcript card,
+ * missed in the first tilt pass. */
 export const ReceiptStrip = memo(function ReceiptStrip({ strip }: { strip: ParsedReceiptStrip }) {
   return (
-    <div className="panel-raised px-4 py-3 border-l-2" style={{ borderLeftColor: 'var(--color-ink-warm-dim)' }}>
+    <div className="tilt-card-soft panel-raised px-4 py-3 border-l-2" style={{ borderLeftColor: 'var(--color-ink-warm-dim)' }}>
       <div className="label-data text-[10px] tracking-[0.22em] uppercase text-[var(--color-ink-warm)]">
         {strip.heading ?? 'Receipt'}
       </div>

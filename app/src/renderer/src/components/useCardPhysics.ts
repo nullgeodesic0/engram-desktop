@@ -45,14 +45,28 @@ import { useCallback, useRef } from 'react'
  *
  * Reduced motion: `prefers-reduced-motion: reduce` makes this a no-op (live —
  * flipping the OS setting mid-session drains everything to flat), and
- * index.css independently forces `transform: none` on `.tilt-card` under the
- * same media query as a belt-and-braces guarantee.
+ * index.css independently forces `transform: none` on `.tilt-card`/
+ * `.tilt-card-soft` under the same media query as a belt-and-braces
+ * guarantee.
  *
- * Contract: the `.tilt-card` class must be present from the element's mount
- * (every current host bakes it into a static className template) — discovery
- * watches childList mutations, not class-attribute churn.
+ * Soft variant (`.tilt-card-soft`): every chat-transcript card (the ritual
+ * family — beat/grade/probe/ask/canonical/milestone/… — plus the coach's own
+ * cards) rides the SAME idle-drift and pointer-tilt behavior as `.tilt-card`,
+ * just quieter — the chat surface asked to read as calmer than the rest of
+ * the app. This is a per-element AMPLITUDE MULTIPLIER (`SOFT_SCALE` below),
+ * computed once at registration from which class the element carries, never
+ * a second set of tuning constants: `.tilt-card-soft` scales the exact same
+ * `IDLE_AMP_MIN/MAX_DEG`/`POINTER_MAX_DEG` this file already tunes, so a
+ * change to those numbers moves both variants together, in proportion.
+ *
+ * Contract: the `.tilt-card`/`.tilt-card-soft` class must be present from the
+ * element's mount (every current host bakes it into a static className
+ * template) — discovery watches childList mutations, not class-attribute
+ * churn. A card is one or the other, never both — index.css's transform rule
+ * matches either class identically; only this file's amplitude differs.
  */
-const TILT_SELECTOR = '.tilt-card'
+const TILT_SELECTOR = '.tilt-card, .tilt-card-soft'
+const SOFT_SELECTOR = '.tilt-card-soft'
 
 /* Tuning — tiny by decree. The effect should be felt, not watched. */
 const IDLE_AMP_MIN_DEG = 0.45
@@ -60,10 +74,23 @@ const IDLE_AMP_MAX_DEG = 0.9
 const POINTER_MAX_DEG = 3.2
 const IDLE_PERIOD_MIN_S = 22
 const IDLE_PERIOD_MAX_S = 55
+/** `.tilt-card-soft`'s per-element multiplier — applied to both idle
+ * amplitude and pointer-tilt target, never a parallel constant set (see the
+ * doctrine comment above). Chosen so the chat surface's drift is felt as
+ * distinctly quieter without reading as "broken"/imperceptible. */
+const SOFT_SCALE = 0.65
 /** Critically-damped-feel exponential smoothing time constant. */
 const SMOOTH_TAU_MS = 150
-/** Idle-drift concurrency cap — hover responsiveness is never capped. */
-const MAX_IDLE_DRIVEN = 18
+/** Idle-drift concurrency cap — hover responsiveness is never capped. Bumped
+ * 18 → 24 for the coach-panel sweep: a tall Dashboard/Topic-drilldown scroll
+ * position can now have noticeably more `.tilt-card` surfaces simultaneously
+ * visible (stat grids, chart-host panels, the topic list) than Wave 1's
+ * coverage ever put on screen at once. Still bounded and still cheap — an
+ * over-cap card simply stays flat until hovered (never drops pointer
+ * response) — so this is a "still feels right at the new density" nudge, not
+ * a re-tuning; revisit if a future sweep pushes the on-screen count much
+ * higher again. */
+const MAX_IDLE_DRIVEN = 24
 /** Below this delta, skip the style write (the change is invisible). */
 const WRITE_EPSILON_DEG = 0.0015
 /** Within this of target, a returning card counts as settled. */
@@ -90,6 +117,11 @@ interface TiltState {
   phaseY: number
   /** True while this card holds a `will-change: transform` promotion. */
   promoted: boolean
+  /** `.tilt-card-soft` → `SOFT_SCALE`, `.tilt-card` → 1. Computed once at
+   * registration from the element's own class and applied to both idle
+   * amplitude (baked into `ampX`/`ampY` below) and the pointer-tilt target
+   * (applied live in `tick`) — the one multiplier, not a second constant set. */
+  scale: number
 }
 
 const states = new WeakMap<HTMLElement, TiltState>()
@@ -178,6 +210,7 @@ const io = new IntersectionObserver(
 function register(el: HTMLElement): void {
   if (registered.has(el)) return
   registered.add(el)
+  const scale = el.matches(SOFT_SELECTOR) ? SOFT_SCALE : 1
   states.set(el, {
     visible: false,
     hovered: false,
@@ -187,13 +220,14 @@ function register(el: HTMLElement): void {
     ry: 0,
     wrx: 0,
     wry: 0,
-    ampX: rand(IDLE_AMP_MIN_DEG, IDLE_AMP_MAX_DEG),
-    ampY: rand(IDLE_AMP_MIN_DEG, IDLE_AMP_MAX_DEG),
+    ampX: rand(IDLE_AMP_MIN_DEG, IDLE_AMP_MAX_DEG) * scale,
+    ampY: rand(IDLE_AMP_MIN_DEG, IDLE_AMP_MAX_DEG) * scale,
     omegaX: (2 * Math.PI) / rand(IDLE_PERIOD_MIN_S, IDLE_PERIOD_MAX_S),
     omegaY: (2 * Math.PI) / rand(IDLE_PERIOD_MIN_S, IDLE_PERIOD_MAX_S),
     phaseX: rand(0, 2 * Math.PI),
     phaseY: rand(0, 2 * Math.PI),
     promoted: false,
+    scale,
   })
   io.observe(el)
 }
@@ -235,8 +269,8 @@ function tick(now: number): void {
       if (rect.width > 0 && rect.height > 0) {
         const nx = clamp01((st.px - rect.left) / rect.width)
         const ny = clamp01((st.py - rect.top) / rect.height)
-        tx = (0.5 - ny) * 2 * POINTER_MAX_DEG
-        ty = (nx - 0.5) * 2 * POINTER_MAX_DEG
+        tx = (0.5 - ny) * 2 * POINTER_MAX_DEG * st.scale
+        ty = (nx - 0.5) * 2 * POINTER_MAX_DEG * st.scale
       }
       wantsDrive = true
     } else if (st.visible && idleBudget > 0) {

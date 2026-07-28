@@ -23,7 +23,7 @@ export const TicketCard = memo(function TicketCard({
   const rest = ticket.fields.filter((f) => f !== topic)
   return (
     <div
-      className={`tilt-card panel-raised relative overflow-hidden ${compact ? 'px-3 py-2.5' : 'px-4 py-3 max-w-sm'}`}
+      className={`tilt-card-soft panel-raised relative overflow-hidden ${compact ? 'px-3 py-2.5' : 'px-4 py-3 max-w-sm'}`}
       style={{
         // Perforated edge: punched notches down the left rim.
         backgroundImage:

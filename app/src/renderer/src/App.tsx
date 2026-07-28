@@ -291,10 +291,11 @@ export default function App() {
 
   const collapsed = narrow && !pinnedOpen
 
-  // Card physics — ONE container wires the whole app: every `.tilt-card`
-  // anywhere in this subtree (present or future, including inside modals'
-  // children and KeepMounted views) is discovered and driven by the shared
-  // manager. Delegated listeners + one rAF loop; no per-card wiring anywhere.
+  // Card physics — ONE container wires the whole app: every `.tilt-card`/
+  // `.tilt-card-soft` anywhere in this subtree (present or future, including
+  // inside modals' children and KeepMounted views) is discovered and driven
+  // by the shared manager. Delegated listeners + one rAF loop; no per-card
+  // wiring anywhere.
   const cardPhysicsRef = useCardPhysics()
 
   return (

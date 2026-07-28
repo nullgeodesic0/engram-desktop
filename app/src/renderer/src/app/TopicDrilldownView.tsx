@@ -64,7 +64,7 @@ function StatCard({ label, value, sub, tone = 'default' }: { label: string; valu
           ? 'text-[var(--color-text-dim)]'
           : 'text-[var(--color-text-primary)]'
   return (
-    <div className="panel px-4 py-3 flex flex-col gap-1 min-w-0">
+    <div className="tilt-card panel px-4 py-3 flex flex-col gap-1 min-w-0">
       <div className="text-xs text-[var(--color-text-dim)] uppercase tracking-wide">{label}</div>
       <div className={`label-data text-2xl font-medium ${valueColor}`}>{value}</div>
       {sub && <div className="text-xs text-[var(--color-text-faint)]">{sub}</div>}
@@ -276,7 +276,7 @@ export function TopicDrilldownView({ topic, topicSummary, due, history, graphs, 
                 return <StatCard key={name} label={name} value={value} sub={caption} tone={tone} />
               })}
             </div>
-            <div className="panel px-4 py-4 flex flex-col gap-5 mt-1">
+            <div className="tilt-card panel px-4 py-4 flex flex-col gap-5 mt-1">
               <RetentionCurve data={weeks} />
               <ActivityStrip data={days} />
             </div>
@@ -325,7 +325,7 @@ export function TopicDrilldownView({ topic, topicSummary, due, history, graphs, 
               <StatBlock label="Calibrated" value={String(cal.calibrated)} tone="neutral" />
             </div>
             <div className="fig-caption">Fig. — how your felt-sense tracks the assessor, this topic only</div>
-            <div className="panel px-4 py-4 mt-1">
+            <div className="tilt-card panel px-4 py-4 mt-1">
               <CalibrationScatter data={{ picks: cal.picks, days: daysInRange }} />
             </div>
           </>
@@ -334,7 +334,7 @@ export function TopicDrilldownView({ topic, topicSummary, due, history, graphs, 
 
       <Section title="Nodes">
         {graph ? (
-          <div className="panel h-[420px]">
+          <div className="tilt-card panel h-[420px]">
             <NodeTable graph={graph} selectedNode={selectedNode} onSelectNode={(id) => (onGoNode ? onGoNode(topic, id) : setSelectedNode(id))} />
           </div>
         ) : (

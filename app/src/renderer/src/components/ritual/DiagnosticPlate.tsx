@@ -51,7 +51,7 @@ function VerdictGlyph({ verdict }: { verdict: DiagnosticPlateItem['verdict'] }) 
 export const DiagnosticPlate = memo(function DiagnosticPlate({ items }: { items: DiagnosticPlateItem[] }) {
   if (items.length === 0) return null
   return (
-    <div className="tilt-card panel px-4 py-3 max-w-md flex flex-col gap-2 ritual-diagnostic-in">
+    <div className="tilt-card-soft panel px-4 py-3 max-w-md flex flex-col gap-2 ritual-diagnostic-in">
       <div className="flex flex-col gap-1.5">
         {items.map((it, i) => (
           <div key={`${it.node}-${i}`} className="flex items-center gap-2.5">
