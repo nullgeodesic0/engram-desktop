@@ -246,25 +246,36 @@ type HistoryRow = SessionIndexEntry & Partial<Pick<AllHistoryEntry, 'kind' | 'to
  * sessionId. `recordSession` (sessionIndex.ts) appends a fresh entry on
  * every resume of the same session, so a key's raw list can carry many rows
  * for a handful of actual sittings — visible in real data as e.g. 66 raw
- * entries under a topic key for just 4 distinct sessionIds. Mirrors
- * `fetchAllHistory`'s own dedupe below: `list` must already be newest-first
- * (`sessionHistoryFor`'s contract), so "first occurrence wins" means the
- * surviving record for a given sessionId is deliberately the LATEST
- * resume — its `startedAt` is what "sitting of <date>" and the ordinal
- * "N sessions ago" ranking are measured from, since that's the most recent
- * time the learner was actually looking at that transcript. Never touches
- * which sessionIds survive, only which single record represents each one —
- * `initialSessionId` matching and the anchor-index walk (both keyed on
- * sessionId / the transcript itself, not on which raw record was kept)
- * still resolve exactly as before. */
+ * entries under a topic key for just 4 distinct sessionIds. The surviving
+ * row's `startedAt` is the sitting's FIRST-recorded one: "sitting of
+ * <date>" (and the export header, and the "N sessions ago" ranking) must
+ * name the day the sitting began — which is also the day provenance/
+ * artifact deep links advertise before opening this drawer. This function's
+ * original choice (the LATEST resume's record survives, over a newest-first
+ * list) made a link that says "First encoded — Jul 19" open a drawer
+ * captioned "sitting of Jul 23" whenever the sitting had since been
+ * resumed — a resume re-records with a fresh wall-clock `startedAt`, which
+ * is a fact about the resume, not about the sitting. The output is
+ * re-sorted newest-first by that same first-recorded `startedAt`, so
+ * display order and displayed dates agree. Never touches which sessionIds
+ * survive — `initialSessionId` matching and the anchor-index walk (both
+ * keyed on sessionId / the transcript itself, not on which raw record was
+ * kept) still resolve exactly as before. */
 function dedupeBySessionId<T extends SessionIndexEntry>(list: T[]): T[] {
+  const earliest = new Map<string, string>()
+  for (const e of list) {
+    const cur = earliest.get(e.sessionId)
+    if (cur === undefined || e.startedAt < cur) earliest.set(e.sessionId, e.startedAt)
+  }
   const seen = new Set<string>()
   const out: T[] = []
   for (const e of list) {
     if (seen.has(e.sessionId)) continue
     seen.add(e.sessionId)
-    out.push(e)
+    const startedAt = earliest.get(e.sessionId)!
+    out.push(e.startedAt === startedAt ? e : { ...e, startedAt })
   }
+  out.sort((a, b) => b.startedAt.localeCompare(a.startedAt))
   return out
 }
 
@@ -289,14 +300,13 @@ function historyRowTag(entry: HistoryRow): string {
  * still live under. A sessionId can legitimately turn up more than once
  * across — or even within — those lists (a resumed session reappears in its
  * own key once per resume, sharing one transcript — see sessionIndex.ts's
- * `recordSession`), so this dedupes by sessionId across the whole combined
- * set with `dedupeBySessionId`'s same "first occurrence wins" rule
- * `nodeProvenance`'s own `seenSessionIds` walk already uses. Because each
- * source list already comes back newest-first (`sessionHistoryFor`'s own
- * contract), "first occurrence" here also means "latest resume" wins the
- * entry actually kept. Topic sittings are attributed before the legacy key,
- * so a topic-tagged occurrence always wins over an untagged legacy one for
- * the same sessionId. */
+ * `recordSession`), so each source list goes through `dedupeBySessionId`
+ * first (one row per sitting, carrying the sitting's FIRST-recorded
+ * `startedAt` — see that function's doc for why the date shown must be the
+ * day the sitting began, not the latest resume's), and `take()` then keeps
+ * the first occurrence across keys. Topic sittings are attributed before
+ * the legacy key, so a topic-tagged occurrence always wins over an untagged
+ * legacy one for the same sessionId. */
 export async function fetchAllHistory(): Promise<AllHistoryEntry[]> {
   const topics = await window.engram.topics()
   const [perTopicLists, reviewList, coachList, legacyList] = await Promise.all([
@@ -317,16 +327,61 @@ export async function fetchAllHistory(): Promise<AllHistoryEntry[]> {
   }
 
   topics.forEach((t, i) =>
-    take(perTopicLists[i], (e) => ({ ...e, kind: 'learn', topicId: t.topic, topicTitle: t.title })),
+    take(dedupeBySessionId(perTopicLists[i]), (e) => ({ ...e, kind: 'learn', topicId: t.topic, topicTitle: t.title })),
   )
-  take(reviewList, (e) => ({ ...e, kind: 'review' }))
-  take(coachList, (e) => ({ ...e, kind: 'coach' }))
-  take(legacyList, (e) => ({ ...e, kind: 'learn' }))
+  take(dedupeBySessionId(reviewList), (e) => ({ ...e, kind: 'review' }))
+  take(dedupeBySessionId(coachList), (e) => ({ ...e, kind: 'coach' }))
+  take(dedupeBySessionId(legacyList), (e) => ({ ...e, kind: 'learn' }))
 
   // Newest first across the combined set — per-key ordering alone isn't
   // enough once lists from different keys are interleaved.
   out.sort((a, b) => b.startedAt.localeCompare(a.startedAt))
   return out
+}
+
+/** A provenance/artifact deep link can name a sitting this drawer's own
+ * fetched list doesn't contain without the link being wrong — the event it
+ * points at is real (provenance is a disk sweep over actual transcripts;
+ * see sessionScan.ts's three coverage layers). Two of those cases are still
+ * honestly openable, resolved in order:
+ *
+ *  1. Recorded under a DIFFERENT index key than the one this drawer
+ *     fetched — e.g. an encode from before per-topic keying lives under the
+ *     legacy shared 'learn' key, not the topic's own (sessionScan.ts layer
+ *     2). `fetchAllHistory` already spans every key, so its entry — real
+ *     recorded `startedAt`, kind/topic tag — is reused as-is. Skipped when
+ *     the drawer is already in `ALL_HISTORY_KEY` mode (that list IS the
+ *     whole recorded index).
+ *  2. Never recorded by this app at all — a CLI-run sitting the provenance
+ *     disk sweep attributed (layer 3). `session:transcript` already reads
+ *     across every project dir (transcriptReader.ts's findTranscriptPath),
+ *     so when the transcript exists the sitting is shown from it directly,
+ *     `startedAt` taken from the transcript's own first timestamped line —
+ *     the sitting's real start, never a fabricated date. `kind` is left
+ *     unset deliberately: the app never recorded what kind of sitting this
+ *     was, and the default rendering (grade cards at their chronological
+ *     positions) is the honest one for an unknown.
+ *
+ * Returns null when neither applies — the transcript is gone or empty — and
+ * the caller keeps the "isn't in the app's recorded history" banner plus
+ * most-recent fallback exactly as before. Nothing here ever substitutes a
+ * different transcript for the requested one: the returned entry's
+ * sessionId is always the one asked for. */
+async function resolveLinkedSitting(
+  sessionId: string,
+  historyKey: string,
+): Promise<{ entry: HistoryRow; unrecorded: boolean } | null> {
+  if (historyKey !== ALL_HISTORY_KEY) {
+    const recorded = (await fetchAllHistory()).find((e) => e.sessionId === sessionId)
+    if (recorded) return { entry: recorded, unrecorded: false }
+  }
+  const lines = (await window.engram.getTranscript(sessionId)) as ({ timestamp?: string } | null)[]
+  for (const line of lines) {
+    if (typeof line?.timestamp !== 'string') continue
+    if (Number.isNaN(new Date(line.timestamp).getTime())) continue
+    return { entry: { sessionId, key: historyKey, startedAt: line.timestamp }, unrecorded: true }
+  }
+  return null
 }
 
 /** Read-only browser for past sittings on a topic (Learn) or the review queue
@@ -359,9 +414,11 @@ export function SessionHistoryDrawer({
   open: boolean
   onClose: () => void
   /** Opens directly on this sitting instead of "most recent" — provenance
-   * deep-links pass the sessionId a ProvenanceEvent came from. Ignored (falls
-   * back to the default "most recent" behavior) if the id isn't in this
-   * history's entry list. */
+   * deep-links pass the sessionId a ProvenanceEvent came from. An id that
+   * isn't in this history's entry list is still opened when it's recorded
+   * under another index key or its transcript exists on disk (see
+   * resolveLinkedSitting); only when the transcript is genuinely gone does
+   * the drawer fall back to "most recent" with the not-in-history banner. */
   initialSessionId?: string
   /** The transcript-line index (ProvenanceEvent.anchor) to scroll to and
    * warm-highlight, once, on the initial open of `initialSessionId`. Has no
@@ -371,15 +428,21 @@ export function SessionHistoryDrawer({
 }) {
   const [entries, setEntries] = useState<HistoryRow[] | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  // True exactly when the caller asked for a specific sitting (`initialSessionId`)
-  // and it wasn't in the fetched list — a stale/CLI-run/pruned sessionId, most
-  // often a sitting `nodeProvenance`'s disk sweep attributed from a transcript
-  // this app's own session index never recorded (see ArtifactTile/TopicMapView's
-  // ProvenanceBlock, the two callers that pass a real `initialSessionId`). The
-  // drawer still opens (on `list[0]`, same as any other unmatched/absent
-  // request) — it just says so instead of silently substituting a different
-  // transcript for the one the reader actually asked to see.
+  // True exactly when the caller asked for a specific sitting (`initialSessionId`),
+  // it wasn't in the fetched list, AND `resolveLinkedSitting` couldn't open it
+  // either — the transcript is genuinely gone (pruned/deleted), not merely
+  // filed elsewhere. The drawer still opens (on `list[0]`, same as any other
+  // unmatched/absent request) — it just says so instead of silently
+  // substituting a different transcript for the one the reader asked to see.
   const [requestedNotFound, setRequestedNotFound] = useState(false)
+  // The deep-linked sitting this drawer's own list doesn't contain but that
+  // could still be honestly opened — see resolveLinkedSitting's doc for the
+  // two cases (recorded under another key / CLI-run, straight from the
+  // transcript). Rendered as its own pinned "Linked sitting" row above the
+  // recorded list (never spliced into it: the list's "N sessions ago"
+  // ordinals count THIS history's recorded sittings only), plus an inline
+  // note naming which case it is.
+  const [linkedSitting, setLinkedSitting] = useState<{ entry: HistoryRow; unrecorded: boolean } | null>(null)
   const [timeline, setTimeline] = useState<{
     messages: ChatMessage[]
     grades: GradeBatch[]
@@ -401,6 +464,7 @@ export function SessionHistoryDrawer({
     setSelectedId(null)
     setTimeline(null)
     setRequestedNotFound(false)
+    setLinkedSitting(null)
     anchorAppliedRef.current = false
     // The per-topic/review branches dedupe here (fetchAllHistory does its own,
     // see dedupeBySessionId's doc) — without it a resumed sitting's repeat
@@ -411,14 +475,29 @@ export function SessionHistoryDrawer({
         : historyKey === 'review'
           ? window.engram.sessionHistoryFor('review').then(dedupeBySessionId)
           : window.engram.sessionHistoryFor('learn', historyKey).then(dedupeBySessionId)
-    fetchEntries.then((list) => {
+    fetchEntries.then(async (list) => {
       setEntries(list)
       // Anchored open lands on the requested sitting; otherwise most-recent
       // sitting is selected by default — same "land on the latest"
       // convenience as any other history browser. Nothing here touches the
       // live session that opened the drawer.
       const matchedInitial = Boolean(initialSessionId) && list.some((e) => e.sessionId === initialSessionId)
-      setRequestedNotFound(Boolean(initialSessionId) && !matchedInitial)
+      if (initialSessionId && !matchedInitial) {
+        // Not in this history's own list — but a provenance/artifact link's
+        // sitting can still be honestly opened when it's recorded under a
+        // different key, or when its CLI-run transcript exists on disk (see
+        // resolveLinkedSitting). Only when both miss does the "isn't in the
+        // app's recorded history" banner + most-recent fallback fire.
+        const linked = await resolveLinkedSitting(initialSessionId, historyKey)
+        if (linked) {
+          setLinkedSitting(linked)
+          // A deep link the learner actually followed — record it, same as
+          // the matchedInitial path below.
+          selectEntry(initialSessionId, [linked.entry], true)
+          return
+        }
+        setRequestedNotFound(true)
+      }
       const target = matchedInitial ? initialSessionId : (list[0]?.sessionId ?? null)
       // Only a genuine deep link (matchedInitial) is something the learner
       // actually chose to look at — the plain "land on most-recent" default,
@@ -532,7 +611,11 @@ export function SessionHistoryDrawer({
     return () => cancelAnimationFrame(raf)
   }, [timeline, selectedId, initialSessionId, anchorIndex])
 
-  const selectedEntry = entries?.find((e) => e.sessionId === selectedId) ?? null
+  // The linked (deep-linked, not-in-list) sitting is selectable too — its
+  // row lives outside `entries` by design (see the linkedSitting state doc).
+  const selectedEntry =
+    entries?.find((e) => e.sessionId === selectedId) ??
+    (linkedSitting && linkedSitting.entry.sessionId === selectedId ? linkedSitting.entry : null)
   // Learn history's `historyKey` is a real topic id; Review history's is the
   // literal 'review' sentinel spanning every topic — only the former gives
   // the interval ladder a single topic to filter receipts by (see
@@ -634,7 +717,23 @@ export function SessionHistoryDrawer({
       <div className="flex gap-4 h-[65vh] drawer-enter">
         <div className="w-48 shrink-0 flex flex-col border-r border-[var(--color-hairline)] pr-3 overflow-y-auto">
           {entries === null && <div className="fig-caption px-1 py-2">reading past sittings…</div>}
-          {entries !== null && entries.length === 0 && (
+          {/* The deep-linked sitting this history's list doesn't contain —
+              pinned above the recorded rows, never spliced in (the ordinals
+              below count recorded sittings only). */}
+          {linkedSitting && (
+            <div className="border-b border-[var(--color-hairline)] mb-1 pb-1">
+              <button
+                onClick={() => selectEntry(linkedSitting.entry.sessionId, [linkedSitting.entry])}
+                className={`focus-ring no-press w-full flex flex-col items-start gap-0.5 px-2.5 py-2.5 text-left rounded-lg hover:bg-[var(--color-surface-3)] ${
+                  linkedSitting.entry.sessionId === selectedId ? 'bg-[var(--color-surface-3)]' : ''
+                }`}
+              >
+                <span className="text-sm text-[var(--color-text-primary)] truncate max-w-full">Linked sitting</span>
+                <span className="text-xs text-[var(--color-text-faint)] label-data">{formatWhen(linkedSitting.entry.startedAt)}</span>
+              </button>
+            </div>
+          )}
+          {entries !== null && entries.length === 0 && !linkedSitting && (
             <div className="px-1 py-2 text-sm text-[var(--color-text-faint)]">No past sessions yet.</div>
           )}
           {entries?.map((entry, i) => (
@@ -654,13 +753,23 @@ export function SessionHistoryDrawer({
         </div>
 
         <div className="flex-1 min-w-0 flex flex-col gap-3">
+          {/* The deep-linked sitting was opened, but from outside this
+              history's own list — say which way (see resolveLinkedSitting).
+              Quiet ink, not a warning: the right transcript IS on screen. */}
+          {linkedSitting && (
+            <div className="shrink-0 panel border-[var(--color-ink-cool-dim)] px-4 py-2 text-xs text-[var(--color-ink-cool)]">
+              {linkedSitting.unrecorded
+                ? 'This sitting ran outside this app — showing its transcript directly. It isn’t part of the recorded list on the left.'
+                : 'This sitting is in the app’s recorded history, but not under this list — showing it directly.'}
+            </div>
+          )}
           {/* The requested sitting (a provenance/artifact deep link's own
-              sessionId) isn't one this drawer's list actually contains — say
+              sessionId) isn't one this drawer's list contains, isn't recorded
+              under any other key, and its transcript is gone from disk — say
               so instead of quietly opening a different transcript in its
-              place. Real today for CLI-run sittings `nodeProvenance`'s disk
-              sweep attributes a node to, that this app's own session index
-              never recorded (see ArtifactTile's "Encoded …" link and
-              TopicMapView's ProvenanceBlock — both route through here). */}
+              place (see resolveLinkedSitting for the two cases that DO still
+              open; ArtifactTile's "Encoded …" link and TopicMapView's
+              ProvenanceBlock both route through here). */}
           {requestedNotFound && (
             <div className="shrink-0 panel border-[var(--color-ink-cool-dim)] px-4 py-2 text-xs text-[var(--color-ink-cool)]">
               The sitting this points to isn’t in the app’s recorded history
