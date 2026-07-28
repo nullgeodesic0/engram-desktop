@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ExportSittingFormat, ExportSittingResult, SessionIndexEntry } from '../../../shared/types'
-import type { ChatMessage } from '../../../shared/chatMessages'
+import { parseLineTimestamp, type ChatMessage } from '../../../shared/chatMessages'
 import { parseGradeResult, parseGradeResults, type GradeResult } from '../../../shared/gradeResult'
 import { deriveRitualMarks, type DerivedRitualMark } from '../../../shared/ritualFromTranscript'
 import { deriveReviewCrossings, nextProbeHeaderAt } from '../../../shared/reviewCrossing'
@@ -17,6 +17,7 @@ import { sittingToMarkdown, sittingToPrintHtml, type SittingMeta } from '../shar
 import { recordView } from '../shared/recentlyViewed'
 import { Modal } from './ui/Modal'
 import { ChatMessageView } from './ChatMessageView'
+import { useEquationCopy } from './useEquationCopy'
 import { GradeResultCard } from './GradeResultCard'
 import { MarkView, NodeCrossingDivider } from './ritual/Marks'
 
@@ -126,7 +127,7 @@ export function buildHistoryTimeline(
       // rubric the audited sitting is being graded against. Never render it
       // as a chat bubble, same discipline as chatMessages.ts.
       if (isTaskNotificationContent(line.message.content)) continue
-      messages.push({ id: `t${idCounter++}`, role: 'user', text: line.message.content })
+      messages.push({ id: `t${idCounter++}`, role: 'user', text: line.message.content, timestamp: parseLineTimestamp(line.timestamp) })
       messageSourceIndex.push(idx)
       continue
     }
@@ -146,9 +147,11 @@ export function buildHistoryTimeline(
         if (block.type !== 'text' || !block.text) continue
         const last = messages[messages.length - 1]
         if (last && last.role === 'assistant' && !boundarySinceLastText) {
+          // Timestamp intentionally untouched — same "keeps the instant it
+          // started at" rule as chatMessages.ts's own merge branch.
           last.text += block.text
         } else {
-          messages.push({ id: `t${idCounter++}`, role: 'assistant', text: block.text })
+          messages.push({ id: `t${idCounter++}`, role: 'assistant', text: block.text, timestamp: parseLineTimestamp(line.timestamp) })
           messageSourceIndex.push(idx)
         }
         boundarySinceLastText = false
@@ -457,6 +460,20 @@ export function SessionHistoryDrawer({
   // without it, StrictMode's double-invoked effects (or a second `timeline`
   // update from re-selecting the same sitting) would re-trigger the scroll.
   const anchorAppliedRef = useRef(false)
+  // Chat Instruments Wave A — the replay transcript's own equation-copy
+  // wiring. Merged onto the SAME node `scrollRef` already tracks (Modal
+  // unmounts this whole pane every time the drawer closes, which is exactly
+  // the remount case `useEquationCopy`'s callback-ref design exists for —
+  // see its own doctrine comment), via a small composed callback rather
+  // than a second `ref` prop (a DOM node only accepts one).
+  const equationCopyRef = useEquationCopy()
+  const setScrollAndCopyRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      scrollRef.current = node
+      equationCopyRef(node)
+    },
+    [equationCopyRef],
+  )
 
   useEffect(() => {
     if (!open) return
@@ -809,7 +826,7 @@ export function SessionHistoryDrawer({
               </div>
             </div>
           )}
-          <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-5 pr-1">
+          <div ref={setScrollAndCopyRef} className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-5 pr-1">
             {selectedId === null && <div className="fig-caption px-1">Select a sitting to view its transcript.</div>}
             {loadingTranscript && <div className="fig-caption px-1">reading transcript…</div>}
             {timeline && (
@@ -862,6 +879,7 @@ export function SessionHistoryDrawer({
                         verdictSegments={verdictProps?.segments}
                         verdictEyebrowIndex={verdictProps?.eyebrowIndex}
                         suppressSchedule={verdictProps?.suppressSchedule}
+                        previousTimestamp={timeline.messages[i - 1]?.timestamp}
                       />
                     </div>
                     {!isReviewSitting &&

@@ -9,14 +9,46 @@ export interface ChatMessage {
    * that gets the model to read them lives in the message text itself, see
    * LearnSessionView's submitProduction). Never populated on transcript replay. */
   attachments?: string[]
+  /** Epoch ms this bubble was first created — never updated by later merges
+   * into the same bubble (see the SPLIT RULE doctrine comment below: a
+   * merged bubble keeps the timestamp of whichever block started it).
+   * Replay: parsed from the transcript line's own `timestamp` field (Claude
+   * Code stamps every `user`/`assistant` line — confirmed against real
+   * transcripts on this machine). Live: stamped at append time with
+   * `Date.now()` by the caller (LearnSessionView/ReviewSessionView) — honest
+   * because that IS when the app received it; SessionManager's own
+   * `SessionEvent` shape carries no timestamp of its own (see
+   * shared/sessionEvents.ts) and this file never invents one for it.
+   * `undefined` when a line/event carried nothing usable — never fabricated;
+   * a message with `undefined` here renders with no clock at all. */
+  timestamp?: number
 }
 
 interface TranscriptLine {
   type?: string
+  /** ISO timestamp on the raw transcript entry. Same field
+   * SessionHistoryDrawer.tsx's `buildHistoryTimeline`/`localDateFromIso` and
+   * ritualFromTranscript.ts's `walkTranscript` read off the identical raw
+   * line shape — three independent call sites relying on the same Claude
+   * Code guarantee. */
+  timestamp?: string
   message?: {
     role?: string
     content?: string | { type?: string; text?: string; name?: string; input?: Record<string, unknown> }[]
   }
+}
+
+/** Local-date discipline (getFullYear/Month/Date — never toISOString) lives
+ * downstream of this, in ChatMessageView's clock formatting — this function
+ * only ever hands back an epoch ms instant, never a calendar day. `undefined`
+ * for a missing or unparseable timestamp, never `NaN` or a fabricated "now".
+ * Exported so SessionHistoryDrawer.tsx's `buildHistoryTimeline` (a deliberate
+ * local superset of this file's own merge rule — see that function's own
+ * doctrine comment) parses the identical raw field the identical way. */
+export function parseLineTimestamp(ts: string | undefined): number | undefined {
+  if (!ts) return undefined
+  const parsed = Date.parse(ts)
+  return Number.isNaN(parsed) ? undefined : parsed
 }
 
 /**
@@ -69,7 +101,7 @@ export function parseTranscriptToMessages(rawLines: unknown[]): ChatMessage[] {
       // rubric the sitting is being graded against. Never render it as a
       // chat bubble.
       if (isTaskNotificationContent(line.message.content)) continue
-      messages.push({ id: `t${idCounter++}`, role: 'user', text: line.message.content })
+      messages.push({ id: `t${idCounter++}`, role: 'user', text: line.message.content, timestamp: parseLineTimestamp(line.timestamp) })
       continue
     }
 
@@ -88,9 +120,11 @@ export function parseTranscriptToMessages(rawLines: unknown[]): ChatMessage[] {
         if (block.type !== 'text' || !block.text) continue
         const last = messages[messages.length - 1]
         if (last && last.role === 'assistant' && !boundarySinceLastText) {
+          // Timestamp intentionally untouched — a merged bubble keeps the
+          // instant it STARTED at, same rule the live append path uses.
           last.text += block.text
         } else {
-          messages.push({ id: `t${idCounter++}`, role: 'assistant', text: block.text })
+          messages.push({ id: `t${idCounter++}`, role: 'assistant', text: block.text, timestamp: parseLineTimestamp(line.timestamp) })
         }
         boundarySinceLastText = false
       }

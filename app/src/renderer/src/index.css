@@ -408,6 +408,77 @@
     margin: 0.75em 0;
   }
 
+  /* Chat Instruments Wave A — equation copy. Scoped under `.katex-copy-scope`
+   * (added by useEquationCopy.ts to whichever container it's attached to)
+   * rather than bare `.katex`, so the hover affordance never lies: it only
+   * ever appears where a click would actually copy something. KaTeX renders
+   * outside chat too (the Topic Map, the misconception ledger) — no handler
+   * is wired there, so those equations keep KaTeX's own plain, un-hoverable
+   * look. `.katex` already carries `position: relative` from KaTeX's own
+   * stylesheet, so the glyph below needs nothing extra to anchor to it. */
+  .katex-copy-scope .katex {
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background-color var(--dur-fast) ease-out, box-shadow var(--dur-fast) ease-out;
+  }
+  .katex-copy-scope .katex:hover {
+    background-color: color-mix(in srgb, var(--color-ink-warm) 10%, transparent);
+    box-shadow: 0 0 0 1px var(--color-ink-warm-dim);
+  }
+  /* The ⧉ glyph — pure CSS rather than DOM injected per-equation, so it
+   * tracks every dynamically-rendered equation (a streaming assistant
+   * bubble growing new KaTeX nodes mid-turn) with zero extra bookkeeping. */
+  .katex-copy-scope .katex::after {
+    content: '⧉';
+    position: absolute;
+    top: -0.2em;
+    right: -1.15em;
+    font-size: 0.62em;
+    line-height: 1;
+    color: var(--color-text-faint);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--dur-fast) ease-out;
+  }
+  .katex-copy-scope .katex:hover::after {
+    opacity: 1;
+  }
+  /* An equation inside an interactive control (an AskCard/AskDialog option
+   * button, an ActionChips chip — see useEquationCopy.ts's own
+   * INTERACTIVE_ANCESTOR_SELECTOR) keeps that control's own click behavior;
+   * the hook never copies there. These overrides match that guard exactly,
+   * so the hover cue never promises a copy the click won't deliver — higher
+   * specificity than the base rules above (an extra type selector) wins
+   * regardless of source order. */
+  .katex-copy-scope button .katex,
+  .katex-copy-scope a .katex,
+  .katex-copy-scope input .katex,
+  .katex-copy-scope select .katex,
+  .katex-copy-scope textarea .katex,
+  .katex-copy-scope [role='button'] .katex,
+  .katex-copy-scope [contenteditable='true'] .katex {
+    cursor: inherit;
+  }
+  .katex-copy-scope button .katex:hover,
+  .katex-copy-scope a .katex:hover,
+  .katex-copy-scope input .katex:hover,
+  .katex-copy-scope select .katex:hover,
+  .katex-copy-scope textarea .katex:hover,
+  .katex-copy-scope [role='button'] .katex:hover,
+  .katex-copy-scope [contenteditable='true'] .katex:hover {
+    background-color: transparent;
+    box-shadow: none;
+  }
+  .katex-copy-scope button .katex:hover::after,
+  .katex-copy-scope a .katex:hover::after,
+  .katex-copy-scope input .katex:hover::after,
+  .katex-copy-scope select .katex:hover::after,
+  .katex-copy-scope textarea .katex:hover::after,
+  .katex-copy-scope [role='button'] .katex:hover::after,
+  .katex-copy-scope [contenteditable='true'] .katex:hover::after {
+    opacity: 0;
+  }
+
   /* The tutor's voice — assistant prose reads in serif, like a set page. */
   .voice-serif {
     font-family: var(--font-serif);

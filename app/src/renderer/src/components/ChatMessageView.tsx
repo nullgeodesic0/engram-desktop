@@ -14,6 +14,40 @@ export function fileName(path: string): string {
   return path.split('/').pop() ?? path
 }
 
+/** `HH:MM` local time for a message's hover-revealed clock — `Mon D · `
+ * prefixed only when this message's local calendar date differs from the
+ * PREVIOUS rendered message's (a multi-day resumed sitting crossed
+ * midnight); never prefixed for the very first message in a transcript
+ * (`previousTs === undefined`) since there's nothing to differ from. Local-
+ * date discipline throughout (getFullYear/Month/Date/Hours/Minutes — never
+ * toISOString), same idiom as SessionHistoryDrawer.tsx's `localDateFromIso`. */
+function formatMessageClock(ts: number, previousTs: number | undefined): string {
+  const d = new Date(ts)
+  const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  if (previousTs === undefined) return time
+  const p = new Date(previousTs)
+  const sameLocalDate = d.getFullYear() === p.getFullYear() && d.getMonth() === p.getMonth() && d.getDate() === p.getDate()
+  return sameLocalDate ? time : `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · ${time}`
+}
+
+/** The row's own hover-revealed clock — anchored to the voice icon (via the
+ * icon wrapper's `relative`) rather than the row, so it reads as "when this
+ * turn was sent" regardless of which side the icon sits on. Absolutely
+ * positioned: never reserves layout space, appears only on `group-hover` of
+ * the enclosing row (see the three call sites below), fades with
+ * `--dur-fast`. `aria-hidden` — decorative supplementary detail, same
+ * treatment CopyButton gives its glyph. */
+function MessageClock({ label }: { label: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1 whitespace-nowrap label-data text-[9px] text-[var(--color-text-faint)] opacity-0 group-hover:opacity-100 transition-opacity duration-[var(--dur-fast)]"
+    >
+      {label}
+    </span>
+  )
+}
+
 interface ChatMessageViewProps {
   message: ChatMessage
   /** Only offered on your own most-recent message — "fix a typo" shouldn't be
@@ -68,6 +102,14 @@ interface ChatMessageViewProps {
    * nothing at all (not even a placeholder); see the empty-bubble guard
    * below for what happens when THAT was the message's only content. */
   suppressSchedule?: (segment: ScheduleSegment) => boolean
+  /** Chat Instruments Wave A — the PREVIOUS rendered message's own
+   * `timestamp`, threaded through by the caller (which already walks the
+   * `messages` array) so this component never has to see the array itself.
+   * Same "caller resolves it once, passes it down" convention as
+   * `verdictEyebrowIndex` above. Used only to decide whether THIS message's
+   * hover clock needs a date prefix (see `formatMessageClock`) — `undefined`
+   * for the transcript's first message, or when the caller doesn't track it. */
+  previousTimestamp?: number
 }
 
 /** One turn, rendered like a normal chat exchange — a right-aligned bubble for
@@ -86,17 +128,20 @@ export const ChatMessageView = memo(function ChatMessageView({
   verdictSegments,
   verdictEyebrowIndex,
   suppressSchedule,
+  previousTimestamp,
 }: ChatMessageViewProps) {
   const segments = useMemo(
     () => (message.role === 'user' || verdictSegments !== undefined ? [] : parseBeatSegments(message.text)),
     [message.role, message.text, verdictSegments],
   )
+  const clockLabel = message.timestamp !== undefined ? formatMessageClock(message.timestamp, previousTimestamp) : null
 
   if (message.role === 'user') {
     return (
       <div className="group flex justify-end items-start gap-1.5">
-        <div className="mt-3.5 shrink-0">
+        <div className="mt-3.5 shrink-0 relative">
           <InkNode id="voice-learner" variant="outlined" color="var(--color-ink-cool)" size={12} />
+          {clockLabel && <MessageClock label={clockLabel} />}
         </div>
         {onEditResend && (
           <button
@@ -187,9 +232,10 @@ export const ChatMessageView = memo(function ChatMessageView({
     const hasVisibleContent = renderedSegments.some((node) => node !== null)
     if (!hasVisibleContent && !probe && !beforeProbeHeader) return null
     return (
-      <div className="flex items-start gap-2 max-w-[97%]">
-        <div className="mt-1 shrink-0">
+      <div className="group flex items-start gap-2 max-w-[97%]">
+        <div className="mt-1 shrink-0 relative">
           <InkNode id="voice-tutor" variant="filled" size={12} />
+          {clockLabel && <MessageClock label={clockLabel} />}
         </div>
         <div className="flex flex-col gap-3 flex-1 min-w-0">
           {renderedSegments}
@@ -205,9 +251,10 @@ export const ChatMessageView = memo(function ChatMessageView({
   }
 
   return (
-    <div className="flex items-start gap-2 max-w-[97%]">
-      <div className="mt-1 shrink-0">
+    <div className="group flex items-start gap-2 max-w-[97%]">
+      <div className="mt-1 shrink-0 relative">
         <InkNode id="voice-tutor" variant="filled" size={12} />
+        {clockLabel && <MessageClock label={clockLabel} />}
       </div>
       <div className="flex flex-col gap-3 flex-1 min-w-0">
         {segments.map((seg, i) => {
