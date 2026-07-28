@@ -12,10 +12,17 @@ export function NeuronMark({ size = 22 }: { size?: number }) {
   return (
     <span className="relative inline-flex shrink-0" style={{ width: size, height: size }} aria-hidden="true">
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className="absolute inset-0">
-        <g stroke="var(--color-ink-lavender)" strokeWidth="1.5" strokeLinecap="round">
-          <path d="M10.5 12.8 C11.5 10.5 12.5 8.5 14 6.4" />
-          <path d="M8.2 13 C7 11 6 9.8 4.9 8.7" />
-          <path d="M11.8 16 C14.5 17.8 17.5 18.4 21.5 19" />
+        {/* Two-segment branches taper (thick near soma, thin at tip) — the
+            same matte tapered-dendrite language as the icon and the sidebar
+            footer, at glyph scale. */}
+        <g stroke="var(--color-ink-lavender)" strokeLinecap="round">
+          <path d="M10.5 12.8 C11.2 11.2 11.8 9.8 12.6 8.4" strokeWidth="1.7" />
+          <path d="M12.6 8.4 C13.2 7.5 13.6 6.9 14 6.4" strokeWidth="1" />
+          <path d="M8.2 13 C7.4 11.7 6.8 10.9 6.1 10" strokeWidth="1.7" />
+          <path d="M6.1 10 C5.6 9.4 5.2 9 4.9 8.7" strokeWidth="1" />
+          <path d="M10 12.6 C9.7 11.2 9.5 10.1 9.4 8.9" strokeWidth="1.2" />
+          <path d="M9.4 8.9 C9.3 8.1 9.3 7.5 9.3 6.9" strokeWidth="0.7" />
+          <path d="M11.8 16 C14.5 17.8 17.5 18.4 21.5 19" strokeWidth="1.5" />
         </g>
         <circle cx="14.8" cy="4.9" r="1.8" fill="var(--color-ink-paper)" />
         <circle cx="4.1" cy="7.3" r="1.4" fill="var(--color-ink-lavender)" />
