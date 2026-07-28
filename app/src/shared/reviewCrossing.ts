@@ -64,6 +64,16 @@ export interface ReviewCrossing {
    * render, immediately before that message's `ProbeCard` — never before the
    * message as a whole. */
   atMessageIndex: number
+  /** Addition A (chat refine round) — present when this crossing ALSO moves
+   * into a different topic than the previous probe's, per the tutor's own
+   * `*(topic)*` annotation on the header (`ProbeHeader.topic` — real title
+   * text, never a slug the renderer would have to resolve). Null when this
+   * header carries no topic annotation at all, or when it matches the
+   * previous probe's own topic (an ordinary within-topic crossing in a mixed
+   * queue). Never guessed from node ids — only ever the tutor's own stated
+   * topic, so a crossing this fires on is a REAL topic change, not a
+   * same-topic node-to-node sweep that merely looks like one. */
+  topicCrossing: string | null
 }
 
 export function deriveReviewCrossings(messages: ChatMessage[]): ReviewCrossing[] {
@@ -72,7 +82,11 @@ export function deriveReviewCrossings(messages: ChatMessage[]): ReviewCrossing[]
   for (let i = 1; i < headers.length; i++) {
     const prevNode = headers[i - 1].header.node
     const { index, header } = headers[i]
-    if (prevNode !== header.node) out.push({ fromNode: prevNode, header, atMessageIndex: index })
+    if (prevNode !== header.node) {
+      const prevTopic = headers[i - 1].header.topic
+      const topicCrossing = header.topic !== null && header.topic !== prevTopic ? header.topic : null
+      out.push({ fromNode: prevNode, header, atMessageIndex: index, topicCrossing })
+    }
   }
   return out
 }

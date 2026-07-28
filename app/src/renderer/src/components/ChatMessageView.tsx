@@ -178,7 +178,7 @@ export const ChatMessageView = memo(function ChatMessageView({
 
   if (message.role === 'user') {
     return (
-      <div className="group flex justify-end items-start gap-1.5" data-msg-index={dataIndex}>
+      <div className="group flex justify-end items-start gap-1.5 scroll-anchor-top" data-msg-index={dataIndex}>
         <div className="mt-3.5 shrink-0 relative">
           <InkNode id="voice-learner" variant="outlined" color="var(--color-ink-cool)" size={12} />
           {clockLabel && <MessageClock label={clockLabel} />}
@@ -272,7 +272,7 @@ export const ChatMessageView = memo(function ChatMessageView({
     const hasVisibleContent = renderedSegments.some((node) => node !== null)
     if (!hasVisibleContent && !probe && !beforeProbeHeader) return null
     return (
-      <div className="group flex items-start gap-2 max-w-[97%]" data-msg-index={dataIndex}>
+      <div className="group flex items-start gap-2 max-w-[97%] scroll-anchor-top" data-msg-index={dataIndex}>
         <div className="mt-1 shrink-0 relative">
           <InkNode id="voice-tutor" variant="filled" size={12} />
           {clockLabel && <MessageClock label={clockLabel} />}
@@ -291,7 +291,7 @@ export const ChatMessageView = memo(function ChatMessageView({
   }
 
   return (
-    <div className="group flex items-start gap-2 max-w-[97%]" data-msg-index={dataIndex}>
+    <div className="group flex items-start gap-2 max-w-[97%] scroll-anchor-top" data-msg-index={dataIndex}>
       <div className="mt-1 shrink-0 relative">
         <InkNode id="voice-tutor" variant="filled" size={12} />
         {clockLabel && <MessageClock label={clockLabel} />}

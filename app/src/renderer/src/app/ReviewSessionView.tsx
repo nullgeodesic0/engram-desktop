@@ -7,6 +7,7 @@ import { isBlockingRateLimitStatus } from '../../../shared/rateLimit'
 import { ChatMessageView } from '../components/ChatMessageView'
 import { MessageComposer } from '../components/MessageComposer'
 import { ContextGauge } from '../components/ContextGauge'
+import { SittingClock } from '../components/SittingClock'
 import { ActivityLine } from '../components/ActivityLine'
 import { ChatScrollRegion } from '../components/ChatScrollRegion'
 import { useEquationCopy } from '../components/useEquationCopy'
@@ -114,6 +115,10 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
   const [phase, setPhase] = useState<Phase>('loading')
   const [queue, setQueue] = useState<DueItem[]>([])
   const [sessionId, setSessionId] = useState<string | null>(null)
+  // Addition D (chat refine round) — see LearnSessionView.tsx's own
+  // identical field/doctrine comment; set alongside `setSessionId(sid)`
+  // below (fresh start or resume — Review has exactly one such call site).
+  const [sittingStartedAt, setSittingStartedAt] = useState<number | null>(null)
   const [production, setProduction] = useState('')
   const [attachedFiles, setAttachedFiles] = useState<string[]>([])
   const [markdownPreview, setMarkdownPreview] = useState(false)
@@ -702,6 +707,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
       : await window.engram.startSession('/engram:review', 'review')
     sessionIdRef.current = sid
     setSessionId(sid)
+    setSittingStartedAt(Date.now())
     // Resuming sends no kickoff turn (SessionManager skips it on --resume — the model
     // already has full context), so there's nothing to wait on.
     setBusy(!resume)
@@ -960,13 +966,24 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
     const otherMarks = resolvedOtherMarks.filter((g) => g.resolvedIndex === i)
     const crossing = crossings.find((c) => c.atMessageIndex === i)
     if (batches.length === 0 && otherMarks.length === 0 && !crossing) return null
+    // Fix 2 — a milestone at this SAME resolved position whose own `node`
+    // also appears in a grade batch resolved here is the "adjacent to its
+    // own grade card" case MilestoneCard's doctrine comment describes; see
+    // that comment for why the numbers line then drops in favor of it.
+    const gradedNodesHere = new Set(batches.flatMap((g) => g.batch.results.map((r) => r.node)))
     return (
       <Fragment>
         {batches.flatMap((g) => renderGradeBatch(g.batch))}
         {otherMarks.map((g) => (
-          <MarkView key={g.mark.id} mark={g.mark} />
+          <MarkView
+            key={g.mark.id}
+            mark={g.mark}
+            milestonePairedWithGradeCard={g.mark.kind === 'milestone' && gradedNodesHere.has(g.mark.node)}
+          />
         ))}
-        {crossing && <NodeCrossingDivider nodeId={crossing.header.node} verb="moving to" />}
+        {crossing && (
+          <NodeCrossingDivider nodeId={crossing.header.node} verb="moving to" topicCrossing={crossing.topicCrossing} />
+        )}
       </Fragment>
     )
   }
@@ -1011,11 +1028,15 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
     [marks, reviewProbes, resolvedGradeBatches, crossings, messages.length],
   )
   const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null)
+  // Minimap fix — see LearnSessionView.tsx's own jumpToMessage doctrine
+  // comment: `block: 'start'` + `.scroll-anchor-top` (index.css), not
+  // `block: 'center'`, so clamped-near-edge jumps never land under the top
+  // fade mask or the peeked/pinned TicketCard.
   function jumpToMessage(atIndex: number) {
     if (!scrollEl || messages.length === 0) return
     const idx = Math.min(Math.max(atIndex, 0), messages.length - 1)
     const target = scrollEl.querySelector<HTMLElement>(`[data-msg-index="${idx}"]`)
-    target?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    target?.scrollIntoView({ block: 'start', behavior: 'smooth' })
   }
 
   return (
@@ -1034,6 +1055,14 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
         subtitle={phase === 'ready' ? undefined : `${queue.length} due`}
         right={
           <>
+            {/* Addition D (chat refine round) — live only; freezes (stops
+                ticking, stays on screen) once the sitting reaches 'done'
+                rather than disappearing — see SittingClock's own doctrine
+                comment for why a resumed sitting is labeled "this sitting",
+                never a recovered original start time. */}
+            {(phase === 'in-session' || phase === 'done') && sittingStartedAt !== null && (
+              <SittingClock startedAt={sittingStartedAt} running={phase === 'in-session'} label="this sitting" />
+            )}
             {phase === 'in-session' && momentumOn && <FlowChain chain={trailingRecalled(sessionGrades)} />}
             {phase === 'in-session' && momentumOn && sessionGrades.length > 0 && <InkWell results={sessionGrades} />}
             {(phase === 'in-session' || phase === 'done') && contextUsage && (
@@ -1334,9 +1363,19 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
                     (the sitting's last graded item, or a session that closed
                     before producing its next probe). */}
                 {tailGradeBatches.flatMap((g) => renderGradeBatch(g.batch))}
-                {tailOtherMarks.map((g) => (
-                  <MarkView key={g.mark.id} mark={g.mark} />
-                ))}
+                {tailOtherMarks.map((g) => {
+                  const milestoneNode = g.mark.kind === 'milestone' ? g.mark.node : null
+                  return (
+                    <MarkView
+                      key={g.mark.id}
+                      mark={g.mark}
+                      milestonePairedWithGradeCard={
+                        milestoneNode !== null &&
+                        tailGradeBatches.some((tb) => tb.batch.results.some((r) => r.node === milestoneNode))
+                      }
+                    />
+                  )
+                })}
                 {busy && (
                   <div className="flex items-center gap-2">
                     <ActivityLine activity={tutorActivity.activity} />

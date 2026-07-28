@@ -796,11 +796,15 @@ export function SessionHistoryDrawer({
         : [],
     [timeline, drawerProbes, resolvedGrades, reviewCrossings],
   )
+  // Minimap fix — see LearnSessionView.tsx's own jumpToMessage doctrine
+  // comment: `block: 'start'` + `.scroll-anchor-top` (index.css), not
+  // `block: 'center'`, so clamped-near-edge jumps never land under the top
+  // fade mask or the peeked/pinned TicketCard.
   function jumpToMessage(atIndex: number) {
     if (!scrollEl || !timeline || timeline.messages.length === 0) return
     const idx = Math.min(Math.max(atIndex, 0), timeline.messages.length - 1)
     const target = scrollEl.querySelector<HTMLElement>(`[data-msg-index="${idx}"]`)
-    target?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    target?.scrollIntoView({ block: 'start', behavior: 'smooth' })
   }
 
   return (
@@ -945,18 +949,37 @@ export function SessionHistoryDrawer({
                         beforeProbeHeader={
                           isReviewSitting ? (
                             <>
-                              {resolvedGrades
-                                .filter((g) => g.resolvedIndex === i)
-                                .flatMap((g) => renderGradeBatch(g.batch))}
-                              {resolvedOtherMarks
-                                .filter((g) => g.resolvedIndex === i)
-                                .map((g) => (
-                                  <MarkView key={g.mark.id} mark={g.mark} />
-                                ))}
+                              {(() => {
+                                const batchesHere = resolvedGrades.filter((g) => g.resolvedIndex === i)
+                                // Fix 2 — same "same resolved position, same
+                                // node" pairing ReviewSessionView's live
+                                // `inlineForMessage` computes; see
+                                // MilestoneCard's own doctrine comment.
+                                const gradedNodesHere = new Set(batchesHere.flatMap((g) => g.batch.results.map((r) => r.node)))
+                                return (
+                                  <>
+                                    {batchesHere.flatMap((g) => renderGradeBatch(g.batch))}
+                                    {resolvedOtherMarks
+                                      .filter((g) => g.resolvedIndex === i)
+                                      .map((g) => (
+                                        <MarkView
+                                          key={g.mark.id}
+                                          mark={g.mark}
+                                          milestonePairedWithGradeCard={g.mark.kind === 'milestone' && gradedNodesHere.has(g.mark.node)}
+                                        />
+                                      ))}
+                                  </>
+                                )
+                              })()}
                               {reviewCrossings
                                 .filter((c) => c.atMessageIndex === i)
                                 .map((c) => (
-                                  <NodeCrossingDivider key={`${c.fromNode}-${c.header.node}-${i}`} nodeId={c.header.node} verb="moving to" />
+                                  <NodeCrossingDivider
+                                    key={`${c.fromNode}-${c.header.node}-${i}`}
+                                    nodeId={c.header.node}
+                                    verb="moving to"
+                                    topicCrossing={c.topicCrossing}
+                                  />
                                 ))}
                             </>
                           ) : undefined
@@ -1006,9 +1029,19 @@ export function SessionHistoryDrawer({
                     .filter((g) => g.resolvedIndex === null)
                     .flatMap((g) => renderGradeBatch(g.batch))}
                 {isReviewSitting &&
-                  resolvedOtherMarks
-                    .filter((g) => g.resolvedIndex === null)
-                    .map((g) => <MarkView key={g.mark.id} mark={g.mark} />)}
+                  (() => {
+                    const tailBatches = resolvedGrades.filter((g) => g.resolvedIndex === null)
+                    const tailGradedNodes = new Set(tailBatches.flatMap((g) => g.batch.results.map((r) => r.node)))
+                    return resolvedOtherMarks
+                      .filter((g) => g.resolvedIndex === null)
+                      .map((g) => (
+                        <MarkView
+                          key={g.mark.id}
+                          mark={g.mark}
+                          milestonePairedWithGradeCard={g.mark.kind === 'milestone' && tailGradedNodes.has(g.mark.node)}
+                        />
+                      ))
+                  })()}
                 {timeline.messages.length === 0 && !loadingTranscript && (
                   <div className="text-sm text-[var(--color-text-faint)] px-1">Empty transcript.</div>
                 )}

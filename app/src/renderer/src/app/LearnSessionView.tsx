@@ -10,6 +10,7 @@ import { JobsRail, type Job } from '../components/JobsRail'
 import { TopicSettingsModal } from '../components/TopicSettingsModal'
 import { NewTopicModal } from '../components/NewTopicModal'
 import { ContextGauge } from '../components/ContextGauge'
+import { SittingClock } from '../components/SittingClock'
 import { BeatStepper, type BeatOutcome } from '../components/BeatStepper'
 import { ActivityLine } from '../components/ActivityLine'
 import { ChatScrollRegion } from '../components/ChatScrollRegion'
@@ -288,6 +289,11 @@ export function LearnSessionView({
   // Session state
   const [activeTopic, setActiveTopic] = useState<TopicListEntry | null>(null)
   const [sessionId, setSessionId] = useState<string | null>(null)
+  // Addition D (chat refine round) — set alongside every `setSessionId(sid)`
+  // below (fresh start, resume, or a brand-new topic), never on a `null`
+  // reset (SittingClock's own doctrine comment covers why a resumed sitting
+  // counts from resume, not a recovered original start time).
+  const [sittingStartedAt, setSittingStartedAt] = useState<number | null>(null)
   const [started, setStarted] = useState(false)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [busy, setBusy] = useState(false)
@@ -759,6 +765,7 @@ export function LearnSessionView({
       }
       sessionIdRef.current = null
       setSessionId(null)
+      setSittingStartedAt(null)
       resetSessionEphemera()
       openTopic(match)
       onDeepLinkConsumed?.()
@@ -1211,6 +1218,7 @@ export function LearnSessionView({
     const { sessionId: sid } = await window.engram.resumeSession(message, 'learn', topic.topic)
     sessionIdRef.current = sid
     setSessionId(sid)
+    setSittingStartedAt(Date.now())
   }
 
   // Deliberately bypasses the resume-if-exists behavior in openTopic — for when you
@@ -1235,6 +1243,7 @@ export function LearnSessionView({
     const { sessionId: sid } = await window.engram.startSession(message, 'learn', topic.topic)
     sessionIdRef.current = sid
     setSessionId(sid)
+    setSittingStartedAt(Date.now())
   }
 
   async function startNewTopic(goal: string, systemPromptExtra = '', contextFiles: string[] = []) {
@@ -1266,11 +1275,13 @@ export function LearnSessionView({
     const { sessionId: sid } = await window.engram.startSession(message, 'learn')
     sessionIdRef.current = sid
     setSessionId(sid)
+    setSittingStartedAt(Date.now())
   }
 
   function backToTopics() {
     setStarted(false)
     setSessionId(null)
+    setSittingStartedAt(null)
     sessionIdRef.current = null
     setActiveTopic(null)
     // Deliberately not reset on tab switches — a live session keeping its ambient
@@ -1462,11 +1473,20 @@ export function LearnSessionView({
   const learnProbes = useMemo(() => allProbeHeaders(messages), [messages])
   const minimapMoments = useMemo(() => deriveInstrumentMoments({ marks, probes: learnProbes }), [marks, learnProbes])
   const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null)
+  // Minimap fix — `block: 'start'`, not `'center'`: centering clamps near the
+  // transcript's own start/end (not enough content above/below to actually
+  // center), and the clamped landing spot then sits under `.scroll-fade-top`'s
+  // 28px mask or behind the peeked/pinned TicketCard — exactly the "lands
+  // slightly off" reports. `block: 'start'` plus `.scroll-anchor-top`'s
+  // `scroll-margin-top` (index.css) makes the browser stop short of that
+  // band instead, using the resolved DOM node's real geometry — never
+  // index-proportional arithmetic, so virtualized/unmeasured blocks can't
+  // drift it either.
   function jumpToMessage(atIndex: number) {
     if (!scrollEl || messages.length === 0) return
     const idx = Math.min(Math.max(atIndex, 0), messages.length - 1)
     const target = scrollEl.querySelector<HTMLElement>(`[data-msg-index="${idx}"]`)
-    target?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    target?.scrollIntoView({ block: 'start', behavior: 'smooth' })
   }
 
   return (
@@ -1542,6 +1562,10 @@ export function LearnSessionView({
             </div>
           )}
           <div className="flex items-center gap-4">
+            {/* Addition D (chat refine round) — live only (see SittingClock's
+                own doctrine comment); never rendered in SessionHistoryDrawer's
+                replay, which has no live sitting to time. */}
+            {started && sittingStartedAt !== null && <SittingClock startedAt={sittingStartedAt} running label="this sitting" />}
             {started && momentumOn && <FlowChain chain={trailingRecalled(sessionGrades)} />}
             {started && momentumOn && sessionGrades.length > 0 && <InkWell results={sessionGrades} />}
             {started && contextUsage && (

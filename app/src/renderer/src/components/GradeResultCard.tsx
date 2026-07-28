@@ -251,9 +251,36 @@ export function GradeResultCard({
           <span className="text-xs text-[var(--color-text-dim)]">{nextReviewText(result.intervalDays)}</span>
         )
       )}
-      {confidenceLabel != null && (
-        <div className="fig-caption">felt “{confidenceLabel}” → {result.grade}</div>
-      )}
+      {confidenceLabel != null &&
+        (() => {
+          // Addition B (chat refine round) — a miscalibration made visible,
+          // never judged: the learner felt high confidence (the dialogue-
+          // grammar's own top two Confidence-picker bands — see
+          // _shared/dialogue-grammar.md's "⚠ Confidence integrity", "Certain"
+          // ~90 and "Pretty sure" ~70 — the ONLY two bands this fires on) and
+          // the assessor's grade came back partial or lapsed anyway. Purely a
+          // cool accent + marker glyph on the SAME "felt X → grade" line this
+          // card already states — no new words, the app still only states
+          // facts (dialogue-grammar's own anti-sycophancy oath). Well-
+          // calibrated rows (recalled) and low-confidence rows ("Half
+          // unsure"/"Just guessing") are unchanged.
+          const highConfidence = confidenceLabel === 'Certain' || confidenceLabel === 'Pretty sure'
+          const missedGrade = result.grade === 'partial' || result.grade === 'lapsed'
+          const miscalibrated = highConfidence && missedGrade
+          return (
+            <div
+              className="fig-caption flex items-center gap-1"
+              style={miscalibrated ? { color: 'var(--color-ink-cool)' } : undefined}
+            >
+              {miscalibrated && (
+                <span aria-hidden="true" className="text-[9px]">
+                  △
+                </span>
+              )}
+              felt “{confidenceLabel}” → {result.grade}
+            </div>
+          )
+        })()}
     </div>
   )
 }
