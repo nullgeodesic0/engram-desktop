@@ -44,11 +44,10 @@ export const BeatCard = memo(function BeatCard({
 }) {
   const style = BEAT_STYLE[beat]
   return (
-    // `.tilt-card-soft` on the labeled beat card only — PlainDialogueBlock
-    // below is deliberately EXCLUDED: it's the transcript's primary reading
-    // prose (often near-full transcript-measure width), and reading surfaces
-    // stay planted by decree (see index.css's tilt vocabulary). Soft, not
-    // full scale — every chat-transcript card rides the quieter variant.
+    // `.tilt-card-soft` — every chat-transcript card rides the quieter
+    // variant. PlainDialogueBlock below carries it too (a user call reversed
+    // its earlier reading-surface exclusion: conversation bubbles are cards
+    // in this design, and at the soft scale the text stays subpixel-crisp).
     <div className="group tilt-card-soft panel px-5 py-4 flex flex-col gap-2 border-l-2" style={{ borderLeftColor: style.accent }}>
       <div className="flex items-center justify-between gap-2 text-xs uppercase tracking-wide" style={{ color: style.accent }}>
         <div className="flex items-center gap-2">
@@ -130,7 +129,7 @@ export const PlainDialogueBlock = memo(function PlainDialogueBlock({
     )
   }
   return (
-    <div className="group relative panel-raised px-5 py-4">
+    <div className="group relative tilt-card-soft panel-raised px-5 py-4">
       <div className="absolute top-3 right-3">
         <CopyButton text={text} />
       </div>
