@@ -31,6 +31,15 @@
   --color-ink-violet: #a78bda;
   --color-ink-violet-dim: #6b5490;
 
+  /* Hero nocturne — the README hero's indigo night and node lavender, used on
+     brand surfaces only (sidebar, splash, the app icon shares this family).
+     Deliberately bluer than --color-ink-violet: violet is a semantic signal
+     (synthesis), lavender is brand imagery — the concept-graph constellation. */
+  --color-nocturne-hi: #191430;
+  --color-nocturne-lo: #100e1c;
+  --color-ink-lavender: #a99ef0;
+  --color-ink-lavender-dim: #7d73b8;
+
   /* Warm "paper ink" text ramp — Cajal sepia, inverted. */
   --color-ink-paper: #e6dfd0;
   --color-text-primary: #e6dfd0;
@@ -257,6 +266,14 @@
  *     hover-only or transition-based focus treatment.
  */
 @layer components {
+  /* The sidebar's hero-nocturne wash: indigo deepening downward, with a faint
+     lavender bloom at the top under the brand lockup. The dendrite
+     constellation footer (App.tsx) sits over this at z-0, content at z-10. */
+  .sidebar-nocturne {
+    background:
+      radial-gradient(140% 50% at 50% 0%, color-mix(in srgb, var(--color-ink-lavender) 6%, transparent), transparent 62%),
+      linear-gradient(to bottom, var(--color-nocturne-hi), var(--color-nocturne-lo));
+  }
   .app-drag {
     -webkit-app-region: drag;
   }

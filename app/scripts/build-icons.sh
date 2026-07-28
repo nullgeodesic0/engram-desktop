@@ -18,6 +18,33 @@ mkdir -p "$ICONSET"
 qlmanage -t -s 1024 -o build "$SRC" >/dev/null
 mv "build/$(basename "$SRC").png" "$MASTER_PNG"
 
+# qlmanage flattens SVG transparency onto white, which used to ship the icon
+# with opaque white squircle corners. The squircle outline is the SVG's first
+# <path> (a pure M/L polygon), so re-apply it here as a real alpha channel:
+# rasterize that polygon 4x supersampled for a smooth edge, downsample to the
+# master's size, and write it into the PNG before the per-size resizes below
+# (sips preserves alpha; iconutil accepts it).
+python3 - "$SRC" "$MASTER_PNG" <<'PY'
+import re, sys
+from PIL import Image, ImageDraw
+
+svg_path, png_path = sys.argv[1], sys.argv[2]
+d = re.search(r'<path d="([^"]+)"', open(svg_path).read()).group(1)
+pts = [(float(x), float(y)) for x, y in re.findall(r'[ML] ([0-9.]+) ([0-9.]+)', d)]
+im = Image.open(png_path).convert('RGBA')
+w, h = im.size
+SS = 4
+mask = Image.new('L', (w * SS, h * SS), 0)
+sx, sy = w * SS / 1024, h * SS / 1024
+ImageDraw.Draw(mask).polygon([(x * sx, y * sy) for x, y in pts], fill=255)
+im.putalpha(mask.resize((w, h), Image.LANCZOS))
+im.save(png_path)
+PY
+
+# Keep the tracked full-size PNG (build/icon.png) in sync with the same
+# masked master the .icns is packed from.
+cp "$MASTER_PNG" build/icon.png
+
 declare -a SIZES=(16 32 64 128 256 512 1024)
 for size in "${SIZES[@]}"; do
   sips -z "$size" "$size" "$MASTER_PNG" --out "$ICONSET/icon_${size}x${size}.png" >/dev/null
