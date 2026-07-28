@@ -463,6 +463,36 @@
      active. The button's own transition (see the base-layer `button` rule)
      already covers border-color/background-color/color at --dur-fast — no
      separate transition declared here. */
+  /* Masthead command-bar nav item: bare tracked text at rest (no border, no
+     wash — the masthead is a command strip, not a rail), hover/focus
+     brightens the label and slides a 1px underline in from the left. The
+     underline is the affordance mark here, playing the role an active-section
+     rule plays in a fixed top nav. */
+  .cmd-item {
+    position: relative;
+    color: var(--color-text-faint);
+    transition: color var(--dur-fast) var(--ease-out-soft);
+  }
+  .cmd-item:hover,
+  .cmd-item:focus-visible {
+    color: var(--color-text-primary);
+  }
+  .cmd-item::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -3px;
+    height: 1px;
+    background: currentColor;
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform var(--dur-fast) var(--ease-out-soft);
+  }
+  .cmd-item:hover::after,
+  .cmd-item:focus-visible::after {
+    transform: scaleX(1);
+  }
   .nav-item {
     position: relative;
     border: 1px solid transparent;

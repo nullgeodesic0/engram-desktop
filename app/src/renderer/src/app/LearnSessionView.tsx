@@ -72,6 +72,7 @@ import { EnvironmentSteps } from '../components/EnvironmentSteps'
 import { extractTicketFromMessages } from '../shared/ticketParser'
 import { TicketCard } from '../components/ritual/TicketCard'
 import { InkWell } from '../components/ritual/InkWell'
+import { ExportCommand } from '../components/ui/ExportCommand'
 import { FlowChain } from '../components/ritual/FlowChain'
 import { trailingRecalled } from '../../../shared/gradeResult'
 import { paperSlide, warmTone } from '../shared/soundscape'
@@ -1555,18 +1556,52 @@ export function LearnSessionView({
                     : 'duration-[var(--dur-base)] ease-[var(--ease-out-soft)] opacity-100 translate-y-0 pb-2 border-[var(--color-hairline)]'
                 }`}
               >
-        <div className="flex items-center justify-between">
+        {/* Row 1 — the command bar. Identity block (title over a mono
+            sub-line) on the left, tracked nav items + the glyph cluster on
+            the right. One line by construction: the identity block is the
+            only flexible child (min-w-0, title truncates), every control is
+            shrink-0 — the title yields, the controls never do, and nothing
+            here can wrap or scroll. */}
+        <div className="flex items-center justify-between gap-6">
           {/* In a session, the topic IS the page — one serif title, no static
               "Learn" h1, no repeated title on the opening plate below. */}
           {started ? (
-            <div className="flex items-baseline gap-3 min-w-0">
-              <h1 className="font-[var(--font-serif)] text-xl text-[var(--color-text-primary)] truncate">
+            <div className="flex flex-col gap-0.5 min-w-0">
+              <h1 className="font-[var(--font-serif)] text-xl leading-tight text-[var(--color-text-primary)] truncate">
                 {activeTopic ? activeTopic.title : 'New topic'}
               </h1>
-              {walkNumber != null && (
-                <span className="label-data text-[10px] tracking-[0.14em] text-[var(--color-text-faint)] shrink-0 uppercase">
-                  walk {walkNumber}
-                </span>
+              {/* The identity sub-line: current node · position · walk, in
+                  one compact mono lockup under the title. The why-chain
+                  disclosure rides here, attached to the node it explains. */}
+              {(currentNodeId || nodePosition || walkNumber != null) && (
+                <div
+                  key={currentNodeId ?? 'none'}
+                  className="label-data text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-faint)] flex items-center gap-1.5 min-w-0"
+                >
+                  {currentNodeId && (
+                    <span className="text-[var(--color-ink-warm)] truncate">{humanizeNodeId(currentNodeId)}</span>
+                  )}
+                  {nodePosition && (
+                    <>
+                      {currentNodeId && <span aria-hidden="true">·</span>}
+                      <span className="shrink-0">node {nodePosition}</span>
+                    </>
+                  )}
+                  {walkNumber != null && (
+                    <>
+                      {(currentNodeId || nodePosition) && <span aria-hidden="true">·</span>}
+                      <span className="shrink-0">walk {walkNumber}</span>
+                    </>
+                  )}
+                  {currentNodeId && whyChain.length > 0 && (
+                    <button
+                      onClick={() => setWhyChainOpen((v) => !v)}
+                      className="focus-ring cmd-item shrink-0 lowercase tracking-[0.14em]"
+                    >
+                      why?
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           ) : (
@@ -1598,75 +1633,39 @@ export function LearnSessionView({
               })()}
             </div>
           )}
-          <div className="flex items-center gap-4">
-            {/* Addition D (chat refine round) — live only (see SittingClock's
-                own doctrine comment); never rendered in SessionHistoryDrawer's
-                replay, which has no live sitting to time. */}
-            {started && sittingStartedAt !== null && <SittingClock startedAt={sittingStartedAt} running label="this sitting" />}
-            {started && momentumOn && <FlowChain chain={trailingRecalled(sessionGrades)} />}
-            {started && momentumOn && sessionGrades.length > 0 && <InkWell results={sessionGrades} />}
-            {started && contextUsage && (
-              <ContextGauge usedTokens={contextUsage.usedTokens} contextWindow={contextUsage.contextWindow} />
-            )}
-            {started && activeTopic && exportStatus && (
-              <span
-                className={`text-xs truncate max-w-[12rem] ${exportStatus.failed ? 'text-[var(--color-ink-danger)]' : 'text-[var(--color-text-faint)]'}`}
-                title={exportStatus.text}
-              >
-                {exportStatus.text}
-              </span>
-            )}
-            {/* Command-bar action cluster: tracked mono row, hairline
-                separators between instrument / export / navigation groups. */}
-            {started && activeTopic && sessionId && (
-              <span className="h-4 w-px bg-[var(--color-hairline)] shrink-0" aria-hidden="true" />
-            )}
-            {started && activeTopic && sessionId && (
-              <button
-                onClick={() => exportCurrentSitting('md')}
-                disabled={exportingFormat !== null}
-                title="Export this sitting as a Markdown file"
-                className="focus-ring label-data text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] disabled:opacity-50"
-              >
-                {exportingFormat === 'md' ? 'Exporting…' : 'Export .md'}
-              </button>
-            )}
-            {started && activeTopic && sessionId && (
-              <button
-                onClick={() => exportCurrentSitting('pdf')}
-                disabled={exportingFormat !== null}
-                title="Export this sitting as a PDF"
-                className="focus-ring label-data text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] disabled:opacity-50"
-              >
-                {exportingFormat === 'pdf' ? 'Exporting…' : 'Export .pdf'}
-              </button>
-            )}
+          {/* Right nav cluster: tracked uppercase command items, then the
+              hairline-separated glyph cluster (pin / clock / gauge). All
+              shrink-0 — this cluster's width is the row's fixed cost. */}
+          <div className="flex items-center gap-4 shrink-0">
             {started && activeTopic && (
               <button
                 onClick={() => setHistoryDrawerOpen(true)}
-                className="focus-ring label-data text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]"
+                className="focus-ring cmd-item label-data text-[10px] uppercase tracking-[0.16em] shrink-0"
               >
                 History
               </button>
             )}
-            {started && <span className="h-4 w-px bg-[var(--color-hairline)] shrink-0" aria-hidden="true" />}
+            {started && activeTopic && sessionId && (
+              <ExportCommand exporting={exportingFormat} onExport={exportCurrentSitting} />
+            )}
             {started && (
               <button
                 onClick={backToTopics}
                 title="Leave this session view (the session keeps running)"
-                // A real claimable control — the sidebar's bordered rail-item
-                // idiom rather than bare faint text; also an honest hit target.
-                className="focus-ring nav-item label-data text-[10px] uppercase tracking-[0.14em] px-2.5 py-1.5 shrink-0"
+                className="focus-ring cmd-item label-data text-[10px] uppercase tracking-[0.16em] shrink-0"
               >
-                ← All topics
+                All topics
               </button>
+            )}
+            {started && messages.length > 0 && (
+              <span className="h-4 w-px bg-[var(--color-hairline)] shrink-0" aria-hidden="true" />
             )}
             {started && messages.length > 0 && (
               <button
                 onClick={() => setMastheadPinned((v) => !v)}
                 aria-label={mastheadPinned ? 'Unpin header' : 'Pin header'}
                 title={mastheadPinned ? 'Unpin — tuck away unless the cursor visits the top' : 'Pin — keep the header out'}
-                className={`focus-ring no-press h-5 w-5 flex items-center justify-center transition-colors duration-[var(--dur-fast)] ${
+                className={`focus-ring no-press h-5 w-5 shrink-0 flex items-center justify-center transition-colors duration-[var(--dur-fast)] ${
                   mastheadPinned
                     ? 'text-[var(--color-ink-warm)] bg-[var(--color-surface-3)]'
                     : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]'
@@ -1675,25 +1674,35 @@ export function LearnSessionView({
                 <PinTackIcon pinned={mastheadPinned} size={14} />
               </button>
             )}
+            {/* Addition D (chat refine round) — live only (see SittingClock's
+                own doctrine comment); never rendered in SessionHistoryDrawer's
+                replay, which has no live sitting to time. */}
+            {started && sittingStartedAt !== null && <SittingClock startedAt={sittingStartedAt} running label="this sitting" />}
+            {started && contextUsage && (
+              <ContextGauge usedTokens={contextUsage.usedTokens} contextWindow={contextUsage.contextWindow} />
+            )}
           </div>
         </div>
+        {/* Row 2 — the instrument strip: the session's live instruments
+            (beat trail, flow chain, ink well, progress note) on their own
+            quieter line under a full-width hairline. This is the structural
+            de-crowding: row 1 is identity + commands, row 2 is instruments.
+            min-w-0/overflow-hidden throughout — compresses, never scrolls. */}
         {started && (
-          <div key={currentNodeId ?? 'none'} className="flex items-center gap-2">
-            {currentNodeId && (
-              <span className="label-data text-xs text-[var(--color-ink-warm)] shrink-0">{humanizeNodeId(currentNodeId)}</span>
-            )}
-            {currentNodeId && whyChain.length > 0 && (
-              <button
-                onClick={() => setWhyChainOpen((v) => !v)}
-                className="focus-ring shrink-0 text-xs text-[var(--color-text-faint)] hover:text-[var(--color-ink-cool)] transition-colors"
-              >
-                why?
-              </button>
-            )}
-            {nodePosition && (
-              <span className="label-data text-xs text-[var(--color-text-faint)] shrink-0">node {nodePosition}</span>
-            )}
+          <div
+            className="flex items-center gap-4 min-w-0 overflow-hidden border-t border-[var(--color-hairline)] pt-2 -mx-6 px-6"
+          >
             <BeatStepper current={currentBeat} trail={beatTrail} />
+            {momentumOn && <FlowChain chain={trailingRecalled(sessionGrades)} />}
+            {momentumOn && sessionGrades.length > 0 && <InkWell results={sessionGrades} />}
+            {exportStatus && (
+              <span
+                className={`text-xs truncate max-w-[12rem] ${exportStatus.failed ? 'text-[var(--color-ink-danger)]' : 'text-[var(--color-text-faint)]'}`}
+                title={exportStatus.text}
+              >
+                {exportStatus.text}
+              </span>
+            )}
             {progressNote && (
               <MathRenderer text={progressNote} inlineOnly className="ml-auto fig-caption truncate min-w-0" />
             )}
