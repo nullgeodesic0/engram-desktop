@@ -114,9 +114,12 @@ interface ReviewSessionViewProps {
   /** Reports live-session state up to App.tsx so the sidebar nav can show an
    * ink-dot ("a session is alive in there") while this view isn't the active tab. */
   onActivity?: (a: { active: boolean; busy: boolean }) => void
+  /** Masthead "← Home" — leaves this view for the main page (the session, if
+   * one is live, keeps running; this view stays mounted via KeepMounted). */
+  onGoHome?: () => void
 }
 
-export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
+export function ReviewSessionView({ onActivity, onGoHome }: ReviewSessionViewProps = {}) {
   const [phase, setPhase] = useState<Phase>('loading')
   const [queue, setQueue] = useState<DueItem[]>([])
   const [sessionId, setSessionId] = useState<string | null>(null)
@@ -192,11 +195,17 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
       set(true)
     },
     tuck: () => {
-      if (timer.current) return
+      // Clear + rearm: motion defers the deadline, so a card can only tuck
+      // once the pointer has genuinely settled away from it. The previous
+      // "armed deadline stands" variant let the tuck fire while the cursor
+      // was mid-flight toward the card (mousemove sampling has holes at the
+      // edges), folding the target under the very click aimed at it — the
+      // same disease as Learn's masthead back button.
+      if (timer.current) clearTimeout(timer.current)
       timer.current = setTimeout(() => {
         timer.current = null
         set(false)
-      }, 250)
+      }, 400)
     },
   })
   const probeCtl = makePeek(probeLeaveTimer, setProbePeek)
@@ -208,7 +217,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
     const rect = e.currentTarget.getBoundingClientRect()
     if (!probePinned) {
       const y = e.clientY - rect.top
-      if (y <= (probePeek ? 220 : 18)) probeCtl.peek()
+      if (y <= (probePeek ? 220 : 28)) probeCtl.peek()
       else probeCtl.tuck()
     }
     if (!ticketPinned) {
@@ -1065,7 +1074,9 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
     // does the separating.
     <div className="h-full min-h-0 flex flex-col px-8 pt-3 pb-6 gap-3 w-full">
       <PageHeader
-        className="shrink-0"
+        // Command-bar band: the hairline underline runs the full view width
+        // (-mx-8 bleeds it past the container padding).
+        className="shrink-0 -mx-8 px-8 pb-3 border-b border-[var(--color-hairline)]"
         title="Review"
         // The ready plate below now says this count once, big — the header
         // repeating it as "N due" right above would be the exact "three due
@@ -1096,12 +1107,17 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
                 {exportStatus.text}
               </span>
             )}
+            {/* Command-bar action cluster: tracked mono row, hairline
+                separators between instrument / export / navigation groups. */}
+            {sessionId && (phase === 'in-session' || phase === 'done') && (
+              <span className="h-4 w-px bg-[var(--color-hairline)] shrink-0" aria-hidden="true" />
+            )}
             {sessionId && (phase === 'in-session' || phase === 'done') && (
               <button
                 onClick={() => exportCurrentSitting('md')}
                 disabled={exportingFormat !== null}
                 title="Export this sitting as a Markdown file"
-                className="focus-ring text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] disabled:opacity-50"
+                className="focus-ring label-data text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] disabled:opacity-50"
               >
                 {exportingFormat === 'md' ? 'Exporting…' : 'Export .md'}
               </button>
@@ -1111,7 +1127,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
                 onClick={() => exportCurrentSitting('pdf')}
                 disabled={exportingFormat !== null}
                 title="Export this sitting as a PDF"
-                className="focus-ring text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] disabled:opacity-50"
+                className="focus-ring label-data text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] disabled:opacity-50"
               >
                 {exportingFormat === 'pdf' ? 'Exporting…' : 'Export .pdf'}
               </button>
@@ -1119,10 +1135,25 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
             {phase !== 'loading' && (
               <button
                 onClick={() => setHistoryDrawerOpen(true)}
-                className="focus-ring text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]"
+                className="focus-ring label-data text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]"
               >
                 History
               </button>
+            )}
+            {onGoHome && (
+              <>
+                <span className="h-4 w-px bg-[var(--color-hairline)] shrink-0" aria-hidden="true" />
+                {/* The back-to-main affordance this header never actually had:
+                    a bordered rail-item (sidebar nav idiom), a real claimable
+                    control with an honest hit target. */}
+                <button
+                  onClick={onGoHome}
+                  title="Back to the main page (a live sitting keeps running)"
+                  className="focus-ring nav-item label-data text-[10px] uppercase tracking-[0.14em] px-2.5 py-1.5 shrink-0"
+                >
+                  ← Home
+                </button>
+              </>
             )}
           </>
         }
@@ -1257,11 +1288,19 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
               return (
                 <>
                   {probeCollapsed && (
-                    <div className="shrink-0 h-2 flex items-center justify-center group cursor-default" aria-hidden="true">
+                    <div
+                      className="shrink-0 h-2 flex items-center justify-center group cursor-default"
+                      onMouseEnter={probeCtl.peek}
+                      aria-hidden="true"
+                    >
                       <span className="h-px w-12 rounded bg-[var(--color-hairline)] group-hover:bg-[var(--color-ink-warm-dim)] transition-colors duration-[var(--dur-fast)]" />
                     </div>
                   )}
                   <div
+                    // Direct hover claims the probe open — authoritative over
+                    // the sampled container-mousemove geometry (see Learn's
+                    // masthead: sampling has holes at the top edge).
+                    onMouseEnter={probeCtl.peek}
                     className={`shrink-0 grid transition-[grid-template-rows] ${
                       probeCollapsed
                         ? 'duration-[340ms] ease-[cubic-bezier(0.45,0.05,0.25,1)]'

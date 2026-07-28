@@ -476,7 +476,10 @@ export default function App() {
           )}
           {(visited.review || view === 'review') && (
             <KeepMounted active={view === 'review'}>
-              <ReviewSessionView onActivity={(a) => setActivity((prev) => ({ ...prev, review: a }))} />
+              <ReviewSessionView
+                onActivity={(a) => setActivity((prev) => ({ ...prev, review: a }))}
+                onGoHome={() => goToView('home')}
+              />
             </KeepMounted>
           )}
           {view === 'topics' && (
