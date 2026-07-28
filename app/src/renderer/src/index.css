@@ -525,6 +525,72 @@
   .chamber-invite { animation: chamber-invite 2.2s ease-in-out infinite; }
 }
 
+/* Sidebar constellation firing (App.tsx's footer SVG) — the one ambient loop
+ * the brand surface owns, same family as frontier-breathe/trail-breathe
+ * below: slow (7s cycle), low-amplitude, decorative only. Fully covered by
+ * the global prefers-reduced-motion kill-switch (durations forced to ~0
+ * freeze every element at its 100% keyframe, which is the resting state for
+ * all of these). The sequence reads as a neuron firing: distal nodes flash
+ * inward (staggered per-element animation-delay set inline), the soma
+ * integrates, an impulse travels the axon via offset-path, and the amber
+ * spark flares as it arrives. */
+@keyframes sb-fire-halo {
+  0%, 12%, 100% { opacity: 0; }
+  4% { opacity: 1; }
+}
+.sb-fire-halo {
+  animation: sb-fire-halo 7s var(--ease-out-soft) infinite;
+  opacity: 0;
+}
+@keyframes sb-fire-node {
+  0%, 12%, 100% { transform: scale(1); }
+  4% { transform: scale(1.45); }
+}
+.sb-fire-node {
+  animation: sb-fire-node 7s var(--ease-out-soft) infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+@keyframes sb-fire-soma {
+  0%, 27%, 41%, 100% { transform: scale(1); }
+  32% { transform: scale(1.12); }
+}
+.sb-fire-soma {
+  animation: sb-fire-soma 7s var(--ease-out-soft) infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+/* The action potential: a dot carried soma-to-edge along the same curve the
+ * footer's axon path draws, visible only for its travel window. */
+@keyframes sb-axon-impulse {
+  0%, 34% { offset-distance: 0%; opacity: 0; }
+  36% { opacity: 0.9; }
+  46% { offset-distance: 100%; opacity: 0.9; }
+  48%, 100% { offset-distance: 100%; opacity: 0; }
+}
+.sb-axon-impulse {
+  offset-path: path('M76 186 C58 206 40 224 -8 232');
+  animation: sb-axon-impulse 7s linear infinite;
+  opacity: 0;
+}
+@keyframes sb-fire-spark {
+  0%, 42%, 56%, 100% { transform: scale(1); }
+  47% { transform: scale(1.5); }
+}
+.sb-fire-spark {
+  animation: sb-fire-spark 7s var(--ease-out-soft) infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+@keyframes sb-fire-spark-halo {
+  0%, 42%, 58%, 100% { opacity: 0; }
+  47% { opacity: 1; }
+}
+.sb-fire-spark-halo {
+  animation: sb-fire-spark-halo 7s var(--ease-out-soft) infinite;
+  opacity: 0;
+}
+
 @keyframes frontier-breathe {
   0%, 100% { opacity: 0.35; }
   50% { opacity: 0.9; }

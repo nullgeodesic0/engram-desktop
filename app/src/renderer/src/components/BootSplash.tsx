@@ -4,12 +4,16 @@ import { NeuronMark } from './BrandMark'
 const MIN_VISIBLE_MS = 500
 const FADE_OUT_MS = 300
 
-/** A conventional native-app launch splash — the same neuron mark + ENGRAM
- * lockup used in the sidebar (App.tsx, via BrandMark.tsx), just bigger and
- * centered, fading/scaling in on mount and fading out after a floor duration.
- * No WebGL, no simulation — this is the thing most desktop apps actually do at
- * launch (Slack, VS Code, …). Held for at least MIN_VISIBLE_MS even if the app
- * underneath is ready sooner, so it never reads as a flash. */
+/** A conventional native-app launch splash — the same neuron mark the sidebar
+ * wears (via BrandMark.tsx), bigger and centered. The WORDMARK treatments
+ * deliberately differ: this splash wears the hero banner's lockup (serif
+ * ENGRAM + "learn anything. keep it.") while the sidebar carries the app's
+ * own face (Space Grotesk "Engram" + night-atlas tagline) — the shared mark
+ * is what keeps the two surfaces from drifting apart. Fades/scales in on
+ * mount and out after a floor duration; no WebGL, no simulation — this is
+ * the thing most desktop apps actually do at launch (Slack, VS Code, …).
+ * Held for at least MIN_VISIBLE_MS even if the app underneath is ready
+ * sooner, so it never reads as a flash. */
 export function BootSplash() {
   const [phase, setPhase] = useState<'in' | 'hold' | 'out' | 'gone'>('in')
 
