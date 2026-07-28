@@ -544,13 +544,14 @@
      title line → optional label-data note, then the caller's own rows,
      fig-caption, and action row. One size by decree so the surfaces rhyme —
      a smaller "sub-figure" scale would just be a stat block, which already
-     exists. The serif's own default figures, deliberately NOT tabular-nums:
-     Fraunces' native numerals are the whole charm of this figure (the user
-     called it out when a tabular pass flattened them), and a single headline
-     number reflowing its trailing text by a pixel on change is a fine trade
-     for the better glyphs. */
+     exists. Body sans (Inter), NOT the serif — and this is a deliberate,
+     user-called decision with a story: the old inline `font-[var(--font-serif)]`
+     utility compiled to an invalid `font-weight`, so the plate's figure had
+     ALWAYS rendered in the inherited body sans. When this class set the serif
+     for real, the user flagged the change — the clean geometric number IS the
+     design they approved. Codified here on purpose; do not "fix" it to serif. */
   .figure-display {
-    font-family: var(--font-serif);
+    font-family: var(--font-body);
     font-size: 3.5rem;
     line-height: 1;
   }
