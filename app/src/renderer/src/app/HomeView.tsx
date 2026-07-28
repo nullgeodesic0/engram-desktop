@@ -11,6 +11,8 @@ import { topicBucket } from '../shared/topicShelf'
 import { DueForecast } from '../components/DueForecast'
 import { DendriteDivider } from '../components/ui/DendriteDivider'
 import { StatBlock } from '../components/ui/StatBlock'
+import { StatFraction } from '../components/ui/StatFraction'
+import { SectionBanner } from '../components/ui/SectionBanner'
 import { Button } from '../components/ui/Button'
 import { EnvironmentSteps } from '../components/EnvironmentSteps'
 import { ExperimentBanner } from '../components/ExperimentBanner'
@@ -103,11 +105,18 @@ function TopicGroup({
   caption,
   topics,
   onGoTopic,
+  resumableTopics,
 }: {
   heading: string
   caption?: string
   topics: TopicListEntry[]
   onGoTopic: (topicId: string) => void
+  /** Which of THESE topics has an in-progress Learn session — passed only by
+   * the "Continue learning" call below; the Consolidated/Not started groups
+   * never resolve resumability for their own topics, so they always render
+   * plain (see the `.dogear` scarcity doctrine in index.css: it marks "the
+   * one you're in", not every card in a list). */
+  resumableTopics?: Set<string>
 }) {
   if (topics.length === 0) return null
   return (
@@ -118,7 +127,13 @@ function TopicGroup({
       </div>
       <div className="grid grid-cols-1 min-[760px]:grid-cols-2 min-[1080px]:grid-cols-3 gap-3">
         {topics.map((t) => (
-          <TopicCard key={t.topic} variant="tile" topic={t} onOpen={() => onGoTopic(t.topic)} />
+          <TopicCard
+            key={t.topic}
+            variant="tile"
+            topic={t}
+            onOpen={() => onGoTopic(t.topic)}
+            resumable={resumableTopics?.has(t.topic)}
+          />
         ))}
       </div>
     </div>
@@ -159,6 +174,30 @@ export function HomeView({ onGoReview, onGoCoach, onGoTopic, onNewTopic, onGoNod
   const [forecast, setForecast] = useState<number[] | null>(null)
   const [duePulse, setDuePulse] = useState(false)
   const [activeExperiment, setActiveExperiment] = useState<ActiveExperiment | null>(null)
+  // Which "Continue learning" topic actually has an in-progress Learn
+  // session — the one card in that group that earns `.dogear` ("the one
+  // you're in"). Same `lastSessionFor('learn', …)` probe LearnSessionView's
+  // own `refreshTopics` uses, just scoped to the active bucket rather than
+  // every topic (this is decoration, not the shelf's own resume affordance).
+  const [resumableTopics, setResumableTopics] = useState<Set<string>>(new Set())
+  useEffect(() => {
+    if (!topics) return
+    const active = topics.filter((t) => topicBucket(t) === 'active')
+    if (active.length === 0) {
+      setResumableTopics(new Set())
+      return
+    }
+    let cancelled = false
+    Promise.all(
+      active.map((t) => window.engram.lastSessionFor('learn', t.topic).then((id) => [t.topic, id] as const)),
+    ).then((pairs) => {
+      if (cancelled) return
+      setResumableTopics(new Set(pairs.filter(([, id]) => id !== null).map(([topic]) => topic)))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [topics])
   useEffect(() => {
     window.engram.stats().then(async (s) => {
       setStats(s)
@@ -316,9 +355,7 @@ export function HomeView({ onGoReview, onGoCoach, onGoTopic, onNewTopic, onGoNod
 
         {flashback && (
           <div className="panel px-5 py-4 flex flex-col gap-1.5">
-            <div className="text-xs label-data text-[var(--color-text-faint)] uppercase tracking-wide">
-              {flashback.daysAgo} days ago · {flashback.topicTitle}
-            </div>
+            <SectionBanner label={`${flashback.daysAgo} days ago · ${flashback.topicTitle}`} className="border-t-0" />
             <DendriteDivider className="mb-3" />
             <p className="text-sm text-[var(--color-text-dim)]">{flashback.claim}</p>
             <div className="text-xs text-[var(--color-text-faint)] mt-0.5">{humanizeNodeId(flashback.node)}</div>
@@ -347,7 +384,10 @@ export function HomeView({ onGoReview, onGoCoach, onGoTopic, onNewTopic, onGoNod
           column narrow, two past 760px — the app's one narrow threshold —
           three past 1080px). */}
       <section className="flex flex-col gap-3">
-        <h2 className="text-[10px] label-data uppercase tracking-wide text-[var(--color-text-faint)]">Your topics</h2>
+        <SectionBanner
+          label="Your topics"
+          count={topics !== null ? <StatFraction n={active.length} d={topics.length} /> : undefined}
+        />
         {topics === null && <SkeletonGrid count={3} />}
         {/* The empty-state decision itself (guided card vs. plain invitation) must wait on
             envCheck — topics() is a cheap readdir that routinely resolves before
@@ -396,7 +436,7 @@ export function HomeView({ onGoReview, onGoCoach, onGoTopic, onNewTopic, onGoNod
             catch and is gone — a fully-encoded-only library now shows its
             "Consolidated" group instead of a false "start a new topic" nudge. */}
         <div className="flex flex-col gap-6">
-          <TopicGroup heading="Continue learning" topics={active} onGoTopic={onGoTopic} />
+          <TopicGroup heading="Continue learning" topics={active} onGoTopic={onGoTopic} resumableTopics={resumableTopics} />
           <TopicGroup
             heading="Consolidated"
             caption="fully encoded — held by review alone"
@@ -420,21 +460,21 @@ export function HomeView({ onGoReview, onGoCoach, onGoTopic, onNewTopic, onGoNod
                 goToNode/goToSitting paths the Topic Map and the command
                 palette already use. */}
             {recent.length > 0 && (
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[10px] label-data uppercase tracking-wide text-[var(--color-text-faint)] shrink-0">
-                  Recently viewed
-                </span>
-                {recent.map((v) => (
-                  <button
-                    key={v.kind === 'node' ? `n:${v.topic}:${v.node}` : `s:${v.sessionId}`}
-                    onClick={() => (v.kind === 'node' ? onGoNode(v.topic, v.node) : onGoSitting(v.sessionId))}
-                    title={v.kind === 'node' ? `${v.label} — ${v.topicTitle}` : v.label}
-                    className="focus-ring flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs text-[var(--color-text-dim)] bg-[var(--color-surface-2)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-primary)] transition-colors duration-[var(--dur-fast)]"
-                  >
-                    {v.kind === 'node' && <InkNode id={v.node} variant="outlined" color="var(--color-ink-cool)" size={10} />}
-                    <span className="truncate max-w-[9rem]">{v.label}</span>
-                  </button>
-                ))}
+              <div className="flex flex-col gap-2">
+                <SectionBanner label="Recently viewed" count={recent.length} />
+                <div className="flex items-center gap-2 flex-wrap">
+                  {recent.map((v) => (
+                    <button
+                      key={v.kind === 'node' ? `n:${v.topic}:${v.node}` : `s:${v.sessionId}`}
+                      onClick={() => (v.kind === 'node' ? onGoNode(v.topic, v.node) : onGoSitting(v.sessionId))}
+                      title={v.kind === 'node' ? `${v.label} — ${v.topicTitle}` : v.label}
+                      className="focus-ring flex items-center gap-1.5 px-2.5 py-1 text-xs text-[var(--color-text-dim)] bg-[var(--color-surface-2)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-primary)] transition-colors duration-[var(--dur-fast)]"
+                    >
+                      {v.kind === 'node' && <InkNode id={v.node} variant="outlined" color="var(--color-ink-cool)" size={10} />}
+                      <span className="truncate max-w-[9rem]">{v.label}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
 

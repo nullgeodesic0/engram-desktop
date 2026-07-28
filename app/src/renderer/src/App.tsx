@@ -330,12 +330,12 @@ export default function App() {
                   goToView(n.id)
                   if (narrow) setPinnedOpen(false)
                 }}
-                className={`focus-ring group relative flex items-center gap-2.5 text-left px-3 py-2 rounded-lg text-sm transition-colors duration-[var(--dur-fast)] ${
+                className={`focus-ring group relative flex items-center gap-2.5 text-left px-3 py-2 text-sm transition-colors duration-[var(--dur-fast)] ${
                   collapsed ? 'justify-center px-0' : ''
-                } ${active ? 'nav-item-active' : 'nav-item'}`}
+                } ${active ? 'nav-item-active' : 'nav-item'} ${active && !collapsed ? 'dogear' : ''}`}
               >
                 {active && (
-                  <span className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-0.5 rounded-full bg-[var(--color-ink-warm)]" aria-hidden="true" />
+                  <span className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-0.5 bg-[var(--color-ink-warm)]" aria-hidden="true" />
                 )}
                 <svg
                   width="16"
@@ -351,13 +351,13 @@ export default function App() {
                 >
                   {n.icon}
                 </svg>
-                {!collapsed && <span className="truncate">{n.label}</span>}
+                {!collapsed && <span className="truncate label-data uppercase tracking-wide">{n.label}</span>}
                 {/* Review's due-count micro-pill — fed by Task 7's due-count
                     plumbing (App's `dueCount` state). Hidden until the first
                     push/refresh lands (`null`) and at 0 — an empty queue gets
                     no badge, not a "0" badge. */}
                 {!collapsed && n.id === 'review' && dueCount != null && dueCount > 0 && (
-                  <span className="label-data text-[10px] leading-none px-1.5 py-1 rounded-full bg-[var(--color-surface-3)] text-[var(--color-ink-warm)] shrink-0">
+                  <span className="label-data text-[10px] leading-none px-1.5 py-1 bg-[var(--color-surface-3)] text-[var(--color-ink-warm)] shrink-0">
                     {dueCount}
                   </span>
                 )}

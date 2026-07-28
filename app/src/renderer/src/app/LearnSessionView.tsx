@@ -65,6 +65,7 @@ import { SkeletonBar } from '../components/Skeleton'
 import { InkNode } from '../components/ui/InkNode'
 import { PinTackIcon } from '../components/ui/PinTackIcon'
 import { TopicCard } from '../components/TopicCard'
+import { SectionBanner } from '../components/ui/SectionBanner'
 import { topicBucket } from '../shared/topicShelf'
 import { EnvironmentSteps } from '../components/EnvironmentSteps'
 import { extractTicketFromMessages } from '../shared/ticketParser'
@@ -189,10 +190,8 @@ function LearnTopicGroup({
   if (topics.length === 0) return null
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex items-baseline gap-2">
-        <span className="text-[10px] label-data uppercase tracking-wide text-[var(--color-text-faint)]">{heading}</span>
-        {caption && <span className="text-xs text-[var(--color-text-faint)]">{caption}</span>}
-      </div>
+      <SectionBanner label={heading} count={topics.length} />
+      {caption && <span className="text-xs text-[var(--color-text-faint)]">{caption}</span>}
       <div className="flex flex-col gap-3">
         {topics.map((t) => (
           <TopicCard
@@ -1623,7 +1622,7 @@ export function LearnSessionView({
                 onClick={() => setMastheadPinned((v) => !v)}
                 aria-label={mastheadPinned ? 'Unpin header' : 'Pin header'}
                 title={mastheadPinned ? 'Unpin — tuck away unless the cursor visits the top' : 'Pin — keep the header out'}
-                className={`focus-ring no-press h-5 w-5 rounded-full flex items-center justify-center transition-colors duration-[var(--dur-fast)] ${
+                className={`focus-ring no-press h-5 w-5 flex items-center justify-center transition-colors duration-[var(--dur-fast)] ${
                   mastheadPinned
                     ? 'text-[var(--color-ink-warm)] bg-[var(--color-surface-3)]'
                     : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]'
@@ -1820,7 +1819,7 @@ export function LearnSessionView({
                         onClick={() => setTicketPinned((v) => !v)}
                         aria-label={ticketPinned ? 'Unpin session ticket' : 'Pin session ticket'}
                         title={ticketPinned ? 'Unpin — tuck away unless the cursor visits the left edge' : 'Pin — keep the ticket out'}
-                        className={`focus-ring no-press absolute bottom-1.5 right-1.5 h-5 w-5 rounded-full flex items-center justify-center transition-colors duration-[var(--dur-fast)] ${
+                        className={`focus-ring no-press absolute bottom-1.5 right-1.5 h-5 w-5 flex items-center justify-center transition-colors duration-[var(--dur-fast)] ${
                           ticketPinned
                             ? 'text-[var(--color-ink-warm)] bg-[var(--color-surface-3)]'
                             : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]'

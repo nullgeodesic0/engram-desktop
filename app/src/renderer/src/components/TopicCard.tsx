@@ -65,7 +65,13 @@ export function TopicCard({ variant, topic: t, onOpen, resumable = false, onSett
     return (
       <button
         onClick={onOpen}
-        className="focus-ring panel text-left px-4 py-3 flex flex-col gap-2 hover:bg-[var(--color-surface-2)] hover:border-[var(--color-ink-warm-dim)] transition-colors duration-[var(--dur-base)]"
+        // Guardian anatomy: the old bespoke hover (own border/bg swap) is
+        // replaced by the shared `.frame-hover` vocabulary (a floating
+        // hairline frame + a one-step-lighter wash, see index.css's doctrine
+        // comment) — not stacked with it. `.dogear` is scarce: only the one
+        // "Continue learning" card with an actual in-progress session earns
+        // it (see TopicGroup's `resumableTopics` in HomeView.tsx).
+        className={`focus-ring frame-hover panel text-left px-4 py-3 flex flex-col gap-2${resumable ? ' dogear' : ''}`}
       >
         <div className="flex items-center gap-2 text-sm text-[var(--color-text-primary)]">
           <InkNode id={t.topic} variant={t.states.review > 0 ? 'filled' : 'outlined'} size={16} />
@@ -84,7 +90,10 @@ export function TopicCard({ variant, topic: t, onOpen, resumable = false, onSett
   }
 
   return (
-    <div className="panel px-5 py-4 flex items-center justify-between gap-4 hover:bg-[var(--color-surface-2)] hover:border-[var(--color-ink-warm-dim)] transition-colors duration-[var(--dur-base)]">
+    // Same `.frame-hover`/`.dogear` swap as the tile branch above — one
+    // shared hover/selection vocabulary for both layouts, not a bespoke
+    // border/bg toggle per variant.
+    <div className={`frame-hover panel px-5 py-4 flex items-center justify-between gap-4${resumable ? ' dogear' : ''}`}>
       <InkNode id={t.topic} variant={t.states.review > 0 ? 'filled' : 'outlined'} size={16} />
       <HealthRing consolidated={t.states.review} total={total} due={t.due} />
       <button onClick={onOpen} className="focus-ring flex-1 min-w-0 text-left flex flex-col gap-1">
