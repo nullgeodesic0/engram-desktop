@@ -116,7 +116,8 @@ function proseHtml(text: string): string {
   const rows = split.ticket.fields
     .map((f) => `<tr><td>${escapeHtml(f.key)}</td><td>${escapeHtml(f.value)}</td></tr>`)
     .join('')
-  const ticketHtml = `<div class="sitting-ticket"><div class="ticket-header">engram · ${escapeHtml(split.ticket.kind)} · ${escapeHtml(split.ticket.mode)}</div><table>${rows}</table></div>`
+  const modeSuffix = split.ticket.mode != null ? ` · ${escapeHtml(split.ticket.mode)}` : ''
+  const ticketHtml = `<div class="sitting-ticket"><div class="ticket-header">engram · ${escapeHtml(split.ticket.kind)}${modeSuffix}</div><table>${rows}</table></div>`
   return [
     split.before && `<div class="sitting-body">${renderMathHtml(split.before)}</div>`,
     ticketHtml,

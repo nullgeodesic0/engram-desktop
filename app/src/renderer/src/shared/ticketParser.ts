@@ -7,17 +7,20 @@ import type { ChatMessage } from '../../../shared/chatMessages'
  *     topic     transformers   frontier 8/13
  *     due today 0              pending 0
  *
- * Deterministic enough to exact-parse: header line `engram · <kind> · <mode>`
- * followed by rows of two-column key/value pairs (keys may contain a space,
- * e.g. "due today"; columns are separated by runs of 2+ spaces). */
+ * Deterministic enough to exact-parse: header line `engram · <kind>` with an
+ * optional ` · <mode>` segment (mode is absent on `review` tickets, and on
+ * `learn` tickets with no mode selected — confirmed against real transcripts,
+ * not just the documented `deep`/`sprint` example) followed by rows of
+ * two-column key/value pairs (keys may contain a space, e.g. "due today";
+ * columns are separated by runs of 2+ spaces). */
 
 export interface ParsedTicket {
   kind: string
-  mode: string
+  mode: string | null
   fields: { key: string; value: string }[]
 }
 
-const HEADER_RE = /^engram\s*·\s*(\S+)\s*·\s*(\S+)/
+const HEADER_RE = /^engram\s*·\s*(\S+)(?:\s*·\s*(\S+))?/
 
 function parseRows(lines: string[]): { key: string; value: string }[] {
   const fields: { key: string; value: string }[] = []
@@ -27,6 +30,13 @@ function parseRows(lines: string[]): { key: string; value: string }[] {
     // key whose value landed in the NEXT cell because the column gap sits
     // between them ("topic" ␣␣␣ "transformers"). A buffered orphan key pairs
     // with whatever cell follows it.
+    //
+    // Within a self-contained cell, the value may itself be multiple words
+    // ("frontier 18 new", "progress 19 retained · 2 learning · 18 untouched"
+    // once paired) — the key/value boundary is anchored on the first token
+    // that starts with a digit, since every observed value leads with a
+    // count. A naive "last token is the value" split (the old approach)
+    // mis-parses "frontier 18 new" as key "frontier 18" / value "new".
     const cells = line.trim().split(/\s{2,}/)
     let pendingKey: string | null = null
     for (const cell of cells) {
@@ -35,7 +45,7 @@ function parseRows(lines: string[]): { key: string; value: string }[] {
         pendingKey = null
         continue
       }
-      const m = cell.match(/^(.+?)\s+(\S+)$/)
+      const m = cell.match(/^(.+?)\s+(\d\S*(?:\s\S+)*)$/)
       if (m) fields.push({ key: m[1].trim(), value: m[2] })
       else pendingKey = cell
     }
@@ -56,7 +66,7 @@ export function parseTicket(text: string): ParsedTicket | null {
   if (!header) return null
   const fields = parseRows(lines.slice(1))
   if (fields.length === 0) return null
-  return { kind: header[1], mode: header[2], fields }
+  return { kind: header[1], mode: header[2] ?? null, fields }
 }
 
 /** Split prose around its ticket fence so the card can render in place of the
