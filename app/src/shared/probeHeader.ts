@@ -58,8 +58,17 @@ const OVERDUE_RE = /(\d+)\s*days?\s*overdue/i
 const SP = '[^\\S\\n]*'
 /** Spaces with optional markdown emphasis/code marks — a real tutor bolds the
  * whole `**[1/12] · node**` and italicizes the topic separately, so the
- * decoration lands BETWEEN the parts, not just around the whole line. */
-const GAP = `${SP}[*\`]{0,2}${SP}`
+ * decoration lands BETWEEN the parts, not just around the whole line.
+ * `{0,4}` (not `{0,2}`) — a real header sometimes stacks bold AND code marks
+ * on the SAME token (`` **`[1/5]` · `euler-lagrange-equations` †** ``, a
+ * genuine 2026-07 /review sitting): the leading decoration there is `` **` ``
+ * — three marker characters — and the `{0,2}` cap this used to carry
+ * silently failed to match the whole line, leaving it as unstructured prose
+ * instead of a ProbeCard. `{0,4}` covers that shape (and the doubled closing
+ * `` `** `` a matching node/dagger can carry) without materially loosening
+ * the separator scan below — no header case in the corpus needs more than 2
+ * decoration characters PLUS one code-fence backtick on each side. */
+const GAP = `${SP}[*\`]{0,4}${SP}`
 const HEADER_RE = new RegExp(
   `^${GAP}(?:\\[(\\d+)${SP}/${SP}(\\d+)\\]|node[^\\S\\n]+(\\d+)${SP}/${SP}(\\d+))` +
     `${GAP}[·•∙⋅]${GAP}([a-z0-9][a-z0-9-]*)${GAP}(†)?${GAP}(?:\\*?\\(([^)]+)\\)\\*?)?[^\\n]*\\n?`,
