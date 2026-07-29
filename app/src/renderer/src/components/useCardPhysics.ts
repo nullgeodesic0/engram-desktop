@@ -100,7 +100,7 @@ const SOFT_SCALE = 1 // one scale by user decision (2026-07-28): the chat-bubble
  * keeps a hovered nav item's corner displacement to a fraction of a pixel at
  * its ~36px height/~192px expanded width — felt as a faint liveliness, not a
  * wobble neighbors visibly fight for the same 2px gap. */
-const RAIL_SCALE = 0.4
+const RAIL_SCALE = 0.75
 /** Critically-damped-feel exponential smoothing time constant. */
 const SMOOTH_TAU_MS = 150
 /** Idle-drift concurrency cap — hover responsiveness is never capped. Bumped
