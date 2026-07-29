@@ -1101,6 +1101,30 @@
     color: var(--color-text-faint);
   }
 
+  /* Bare single-count field value (no ratio, e.g. ticket rows like
+     `due today 0`, `stash 0`, `retained 17`) — the same bold-numeral half of
+     `.stat-fraction`'s language, extended to counts that aren't a fraction.
+     See ritual/TicketCard.tsx `FieldValue`. */
+  .field-count-n {
+    color: var(--color-text-primary);
+    font-weight: 600;
+    font-family: var(--font-data);
+  }
+
+  /* Multi-clause aggregate field value (e.g. ticket rows like
+     `progress: 19 retained · 2 learning · 18 untouched` or
+     `topics: classical-mech 8 · quantum 2 · lenin 1 · labor 1`) — each
+     clause's number gets a lighter numeral weight than `.field-count-n`/
+     `.stat-fraction`'s frac-n, since this is a dense row of several small
+     facts rather than one headline count. See ritual/TicketCard.tsx
+     `FieldValue`/`parseAggregateClauses`. */
+  .field-clause-n {
+    color: var(--color-text-primary);
+    font-weight: 500;
+    font-family: var(--font-data);
+    font-variant-numeric: tabular-nums;
+  }
+
   /* Modal/drawer detail anatomy (T3): an opaque title band (never blurred —
      it's a solid plate, not a floating glass panel), an italic-serif
      subtitle in-band, and a hairline-topped footer for actions + kbd hints. */

@@ -12,28 +12,116 @@ const FRACTION_RE = /^(\d+)\s*\/\s*(\d+)(.*)$/
  * qualifies, instead of running together as one flat string. */
 const PAREN_TAIL_RE = /^(.*?)\s*(\(.*\))$/
 
+/** Matches a bare leading count with no fraction shape (e.g. "0", "8",
+ * "20 untouched", "8 (this topic)" after the paren tail above has already
+ * been peeled off) — this is the "number said first" register: a hard fact
+ * that isn't a ratio, so it doesn't want the full n/m `.stat-fraction`
+ * anatomy, just its bold-numeral half. Real examples: `due today 0`,
+ * `pending 0`, `stash 0`, `due 2`, `overdue 0`, `encoded 7`, `retained 17`,
+ * `learning 3`, `untouched 19`, `frontier 20 untouched`. */
+const BARE_COUNT_RE = /^(\d+)(\s+\S.*)?$/
+
+/** Matches a soft estimate/duration value ("est ~9 min") — informational,
+ * not a hard count, so it gets the app's existing "informational aside"
+ * register (`.detail-subtitle`: italic serif, dim) instead of a numeral
+ * treatment. */
+const ESTIMATE_RE = /^~?\s*\d+.*\b(?:min|mins|sec|secs|hour|hours|hr|hrs)\b/i
+
+/** Matches a multi-clause aggregate value: several small "count + word" (or
+ * "word + count") facts joined by " · " prose-dots, e.g.
+ * "19 retained · 2 learning · 18 untouched" (progress) or
+ * "classical-mech 8 · quantum 2 · lenin 1 · labor 1" (topics). Each clause
+ * pairs a bare number with a descriptor word in either order. */
+const CLAUSE_RE = /^(?:(\d+)\s+(\S+)|(\S+)\s+(\d+))$/
+
+function parseAggregateClauses(
+  value: string,
+): { n: string; label: string }[] | null {
+  if (!value.includes('·')) return null
+  const parts = value.split('·').map((p) => p.trim())
+  if (parts.length < 2) return null
+  const clauses: { n: string; label: string }[] = []
+  for (const part of parts) {
+    const m = CLAUSE_RE.exec(part)
+    if (!m) return null
+    const [, nFirst, labelFirst, labelSecond, nSecond] = m
+    clauses.push(nFirst != null ? { n: nFirst, label: labelFirst } : { n: nSecond, label: labelSecond })
+  }
+  return clauses
+}
+
+/** A single field value, rendered per its semantic role rather than one flat
+ * mono treatment. Classified purely from the value's own shape (and, for the
+ * fraction case, reusing `.stat-fraction`) — never from the field's key or
+ * from which ticket kind (`learn`/`review`) it came from, so this stays a
+ * generic rendering layer over `parseTicket`'s output rather than a
+ * view-specific special case. */
 function FieldValue({ value }: { value: string }) {
   const trimmed = value.trim()
-  const fracMatch = FRACTION_RE.exec(trimmed)
+
+  // Peel off a trailing parenthetical qualifier first — it applies on top of
+  // whichever role the remaining value gets classified into below (a bare
+  // count, a fraction, etc. can all carry one), and it always renders in the
+  // same dim/small "secondary" register regardless of the main value's role.
+  const parenMatch = PAREN_TAIL_RE.exec(trimmed)
+  const main = parenMatch && parenMatch[1] ? parenMatch[1] : trimmed
+  const parenTail = parenMatch && parenMatch[1] ? parenMatch[2] : null
+
+  const fracMatch = FRACTION_RE.exec(main)
   if (fracMatch) {
     const tail = fracMatch[3].trim()
     return (
       <span className="label-data text-xs text-[var(--color-text-dim)] inline-flex items-baseline gap-1">
         <StatFraction n={fracMatch[1]} d={fracMatch[2]} className="text-xs" />
         {tail && <span>{tail}</span>}
+        {parenTail && <span className="text-[var(--color-text-faint)]">{parenTail}</span>}
       </span>
     )
   }
-  const parenMatch = PAREN_TAIL_RE.exec(trimmed)
-  if (parenMatch && parenMatch[1]) {
+
+  const clauses = parseAggregateClauses(main)
+  if (clauses) {
     return (
-      <span className="label-data text-xs text-[var(--color-text-dim)] inline-flex items-baseline gap-1">
-        <span>{parenMatch[1]}</span>
-        <span className="text-[var(--color-text-faint)]">{parenMatch[2]}</span>
+      <span className="label-data text-xs text-[var(--color-text-dim)] inline-flex items-baseline flex-wrap gap-x-1 justify-end">
+        {clauses.map((c, i) => (
+          <span key={i} className="inline-flex items-baseline gap-1">
+            {i > 0 && <span className="text-[var(--color-text-faint)]">·</span>}
+            <span className="field-clause-n">{c.n}</span>
+            <span>{c.label}</span>
+          </span>
+        ))}
+        {parenTail && <span className="text-[var(--color-text-faint)]">{parenTail}</span>}
       </span>
     )
   }
-  return <span className="label-data text-xs text-[var(--color-text-dim)]">{value}</span>
+
+  if (ESTIMATE_RE.test(main)) {
+    return (
+      <span className="detail-subtitle text-xs inline-flex items-baseline gap-1">
+        <span>{main}</span>
+        {parenTail && <span className="text-[var(--color-text-faint)] not-italic">{parenTail}</span>}
+      </span>
+    )
+  }
+
+  const bareMatch = BARE_COUNT_RE.exec(main)
+  if (bareMatch) {
+    const rest = bareMatch[2]?.trim()
+    return (
+      <span className="label-data text-xs inline-flex items-baseline gap-1">
+        <span className="field-count-n">{bareMatch[1]}</span>
+        {rest && <span className="text-[var(--color-text-dim)]">{rest}</span>}
+        {parenTail && <span className="text-[var(--color-text-faint)]">{parenTail}</span>}
+      </span>
+    )
+  }
+
+  return (
+    <span className="label-data text-xs text-[var(--color-text-dim)] inline-flex items-baseline gap-1">
+      <span>{main}</span>
+      {parenTail && <span className="text-[var(--color-text-faint)]">{parenTail}</span>}
+    </span>
+  )
 }
 
 /** The session ticket — the dialogue grammar's fenced mono block given a home
