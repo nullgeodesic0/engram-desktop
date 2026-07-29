@@ -119,57 +119,77 @@
    overridden, and it inherits the dark theme's own deliberate choice to sit
    under the 3:1 floor as a quiet drawn line rather than a hard UI border
    (see that token's doctrine comment above). */
+/* CORRECTION (reverses the immediately preceding commit's core call): the
+   "warm-dim / instrument-panel" register that commit landed on was tuned
+   against the wrong reference. The actual target is genuinely bright paper —
+   near-white/cream ground, dark ink text, a faint pale technical line-art
+   field barely visible beneath it (concentric circles, radiating lines, a
+   diamond, small geometric marks at intersections — an old astronomical
+   diagram etched into aged paper), with soft warm shadows doing the lift.
+   This block goes back to the *first* light-theme pass's direction (bright
+   ground / dark text), not a copy of that pass's exact hex values — the
+   node-state inks, surface tiers, and shadow treatment below are recomputed
+   fresh against this specific bright cream rather than restored verbatim. */
 :root[data-theme='light'] {
-  --color-void: #4a4038;
-  --color-surface: #443b32;
-  --color-surface-2: #3a332b;
-  --color-surface-3: #302a23;
-  --color-hairline: #5d5145;
+  --color-void: #f4efe4;
+  --color-surface: #ede5d4;
+  --color-surface-2: #e3d8c1;
+  --color-surface-3: #d6c7a9;
+  --color-hairline: #cbbb98;
 
-  --color-ink-cool: #86b6ca;
-  --color-ink-cool-dim: #6b96a7;
-  --color-ink-warm: #e0a655;
-  --color-ink-warm-dim: #b98d49;
-  --color-ink-hot: #eec767;
-  --color-ink-danger: #e9a08c;
-  --color-ink-danger-dim: #bb8074;
+  --color-ink-cool: #1f6b86;
+  --color-ink-cool-dim: #4f8ea3;
+  --color-ink-warm: #8f5416;
+  --color-ink-warm-dim: #a97a3a;
+  --color-ink-hot: #7a5a10;
+  --color-ink-danger: #a13527;
+  --color-ink-danger-dim: #c06452;
 
-  --color-ink-violet: #c0a4e1;
-  --color-ink-violet-dim: #9a80b8;
+  --color-ink-violet: #6b4fa0;
+  --color-ink-violet-dim: #8f76b8;
 
   /* Cooler slate-teal accent, distinct from the warm ink family — reserved
      for the session masthead command-bar's hover/focus state (`.cmd-item`
-     below), the one place the app has a natural "header" analog. Not
+     below), the one place the app has a natural "header" analog. Darkened
+     from the previous pass's pale `#8fb8bd` (which assumed a dark ground) to
+     a deep teal that clears 4.5:1 against the bright cream void. Still not
      applied anywhere else: forcing it onto panels/rails would fight the
      single warm-ink accent language everywhere else in this theme. */
-  --color-accent-masthead: #8fb8bd;
+  --color-accent-masthead: #0f6b78;
 
-  --color-ink-paper: #ede3d3;
-  --color-text-primary: #ede3d3;
-  --color-text-dim: #c2b39c;
-  --color-text-faint: #96876f;
+  --color-ink-paper: #2b2016;
+  --color-text-primary: #2b2016;
+  --color-text-dim: #6b5c46;
+  --color-text-faint: #93856c;
 }
 
-/* NeuralField ambient layer under light (retuned): the field is glowing
-   synapses on dark space by construction (additive-blend particles + lines).
-   Under the old bright-parchment ground that geometry read as fireflies on
-   paper, so it was dimmed hard (0.16). The ground is now a warm-umber
-   midtone much closer in raw lightness to the dark theme's own void, so the
-   original problem — a light glow stranded on a pale field — no longer
-   applies; at 0.16 the field was nearly invisible against this darker
-   ground for no reason. Raised back up (0.5) so the particle/line geometry
-   (still sampled from this block's re-tuned ink tokens via cssColor() at
-   mount) reads as genuine ambient glow again, just a half-step quieter than
-   full dark-mode strength so `light` still feels like the calmer of the two
-   registers. NeuralField.tsx is remounted on theme change (see main.tsx) so
-   its particle palette is re-sampled from the fresh light-mode tokens
-   rather than carrying the previous theme's palette forward. */
+/* NeuralField ambient layer under light (corrected): the reference image's
+   faint pale-gray radiating lines / concentric rings / small geometric marks
+   is essentially what an "ambient field" should look like on paper — sparse
+   pale technical linework, not glowing neurons. NeuralField.tsx's underlying
+   particle/line geometry (see that file's `paletteMode` prop) still drives
+   the motion, but under light it renders in "line-art" mode: additive
+   glow-blending is swapped for plain alpha-blended thin strokes, particle
+   glow sprites are replaced with small flat squares (the reference's
+   "small circles/squares at intersections"), and colors are sampled as a
+   single desaturated warm-gray ink rather than the cyan/violet/orange signal
+   triad — because a scattered rainbow of watermark lines would read as
+   decoration-gone-wrong rather than a faded technical diagram. This is a
+   faithful approximation of the reference, not a full match: the reference's
+   actual concentric-circle/radiating-line/diamond *composition* is a fixed
+   drawn diagram, while NeuralField's field is a live particle simulation —
+   reproducing the exact static geometry would mean an entirely separate
+   canvas layer. What's real here: genuine rendering-mode change (additive
+   glow → flat pale linework, sprites → geometric marks, tri-color → single
+   ink), still driven by the same live particle data. Kept at full opacity
+   (the mode change itself does the quieting) rather than also dimming via
+   opacity, which would just fade the linework into invisibility. */
 .neural-field-root {
   opacity: 1;
   transition: opacity var(--dur-base) var(--ease-out-soft);
 }
 :root[data-theme='light'] .neural-field-root {
-  opacity: 0.5;
+  opacity: 1;
 }
 
 @layer base {
@@ -582,6 +602,10 @@
      cooler teal accent band, so hover/focus here borrows
      --color-accent-masthead instead of the warm-ink text-primary used
      everywhere else — a deliberately narrow, non-forced application. */
+  /* Light theme (corrected): still borrows --color-accent-masthead for the
+     one masthead command-bar hover/focus spot — a cool teal reads fine on
+     bright paper too (see the token's own doctrine comment above; it was
+     re-darkened for this ground). */
   :root[data-theme='light'] .cmd-item:hover,
   :root[data-theme='light'] .cmd-item:focus-visible {
     color: var(--color-accent-masthead);
@@ -684,33 +708,34 @@
     transition: border-color var(--dur-base) var(--ease-out-soft), box-shadow var(--dur-base) var(--ease-out-soft);
     backdrop-filter: blur(12px);
   }
-  /* Light theme (retuned): the previous parchment ground was pale, so glass
-     alphas were bumped well above the dark-theme base (62/68/68% →
-     78/84/82%) and the inset/drop-shadow direction was flipped to a light
-     top-edge highlight / soft warm-ink drop. The ground is now a warm-umber
-     midtone much closer in lightness to the dark theme's own void, so that
-     pale-field reasoning no longer applies — recomputed back down toward
-     (but not identical to) the dark-theme base, and the shadow direction
-     flips back: a light inset catch-light on the top edge reads correctly
-     again against a dark card, and the drop shadow goes back to a warm-black
-     (not warm-ink-on-cream) tone with more depth than the parchment version. */
+  /* Light theme (corrected back to bright paper): the ground is genuinely
+     pale again (--color-void L≈0.87), so the previous commit's shadow-
+     direction flip (light top-highlight was swapped for a dark-ink inset,
+     drop-shadow deepened toward warm-black) is reversed once more, back to
+     this token block's first-pass logic — verified fresh against the actual
+     new values here, not copy-pasted: a pale field behind the blur means a
+     card needs more of its own fill to read as a surface (glass alphas
+     bumped above the dark-theme base, 62/68/68/76/82% → 78/84/82/90/93%),
+     and a light top-edge catch-light plus a soft, low-alpha warm-ink drop
+     shadow reads as a lift off the page rather than the dark-mode
+     "bruise-black" drop needed on a dark ground. */
   :root[data-theme='light'] .panel {
-    background: color-mix(in srgb, var(--color-surface) 64%, transparent);
-    box-shadow: inset 0 1px 0 rgba(255, 238, 214, 0.05), 0 8px 20px -12px rgba(20, 15, 10, 0.45);
+    background: color-mix(in srgb, var(--color-surface) 78%, transparent);
+    box-shadow: inset 0 1px 0 rgba(255, 252, 244, 0.55), 0 8px 20px -12px rgba(43, 32, 22, 0.22);
   }
   :root[data-theme='light'] .panel-raised {
-    background: color-mix(in srgb, var(--color-surface-2) 70%, transparent);
-    box-shadow: inset 0 1px 0 rgba(255, 238, 214, 0.06), 0 8px 20px -12px rgba(20, 15, 10, 0.45);
+    background: color-mix(in srgb, var(--color-surface-2) 84%, transparent);
+    box-shadow: inset 0 1px 0 rgba(255, 252, 244, 0.6), 0 8px 20px -12px rgba(43, 32, 22, 0.22);
   }
   :root[data-theme='light'] .panel-plate {
-    background: color-mix(in srgb, var(--color-surface) 66%, transparent);
-    box-shadow: inset 0 0 0 1px var(--color-ink-warm-dim), inset 0 1px 0 rgba(255, 238, 214, 0.05), 0 8px 20px -12px rgba(20, 15, 10, 0.45);
+    background: color-mix(in srgb, var(--color-surface) 82%, transparent);
+    box-shadow: inset 0 0 0 1px var(--color-ink-warm-dim), inset 0 1px 0 rgba(255, 252, 244, 0.55), 0 8px 20px -12px rgba(43, 32, 22, 0.22);
   }
   :root[data-theme='light'] .chat-glass .panel {
-    background: color-mix(in srgb, var(--color-surface) 78%, transparent);
+    background: color-mix(in srgb, var(--color-surface) 90%, transparent);
   }
   :root[data-theme='light'] .chat-glass .panel-raised {
-    background: color-mix(in srgb, var(--color-surface-2) 84%, transparent);
+    background: color-mix(in srgb, var(--color-surface-2) 93%, transparent);
   }
   .label-data {
     font-family: var(--font-data);

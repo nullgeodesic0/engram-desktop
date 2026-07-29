@@ -55,7 +55,7 @@ function ThemeRoot() {
           moment before fading away on its own; it and the field are
           independent, not a hand-off between two states of one thing. */}
       <Suspense fallback={null}>
-        <NeuralField key={theme} />
+        <NeuralField key={theme} theme={theme} />
       </Suspense>
       <ErrorBoundary>
         <EnvironmentGate>
