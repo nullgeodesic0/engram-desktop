@@ -180,7 +180,7 @@ export function ArtifactGalleryView({ onGoLearn, onOpenNode }: ArtifactGalleryVi
       {groups.map(({ topic, items }) => (
         <section key={topic} className="flex flex-col gap-3">
           <div className="flex items-baseline gap-2">
-            <h2 className="font-[var(--font-serif)] text-lg text-[var(--color-text-primary)]">{topicTitle(topic)}</h2>
+            <h2 className="font-(family-name:--font-serif) text-lg text-[var(--color-text-primary)]">{topicTitle(topic)}</h2>
             <span className="label-data text-[10px] text-[var(--color-text-faint)]">{topic}</span>
           </div>
           <div className="grid grid-cols-3 gap-4">

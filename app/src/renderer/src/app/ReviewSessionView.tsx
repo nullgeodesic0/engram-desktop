@@ -1342,27 +1342,30 @@ export function ReviewSessionView({ onActivity, onGoHome }: ReviewSessionViewPro
                         </div>
                         <div className="px-5 py-3 flex flex-col gap-2">
                           <div className="min-w-0">
-                            <div className="font-(family-name:--font-display) font-semibold text-sm text-[var(--color-text-primary)] truncate">
+                            <div className="font-(family-name:--font-display) font-semibold text-base text-[var(--color-text-primary)] truncate">
                               {humanizeNodeId(current.id)}
                             </div>
-                            <div className="label-data text-xs text-[var(--color-text-faint)] mt-0.5 uppercase tracking-wider truncate">
-                              {current.topic}
-                            </div>
+                            <div className="detail-subtitle text-xs mt-0.5 truncate">{current.topic}</div>
                           </div>
-                          <p className="text-sm text-[var(--color-text-primary)] pr-7">{current.probe}</p>
+                          <p className="text-sm text-[var(--color-text-primary)]">{current.probe}</p>
                         </div>
-                        <button
-                          onClick={() => setProbePinned((v) => !v)}
-                          aria-label={probePinned ? 'Unpin probe' : 'Pin probe'}
-                          title={probePinned ? 'Unpin — tuck away unless the cursor visits the top' : 'Pin — keep the probe out'}
-                          className={`focus-ring no-press absolute bottom-1.5 right-1.5 h-5 w-5 flex items-center justify-center transition-colors duration-[var(--dur-fast)] ${
-                            probePinned
-                              ? 'text-[var(--color-ink-warm)] bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)]'
-                              : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]'
-                          }`}
-                        >
-                          <PinTackIcon pinned={probePinned} size={14} />
-                        </button>
+                        <div className="detail-footer px-5 py-1.5">
+                          <span className="label-data text-[10px] text-[var(--color-text-faint)] uppercase tracking-wider">
+                            probe
+                          </span>
+                          <button
+                            onClick={() => setProbePinned((v) => !v)}
+                            aria-label={probePinned ? 'Unpin probe' : 'Pin probe'}
+                            title={probePinned ? 'Unpin — tuck away unless the cursor visits the top' : 'Pin — keep the probe out'}
+                            className={`focus-ring no-press h-5 w-5 flex items-center justify-center transition-colors duration-[var(--dur-fast)] ${
+                              probePinned
+                                ? 'text-[var(--color-ink-warm)] bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)]'
+                                : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]'
+                            }`}
+                          >
+                            <PinTackIcon pinned={probePinned} size={14} />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>

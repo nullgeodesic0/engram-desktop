@@ -22,7 +22,7 @@ export function PageHeader({
   return (
     <header className={`flex items-center justify-between gap-4 ${className}`}>
       <div className="min-w-0">
-        <h1 className="font-[var(--font-serif)] text-[length:var(--text-display)] text-[var(--color-text-primary)]">
+        <h1 className="font-(family-name:--font-serif) text-[length:var(--text-display)] text-[var(--color-text-primary)]">
           {title}
         </h1>
         {subtitle && <p className="text-sm text-[var(--color-text-dim)] mt-1">{subtitle}</p>}

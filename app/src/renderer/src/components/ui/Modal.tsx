@@ -73,7 +73,7 @@ export function Modal({
         {title && (
           <div className="detail-title-band flex items-start justify-between gap-4 px-6 py-4 shrink-0">
             <div className="min-w-0">
-              <h2 className="font-[var(--font-display)] text-[length:var(--text-heading)] text-[var(--color-text-primary)]">
+              <h2 className="font-(family-name:--font-display) text-[length:var(--text-heading)] text-[var(--color-text-primary)]">
                 {title}
               </h2>
               {subtitle && <div className="detail-subtitle text-[length:var(--text-caption)] mt-0.5">{subtitle}</div>}

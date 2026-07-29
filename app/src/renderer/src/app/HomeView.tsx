@@ -308,7 +308,7 @@ export function HomeView({ onGoReview, onGoCoach, onGoTopic, onNewTopic, onGoNod
         <header>
           {stats ? (
             <>
-              <h1 className="font-[var(--font-serif)] text-[length:var(--text-display)] text-[var(--color-text-primary)]">{greeting()}.</h1>
+              <h1 className="font-(family-name:--font-serif) text-[length:var(--text-display)] text-[var(--color-text-primary)]">{greeting()}.</h1>
               {topics !== null && (
                 <p className="text-sm text-[var(--color-text-dim)] mt-1">
                   {topics.length} {topics.length === 1 ? 'topic' : 'topics'} in your atlas
@@ -406,7 +406,7 @@ export function HomeView({ onGoReview, onGoCoach, onGoTopic, onNewTopic, onGoNod
         {topics !== null && topics.length === 0 && envBroken && envCheck && (
           <div className="flex flex-col items-start gap-3 py-10 w-full max-w-lg">
             <div className="fig-caption">Fig. — setup needed before your first topic</div>
-            <div className="font-[var(--font-serif)] text-[length:var(--text-display)] text-[var(--color-text-primary)]">
+            <div className="font-(family-name:--font-serif) text-[length:var(--text-display)] text-[var(--color-text-primary)]">
               Two things first.
             </div>
             <p className="text-sm text-[var(--color-text-dim)] max-w-md">
@@ -424,7 +424,7 @@ export function HomeView({ onGoReview, onGoCoach, onGoTopic, onNewTopic, onGoNod
         {topics !== null && topics.length === 0 && envCheck !== null && !envBroken && (
           <div className="flex flex-col items-start gap-3 py-10">
             <div className="fig-caption">Fig. — an unmarked atlas</div>
-            <div className="font-[var(--font-serif)] text-[length:var(--text-display)] text-[var(--color-text-primary)]">Begin your atlas</div>
+            <div className="font-(family-name:--font-serif) text-[length:var(--text-display)] text-[var(--color-text-primary)]">Begin your atlas</div>
             <p className="text-sm text-[var(--color-text-dim)] max-w-md">
               Engram teaches by making you produce, then verifies what stuck — free recall, honest grades, and a map that fills in as you learn.
             </p>

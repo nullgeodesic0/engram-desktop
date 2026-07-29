@@ -28,7 +28,7 @@ export class ErrorBoundary extends Component<Props, State> {
       <div className="h-full flex items-center justify-center p-8">
         <div className="panel-raised max-w-md w-full p-7 flex flex-col gap-4">
           <div>
-            <h1 className="font-[var(--font-display)] text-xl text-[var(--color-text-primary)]">Something went wrong</h1>
+            <h1 className="font-(family-name:--font-display) text-xl text-[var(--color-text-primary)]">Something went wrong</h1>
             <p className="text-sm text-[var(--color-text-dim)] mt-2">
               The interface hit an unexpected error. Your Engram data is untouched — it lives entirely outside this
               window — but this screen needs a reload to recover.

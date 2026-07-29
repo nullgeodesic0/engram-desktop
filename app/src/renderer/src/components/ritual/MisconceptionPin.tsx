@@ -29,7 +29,7 @@ export const MisconceptionPin = memo(function MisconceptionPin({ text, node }: {
         </div>
         <MathRenderer
           text={text}
-          className="font-[var(--font-serif)] text-xs leading-relaxed text-[var(--color-text-dim)]"
+          className="font-(family-name:--font-serif) text-xs leading-relaxed text-[var(--color-text-dim)]"
         />
         {node && <div className="fig-caption pt-0.5">specimen — {humanizeNodeId(node)}</div>}
       </div>

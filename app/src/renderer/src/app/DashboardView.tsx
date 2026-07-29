@@ -324,7 +324,7 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts, coachHomeSi
       {stats.topics.length === 0 ? (
         <div className="flex flex-col items-start gap-3 py-10">
           <div className="fig-caption">Fig. — nothing to coach yet</div>
-          <div className="font-[var(--font-serif)] text-[length:var(--text-display)] text-[var(--color-text-primary)]">
+          <div className="font-(family-name:--font-serif) text-[length:var(--text-display)] text-[var(--color-text-primary)]">
             Coaching starts once you do.
           </div>
           <p className="text-sm text-[var(--color-text-dim)] max-w-md">

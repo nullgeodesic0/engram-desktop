@@ -52,7 +52,7 @@ export function TitleBar() {
         <span className="relative inline-flex h-1.5 w-1.5">
           <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[var(--color-ink-warm)]" />
         </span>
-        <span className="font-[var(--font-serif)] text-xs text-[var(--color-text-dim)] tracking-wide">Engram</span>
+        <span className="font-(family-name:--font-serif) text-xs text-[var(--color-text-dim)] tracking-wide">Engram</span>
       </div>
     </div>
   )
