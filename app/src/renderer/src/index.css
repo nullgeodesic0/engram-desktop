@@ -91,6 +91,16 @@
   --radius-2xl: 0px;
   --radius-3xl: 0px;
   --radius-4xl: 0px;
+
+  /* Primary-button chrome accent. Defaults to the warm-ink pair so dark mode
+     (and any theme that doesn't override it) renders byte-identical to
+     before this token existed; the light theme below is the only place that
+     redirects it to the grayish-blue accent. Kept separate from
+     --color-ink-warm itself: ink-warm is the cross-theme "surviving signal"
+     semantic (node state, StatBlock warm tone, GradeResultCard badges) and
+     must stay amber even where this token goes blue. */
+  --color-accent-cta: var(--color-ink-warm);
+  --color-accent-cta-hover: var(--color-ink-hot);
 }
 
 /* "Atlas by Daylight" — the light theme. NOTE (retune, see
@@ -130,22 +140,22 @@
    ground / dark text), not a copy of that pass's exact hex values — the
    node-state inks, surface tiers, and shadow treatment below are recomputed
    fresh against this specific bright cream rather than restored verbatim. */
-/* Chrome elements retune: the void stays bright cream (per the correction
-   above); only the panel/chrome tier (surface/surface-2/surface-3/hairline,
-   and --color-edge which derives from hairline) moves off the warm-cream
-   family to a desaturated slate blue-gray — low chroma, not a vivid blue —
-   so panels/cards/chips/borders read as cool "greyish blue" elements sitting
-   on top of the unchanged white/cream ground. Deliberately kept far from
-   --color-ink-cool (the semantic "unconsolidated node" ink, #1f6b86): that
-   token stays a dark, saturated teal (HSL ~196°, L 32%, S 62%) used as text/
-   ink, while this new neutral family sits at the same broad blue hue
-   (~210-213°) but far lighter and far less saturated (L 70-91%, S 17-20%) —
-   a pale muted chrome color, not a competing semantic ink. */
+/* CORRECTION (reverses the immediately preceding commit's fill decision):
+   that pass moved the panel/chrome FILLS themselves (surface/surface-2/
+   surface-3) to a blue-gray, on the theory that "greyish blue chrome" meant
+   the card bodies. It didn't — the actual request is card fills stay white/
+   cream (back to the bright-paper values two commits back) and the
+   grayish-blue instead goes on the ACCENT/LINE work: hairline/edge, hover-
+   and-focus rings, the frame-hover/dogear "you are here" mark, and selected/
+   active states. --color-hairline (and --color-edge, which derives from it)
+   keeps the desaturated slate blue-gray from that pass — it was already the
+   right token for a drawn line, just needed its neighboring fill tokens to
+   stop following it off the cream register. */
 :root[data-theme='light'] {
   --color-void: #f4efe4;
-  --color-surface: #e4e8ec;
-  --color-surface-2: #d3dae1;
-  --color-surface-3: #bcc6d2;
+  --color-surface: #ede5d4;
+  --color-surface-2: #e3d8c1;
+  --color-surface-3: #d6c7a9;
   --color-hairline: #a5b2c0;
 
   --color-ink-cool: #1f6b86;
@@ -158,6 +168,19 @@
 
   --color-ink-violet: #6b4fa0;
   --color-ink-violet-dim: #8f76b8;
+
+  /* Grayish-blue accent pair — the LINE/EMPHASIS color for this theme, not a
+     fill. Same desaturated slate-blue family as --color-hairline (H~207-211,
+     low saturation) but two weights: -cta is dark/saturated enough to carry
+     light (--color-void) button text at high contrast and to read as a bold
+     "you are here" mark for frame-hover/dogear/selected states; -cta-hover
+     is a step darker for press/hover feedback. Deliberately NOT the same
+     weight as --color-ink-cool (#1f6b86, H196 S62 L32): same broad blue
+     family, but ink-cool is a saturated semantic teal used as body ink,
+     while this pair is desaturated slate (S25-27% vs ink-cool's 62%) so the
+     two never read as the same signal. */
+  --color-accent-cta: #3d5266;
+  --color-accent-cta-hover: #2e3f50;
 
   /* Cooler slate-teal accent, distinct from the warm ink family — reserved
      for the session masthead command-bar's hover/focus state (`.cmd-item`
@@ -421,6 +444,13 @@
     0 0 0 1.5px var(--color-ink-warm-dim),
     0 0 0 6px color-mix(in srgb, var(--color-ink-warm) 6%, transparent);
 }
+/* Light theme: this is a hover/focus ring (see the accent-line doctrine in
+   the light-theme token block), not a semantic ink wash. */
+:root[data-theme='light'] .pair-linked {
+  box-shadow:
+    0 0 0 1.5px var(--color-accent-cta),
+    0 0 0 6px color-mix(in srgb, var(--color-accent-cta) 6%, transparent);
+}
 
 /* Interaction vocabulary — one set of rules for every hover/press micro-interaction
  * in the app, built on the two motion tokens declared in @theme above:
@@ -653,6 +683,14 @@
     color: var(--color-ink-warm);
     background-color: color-mix(in srgb, var(--color-ink-warm) 9%, transparent);
   }
+  /* Light theme: "you are here" is a selected/active state, not a semantic
+     node-state ink, so it takes the grayish-blue accent here — same doctrine
+     as frame-hover/frame-selected/dogear below. */
+  :root[data-theme='light'] .nav-item-active {
+    border-color: var(--color-accent-cta);
+    color: var(--color-accent-cta);
+    background-color: color-mix(in srgb, var(--color-accent-cta) 9%, transparent);
+  }
   .app-drag {
     -webkit-app-region: drag;
   }
@@ -760,6 +798,11 @@
     outline: 2px solid var(--color-ink-warm);
     outline-offset: 2px;
   }
+  /* Light theme: focus rings are pure chrome/emphasis, not a semantic ink,
+     so they take the grayish-blue accent instead of warm amber here. */
+  :root[data-theme='light'] .focus-ring:focus-visible {
+    outline-color: var(--color-accent-cta);
+  }
   /* "Fig. N —" atlas caption: italic serif, dim, used for stats and empty states. */
   .fig-caption {
     font-family: var(--font-serif);
@@ -852,6 +895,12 @@
   .frame-selected::after {
     border-color: var(--color-ink-warm);
   }
+  /* Light theme: the hover/selected frame is line-and-emphasis work, not a
+     semantic ink — grayish-blue accent instead of warm amber. */
+  :root[data-theme='light'] .frame-hover:hover::after,
+  :root[data-theme='light'] .frame-selected::after {
+    border-color: var(--color-accent-cta);
+  }
 
   /* Dogear — folded top-right corner marking "this is the one you're in".
      Border-triangle over clip-path: crisper anti-aliasing, and it never
@@ -871,6 +920,11 @@
     border-top: 9px solid var(--color-ink-warm);
     border-left: 9px solid transparent;
     pointer-events: none;
+  }
+  /* Light theme: the dogear "current item" mark is the same accent-line
+     doctrine as frame-hover/frame-selected above — grayish-blue, not amber. */
+  :root[data-theme='light'] .dogear::before {
+    border-top-color: var(--color-accent-cta);
   }
 
   /* Card physics — the ONE rule that consumes the tilt angles (see the
@@ -1054,6 +1108,10 @@
     outline: 2px solid var(--color-ink-warm);
     outline-offset: 3px;
     border-radius: 0;
+  }
+  /* Light theme: focus ring, same accent-line doctrine as .focus-ring above. */
+  :root[data-theme='light'] .scrubber-range:focus-visible {
+    outline-color: var(--color-accent-cta);
   }
 
   /* The transcript reads as a set page, not a chat log — one reading measure,
