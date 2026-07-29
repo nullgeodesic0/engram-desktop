@@ -52,7 +52,7 @@ export const TicketCard = memo(function TicketCard({
     >
       <div className={`detail-title-band flex items-center justify-between gap-3 ${padX} ${compact ? 'py-1.5' : 'py-2'}`}>
         <span className="label-data text-[10px] tracking-[0.22em] uppercase text-[var(--color-ink-warm)]">
-          engram · {ticket.kind} · {ticket.mode}
+          engram · {ticket.kind}{ticket.mode != null ? ` · ${ticket.mode}` : ''}
         </span>
         {walkNumber != null && (
           <span
