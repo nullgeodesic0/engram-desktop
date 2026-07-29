@@ -27,8 +27,8 @@ const PLATE_FORCE_PARAMS = {
   centerForce: 0.5,
 }
 
-/** Minimum clear space between two cell rims — room for dendrite stubs,
- * rings, and a label line without collisions. */
+/** Minimum clear space between two cell rims — room for rings, halos, and a
+ * label line without collisions. */
 const CELL_CLEARANCE = 30
 
 /** Run the existing X/Y force simulation to convergence once and freeze it —
@@ -109,8 +109,34 @@ export function settlePlate(graph: TopicGraph, width: number, height: number): M
   return out
 }
 
-/** Irregular closed blob path centered at the origin — the InkNode technique
- * at plate scale: 10 points, seeded per-id wobble, quadratic smoothing. */
+/** Precise circular mark centered at the origin, as a path (not a <circle>)
+ * so every consumer — screen plate, printed plate, legend glyphs — can fill,
+ * stroke, and clip node marks through one uniform `d` vocabulary. Two arcs
+ * because a single SVG arc with coincident endpoints collapses to nothing. */
+export function ringMarkPath(r: number): string {
+  const rr = r.toFixed(2)
+  return `M ${-rr} 0 A ${rr} ${rr} 0 1 0 ${rr} 0 A ${rr} ${rr} 0 1 0 ${-rr} 0 Z`
+}
+
+/** Diamond mark centered at the origin — the threshold glyph. Slightly
+ * larger than the circle it replaces (×1.12) so equal-radius circle and
+ * diamond read as equal visual weight despite the diamond's smaller area. */
+export function diamondMarkPath(r: number): string {
+  const k = (r * 1.12).toFixed(2)
+  return `M 0 -${k} L ${k} 0 L 0 ${k} L -${k} 0 Z`
+}
+
+/** The plate's node-mark chooser: threshold concepts take the diamond,
+ * everything else the circular ring/disc. State ink (color, fill vs hollow,
+ * half-fill) is applied by the caller — this is geometry only. */
+export function nodeMarkPath(threshold: boolean | undefined, r: number): string {
+  return threshold ? diamondMarkPath(r) : ringMarkPath(r)
+}
+
+/** Irregular closed blob path centered at the origin — the seeded-wobble
+ * technique, kept for the AtlasBirth ritual (whose ink-blot birth animation
+ * still uses it deliberately). The map plate itself now renders geometric
+ * marks (ringMarkPath/diamondMarkPath above) instead. */
 export function cellBodyPath(id: string, r: number): string {
   const points = 10
   const coords: [number, number][] = []
@@ -133,30 +159,6 @@ export function cellBodyPath(id: string, r: number): string {
   const firstMid = [(coords[0][0] + coords[1][0]) / 2, (coords[0][1] + coords[1][1]) / 2]
   d += ` Q ${last[0].toFixed(2)} ${last[1].toFixed(2)} ${firstMid[0].toFixed(2)} ${firstMid[1].toFixed(2)} Z`
   return d
-}
-
-/** Short dendrite stubs reaching from the cell body toward up to 4 of the
- * node's real neighbors — drawn in plate coordinates. Each stub is a short
- * 2-segment path with a seeded kink, starting on the body rim. */
-export function dendriteStubs(
-  id: string,
-  pos: { x: number; y: number },
-  neighborDirs: { x: number; y: number }[],
-  r: number,
-): string[] {
-  return neighborDirs.slice(0, 4).map((dir, i) => {
-    const len = Math.hypot(dir.x, dir.y) || 1
-    const ux = dir.x / len
-    const uy = dir.y / len
-    const start = { x: pos.x + ux * r, y: pos.y + uy * r }
-    const reach = r * (0.8 + seeded(id, 20 + i) * 0.7)
-    const kink = (seeded(id, 40 + i) - 0.5) * r * 0.6
-    const midX = start.x + ux * reach * 0.55 - uy * kink
-    const midY = start.y + uy * reach * 0.55 + ux * kink
-    const endX = start.x + ux * reach
-    const endY = start.y + uy * reach
-    return `M ${start.x.toFixed(2)} ${start.y.toFixed(2)} Q ${midX.toFixed(2)} ${midY.toFixed(2)} ${endX.toFixed(2)} ${endY.toFixed(2)}`
-  })
 }
 
 /** Group non-capstone nodes by their nearest layer-0 ancestor (breadth-first
@@ -218,8 +220,12 @@ function convexHull(points: Pt[]): Pt[] {
   return [...lower.slice(0, -1), ...upper.slice(0, -1)]
 }
 
-/** Convex hull (Andrew's monotone chain) expanded by `padding`, returned as a
- * smoothed closed SVG path through the hull midpoints. */
+/** Convex hull (Andrew's monotone chain) expanded by `padding`, returned as
+ * an ANGULAR closed polygon path — straight segments between padded hull
+ * vertices. The territory wash used to smooth this through midpoint
+ * quadratics into an organic cloud; the plate's chart idiom keeps the same
+ * hull, same padding, same footprint, drawn as a faceted sector boundary
+ * instead. */
 export function hullPath(points: Pt[], padding: number): string {
   if (points.length < 3) return ''
   const hull = convexHull(points)
@@ -231,16 +237,11 @@ export function hullPath(points: Pt[], padding: number): string {
     const d = Math.hypot(dx, dy) || 1
     return { x: p.x + (dx / d) * padding, y: p.y + (dy / d) * padding }
   })
-  let d = ''
-  for (let i = 0; i < padded.length; i++) {
-    const curr = padded[i]
-    const next = padded[(i + 1) % padded.length]
-    const midX = (curr.x + next.x) / 2
-    const midY = (curr.y + next.y) / 2
-    d += i === 0 ? `M ${midX.toFixed(2)} ${midY.toFixed(2)}` : ''
-    d += ` Q ${curr.x.toFixed(2)} ${curr.y.toFixed(2)} ${midX.toFixed(2)} ${midY.toFixed(2)}`
-  }
-  return d + ' Z'
+  return (
+    padded
+      .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(2)} ${p.y.toFixed(2)}`)
+      .join(' ') + ' Z'
+  )
 }
 
 /** The same hull center `hullPath` computes internally before padding —

@@ -4,8 +4,9 @@ import { EDGE_STYLE } from '../components/graph3d/types'
 import { buildEdges, computeForwardAdjacency, computeFrontierIds, computeHubNodeIds } from '../components/graph3d/layout'
 import {
   settlePlate,
-  cellBodyPath,
-  dendriteStubs,
+  nodeMarkPath,
+  ringMarkPath,
+  diamondMarkPath,
   territoryGroups,
   hullPath,
   hullCentroid,
@@ -15,7 +16,6 @@ import {
 import {
   STATE_COLOR,
   stringEdgePath,
-  calligraphicEdgePath,
   arrowheadTransform,
   isEdgeVisible,
   cornerTicks,
@@ -275,7 +275,7 @@ function planLabels(
 }
 
 /** Small filled glyph + label row for the printed key, built from the exact
- * same `cellBodyPath` the plate itself uses — never a hand-drawn stand-in
+ * same `ringMarkPath`/`diamondMarkPath` mark geometry the plate uses — never a hand-drawn stand-in
  * shape that could drift from what the plate actually draws. */
 function legendRow(y: number, glyph: string, label: string): string {
   return `<g transform="translate(14 ${y})">${glyph}<text x="16" y="4" font-family="var(--font-body)" font-size="10" fill="var(--color-text-dim)">${escapeXml(label)}</text></g>`
@@ -289,7 +289,7 @@ function legendRow(y: number, glyph: string, label: string): string {
  *
  * This is NOT a screenshot or a re-render of the live `GraphView` component:
  * it calls the exact same geometry/path functions GraphView itself calls
- * (`settlePlate`, `cellBodyPath`, `dendriteStubs`, `hullPath`, the edge-path
+ * (`settlePlate`, `nodeMarkPath`, `hullPath`, the edge-path
  * builders now exported from GraphView.tsx) so the printed figure is
  * mathematically the same specimen, just assembled as a markup string
  * instead of JSX — the same choice `sittingToPrintHtml` already made for
@@ -362,33 +362,11 @@ export function mapToPrintHtml(
   const visibleEdges = edges.filter((e) => isEdgeVisible(e, hubNodeIds, forwardAdjacency))
   const t = 0 // frozen — see the header comment above
 
-  const neighborIdsById = new Map<string, string[]>()
-  for (const e of visibleEdges) {
-    if (!hubNodeIds.has(e.target)) {
-      const arr = neighborIdsById.get(e.source) ?? []
-      if (!arr.includes(e.target)) arr.push(e.target)
-      neighborIdsById.set(e.source, arr)
-    }
-    if (!hubNodeIds.has(e.source)) {
-      const arr = neighborIdsById.get(e.target) ?? []
-      if (!arr.includes(e.source)) arr.push(e.source)
-      neighborIdsById.set(e.target, arr)
-    }
-  }
-
   const svg: string[] = []
 
   svg.push(`<defs>`)
   svg.push(
     `<filter id="plate-grain" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="4" stitchTiles="stitch" result="grain-noise"/><feColorMatrix in="grain-noise" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0.33 0.33 0.34 0 0"/></filter>`,
-  )
-  // No `patternTransform` zoom-cancellation here (see plate.ts's caller in
-  // GraphView) — the print plate has exactly one zoom level, 1, forever.
-  svg.push(
-    `<pattern id="hatch-review" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="var(--color-ink-warm)" stroke-width="1.1"/></pattern>`,
-  )
-  svg.push(
-    `<pattern id="stipple-learning" patternUnits="userSpaceOnUse" width="9" height="9"><circle cx="2.25" cy="2.25" r="0.9" fill="var(--color-ink-cool)"/><circle cx="6.75" cy="6.75" r="0.9" fill="var(--color-ink-cool)"/></pattern>`,
   )
   svg.push(`<clipPath id="legend-half-clip"><rect x="-10" y="0" width="20" height="10"/></clipPath>`)
   for (const id of graph.order) {
@@ -428,11 +406,14 @@ export function mapToPrintHtml(
     const pts = members.map((id) => plate.get(id)).filter((p): p is PlateNode => !!p)
     const centroid = hullCentroid(pts)
     if (!centroid) continue
-    const territoryLabel = humanizeNodeId(root)
+    // Tracked uppercase mono, matching the on-screen plate's sector
+    // captions; measured on the UPPERCASED string (wider) so the obstacle
+    // rect fed to planLabels stays honest about the extra width.
+    const territoryLabel = humanizeNodeId(root).toUpperCase()
     svg.push(
-      `<text x="${centroid.x.toFixed(2)}" y="${centroid.y.toFixed(2)}" text-anchor="middle" font-family="var(--font-serif)" font-style="italic" font-size="11" fill="var(--color-text-dim)" opacity="0.45">${escapeXml(territoryLabel)}</text>`,
+      `<text x="${centroid.x.toFixed(2)}" y="${centroid.y.toFixed(2)}" text-anchor="middle" font-family="var(--font-data)" font-size="10" letter-spacing="1.6" fill="var(--color-text-dim)" opacity="0.5">${escapeXml(territoryLabel)}</text>`,
     )
-    territoryLabelRects.push(labelRect(centroid, territoryLabel, { dx: 0, dy: 0, anchor: 'middle', fontSize: 11 }))
+    territoryLabelRects.push(labelRect(centroid, territoryLabel, { dx: 0, dy: 0, anchor: 'middle', fontSize: 12 }))
   }
 
   // Edges — flat opacity: no hover/selection trail to promote or dim on paper.
@@ -442,32 +423,15 @@ export function mapToPrintHtml(
     if (!a || !b) continue
     const style = EDGE_STYLE[e.kind]
     if (e.kind === 'requires') {
-      const d = calligraphicEdgePath(e.source, e.target, a, b, t)
+      const d = stringEdgePath(e.source, e.target, a, b, 'requires', t)
       const arrowTransform = arrowheadTransform(e.source, e.target, a, b, b.r, t, 1)
-      svg.push(`<path d="${d}" fill="${style.stroke}" fill-opacity="0.4"/>`)
+      svg.push(`<path d="${d}" fill="none" stroke="${style.stroke}" stroke-opacity="0.4" stroke-width="1.2"/>`)
       svg.push(`<path d="${ARROWHEAD_PATH}" fill="${style.stroke}" fill-opacity="0.4" transform="${arrowTransform}"/>`)
     } else {
       const d = stringEdgePath(e.source, e.target, a, b, 'other', t)
       svg.push(
         `<path d="${d}" fill="none" stroke="${style.stroke}" stroke-opacity="0.4" stroke-width="1.1" ${style.dash ? `stroke-dasharray="${style.dash}"` : ''}/>`,
       )
-    }
-  }
-
-  // Dendrite stubs
-  for (const id of graph.order) {
-    const node = graph.nodes[id]
-    const pos = plate.get(id)
-    if (!node || !pos || node.capstone) continue
-    const neighborIds = (neighborIdsById.get(id) ?? []).slice(0, 4)
-    const dirs = neighborIds.map((nid) => {
-      const npos = plate.get(nid)
-      if (!npos) return { x: 1, y: 0 }
-      return { x: npos.x - pos.x, y: npos.y - pos.y }
-    })
-    const stubs = dendriteStubs(id, pos, dirs, pos.r)
-    for (const d of stubs) {
-      svg.push(`<path d="${d}" stroke="${STATE_COLOR[node.state]}" stroke-opacity="0.45" stroke-width="1" fill="none"/>`)
     }
   }
 
@@ -478,7 +442,9 @@ export function mapToPrintHtml(
     const pos = plate.get(id)
     if (!node || !pos) continue
     const r = pos.r
-    const bodyPath = cellBodyPath(id, r)
+    // Threshold concepts take the diamond mark; geometry, not a dash, now
+    // carries that distinction (the printed Key documents both).
+    const bodyPath = nodeMarkPath(node.threshold, r)
 
     if (node.capstone) {
       const outerR = r + 4
@@ -490,23 +456,22 @@ export function mapToPrintHtml(
         `<circle r="${outerR}" fill="none" stroke="var(--color-ink-warm)" stroke-width="2" stroke-linecap="round" stroke-dasharray="${(fraction * circumference).toFixed(2)} ${circumference.toFixed(2)}" transform="rotate(-90)"/>`,
       )
       svg.push(`<circle r="${r}" fill="none" stroke="var(--color-ink-warm)" stroke-width="1.2"/>`)
-      svg.push(`<path d="${cellBodyPath(id, r * 0.55)}" fill="var(--color-ink-warm)" fill-opacity="${(0.25 + 0.75 * fraction).toFixed(3)}"/>`)
+      svg.push(`<circle r="${(r * 0.62).toFixed(2)}" fill="none" stroke="var(--color-ink-warm)" stroke-width="1"/>`)
+      svg.push(`<circle r="${(r * 0.45).toFixed(2)}" fill="var(--color-ink-warm)" fill-opacity="${(0.25 + 0.75 * fraction).toFixed(3)}"/>`)
       svg.push(`</g>`)
       continue
     }
 
     const fillOpacity = 0.35 + 0.65 * (retrievability?.get(id) ?? 1)
-    const dash = node.threshold ? '3 2.5' : undefined
     svg.push(`<g transform="translate(${pos.x.toFixed(2)} ${pos.y.toFixed(2)})">`)
     if (node.state === 'new') {
-      svg.push(`<path d="${bodyPath}" fill="none" stroke="${STATE_COLOR.new}" stroke-width="1.2" ${dash ? `stroke-dasharray="${dash}"` : ''}/>`)
+      svg.push(`<path d="${bodyPath}" fill="none" stroke="${STATE_COLOR.new}" stroke-width="1.2"/>`)
     } else if (node.state === 'learning') {
-      svg.push(`<path d="${bodyPath}" fill="none" stroke="${STATE_COLOR.learning}" stroke-width="1.2" ${dash ? `stroke-dasharray="${dash}"` : ''}/>`)
+      svg.push(`<path d="${bodyPath}" fill="none" stroke="${STATE_COLOR.learning}" stroke-width="1.2"/>`)
       svg.push(`<path d="${bodyPath}" fill="${STATE_COLOR.learning}" fill-opacity="${fillOpacity.toFixed(3)}" clip-path="url(#half-${escapeXml(id)})"/>`)
-      svg.push(`<path d="${bodyPath}" fill="url(#stipple-learning)" fill-opacity="0.9" clip-path="url(#half-${escapeXml(id)})"/>`)
     } else {
       svg.push(`<path d="${bodyPath}" fill="${STATE_COLOR.review}" fill-opacity="${fillOpacity.toFixed(3)}"/>`)
-      svg.push(`<path d="${bodyPath}" fill="url(#hatch-review)" fill-opacity="0.85"/>`)
+      svg.push(`<path d="${bodyPath}" fill="none" stroke="${STATE_COLOR.review}" stroke-width="1.2" stroke-opacity="0.9"/>`)
     }
     svg.push(`</g>`)
   }
@@ -589,34 +554,34 @@ export function mapToPrintHtml(
   )
 
   // Legend — reuses the exact glyph vocabulary the on-screen Key panel uses
-  // (same cellBodyPath calls, same seeded ids), placed bottom-RIGHT as an
+  // (same ringMarkPath/diamondMarkPath calls), placed bottom-RIGHT as an
   // inset panel over the plate (`legendX = PLATE_W - 168`), mirroring
   // TopicMapView's floating Key.
   const legendX = PLATE_W - 168
   const legendY = PLATE_H - 176
   const legendRows: string[] = []
   legendRows.push(
-    legendRow(20, `<path d="${cellBodyPath('legend-new', 6)}" fill="none" stroke="var(--color-ink-cool-dim)" stroke-width="1.2"/>`, 'not started'),
+    legendRow(20, `<path d="${ringMarkPath(6)}" fill="none" stroke="var(--color-ink-cool-dim)" stroke-width="1.2"/>`, 'not started'),
   )
   legendRows.push(
     legendRow(
       38,
-      `<path d="${cellBodyPath('legend-learning', 6)}" fill="none" stroke="var(--color-ink-cool)" stroke-width="1.2"/><path d="${cellBodyPath('legend-learning', 6)}" fill="var(--color-ink-cool)" fill-opacity="0.8" clip-path="url(#legend-half-clip)"/>`,
+      `<path d="${ringMarkPath(6)}" fill="none" stroke="var(--color-ink-cool)" stroke-width="1.2"/><path d="${ringMarkPath(6)}" fill="var(--color-ink-cool)" fill-opacity="0.8" clip-path="url(#legend-half-clip)"/>`,
       'encoding',
     ),
   )
-  legendRows.push(legendRow(56, `<path d="${cellBodyPath('legend-review', 6)}" fill="var(--color-ink-warm)" fill-opacity="0.85"/>`, 'consolidated'))
+  legendRows.push(legendRow(56, `<path d="${ringMarkPath(6)}" fill="var(--color-ink-warm)" fill-opacity="0.85"/>`, 'consolidated'))
   legendRows.push(
     legendRow(
       74,
-      `<path d="${cellBodyPath('legend-threshold', 6)}" fill="none" stroke="var(--color-ink-hot)" stroke-width="1.2" stroke-dasharray="3 2.5"/>`,
+      `<path d="${diamondMarkPath(6)}" fill="none" stroke="var(--color-ink-hot)" stroke-width="1.2"/>`,
       'threshold',
     ),
   )
   legendRows.push(
     legendRow(
       92,
-      `<path d="${cellBodyPath('legend-frontier', 5)}" fill="none" stroke="var(--color-ink-cool)" stroke-width="1"/><circle r="7.5" fill="none" stroke="var(--color-ink-warm)" stroke-width="1"/>`,
+      `<path d="${ringMarkPath(5)}" fill="none" stroke="var(--color-ink-cool)" stroke-width="1"/><circle r="7.5" fill="none" stroke="var(--color-ink-warm)" stroke-width="1"/>`,
       'learn next',
     ),
   )
@@ -626,12 +591,12 @@ export function mapToPrintHtml(
     return `<circle cx="${(Math.cos(angle) * r).toFixed(2)}" cy="${(Math.sin(angle) * r).toFixed(2)}" r="0.8" fill="var(--color-ink-danger)" opacity="0.7"/>`
   }).join('')
   legendRows.push(
-    legendRow(110, `<path d="${cellBodyPath('legend-lapsed', 5)}" fill="none" stroke="var(--color-ink-cool)" stroke-width="1"/>${lapsedDots}`, 'lapsed'),
+    legendRow(110, `<path d="${ringMarkPath(5)}" fill="none" stroke="var(--color-ink-cool)" stroke-width="1"/>${lapsedDots}`, 'lapsed'),
   )
   legendRows.push(
     legendRow(
       128,
-      `<circle r="8" fill="none" stroke="var(--color-ink-warm)" stroke-width="1"/><path d="${cellBodyPath('legend-capstone', 5)}" fill="var(--color-ink-warm)" fill-opacity="0.85"/>`,
+      `<circle r="8" fill="none" stroke="var(--color-ink-warm)" stroke-width="1"/><circle r="5" fill="none" stroke="var(--color-ink-warm)" stroke-width="1"/><circle r="3.4" fill="var(--color-ink-warm)" fill-opacity="0.85"/>`,
       'capstone seal',
     ),
   )
