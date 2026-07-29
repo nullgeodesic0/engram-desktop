@@ -341,7 +341,7 @@ export default function App() {
                   goToView(n.id)
                   if (narrow) setPinnedOpen(false)
                 }}
-                className={`focus-ring group relative flex items-center gap-2.5 text-left px-3 py-2 text-sm transition-colors duration-[var(--dur-fast)] ${
+                className={`focus-ring group relative flex items-center gap-2.5 text-left px-3 py-2 text-sm transition-colors duration-[var(--dur-fast)] tilt-card-rail ${
                   collapsed ? 'justify-center px-0' : ''
                 } ${active ? 'nav-item-active' : 'nav-item'} ${active && !collapsed ? 'dogear' : ''}`}
               >
