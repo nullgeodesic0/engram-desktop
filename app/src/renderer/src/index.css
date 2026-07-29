@@ -153,9 +153,14 @@
    stop following it off the cream register. */
 :root[data-theme='light'] {
   --color-void: #f4efe4;
-  --color-surface: #ede5d4;
-  --color-surface-2: #e3d8c1;
-  --color-surface-3: #d6c7a9;
+  /* Card/panel fills go neutral grey (not the previous cream, not the
+     blue-gray that got reverted two passes back — that shift affected the
+     wrong tokens). --color-void stays the bright cream/white base page
+     color; only the surface tiers step down in a genuine low-chroma grey,
+     with the same proportional value steps the cream ramp used. */
+  --color-surface: #e3e4e2;
+  --color-surface-2: #d2d4d0;
+  --color-surface-3: #bcbfba;
   --color-hairline: #a5b2c0;
 
   --color-ink-cool: #1f6b86;
@@ -181,6 +186,17 @@
      two never read as the same signal. */
   --color-accent-cta: #3d5266;
   --color-accent-cta-hover: #2e3f50;
+
+  /* Rail glass-box accent — a lightened tint of accent-cta, for the sidebar
+     nav rows specifically. The sidebar rail (.sidebar-nocturne) stays a
+     permanently dark "night pane" brand island in every theme (see its own
+     repin block below), so raw --color-accent-cta (#3d5266, tuned for
+     legibility against the bright cream void) computes only ~1.4:1 there —
+     effectively invisible. Mixing 75% toward white keeps the same hue family
+     (same H~209-210 as accent-cta/hairline) while clearing WCAG floors
+     against the rail's dark composite (~7.5:1 solid, ~4.9:1 once diluted
+     into the active-state fill wash — see the rail-report contrast table). */
+  --color-accent-cta-rail: color-mix(in srgb, var(--color-accent-cta) 25%, white);
 
   /* Cooler slate-teal accent, distinct from the warm ink family — reserved
      for the session masthead command-bar's hover/focus state (`.cmd-item`
@@ -602,7 +618,13 @@
      touching a single component class. */
   :root[data-theme='light'] .sidebar-nocturne {
     --color-text-primary: #e6dfd0;
-    --color-text-dim: #8b8878;
+    /* Brightened from the dark theme's own #8b8878: the rail's new
+       glass-box nav items (light theme only) add a translucent fill wash
+       under this text, which eats into #8b8878's already-tight ~3.1:1
+       margin against the rail's dark composite. #a89f8c keeps the same
+       warm-taupe "dim" character but clears 3:1 with the wash applied
+       (~3.7:1) as well as without (~4.9:1). */
+    --color-text-dim: #a89f8c;
     --color-text-faint: #545248;
     --color-ink-warm: #e8a857;
     --color-ink-warm-dim: #8a6533;
@@ -683,13 +705,35 @@
     color: var(--color-ink-warm);
     background-color: color-mix(in srgb, var(--color-ink-warm) 9%, transparent);
   }
-  /* Light theme: "you are here" is a selected/active state, not a semantic
-     node-state ink, so it takes the grayish-blue accent here — same doctrine
-     as frame-hover/frame-selected/dogear below. */
+  /* Light theme: nav rows become discrete bordered glass boxes — a
+     translucent color-mix fill/border at rest, brightening on hover, a
+     solid-tint border + accent label at active. Uses
+     --color-accent-cta-rail (a lightened tint), not raw --color-accent-cta:
+     nav items live inside .sidebar-nocturne, whose dark wash is untouched by
+     this pass, and accent-cta's light-theme value is tuned for the bright
+     cream void — unreadable against the rail's dark composite (see that
+     token's doctrine comment above). Border alphas hold the 3:1 UI-contrast
+     floor against the rail's own dark background at every state; fill
+     alphas are kept low enough not to erode --color-text-dim's floor (see
+     the .sidebar-nocturne repin above). Sharp 0-radius geometry and the
+     app's existing .focus-ring vocabulary are unchanged — only the box
+     itself is restyled. */
+  :root[data-theme='light'] .nav-item {
+    border-color: color-mix(in srgb, var(--color-accent-cta-rail) 55%, transparent);
+    background-color: color-mix(in srgb, var(--color-accent-cta-rail) 6%, transparent);
+  }
+  :root[data-theme='light'] .nav-item:hover {
+    border-color: color-mix(in srgb, var(--color-accent-cta-rail) 78%, transparent);
+    background-color: color-mix(in srgb, var(--color-accent-cta-rail) 12%, transparent);
+  }
+  /* "You are here" is a selected/active state, not a semantic node-state
+     ink, so it takes the rail-accent tint here — same doctrine as
+     frame-hover/frame-selected/dogear below (those apply outside the rail,
+     so they still use plain --color-accent-cta against the bright void). */
   :root[data-theme='light'] .nav-item-active {
-    border-color: var(--color-accent-cta);
-    color: var(--color-accent-cta);
-    background-color: color-mix(in srgb, var(--color-accent-cta) 9%, transparent);
+    border-color: var(--color-accent-cta-rail);
+    color: var(--color-accent-cta-rail);
+    background-color: color-mix(in srgb, var(--color-accent-cta-rail) 18%, transparent);
   }
   .app-drag {
     -webkit-app-region: drag;
