@@ -7,6 +7,7 @@ import {
   settlePlate,
   nodeMarkPath,
   territoryGroups,
+  regionGroups,
   hullPath,
   hullCentroid,
   plateStats,
@@ -264,9 +265,13 @@ export function GraphView({
   // re-deriving from `size` at every use site.
   const plateW = size?.w ?? 800
   const plateH = size?.h ?? 600
+  // Regions computed once here so the settle can cluster by them — the
+  // territory-wash RENDER swap is a later wave; this wave only threads
+  // regions into geometry.
+  const regions = useMemo(() => regionGroups(graph), [graph])
   const plate: Map<string, PlateNode> = useMemo(
-    () => settlePlate(graph, plateW, plateH),
-    [graph, plateW, plateH],
+    () => settlePlate(graph, plateW, plateH, regions),
+    [graph, plateW, plateH, regions],
   )
 
   // Ambient drift clock — cells wander a couple of pixels around their
