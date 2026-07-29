@@ -85,7 +85,7 @@ export function ChatScrollRegion({
       {!stick && (
         <button
           onClick={jumpToBottom}
-          className="focus-ring absolute bottom-3 left-1/2 -translate-x-1/2 panel px-3 py-1.5 text-xs text-[var(--color-ink-warm)] bg-[var(--color-surface-2)] shadow-lg"
+          className="focus-ring absolute bottom-3 left-1/2 -translate-x-1/2 panel px-3 py-1.5 text-xs text-[var(--color-ink-warm)] bg-[color-mix(in_srgb,var(--color-surface-2)_78%,transparent)] shadow-lg"
         >
           ↓ Jump to latest
         </button>

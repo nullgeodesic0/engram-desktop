@@ -85,7 +85,7 @@ export function TopicSettingsModal({ topicId, topicTitle, onClose }: TopicSettin
             disabled={!loaded}
             rows={5}
             placeholder={EXAMPLE}
-            className="focus-ring panel px-3 py-2 text-sm bg-[var(--color-surface-2)] text-[var(--color-text-primary)] resize-none disabled:opacity-50"
+            className="focus-ring panel px-3 py-2 text-sm bg-[color-mix(in_srgb,var(--color-surface-2)_78%,transparent)] text-[var(--color-text-primary)] resize-none disabled:opacity-50"
           />
         </div>
 
@@ -134,7 +134,7 @@ export function TopicSettingsModal({ topicId, topicTitle, onClose }: TopicSettin
               onChange={(e) => setTargetDate(e.target.value || null)}
               disabled={!loaded}
               aria-label="Target date"
-              className="focus-ring panel px-3 py-1.5 text-sm bg-[var(--color-surface-2)] text-[var(--color-text-primary)] disabled:opacity-50"
+              className="focus-ring panel px-3 py-1.5 text-sm bg-[color-mix(in_srgb,var(--color-surface-2)_78%,transparent)] text-[var(--color-text-primary)] disabled:opacity-50"
             />
             {targetDate && (
               <button

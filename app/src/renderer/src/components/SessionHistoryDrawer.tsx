@@ -878,8 +878,8 @@ export function SessionHistoryDrawer({
             <div className="border-b border-[var(--color-hairline)] mb-1 pb-1">
               <button
                 onClick={() => selectEntry(linkedSitting.entry.sessionId, [linkedSitting.entry])}
-                className={`focus-ring no-press tilt-card w-full flex flex-col items-start gap-0.5 px-2.5 py-2.5 text-left rounded-lg hover:bg-[var(--color-surface-3)] ${
-                  linkedSitting.entry.sessionId === selectedId ? 'bg-[var(--color-surface-3)]' : ''
+                className={`focus-ring no-press tilt-card w-full flex flex-col items-start gap-0.5 px-2.5 py-2.5 text-left rounded-lg hover:bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)] ${
+                  linkedSitting.entry.sessionId === selectedId ? 'bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)]' : ''
                 }`}
               >
                 <span className="text-sm text-[var(--color-text-primary)] truncate max-w-full">Linked sitting</span>
@@ -894,8 +894,8 @@ export function SessionHistoryDrawer({
             <button
               key={entry.sessionId}
               onClick={() => selectEntry(entry.sessionId)}
-              className={`focus-ring no-press tilt-card w-full flex flex-col items-start gap-0.5 px-2.5 py-2.5 text-left rounded-lg hover:bg-[var(--color-surface-3)] ${
-                entry.sessionId === selectedId ? 'bg-[var(--color-surface-3)]' : ''
+              className={`focus-ring no-press tilt-card w-full flex flex-col items-start gap-0.5 px-2.5 py-2.5 text-left rounded-lg hover:bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)] ${
+                entry.sessionId === selectedId ? 'bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)]' : ''
               }`}
             >
               <span className="text-sm text-[var(--color-text-primary)] truncate max-w-full">

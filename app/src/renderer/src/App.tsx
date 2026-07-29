@@ -368,7 +368,7 @@ export default function App() {
                     push/refresh lands (`null`) and at 0 — an empty queue gets
                     no badge, not a "0" badge. */}
                 {!collapsed && n.id === 'review' && dueCount != null && dueCount > 0 && (
-                  <span className="label-data text-[10px] leading-none px-1.5 py-1 bg-[var(--color-surface-3)] text-[var(--color-ink-warm)] shrink-0">
+                  <span className="label-data text-[10px] leading-none px-1.5 py-1 bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)] text-[var(--color-ink-warm)] shrink-0">
                     {dueCount}
                   </span>
                 )}
@@ -405,7 +405,7 @@ export default function App() {
                     silent about what each icon does or its shortcut. */}
                 {collapsed && (
                   <span
-                    className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 z-20 whitespace-nowrap rounded-md bg-[var(--color-surface-3)] px-2 py-1 text-[10px] label-data text-[var(--color-text-primary)] opacity-0 group-focus-visible:opacity-100 transition-opacity duration-[var(--dur-fast)]"
+                    className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 z-20 whitespace-nowrap rounded-md bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)] px-2 py-1 text-[10px] label-data text-[var(--color-text-primary)] opacity-0 group-focus-visible:opacity-100 transition-opacity duration-[var(--dur-fast)]"
                   >
                     {n.label} · ⌘{n.hint}
                   </span>

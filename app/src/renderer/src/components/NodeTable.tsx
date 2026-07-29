@@ -158,7 +158,7 @@ export function NodeTable({
               aria-pressed={pressed}
               className={`focus-ring label-data text-[10px] uppercase tracking-wide px-2 py-1 border transition-colors ${
                 pressed
-                  ? 'bg-[var(--color-surface-3)] border-[var(--color-ink-warm)] text-[var(--color-ink-warm)]'
+                  ? 'bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)] border-[var(--color-ink-warm)] text-[var(--color-ink-warm)]'
                   : 'border-[var(--color-hairline)] text-[var(--color-text-dim)] hover:text-[var(--color-text-primary)]'
               }`}
             >
@@ -181,7 +181,7 @@ export function NodeTable({
 
       <div className="flex-1 min-h-0 overflow-auto px-3 pb-3">
         <table className="w-full text-xs border-collapse">
-          <thead className="sticky top-0 bg-[var(--color-surface)] z-10">
+          <thead className="sticky top-0 bg-[color-mix(in_srgb,var(--color-surface)_74%,transparent)] backdrop-blur-md z-10">
             <tr className="border-b border-[var(--color-hairline)]">
               {COLUMNS.map((col) => {
                 const active = sortKey === col.key
@@ -216,7 +216,7 @@ export function NodeTable({
                   key={id}
                   onClick={() => onSelectNode(id)}
                   className={`cursor-pointer transition-colors ${
-                    isSelected ? 'bg-[var(--color-surface-3)]' : 'hover:bg-[var(--color-surface-2)]/60'
+                    isSelected ? 'bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)]' : 'hover:bg-[color-mix(in_srgb,var(--color-surface-2)_47%,transparent)]'
                   }`}
                 >
                   <td className="py-1.5 pr-3 first:pl-0">

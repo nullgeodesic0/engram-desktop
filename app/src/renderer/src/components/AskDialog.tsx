@@ -75,7 +75,7 @@ export function AskDialog({ request, onAnswer }: AskDialogProps) {
                   <button
                     key={opt.label}
                     onClick={() => onAnswer([opt.label])}
-                    className="focus-ring panel px-3 py-3 flex flex-col items-center gap-1.5 text-center hover:bg-[var(--color-surface-3)] hover:border-[var(--color-ink-warm-dim)] transition-colors duration-[var(--dur-base)]"
+                    className="focus-ring panel px-3 py-3 flex flex-col items-center gap-1.5 text-center hover:bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)] hover:border-[var(--color-ink-warm-dim)] transition-colors duration-[var(--dur-base)]"
                   >
                     <span className="text-lg leading-none" aria-hidden="true" style={{ color: style.color }}>
                       {style.icon}
@@ -92,7 +92,7 @@ export function AskDialog({ request, onAnswer }: AskDialogProps) {
                 <button
                   key={opt.label}
                   onClick={() => onAnswer([opt.label])}
-                  className="focus-ring panel px-4 py-2.5 text-left hover:bg-[var(--color-surface-3)] hover:border-[var(--color-ink-warm-dim)] transition-colors duration-[var(--dur-base)]"
+                  className="focus-ring panel px-4 py-2.5 text-left hover:bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)] hover:border-[var(--color-ink-warm-dim)] transition-colors duration-[var(--dur-base)]"
                 >
                   <MathRenderer text={opt.label} inlineOnly className="text-sm text-[var(--color-text-primary)]" />
                   {opt.description && (
@@ -115,7 +115,7 @@ export function AskDialog({ request, onAnswer }: AskDialogProps) {
               value={otherText}
               onChange={(e) => setOtherText(e.target.value)}
               placeholder="Type an answer, or leave blank to skip"
-              className="focus-ring panel px-3 py-2 text-sm bg-[var(--color-surface-2)] text-[var(--color-text-primary)]"
+              className="focus-ring panel px-3 py-2 text-sm bg-[color-mix(in_srgb,var(--color-surface-2)_78%,transparent)] text-[var(--color-text-primary)]"
             />
           </div>
         )}

@@ -515,6 +515,22 @@
   .app-no-drag {
     -webkit-app-region: no-drag;
   }
+  /* GLASS SWEEP — the app-wide surface-tier rule (whole-app pass following
+     the rail/card glass precedent above): every opaque fill that reads as a
+     card/chip/bar/panel gets ONE alpha per surface tier, everywhere —
+     surface: 74%, surface-2/surface-3: 78% — via `color-mix(in srgb, <token>
+     <alpha>%, transparent)`. `backdrop-blur`/`backdrop-filter: blur(12px)` is
+     added wherever the element floats directly over content that moves or
+     scrolls (panels, modals/drawers, the sticky table header, the composer).
+     NESTED-GLASS RULE: an element already sitting inside a blurring ancestor
+     (a chip inside a .panel, an inline code span inside a chat bubble) gets
+     the tier alpha but SKIPS its own backdrop-blur — the ancestor already
+     smoothed the field, and a second blur multiplies GPU cost for zero
+     visible gain. Micro-elements (kbd hints, tiny badges) may also skip blur
+     as imperceptible at that size. Deliberate solids (documented at their
+     definition) stay opaque on purpose: `.detail-title-band` (a plate, not a
+     floating panel), the scrollbar thumb, and the KaTeX copy-hover wash
+     (a hover wash, not a fill). */
   .panel {
     /* Glass cards: the fill dropped from 94% so the ambient field reads
        through every card the way it reads through the rail (whose 78-84%
@@ -1041,12 +1057,16 @@
   :is(.md-preview, .md-prose) code {
     font-family: var(--font-data);
     font-size: 0.85em;
-    background: var(--color-surface-3);
+    /* Glass sweep: tier-3 alpha, no backdrop-blur — this chip lives inside an
+       already-blurred chat/panel surface, so an inner blur would just double
+       the GPU cost for no visible gain (see the nested-glass rule above the
+       .panel classes). */
+    background: color-mix(in srgb, var(--color-surface-3) 78%, transparent);
     padding: 0.1em 0.35em;
     border-radius: 0;
   }
   :is(.md-preview, .md-prose) pre {
-    background: var(--color-surface-3);
+    background: color-mix(in srgb, var(--color-surface-3) 78%, transparent);
     border: 1px solid var(--color-hairline);
     border-radius: 0;
     padding: 0.6em 0.8em;

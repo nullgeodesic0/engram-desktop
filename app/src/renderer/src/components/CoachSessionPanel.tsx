@@ -110,7 +110,7 @@ export function CoachSessionPanel() {
             key={a.label}
             onClick={() => run(a.message)}
             disabled={busy}
-            className="focus-ring px-3 py-1.5 rounded-lg text-xs bg-[var(--color-surface-2)] text-[var(--color-text-dim)] hover:text-[var(--color-ink-warm)] disabled:opacity-40"
+            className="focus-ring px-3 py-1.5 rounded-lg text-xs bg-[color-mix(in_srgb,var(--color-surface-2)_78%,transparent)] text-[var(--color-text-dim)] hover:text-[var(--color-ink-warm)] disabled:opacity-40"
           >
             {a.label}
           </button>
@@ -161,12 +161,12 @@ export function CoachSessionPanel() {
             onKeyDown={(e) => e.key === 'Enter' && submitInput()}
             placeholder="Reply, or ask something else…"
             disabled={busy}
-            className="focus-ring flex-1 panel px-3 py-2 text-sm bg-[var(--color-surface-2)] text-[var(--color-text-primary)] disabled:opacity-50"
+            className="focus-ring flex-1 panel px-3 py-2 text-sm bg-[color-mix(in_srgb,var(--color-surface-2)_78%,transparent)] text-[var(--color-text-primary)] disabled:opacity-50"
           />
           <button
             onClick={submitInput}
             disabled={!input.trim() || busy}
-            className="focus-ring px-4 py-2 rounded-lg text-sm bg-[var(--color-surface-3)] text-[var(--color-ink-warm)] disabled:opacity-40"
+            className="focus-ring px-4 py-2 rounded-lg text-sm bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)] text-[var(--color-ink-warm)] disabled:opacity-40"
           >
             Send
           </button>

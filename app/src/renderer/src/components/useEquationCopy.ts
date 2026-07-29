@@ -44,11 +44,15 @@ const INTERACTIVE_ANCESTOR_SELECTOR = 'button, a, input, select, textarea, [role
  * remove) is simpler as a fire-and-forget imperative sequence than a piece of
  * React state some component would have to own. */
 function showCopiedWhisper(x: number, y: number): void {
+  // Glass sweep judgment: tier-2 alpha (78%), no backdrop-blur. It's a
+  // fire-and-forget whisper over whatever equation sits under the cursor —
+  // small enough that blur would be imperceptible, and the hairline border +
+  // shadow-lg already carry its legibility, not the fill.
   const el = document.createElement('div')
   el.textContent = 'Copied'
   el.setAttribute('aria-hidden', 'true')
   el.className =
-    'fixed z-[60] pointer-events-none label-data text-[10px] text-[var(--color-ink-warm)] bg-[var(--color-surface-2)] border border-[var(--color-hairline)] rounded px-2 py-1 shadow-lg transition-opacity ease-out'
+    'fixed z-[60] pointer-events-none label-data text-[10px] text-[var(--color-ink-warm)] bg-[color-mix(in_srgb,var(--color-surface-2)_78%,transparent)] border border-[var(--color-hairline)] rounded px-2 py-1 shadow-lg transition-opacity ease-out'
   el.style.left = `${x + 12}px`
   el.style.top = `${y - 10}px`
   el.style.transitionDuration = `${WHISPER_FADE_MS}ms`

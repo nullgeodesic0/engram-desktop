@@ -201,7 +201,7 @@ export const ChatMessageView = memo(function ChatMessageView({
                 <span
                   key={path}
                   title={path}
-                  className="label-data text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-surface-2)] text-[var(--color-text-dim)]"
+                  className="label-data text-[10px] px-1.5 py-0.5 rounded bg-[color-mix(in_srgb,var(--color-surface-2)_78%,transparent)] text-[var(--color-text-dim)]"
                 >
                   📎 {fileName(path)}
                 </span>

@@ -224,7 +224,7 @@ function AddTerritoryCard({ onClick, blocked }: { onClick: () => void; blocked: 
       onClick={onClick}
       disabled={blocked}
       title={blocked ? 'Blocked until the current rate limit resets' : undefined}
-      className="focus-ring panel border-dashed px-5 py-4 flex items-center gap-3 text-left hover:bg-[var(--color-surface-2)] hover:border-[var(--color-ink-warm-dim)] transition-colors duration-[var(--dur-base)] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+      className="focus-ring panel border-dashed px-5 py-4 flex items-center gap-3 text-left hover:bg-[color-mix(in_srgb,var(--color-surface-2)_78%,transparent)] hover:border-[var(--color-ink-warm-dim)] transition-colors duration-[var(--dur-base)] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
     >
       <span className="text-lg leading-none text-[var(--color-text-faint)]">+</span>
       <div className="flex flex-col gap-0.5">
@@ -1667,7 +1667,7 @@ export function LearnSessionView({
                 title={mastheadPinned ? 'Unpin — tuck away unless the cursor visits the top' : 'Pin — keep the header out'}
                 className={`focus-ring no-press h-5 w-5 shrink-0 flex items-center justify-center transition-colors duration-[var(--dur-fast)] ${
                   mastheadPinned
-                    ? 'text-[var(--color-ink-warm)] bg-[var(--color-surface-3)]'
+                    ? 'text-[var(--color-ink-warm)] bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)]'
                     : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]'
                 }`}
               >
@@ -1874,7 +1874,7 @@ export function LearnSessionView({
                         title={ticketPinned ? 'Unpin — tuck away unless the cursor visits the left edge' : 'Pin — keep the ticket out'}
                         className={`focus-ring no-press absolute bottom-1.5 right-1.5 h-5 w-5 flex items-center justify-center transition-colors duration-[var(--dur-fast)] ${
                           ticketPinned
-                            ? 'text-[var(--color-ink-warm)] bg-[var(--color-surface-3)]'
+                            ? 'text-[var(--color-ink-warm)] bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)]'
                             : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]'
                         }`}
                       >
@@ -1936,7 +1936,7 @@ export function LearnSessionView({
                     <ActivityLine activity={tutorActivity.activity} />
                     <button
                       onClick={stopSession}
-                      className="focus-ring text-xs px-2.5 py-1 rounded-lg text-[var(--color-text-faint)] hover:text-[var(--color-ink-danger)] hover:bg-[var(--color-surface-3)]"
+                      className="focus-ring text-xs px-2.5 py-1 rounded-lg text-[var(--color-text-faint)] hover:text-[var(--color-ink-danger)] hover:bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)]"
                     >
                       Stop
                     </button>
