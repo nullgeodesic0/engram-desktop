@@ -5,8 +5,7 @@ import { EDGE_STYLE, type SimEdge } from './graph3d/types'
 import { buildEdges, computeForwardAdjacency, computeFrontierIds, computeHubNodeIds, seeded } from './graph3d/layout'
 import {
   settlePlate,
-  cellBodyPath,
-  dendriteStubs,
+  nodeMarkPath,
   territoryGroups,
   hullPath,
   hullCentroid,
@@ -69,12 +68,11 @@ export function dueStatusFor(node: EngramNode): DueStatus | null {
   return 'future'
 }
 
-/** Shared control-point math for the "loose string" quadratic — factored out
- * of stringEdgePath so the calligraphic taper (below) samples the EXACT same
- * curve rather than a re-derivation that could silently drift out of sync
- * with the hairline spine. Both baseBow (deterministic per-edge bow, requires
- * edges only) and sway (ambient drift-clock ripple) are unchanged from the
- * pre-taper implementation. */
+/** Shared control-point math for the edge quadratic — factored out of
+ * stringEdgePath so arrowheadTransform samples the EXACT same curve rather
+ * than a re-derivation that could silently drift out of sync with the
+ * stroked spine. Both baseBow (deterministic per-edge bow, requires edges
+ * only) and sway (ambient drift-clock ripple) are unchanged. */
 function edgeBezierControl(
   source: string,
   target: string,
@@ -118,66 +116,6 @@ export function stringEdgePath(
 ): string {
   const { cx, cy } = edgeBezierControl(source, target, a, b, kind, t)
   return `M ${a.x.toFixed(2)} ${a.y.toFixed(2)} Q ${cx.toFixed(2)} ${cy.toFixed(2)} ${b.x.toFixed(2)} ${b.y.toFixed(2)}`
-}
-
-/** Point and unit tangent at parameter `s` (0..1) along the quadratic bezier
- * A -> (cx,cy) -> B. Used to sample the taper outline below. */
-function quadPointAndTangent(
-  a: { x: number; y: number },
-  cx: number,
-  cy: number,
-  b: { x: number; y: number },
-  s: number,
-): { x: number; y: number; nx: number; ny: number } {
-  const mt = 1 - s
-  const x = mt * mt * a.x + 2 * mt * s * cx + s * s * b.x
-  const y = mt * mt * a.y + 2 * mt * s * cy + s * s * b.y
-  // B'(s) = 2(1-s)(C-A) + 2s(B-C)
-  const tx = 2 * mt * (cx - a.x) + 2 * s * (b.x - cx)
-  const ty = 2 * mt * (cy - a.y) + 2 * s * (b.y - cy)
-  const tlen = Math.hypot(tx, ty) || 1
-  // Unit normal (perpendicular to the tangent), not the tangent itself.
-  return { x, y, nx: -ty / tlen, ny: tx / tlen }
-}
-
-// Sample count for the taper outline — a quadratic bezier is already a very
-// low-order curve (one control point), so a handful of samples reproduces it
-// with no visible faceting once anti-aliased; this is a fixed, modest cost
-// per requires-edge per render (not per-pixel, not per-frame beyond the
-// existing drift re-render), comparable to the single stroked path it
-// replaces.
-const TAPER_SAMPLES = 12
-
-/** Requires-edge spine, offset perpendicular into a filled tapered ribbon —
- * ~2.2px at the prerequisite end (source/`a`, per buildEdges: `source` is
- * always the node listed in another node's `requires`, i.e. the
- * prerequisite) narrowing to ~0.8px at the dependent end (target/`b`), so
- * the ink visibly "lifts" as it travels from what-you-need to what-it-
- * unlocks. Built from the identical edgeBezierControl the hairline spine
- * uses, so sway/drift are pixel-identical to stringEdgePath's output. */
-export function calligraphicEdgePath(
-  source: string,
-  target: string,
-  a: { x: number; y: number },
-  b: { x: number; y: number },
-  t: number,
-  widthStart = 2.2,
-  widthEnd = 0.8,
-): string {
-  const { cx, cy } = edgeBezierControl(source, target, a, b, 'requires', t)
-  const top: { x: number; y: number }[] = []
-  const bottom: { x: number; y: number }[] = []
-  for (let i = 0; i <= TAPER_SAMPLES; i++) {
-    const s = i / TAPER_SAMPLES
-    const { x, y, nx, ny } = quadPointAndTangent(a, cx, cy, b, s)
-    const halfW = (widthStart + (widthEnd - widthStart) * s) / 2
-    top.push({ x: x + nx * halfW, y: y + ny * halfW })
-    bottom.push({ x: x - nx * halfW, y: y - ny * halfW })
-  }
-  const pts = [...top, ...bottom.reverse()]
-  return (
-    pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(' ') + ' Z'
-  )
 }
 
 /** Small filled arrowhead at the dependent end of a requires edge, oriented
@@ -409,24 +347,6 @@ export function GraphView({
     () => edges.filter((e) => isEdgeVisible(e, hubNodeIds, forwardAdjacency)),
     [edges, hubNodeIds, forwardAdjacency],
   )
-  // Up to 4 non-hub neighbors per node, from any kind of visible edge — feeds
-  // the dendrite stubs, a purely cosmetic "this cell has connections" cue.
-  const neighborIdsById = useMemo(() => {
-    const m = new Map<string, string[]>()
-    for (const e of visibleEdges) {
-      if (!hubNodeIds.has(e.target)) {
-        const arr = m.get(e.source) ?? []
-        if (!arr.includes(e.target)) arr.push(e.target)
-        m.set(e.source, arr)
-      }
-      if (!hubNodeIds.has(e.source)) {
-        const arr = m.get(e.target) ?? []
-        if (!arr.includes(e.source)) arr.push(e.source)
-        m.set(e.target, arr)
-      }
-    }
-    return m
-  }, [visibleEdges, hubNodeIds])
   // Fallback ranking so *something* labels even before the container has been
   // measured (top 8 by radius drives the below-1.1x-zoom label cap).
   const topRadiusIds = useMemo(() => {
@@ -580,11 +500,10 @@ export function GraphView({
     >
       <svg className="h-full w-full">
         <defs>
-          <filter id="plate-blur">
-            <feGaussianBlur stdDeviation="14" />
-          </filter>
-          {/* Same blur technique as plate-blur, tuned down to cell scale for
-              the due lens's overdue glow. */}
+          {/* One static blur, cell-scale — shared by the due lens's overdue
+              glow and the selection halo below. Static SVG filter: rasterized
+              once per referencing shape per paint, no per-frame cost beyond
+              the existing drift re-render. */}
           <filter id="plate-node-glow">
             <feGaussianBlur stdDeviation="4" />
           </filter>
@@ -622,38 +541,6 @@ export function GraphView({
             <stop offset="65%" stopColor="var(--color-void)" stopOpacity={0} />
             <stop offset="100%" stopColor="var(--color-void)" stopOpacity={0.42} />
           </radialGradient>
-          {/* Node-fill engraving patterns — fine diagonal hatch for 'review'
-              (warm), sparse stipple for 'learning' (cool); 'new' stays hollow
-              (no pattern) since the point of that state is emptiness. Layered
-              on TOP of the existing STATE_COLOR/DUE_LENS_COLOR fill as a
-              second path with fill="url(#...)", never replacing it.
-
-              Unit-space reasoning: these <pattern>s live in this top-level
-              <defs>, outside the pan/zoom `<g transform>` below, but they're
-              REFERENCED by fill="url(...)" from paths INSIDE that group. Per
-              the SVG spec, patternUnits="userSpaceOnUse" resolves x/y/width/
-              height in the user coordinate system of the referencing element
-              at reference time — which includes every ancestor transform,
-              i.e. the group's `scale(view.zoom)`. Left alone, that means a
-              6px tile would render at 6*zoom screen pixels: hatch spacing
-              would visibly balloon as you zoom in, exactly the "spacing
-              constant in screen space" failure the brief calls out.
-              `patternTransform={scale(1/view.zoom)}` cancels that ambient
-              scale (scale(s) ∘ scale(1/s) = identity), so the tile is 6
-              local units defined at zoom=1 and stays ~6 screen px at any
-              zoom from 0.35 to 4 — objectBoundingBox units were not an
-              option here since that ties tile size to each node's own bbox
-              (every node a different hatch scale), not to screen space. This
-              re-renders on view.zoom changes (wheel zoom, pan-to-selected
-              easing) but never on the per-frame drift clock `t`, so it's no
-              more per-frame cost than the rest of the static furniture. */}
-          <pattern id="hatch-review" patternUnits="userSpaceOnUse" width={6} height={6} patternTransform={`scale(${1 / view.zoom}) rotate(45)`}>
-            <line x1={0} y1={0} x2={0} y2={6} stroke="var(--color-ink-warm)" strokeWidth={1.1} />
-          </pattern>
-          <pattern id="stipple-learning" patternUnits="userSpaceOnUse" width={9} height={9} patternTransform={`scale(${1 / view.zoom})`}>
-            <circle cx={2.25} cy={2.25} r={0.9} fill="var(--color-ink-cool)" />
-            <circle cx={6.75} cy={6.75} r={0.9} fill="var(--color-ink-cool)" />
-          </pattern>
           {graph.order
             .filter((id) => graph.nodes[id]?.state === 'learning' && !graph.nodes[id]?.capstone)
             .map((id) => {
@@ -691,12 +578,16 @@ export function GraphView({
           height={plateH}
           fill="black"
           filter="url(#plate-grain)"
-          opacity={0.035}
+          opacity={0.022}
           pointerEvents="none"
         />
         <rect x={0} y={0} width={plateW} height={plateH} fill="url(#plate-vignette)" pointerEvents="none" />
         <g transform={`translate(${view.x} ${view.y}) scale(${view.zoom})`}>
-          {/* Territory washes */}
+          {/* Territory sectors — the same convex hulls, now drawn as quiet
+              faceted regions (angular hullPath, no blur): a barely-there
+              warm fill whose depth still tracks the group's consolidated
+              fraction, plus a hairline boundary so the sector reads as a
+              charted region rather than an atmospheric wash. */}
           {Array.from(territories.entries()).map(([root, members]) => {
             const pts = members.map((id) => plate.get(id)).filter((p): p is PlateNode => !!p)
             if (pts.length < 3) return null
@@ -709,9 +600,10 @@ export function GraphView({
                 key={root}
                 d={d}
                 fill="var(--color-ink-warm)"
-                fillOpacity={0.03 + 0.09 * consolidatedFraction}
-                stroke="none"
-                filter="url(#plate-blur)"
+                fillOpacity={0.02 + 0.06 * consolidatedFraction}
+                stroke="var(--color-ink-warm)"
+                strokeOpacity={0.14}
+                strokeWidth={1}
                 pointerEvents="none"
               />
             )
@@ -733,14 +625,14 @@ export function GraphView({
                   x={centroid.x}
                   y={centroid.y}
                   textAnchor="middle"
-                  fontFamily="var(--font-serif)"
-                  fontStyle="italic"
-                  fontSize={11}
+                  fontFamily="var(--font-data)"
+                  fontSize={10}
+                  letterSpacing={1.6}
                   fill="var(--color-text-dim)"
-                  opacity={0.35}
+                  opacity={0.4}
                   pointerEvents="none"
                 >
-                  {humanizeNodeId(root)}
+                  {humanizeNodeId(root).toUpperCase()}
                 </text>
               )
             })}
@@ -750,11 +642,11 @@ export function GraphView({
               on bare hover, with nothing active, or under the due lens
               (one lens at a time — see trailEdgesActive above).
 
-              Requires edges render as a filled calligraphic ribbon (taper
-              2.2px at the prerequisite end -> 0.8px at the dependent end)
-              plus a small screen-space arrowhead at the dependent end;
-              every other edge kind keeps the original uniform hairline
-              stroke. Both branches read from `visibleEdges` (hub
+              Requires edges render as a thin solid line (slightly heavier
+              than the softer relation kinds) with a small screen-space
+              arrowhead at the dependent end; every other edge kind keeps
+              its own dash from EDGE_STYLE so the relation kinds stay
+              distinguishable. Both branches read from `visibleEdges` (hub
               suppression already applied via isEdgeVisible above) and apply
               the SAME replay-clip (`visibleNodes`) and trail-dimming
               (`onTrail`/`strokeOpacity`) checks as before — no parallel
@@ -773,11 +665,11 @@ export function GraphView({
             const opacity = trailEdgesActive ? (onTrail ? 0.5 : 0.08) : 0.35
 
             if (e.kind === 'requires') {
-              const d = calligraphicEdgePath(e.source, e.target, a, b, t)
+              const d = stringEdgePath(e.source, e.target, a, b, 'requires', t)
               const arrowTransform = arrowheadTransform(e.source, e.target, a, b, b.r, t, 1 / view.zoom)
               return (
                 <g key={i} pointerEvents="none">
-                  <path d={d} fill={style.stroke} fillOpacity={opacity} />
+                  <path d={d} fill="none" stroke={style.stroke} strokeOpacity={opacity} strokeWidth={1.2} />
                   <path d={ARROWHEAD_PATH} fill={style.stroke} fillOpacity={opacity} transform={arrowTransform} />
                 </g>
               )
@@ -797,35 +689,7 @@ export function GraphView({
             )
           })}
 
-          {/* Dendrite stubs */}
-          {graph.order.map((id) => {
-            const node = graph.nodes[id]
-            const pos = drifted.get(id)
-            if (!node || !pos || node.capstone) return null
-            const neighborIds = (neighborIdsById.get(id) ?? []).slice(0, 4)
-            const dirs = neighborIds.map((nid) => {
-              const npos = drifted.get(nid)
-              if (!npos) return { x: 1, y: 0 }
-              return { x: npos.x - pos.x, y: npos.y - pos.y }
-            })
-            const stubs = dendriteStubs(id, pos, dirs, pos.r)
-            return (
-              <g key={id} opacity={nodeOpacity(id)} pointerEvents="none">
-                {stubs.map((d, i) => (
-                  <path
-                    key={i}
-                    d={d}
-                    stroke={STATE_COLOR[node.state]}
-                    strokeOpacity={0.45}
-                    strokeWidth={1}
-                    fill="none"
-                  />
-                ))}
-              </g>
-            )
-          })}
-
-          {/* Cell bodies */}
+          {/* Node marks */}
           {graph.order.map((id) => {
             const node = graph.nodes[id]
             const pos = drifted.get(id)
@@ -864,13 +728,22 @@ export function GraphView({
                     transform="rotate(-90)"
                   />
                   <circle r={r} fill="none" stroke="var(--color-ink-warm)" strokeWidth={1.2} />
-                  <path
-                    d={cellBodyPath(id, r * 0.55)}
-                    fill="var(--color-ink-warm)"
-                    fillOpacity={0.25 + 0.75 * fraction}
-                  />
+                  {/* Heavier seal core — filled disc inside its own thin
+                      ring: the plate's one deliberately weighty mark. */}
+                  <circle r={r * 0.62} fill="none" stroke="var(--color-ink-warm)" strokeWidth={1} />
+                  <circle r={r * 0.45} fill="var(--color-ink-warm)" fillOpacity={0.25 + 0.75 * fraction} />
                   {isSelected && (
-                    <path d={cellBodyPath(id, r)} fill="none" stroke="var(--color-text-primary)" strokeWidth={1.8} />
+                    <>
+                      <circle
+                        r={outerR + 3}
+                        fill="none"
+                        stroke="var(--color-ink-warm)"
+                        strokeWidth={3}
+                        opacity={0.55}
+                        filter="url(#plate-node-glow)"
+                      />
+                      <circle r={outerR + 3} fill="none" stroke="var(--color-text-primary)" strokeWidth={1.4} />
+                    </>
                   )}
                 </g>
               )
@@ -901,8 +774,9 @@ export function GraphView({
                     ? 'var(--color-ink-hot)'
                     : STATE_COLOR[node.state]
             const fillOpacity = 0.35 + 0.65 * (retrievability?.get(id) ?? 1)
-            const dash = node.threshold ? '3 2.5' : undefined
-            const bodyPath = cellBodyPath(id, r)
+            // Threshold concepts take the diamond mark — geometry, not a
+            // dash, now carries that distinction (the Key documents both).
+            const bodyPath = nodeMarkPath(node.threshold, r)
 
             return (
               <g
@@ -928,37 +802,36 @@ export function GraphView({
                   />
                 )}
                 {node.state === 'new' && (
-                  <path d={bodyPath} fill="none" stroke={color} strokeWidth={1.2} strokeDasharray={dash} />
+                  <path d={bodyPath} fill="none" stroke={color} strokeWidth={1.2} />
                 )}
                 {node.state === 'learning' && (
                   <>
-                    <path d={bodyPath} fill="none" stroke={color} strokeWidth={1.2} strokeDasharray={dash} />
+                    <path d={bodyPath} fill="none" stroke={color} strokeWidth={1.2} />
                     <path d={bodyPath} fill={color} fillOpacity={fillOpacity} clipPath={`url(#half-${id})`} />
-                    {/* Stipple engraving — suppressed under the due lens (one
-                        lens at a time: the lens's own recolor already owns
-                        this node's fill language, see dueStatus above) and
-                        clipped to the same half-region as the fill it sits
-                        on top of. */}
-                    {!dueLens && (
-                      <path
-                        d={bodyPath}
-                        fill="url(#stipple-learning)"
-                        fillOpacity={0.9}
-                        clipPath={`url(#half-${id})`}
-                        pointerEvents="none"
-                      />
-                    )}
                   </>
                 )}
                 {node.state === 'review' && (
                   <>
                     <path d={bodyPath} fill={color} fillOpacity={fillOpacity} />
-                    {!dueLens && (
-                      <path d={bodyPath} fill="url(#hatch-review)" fillOpacity={0.85} pointerEvents="none" />
-                    )}
+                    <path d={bodyPath} fill="none" stroke={color} strokeWidth={1.2} strokeOpacity={0.9} />
                   </>
                 )}
-                {isSelected && <path d={bodyPath} fill="none" stroke="var(--color-text-primary)" strokeWidth={1.8} />}
+                {/* Selection — a soft halo in the mark's own ink under a
+                    crisp ring: the blurred stroke is a static SVG filter
+                    (no animation, no per-frame recompute). */}
+                {isSelected && (
+                  <>
+                    <path
+                      d={nodeMarkPath(node.threshold, r + 3)}
+                      fill="none"
+                      stroke="var(--color-ink-warm)"
+                      strokeWidth={3}
+                      opacity={0.55}
+                      filter="url(#plate-node-glow)"
+                    />
+                    <path d={nodeMarkPath(node.threshold, r + 3)} fill="none" stroke="var(--color-text-primary)" strokeWidth={1.4} />
+                  </>
+                )}
               </g>
             )
           })}
@@ -1046,12 +919,19 @@ export function GraphView({
             const label = latexLabel ? stripMathDelimiters(latexLabel) : humanizeNodeId(id)
             return (
               <g key={id} transform={`translate(${pos.x} ${pos.y})`} opacity={nodeOpacity(id)} pointerEvents="none">
+                {/* Tracked mono, mixed case — uppercase was judged and
+                    rejected at this size: labels render as small as 8-9px
+                    at low zoom, where tracked all-caps over the plate's
+                    real multi-word label lengths costs more legibility
+                    than the idiom is worth. The data face + light tracking
+                    carries the chart register without that penalty. */}
                 <text
                   x={pos.r + 6}
                   y={4}
                   fontSize={fontSize}
+                  letterSpacing={0.3}
                   fill={id === selected ? 'var(--color-text-primary)' : 'var(--color-text-dim)'}
-                  fontFamily="var(--font-body)"
+                  fontFamily="var(--font-data)"
                 >
                   {label}
                 </text>

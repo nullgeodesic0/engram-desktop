@@ -5,7 +5,7 @@ import { GraphView, EDGE_STYLE } from '../components/GraphView'
 import { NodeTable } from '../components/NodeTable'
 import { GrowthScrubber } from '../components/GrowthScrubber'
 import { PressureReadout } from '../components/PressureReadout'
-import { cellBodyPath, plateStats, ancestorClosure, descendantPath } from '../components/graph2d/plate'
+import { ringMarkPath, diamondMarkPath, plateStats, ancestorClosure, descendantPath } from '../components/graph2d/plate'
 import { mapToPrintHtml } from '../shared/mapToPrintHtml'
 import { layersOf, computeHubNodeIds } from '../components/graph3d/layout'
 import { humanizeNodeId } from '../../../shared/humanizeId'
@@ -379,7 +379,7 @@ export function TopicMapView({
   const [mapExportStatus, setMapExportStatus] = useState<{ text: string; failed: boolean } | null>(null)
 
   /** The print-plate export's entry point — builds the SAME figure GraphView
-   * renders (mapToPrintHtml calls the identical settlePlate/cellBodyPath/
+   * renders (mapToPrintHtml calls the identical settlePlate/nodeMarkPath/
    * edge-path functions, just as markup instead of JSX; see that file's own
    * header comment for the full reasoning) and hands it to main's
    * exportSitting-pipeline-reusing hidden-window printer. Deliberately reads
@@ -884,19 +884,19 @@ export function TopicMapView({
                   <div className="flex items-center gap-2">
                     <svg width={18} height={18} viewBox="-9 -9 18 18" aria-hidden="true">
                       <circle r={7.5} fill="none" stroke="var(--color-ink-danger)" strokeWidth={1.2} />
-                      <path d={cellBodyPath('legend-overdue', 6)} fill="var(--color-ink-danger)" fillOpacity={0.85} />
+                      <path d={ringMarkPath(5.5)} fill="var(--color-ink-danger)" fillOpacity={0.85} />
                     </svg>
                     overdue
                   </div>
                   <div className="flex items-center gap-2">
                     <svg width={18} height={18} viewBox="-9 -9 18 18" aria-hidden="true">
-                      <path d={cellBodyPath('legend-due-today', 6)} fill="var(--color-ink-warm)" fillOpacity={0.85} />
+                      <path d={ringMarkPath(6)} fill="var(--color-ink-warm)" fillOpacity={0.85} />
                     </svg>
                     due today
                   </div>
                   <div className="flex items-center gap-2">
                     <svg width={18} height={18} viewBox="-9 -9 18 18" aria-hidden="true">
-                      <path d={cellBodyPath('legend-due-future', 6)} fill="none" stroke="var(--color-ink-cool-dim)" strokeWidth={1.2} />
+                      <path d={ringMarkPath(6)} fill="none" stroke="var(--color-ink-cool-dim)" strokeWidth={1.2} />
                     </svg>
                     not yet due
                   </div>
@@ -905,15 +905,15 @@ export function TopicMapView({
                 <div className="flex flex-col divide-y divide-[var(--color-hairline)] [&>div]:py-1 first:[&>div]:pt-0 last:[&>div]:pb-0">
                   <div className="flex items-center gap-2">
                     <svg width={18} height={18} viewBox="-9 -9 18 18" aria-hidden="true">
-                      <path d={cellBodyPath('legend-new', 6)} fill="none" stroke="var(--color-ink-cool-dim)" strokeWidth={1.2} />
+                      <path d={ringMarkPath(6)} fill="none" stroke="var(--color-ink-cool-dim)" strokeWidth={1.2} />
                     </svg>
                     not started
                   </div>
                   <div className="flex items-center gap-2">
                     <svg width={18} height={18} viewBox="-9 -9 18 18" aria-hidden="true">
-                      <path d={cellBodyPath('legend-learning', 6)} fill="none" stroke="var(--color-ink-cool)" strokeWidth={1.2} />
+                      <path d={ringMarkPath(6)} fill="none" stroke="var(--color-ink-cool)" strokeWidth={1.2} />
                       <path
-                        d={cellBodyPath('legend-learning', 6)}
+                        d={ringMarkPath(6)}
                         fill="var(--color-ink-cool)"
                         fillOpacity={0.8}
                         clipPath="url(#legend-half-clip)"
@@ -923,26 +923,26 @@ export function TopicMapView({
                   </div>
                   <div className="flex items-center gap-2">
                     <svg width={18} height={18} viewBox="-9 -9 18 18" aria-hidden="true">
-                      <path d={cellBodyPath('legend-review', 6)} fill="var(--color-ink-warm)" fillOpacity={0.85} />
+                      <path d={ringMarkPath(6)} fill="var(--color-ink-warm)" fillOpacity={0.85} />
                     </svg>
                     consolidated
                   </div>
                   <div className="flex items-center gap-2">
                     <svg width={18} height={18} viewBox="-9 -9 18 18" aria-hidden="true">
-                      <path d={cellBodyPath('legend-threshold', 6)} fill="none" stroke="var(--color-ink-hot)" strokeWidth={1.2} strokeDasharray="3 2.5" />
+                      <path d={diamondMarkPath(6)} fill="none" stroke="var(--color-ink-hot)" strokeWidth={1.2} />
                     </svg>
                     threshold
                   </div>
                   <div className="flex items-center gap-2">
                     <svg width={18} height={18} viewBox="-9 -9 18 18" aria-hidden="true">
-                      <path d={cellBodyPath('legend-frontier', 5)} fill="none" stroke="var(--color-ink-cool)" strokeWidth={1} />
+                      <path d={ringMarkPath(5)} fill="none" stroke="var(--color-ink-cool)" strokeWidth={1} />
                       <circle r={7.5} fill="none" stroke="var(--color-ink-warm)" strokeWidth={1} />
                     </svg>
                     learn next
                   </div>
                   <div className="flex items-center gap-2">
                     <svg width={18} height={18} viewBox="-9 -9 18 18" aria-hidden="true">
-                      <path d={cellBodyPath('legend-lapsed', 5)} fill="none" stroke="var(--color-ink-cool)" strokeWidth={1} />
+                      <path d={ringMarkPath(5)} fill="none" stroke="var(--color-ink-cool)" strokeWidth={1} />
                       {Array.from({ length: 8 }, (_, i) => {
                         const angle = (i / 8) * Math.PI * 2
                         const r = 8
@@ -954,7 +954,8 @@ export function TopicMapView({
                   <div className="flex items-center gap-2">
                     <svg width={18} height={18} viewBox="-9 -9 18 18" aria-hidden="true">
                       <circle r={8} fill="none" stroke="var(--color-ink-warm)" strokeWidth={1} />
-                      <path d={cellBodyPath('legend-capstone', 5)} fill="var(--color-ink-warm)" fillOpacity={0.85} />
+                      <circle r={5} fill="none" stroke="var(--color-ink-warm)" strokeWidth={1} />
+                      <circle r={3.4} fill="var(--color-ink-warm)" fillOpacity={0.85} />
                     </svg>
                     capstone seal
                   </div>
