@@ -13,23 +13,55 @@ const BASE_PARTICLE_SIZE = 6.5
 const BASE_PARTICLE_OPACITY = 0.9
 const PULSE_DECAY = 0.94 // per frame — a pulse fades to near-nothing in ~1–1.5s at 60fps
 
+// Light-theme "line-art" tuning — see the doctrine comment in index.css above
+// `.neural-field-root`. Smaller, flatter marks and much thinner/fainter
+// strokes than the dark theme's glowing-neuron register.
+const LINE_ART_PARTICLE_SIZE = 3
+const LINE_ART_PARTICLE_OPACITY = 0.3
+const LINE_ART_LINE_OPACITY = 0.2
+const LINE_ART_LINEWIDTH = 1.1
+
+interface NeuralFieldProps {
+  /** Resolved theme at mount. NeuralField is remounted on theme change (see
+   * main.tsx's `key={theme}`), so this never needs to react live — it's read
+   * once here to pick a rendering mode. */
+  theme?: 'light' | 'dark'
+}
+
 /** Ambient WebGL backdrop — a slow-drifting field of "neurons" with bright
  * synapse connections, replacing the flat void background app-wide. Purely
  * decorative: fixed, pointer-events none, painted before everything else so
  * panels sit on top. Three signal colors (cyan / violet / orange) echo the
  * app's cool/warm ink duality plus the synthesis accent, mixed across the
- * field rather than a single flat hue. */
-export function NeuralField() {
+ * field rather than a single flat hue.
+ *
+ * Under the light theme this same particle/line simulation renders in a
+ * distinct "line-art" mode instead: additive glow blending is swapped for
+ * plain alpha blending, the glow-sprite texture is dropped (a bare THREE.js
+ * point renders as a flat square — the "small squares at intersections" the
+ * reference calls for), and the tri-color signal palette collapses to a
+ * single pale warm-gray ink, because a field of colored glow dots reads as a
+ * decorative bug on bright paper where a monochrome technical-diagram wash
+ * reads as intentional. The underlying particle motion/physics is identical
+ * in both modes — only the rendering is mode-switched. */
+export function NeuralField({ theme = 'dark' }: NeuralFieldProps) {
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
 
+    const isLineArt = theme === 'light'
+
+    // Line-art mode: one pale desaturated ink shared by every particle/line,
+    // sampled from the light theme's own faint text tier rather than the
+    // saturated cool/warm/violet signal triad — a faded-graphite wash, not a
+    // colored glow. Dark mode keeps the existing three-color vivid palette.
     const cyan = vivid(cssColor('--color-ink-cool', '#5b8fa8'), 0.35, 0.18)
     const violet = vivid(cssColor('--color-ink-violet', '#a78bda'), 0.25, 0.12)
     const orange = vivid(cssColor('--color-ink-warm', '#e8a857'), 0.3, 0.1)
-    const palette = [cyan, violet, orange]
+    const paleInk = cssColor('--color-hairline', '#cbbb98')
+    const palette = isLineArt ? [paleInk] : [cyan, violet, orange]
 
     const scene = new THREE.Scene()
     const camera = new THREE.PerspectiveCamera(50, 1, 1, 2000)
@@ -65,19 +97,23 @@ export function NeuralField() {
       colors[i * 3 + 2] = c.b
     }
 
-    const glowTexture = makeGlowTexture()
+    // Line-art mode drops the glow sprite entirely — a THREE.Points material
+    // with no `map` renders each point as a flat square, which is exactly
+    // the reference's "small squares at intersections" mark rather than a
+    // glowing sphere.
+    const glowTexture = isLineArt ? null : makeGlowTexture()
     const particleGeo = new THREE.BufferGeometry()
     particleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3))
     particleGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3))
     const particleMat = new THREE.PointsMaterial({
-      size: BASE_PARTICLE_SIZE,
-      map: glowTexture,
+      size: isLineArt ? LINE_ART_PARTICLE_SIZE : BASE_PARTICLE_SIZE,
+      map: glowTexture ?? undefined,
       vertexColors: true,
       transparent: true,
-      opacity: BASE_PARTICLE_OPACITY,
+      opacity: isLineArt ? LINE_ART_PARTICLE_OPACITY : BASE_PARTICLE_OPACITY,
       sizeAttenuation: true,
       depthWrite: false,
-      blending: THREE.AdditiveBlending,
+      blending: isLineArt ? THREE.NormalBlending : THREE.AdditiveBlending,
     })
     const points = new THREE.Points(particleGeo, particleMat)
     scene.add(points)
@@ -85,18 +121,20 @@ export function NeuralField() {
     // Synapse lines — real screen-space width via Line2/LineMaterial (plain
     // LineBasicMaterial ignores linewidth on most WebGL backends). Colors
     // interpolate between each connection's two endpoint particles, so the
-    // cyan/violet/orange mix actually blends across the field.
+    // cyan/violet/orange mix actually blends across the field (dark mode);
+    // in line-art mode every particle shares the same pale ink, so this
+    // still works, it just interpolates a color with itself.
     const maxLines = PARTICLE_COUNT * MAX_CONNECTIONS_PER_PARTICLE
     const linePositions = new Float32Array(maxLines * 2 * 3)
     const lineColors = new Float32Array(maxLines * 2 * 3)
     const lineGeo = new LineSegmentsGeometry()
     const lineMat = new LineMaterial({
-      linewidth: 2.4, // screen-space pixels (worldUnits: false, the default)
+      linewidth: isLineArt ? LINE_ART_LINEWIDTH : 2.4, // screen-space pixels (worldUnits: false, the default)
       vertexColors: true,
       transparent: true,
-      opacity: 0.55,
+      opacity: isLineArt ? LINE_ART_LINE_OPACITY : 0.55,
       depthWrite: false,
-      blending: THREE.AdditiveBlending,
+      blending: isLineArt ? THREE.NormalBlending : THREE.AdditiveBlending,
     })
     lineMat.resolution.set(container.clientWidth || 1, container.clientHeight || 1)
     const lines = new LineSegments2(lineGeo, lineMat)
@@ -243,13 +281,15 @@ export function NeuralField() {
         camera.position.y += (-mouse.y * 25 - camera.position.y) * 0.02
         camera.lookAt(0, 0, 0)
 
-        const ambientOpacity = BASE_PARTICLE_OPACITY * (1 + 0.25 * ambient)
+        const baseSize = isLineArt ? LINE_ART_PARTICLE_SIZE : BASE_PARTICLE_SIZE
+        const baseOpacity = isLineArt ? LINE_ART_PARTICLE_OPACITY : BASE_PARTICLE_OPACITY
+        const ambientOpacity = baseOpacity * (1 + 0.25 * ambient)
         if (pulseIntensity > 0.001) {
-          particleMat.size = BASE_PARTICLE_SIZE * (1 + pulseIntensity * 0.7)
+          particleMat.size = baseSize * (1 + pulseIntensity * 0.7)
           particleMat.opacity = Math.min(1, ambientOpacity + pulseIntensity * 0.1)
           pulseIntensity *= PULSE_DECAY
-        } else if (particleMat.size !== BASE_PARTICLE_SIZE || particleMat.opacity !== ambientOpacity) {
-          particleMat.size = BASE_PARTICLE_SIZE
+        } else if (particleMat.size !== baseSize || particleMat.opacity !== ambientOpacity) {
+          particleMat.size = baseSize
           particleMat.opacity = ambientOpacity
           pulseIntensity = 0
         }
@@ -330,7 +370,7 @@ export function NeuralField() {
       window.removeEventListener('focus', syncRunning)
       particleGeo.dispose()
       particleMat.dispose()
-      glowTexture.dispose()
+      glowTexture?.dispose()
       lineGeo.dispose()
       lineMat.dispose()
       renderer.dispose()
