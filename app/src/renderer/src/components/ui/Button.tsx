@@ -1,8 +1,14 @@
 import type { ButtonHTMLAttributes } from 'react'
 
 const VARIANT: Record<string, string> = {
+  // `--color-accent-cta`/`-hover` default to `--color-ink-warm`/`--color-ink-hot`
+  // (dark theme renders byte-identical to before); the light theme overrides
+  // just this pair to a grayish-blue so the primary-button chrome role shifts
+  // without touching `--color-ink-warm` itself, which stays the app's
+  // cross-theme "surviving signal" semantic elsewhere (StatBlock, GradeResultCard,
+  // node-state ink all still read amber in light mode on purpose).
   primary:
-    'bg-[color-mix(in_srgb,var(--color-ink-warm)_82%,transparent)] text-[var(--color-void)] hover:bg-[color-mix(in_srgb,var(--color-ink-hot)_86%,transparent)] font-medium',
+    'bg-[color-mix(in_srgb,var(--color-accent-cta)_82%,transparent)] text-[var(--color-void)] hover:bg-[color-mix(in_srgb,var(--color-accent-cta-hover)_86%,transparent)] font-medium',
   ghost:
     'border border-[var(--color-edge)] text-[var(--color-text-dim)] hover:text-[var(--color-text-primary)] hover:border-[var(--color-text-faint)] bg-transparent',
   danger:
