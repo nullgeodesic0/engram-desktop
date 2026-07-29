@@ -194,7 +194,7 @@ export const ChatMessageView = memo(function ChatMessageView({
             <span aria-hidden="true">↺</span>
           </button>
         )}
-        <div className="tilt-card-soft panel px-4 py-3 max-w-[92%] bg-[var(--color-surface-3)] flex flex-col gap-2">
+        <div className="tilt-card-soft panel px-4 py-3 max-w-[92%] bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)] flex flex-col gap-2">
           {message.attachments && message.attachments.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
               {message.attachments.map((path) => (
