@@ -1319,22 +1319,18 @@ export function ReviewSessionView({ onActivity, onGoHome }: ReviewSessionViewPro
                           : 'duration-[var(--dur-base)] ease-[var(--ease-out-soft)] opacity-100'
                       }`}
                     >
-                      {/* `.dogear` — the CURRENT item only ("you are here" on
-                          the one probe actually being sat with right now); a
-                          replayed/history probe card (ChatMessageView's own
-                          `ProbeCard`, past turns in this same transcript or in
-                          SessionHistoryDrawer) never carries it — scarcity by
-                          decree, see index.css's dogear doctrine comment. */}
-                      <div key={current.id} className="relative panel dogear px-5 py-4 flex flex-col gap-3 mb-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="min-w-0">
-                            <div className="text-sm font-medium text-[var(--color-text-primary)] truncate">
-                              {humanizeNodeId(current.id)}
-                            </div>
-                            <div className="label-data text-xs text-[var(--color-text-faint)] mt-0.5 uppercase tracking-wider truncate">
-                              {current.topic}
-                            </div>
-                          </div>
+                      {/* `.dogear` — the PINNED card only (the pin is the
+                          active claim on this probe); a replayed/history probe
+                          card (ChatMessageView's own `ProbeCard`, past turns
+                          in this same transcript or in SessionHistoryDrawer)
+                          never carries it — scarcity by decree, see
+                          index.css's dogear doctrine comment. */}
+                      <div key={current.id} className={`relative panel ${probePinned ? 'dogear' : ''} flex flex-col mb-2`}>
+                        <div className="detail-title-band flex items-center justify-between gap-3 px-5 py-2">
+                          <span className="label-data text-[10px] tracking-[0.22em] uppercase text-[var(--color-ink-warm)] inline-flex items-baseline gap-1.5">
+                            review ·{' '}
+                            <StatFraction n={sessionGrades.length + 1} d={sessionTotal} className="text-[10px]" />
+                          </span>
                           {sessionTotal > 1 && (
                             <QueueRail
                               total={sessionTotal}
@@ -1344,7 +1340,17 @@ export function ReviewSessionView({ onActivity, onGoHome }: ReviewSessionViewPro
                             />
                           )}
                         </div>
-                        <p className="text-sm text-[var(--color-text-primary)] pr-7">{current.probe}</p>
+                        <div className="px-5 py-3 flex flex-col gap-2">
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium text-[var(--color-text-primary)] truncate">
+                              {humanizeNodeId(current.id)}
+                            </div>
+                            <div className="label-data text-xs text-[var(--color-text-faint)] mt-0.5 uppercase tracking-wider truncate">
+                              {current.topic}
+                            </div>
+                          </div>
+                          <p className="text-sm text-[var(--color-text-primary)] pr-7">{current.probe}</p>
+                        </div>
                         <button
                           onClick={() => setProbePinned((v) => !v)}
                           aria-label={probePinned ? 'Unpin probe' : 'Pin probe'}

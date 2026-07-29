@@ -1867,7 +1867,7 @@ export function LearnSessionView({
                   >
                     <div className="min-w-0 overflow-hidden">
                     <div className="relative w-72">
-                      <TicketCard ticket={latestTicket} walkNumber={walkNumber} compact />
+                      <TicketCard ticket={latestTicket} walkNumber={walkNumber} compact pinned={ticketPinned} />
                       <button
                         onClick={() => setTicketPinned((v) => !v)}
                         aria-label={ticketPinned ? 'Unpin session ticket' : 'Pin session ticket'}
