@@ -5,7 +5,7 @@ import { GraphView, EDGE_STYLE } from '../components/GraphView'
 import { NodeTable } from '../components/NodeTable'
 import { GrowthScrubber } from '../components/GrowthScrubber'
 import { PressureReadout } from '../components/PressureReadout'
-import { ringMarkPath, diamondMarkPath, plateStats, ancestorClosure, descendantPath } from '../components/graph2d/plate'
+import { ringMarkPath, diamondMarkPath, plateStats, ancestorClosure, descendantPath, regionGroups, regionName } from '../components/graph2d/plate'
 import { mapToPrintHtml } from '../shared/mapToPrintHtml'
 import { layersOf, computeHubNodeIds } from '../components/graph3d/layout'
 import { humanizeNodeId } from '../../../shared/humanizeId'
@@ -359,6 +359,13 @@ export function TopicMapView({
   // stale scrub position.
   const [replayActive, setReplayActive] = useState(false)
   const [replayT, setReplayT] = useState(0)
+  // Click-focused conceptual branch (region) — the lens's one source of
+  // truth, shared by the plate's own sectors and the NodeTable chip so they
+  // can never disagree about which region (if any) is focused. Reset on
+  // topic switch (alongside replayActive/provenance/etc. below) and cleared
+  // whenever replay activates (one lens exclusivity, same instinct as
+  // dueLens && !replayActive elsewhere in this file).
+  const [focusedRegion, setFocusedRegion] = useState<string | null>(null)
   // The whole ledger, fetched once (unscoped by topic — window.engram.misconceptions()
   // always returns everything) and filtered per-node below. null = still loading,
   // a rejected read leaves it null forever and flips misconceptionsError instead —
@@ -464,6 +471,7 @@ export function TopicMapView({
     setProvenance(null)
     setReplayActive(false)
     setReplayT(0)
+    setFocusedRegion(null)
     setTargetDate(null)
     setMapExportStatus(null)
     window.engram
@@ -527,6 +535,21 @@ export function TopicMapView({
       if (inkFlashTimer.current) clearTimeout(inkFlashTimer.current)
     }
   }, [])
+
+  // Esc releases a focused region — but yields to any open modal/drawer
+  // first (the node modal, the explorable viewer, the history drawer each
+  // presumably want Esc to close THEMSELVES first; a focused region without
+  // any of those open is the only case this listener acts on, so it never
+  // races or double-handles the same keypress).
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return
+      if (openNode || explorableNode || historyDrawer) return
+      if (focusedRegion) setFocusedRegion(null)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [openNode, explorableNode, historyDrawer, focusedRegion])
 
   // Only fires once the freshly-loaded graph actually matches the deep-linked
   // topic — setting openNode any earlier would just get wiped by the effect above.
@@ -593,6 +616,10 @@ export function TopicMapView({
   const node = graph && selectedNode ? graph.nodes[selectedNode] : null
   const opened = graph && openNode ? graph.nodes[openNode] : null
   const stats = useMemo(() => (graph ? plateStats(graph, retrievability) : null), [graph, retrievability])
+  // Computed once here (pure function of `graph`) and threaded to both
+  // GraphView (sectors/labels/settle) and NodeTable (chip restriction) — a
+  // single partition neither can drift out of sync with.
+  const regions = useMemo(() => (graph ? regionGroups(graph) : new Map<string, string[]>()), [graph])
 
   // Dependency-depth layers + a stable graph-order index, both reused by
   // NodeStructure's root-first sort below — computed once per graph rather
@@ -736,7 +763,18 @@ export function TopicMapView({
                   <>
                     <div role="group" aria-label="Map lenses" className="flex items-center gap-3">
                       <button
-                        onClick={() => setReplayActive((v) => !v)}
+                        onClick={() =>
+                          setReplayActive((v) => {
+                            const next = !v
+                            // Replay is exclusive with the focus lens (a
+                            // frozen-at-a-past-cutoff scrub and a
+                            // click-to-focus interaction don't compose) —
+                            // activating it releases whatever region was
+                            // focused, same as it already forces dueLens off.
+                            if (next) setFocusedRegion(null)
+                            return next
+                          })
+                        }
                         disabled={!growthTimeline}
                         title={growthTimeline ? undefined : 'Nothing dated yet to replay'}
                         aria-pressed={replayActive}
@@ -780,7 +818,14 @@ export function TopicMapView({
 
             {plateView === 'table' && (
               <div className="relative flex-1 min-h-0">
-                <NodeTable graph={graph} selectedNode={selectedNode} onSelectNode={setSelectedNode} />
+                <NodeTable
+                  graph={graph}
+                  selectedNode={selectedNode}
+                  onSelectNode={setSelectedNode}
+                  restrictIds={focusedRegion ? regions.get(focusedRegion) : undefined}
+                  restrictLabel={focusedRegion ? regionName(focusedRegion) : undefined}
+                  onClearRestrict={() => setFocusedRegion(null)}
+                />
               </div>
             )}
 
@@ -796,6 +841,9 @@ export function TopicMapView({
               annotations={annotations}
               dueLens={dueLens && !replayActive}
               visibleNodes={replayVisibleNodes}
+              regions={regions}
+              focusedRegion={focusedRegion}
+              onFocusRegion={setFocusedRegion}
             />
 
             {/* Growth time-lapse scrubber — only mounted while the replay
