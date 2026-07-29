@@ -503,35 +503,41 @@
  *     continuing topic, the current probe, the active nav item). Scarce by
  *     decree — ACTIVE ONLY. A dogear on every card in a list is just
  *     wallpaper; it only means something because most cards don't have one.
- *   - Tilt vocabulary (`.tilt-card`/`.tilt-card-soft`, driven by
- *     useCardPhysics.ts): card-scale surfaces sit embedded in shallow 3D
- *     space. Two motions, both nearly subliminal: a slow idle drift (≤ ~0.9deg
- *     sinusoid, half-minute-scale periods, per-card phase so the surface
- *     breathes rather than marches) and a pointer-follow tilt (≤ 3.2deg at
- *     the edges, damped — the corner under the cursor dips AWAY, pressing
- *     into a floating plate), through `perspective(1200px)`. `.tilt-card-soft`
- *     is the SAME behavior at a quieter amplitude — useCardPhysics.ts scales
- *     both numbers above down by one multiplier (`SOFT_SCALE`, ~0.65×) for
- *     every chat-transcript card; it is not a second tuning, just a quieter
- *     current under the same physics. WHAT TILTS AT FULL SCALE (`.tilt-card`):
- *     coach/dashboard surfaces — topic cards, stat blocks/cards, chart-host
- *     panels (a chart's own SVG never tilts; the panel hosting it does),
- *     the coach session panel, grader-audit cards, the experiment banner,
- *     the week digest, misconception-ledger rows, artifact tiles, the topic
- *     list, history-drawer rows. WHAT TILTS SOFTLY (`.tilt-card-soft`): every
+ *   - Tilt vocabulary (`.tilt-card`/`.tilt-card-soft`/`.tilt-card-rail`,
+ *     driven by useCardPhysics.ts): card-scale surfaces sit embedded in
+ *     shallow 3D space. Two motions, both nearly subliminal: a slow idle
+ *     drift (≤ ~0.9deg sinusoid, half-minute-scale periods, per-card phase so
+ *     the surface breathes rather than marches) and a pointer-follow tilt
+ *     (≤ 3.2deg at the edges, damped — the corner under the cursor dips AWAY,
+ *     pressing into a floating plate), through `perspective(1200px)`.
+ *     `.tilt-card-soft` and `.tilt-card-rail` are the SAME behavior at a
+ *     quieter amplitude — useCardPhysics.ts scales both numbers above down by
+ *     one multiplier each (`SOFT_SCALE`/`RAIL_SCALE`) for their surfaces; not
+ *     a second tuning, just a quieter current under the same physics.
+ *     WHAT TILTS AT FULL SCALE (`.tilt-card`): coach/dashboard surfaces —
+ *     topic cards, stat blocks/cards, chart-host panels (a chart's own SVG
+ *     never tilts; the panel hosting it does), the coach session panel,
+ *     grader-audit cards, the experiment banner, the week digest,
+ *     misconception-ledger rows, artifact tiles, the topic list,
+ *     history-drawer rows. WHAT TILTS SOFTLY (`.tilt-card-soft`): every
  *     chat-transcript card — the ritual family (beat/grade/probe/milestone/
  *     canonical/ask/audit/diagnostic/explorable/lapse/misconception/
  *     tool-failure/ticket/ready-room/schedule-delta/figure/receipt-strip/
- *     session-ceremony and their kin). WHAT NEVER TILTS: shell chrome and
- *     reading surfaces — the sidebar rail, TitleBar, the composer, the
- *     transcript container and its prose dialogue blocks (PlainDialogueBlock,
- *     LearnCodaBlock — same "documents don't tilt" judgment, not just the one
- *     named block), ChatScrollRegion, the map plate/GraphView, the
- *     NeuralField, modal bodies (modals stay planted), anything that scrolls
- *     its own overflow (a `CaseTypeTable`-style host, a streamed-prose region),
- *     transient status/error banners and loading skeletons (a card records
- *     something; a banner or a shimmer is announcing, not holding, so it
- *     stays planted). The manager writes ONLY the non-inheriting
+ *     session-ceremony and their kin). WHAT TILTS AT RAIL SCALE
+ *     (`.tilt-card-rail`, quieter still than soft — see `RAIL_SCALE`'s own
+ *     note in useCardPhysics.ts): the sidebar nav buttons — small, packed
+ *     edge-to-edge, so full/soft amplitude would read as neighboring items
+ *     visibly fighting each other rather than one surface breathing.
+ *     WHAT NEVER TILTS: shell chrome and reading surfaces — TitleBar, the
+ *     composer, the transcript container and its prose dialogue blocks
+ *     (PlainDialogueBlock, LearnCodaBlock — same "documents don't tilt"
+ *     judgment, not just the one named block), ChatScrollRegion, the map
+ *     plate/GraphView, the NeuralField, modal bodies (modals stay planted),
+ *     anything that scrolls its own overflow (a `CaseTypeTable`-style host, a
+ *     streamed-prose region), transient status/error banners and loading
+ *     skeletons (a card records something; a banner or a shimmer is
+ *     announcing, not holding, so it stays planted). The manager writes ONLY
+ *     the non-inheriting
  *     `--tilt-rx`/`--tilt-ry` properties (see `@property` below); the single
  *     transform rule (matching both classes) owns the transform, so no other
  *     transform source is ever clobbered. No lift, no shadow choreography —
@@ -689,15 +695,28 @@
   .cmd-item:focus-visible::after {
     transform: scaleX(1);
   }
+  /* Dark theme (the app's default): nav rows get a drawn border too, added
+     here to match the light theme's bordered-box treatment below rather than
+     leaving dark as the one theme with an invisible rest-state box. Rest uses
+     --color-edge, not the raw --color-hairline: hairline alone reads at only
+     ~1.3:1 against the rail's dark wash (see --color-edge's own doctrine
+     comment above — same "too faint to read as a drawn line" problem this
+     token already exists to fix elsewhere in the app), so reusing raw
+     hairline here would have shipped the same near-invisible box hairline
+     already fails at on hover today. Hover brightens the border toward
+     --color-ink-warm-dim — the exact color .nav-item-active already borders
+     with for "you are here" — so rest/hover/active read as one ramp toward
+     the single warm accent, not three unrelated colors. Bg-tint hover wash
+     and active fill/label colors are unchanged; only the border ramp is new. */
   .nav-item {
     position: relative;
-    border: 1px solid transparent;
+    border: 1px solid var(--color-edge);
     color: var(--color-text-dim);
   }
   .nav-item:hover {
     color: var(--color-text-primary);
     background-color: color-mix(in srgb, var(--color-ink-lavender) 8%, transparent);
-    border-color: var(--color-hairline);
+    border-color: color-mix(in srgb, var(--color-ink-warm-dim) 55%, var(--color-edge) 45%);
   }
   .nav-item-active {
     position: relative;
@@ -977,17 +996,20 @@
      vanishing point. A card's `.frame-hover` ::after frame and `.dogear`
      fold are children of the same box, so they tilt with it — the whole
      plate moves as one. Rasterization stays crisp by construction: at these
-     angles (idle ≤ ~0.9deg, hover ≤ 3.2deg — `.tilt-card-soft` scales both
-     down by useCardPhysics.ts's own `SOFT_SCALE`, never past them) with a
-     1200px perspective the projected displacement across even a transcript-
-     width card is subpixel-to-low-single-digit-px, and macOS renders
-     grayscale-AA text either way. `.tilt-card-soft` is a MARKER class only —
-     it carries no CSS of its own beyond matching this same rule; the quieter
-     motion is entirely a JS-side amplitude multiplier (see useCardPhysics.ts),
-     so there is exactly one transform rule, one press-compose rule, and one
-     reduced-motion override for both variants. */
+     angles (idle ≤ ~0.9deg, hover ≤ 3.2deg — `.tilt-card-soft`/
+     `.tilt-card-rail` scale both down by useCardPhysics.ts's own
+     `SOFT_SCALE`/`RAIL_SCALE`, never past them) with a 1200px perspective the
+     projected displacement across even a transcript-width card is
+     subpixel-to-low-single-digit-px, and macOS renders grayscale-AA text
+     either way. `.tilt-card-soft`/`.tilt-card-rail` are MARKER classes only —
+     they carry no CSS of their own beyond matching this same rule; the
+     quieter motion is entirely a JS-side amplitude multiplier (see
+     useCardPhysics.ts), so there is exactly one transform rule, one
+     press-compose rule, and one reduced-motion override for all three
+     variants. */
   .tilt-card,
-  .tilt-card-soft {
+  .tilt-card-soft,
+  .tilt-card-rail {
     transform: perspective(1200px) rotateX(var(--tilt-rx)) rotateY(var(--tilt-ry));
   }
   /* The base-layer press scale (`button:active` in @layer base) would be
@@ -995,7 +1017,8 @@
      components over base, and two `transform` declarations never merge — so
      the press composes here explicitly, tilt-then-scale. */
   button.tilt-card:not(:disabled):not(.no-press):active,
-  button.tilt-card-soft:not(:disabled):not(.no-press):active {
+  button.tilt-card-soft:not(:disabled):not(.no-press):active,
+  button.tilt-card-rail:not(:disabled):not(.no-press):active {
     transform: perspective(1200px) rotateX(var(--tilt-rx)) rotateY(var(--tilt-ry)) scale(0.97);
   }
   /* Reduced motion: fully static, belt-and-braces with useCardPhysics.ts's
@@ -1005,11 +1028,13 @@
      kept: it's positional feedback, not motion. */
   @media (prefers-reduced-motion: reduce) {
     .tilt-card,
-    .tilt-card-soft {
+    .tilt-card-soft,
+    .tilt-card-rail {
       transform: none;
     }
     button.tilt-card:not(:disabled):not(.no-press):active,
-    button.tilt-card-soft:not(:disabled):not(.no-press):active {
+    button.tilt-card-soft:not(:disabled):not(.no-press):active,
+    button.tilt-card-rail:not(:disabled):not(.no-press):active {
       transform: scale(0.97);
     }
   }

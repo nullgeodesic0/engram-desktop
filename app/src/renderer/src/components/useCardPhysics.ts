@@ -59,14 +59,26 @@ import { useCallback, useRef } from 'react'
  * `IDLE_AMP_MIN/MAX_DEG`/`POINTER_MAX_DEG` this file already tunes, so a
  * change to those numbers moves both variants together, in proportion.
  *
- * Contract: the `.tilt-card`/`.tilt-card-soft` class must be present from the
- * element's mount (every current host bakes it into a static className
- * template) — discovery watches childList mutations, not class-attribute
- * churn. A card is one or the other, never both — index.css's transform rule
- * matches either class identically; only this file's amplitude differs.
+ * Rail variant (`.tilt-card-rail`): the sidebar nav buttons — small (~36px
+ * tall), packed edge-to-edge (2px gaps), and read as a scanned list rather
+ * than isolated cards. `.tilt-card-soft`'s amplitude (`SOFT_SCALE`, currently
+ * 1× — see that constant's own note) is tuned for spaced, card-scale chat
+ * bubbles; at nav-item density several independently-phased idle drifts
+ * sitting a couple pixels apart read as a busy, uncoordinated wobble rather
+ * than the single-card "breathing" the effect is meant to read as. Same
+ * multiplier mechanism as `SOFT_SCALE`, one tier quieter (`RAIL_SCALE`
+ * below) — not a parallel tuning, still scales the same base numbers.
+ *
+ * Contract: the `.tilt-card`/`.tilt-card-soft`/`.tilt-card-rail` class must
+ * be present from the element's mount (every current host bakes it into a
+ * static className template) — discovery watches childList mutations, not
+ * class-attribute churn. A card is exactly one of the three, never more than
+ * one — index.css's transform rule matches all three classes identically;
+ * only this file's amplitude differs.
  */
-const TILT_SELECTOR = '.tilt-card, .tilt-card-soft'
+const TILT_SELECTOR = '.tilt-card, .tilt-card-soft, .tilt-card-rail'
 const SOFT_SELECTOR = '.tilt-card-soft'
+const RAIL_SELECTOR = '.tilt-card-rail'
 
 /* Tuning — tiny by decree. The effect should be felt, not watched. */
 const IDLE_AMP_MIN_DEG = 0.4
@@ -81,6 +93,14 @@ const IDLE_PERIOD_MAX_S = 55
 const SOFT_SCALE = 1 // one scale by user decision (2026-07-28): the chat-bubble
 // values became the app-wide values, so soft === full today. The class split
 // (.tilt-card vs .tilt-card-soft) is kept so the surfaces can re-diverge later.
+/** `.tilt-card-rail`'s per-element multiplier — same mechanism as
+ * `SOFT_SCALE`, tuned quieter for the nav rail's small, tightly-packed
+ * buttons (see the doctrine comment above). At this scale idle drift tops
+ * out well under a third of a degree and pointer-tilt under 1.1deg, which
+ * keeps a hovered nav item's corner displacement to a fraction of a pixel at
+ * its ~36px height/~192px expanded width — felt as a faint liveliness, not a
+ * wobble neighbors visibly fight for the same 2px gap. */
+const RAIL_SCALE = 0.4
 /** Critically-damped-feel exponential smoothing time constant. */
 const SMOOTH_TAU_MS = 150
 /** Idle-drift concurrency cap — hover responsiveness is never capped. Bumped
@@ -119,10 +139,11 @@ interface TiltState {
   phaseY: number
   /** True while this card holds a `will-change: transform` promotion. */
   promoted: boolean
-  /** `.tilt-card-soft` → `SOFT_SCALE`, `.tilt-card` → 1. Computed once at
-   * registration from the element's own class and applied to both idle
-   * amplitude (baked into `ampX`/`ampY` below) and the pointer-tilt target
-   * (applied live in `tick`) — the one multiplier, not a second constant set. */
+  /** `.tilt-card-rail` → `RAIL_SCALE`, `.tilt-card-soft` → `SOFT_SCALE`,
+   * `.tilt-card` → 1. Computed once at registration from the element's own
+   * class and applied to both idle amplitude (baked into `ampX`/`ampY`
+   * below) and the pointer-tilt target (applied live in `tick`) — one
+   * multiplier per class, not a second constant set. */
   scale: number
 }
 
@@ -212,7 +233,7 @@ const io = new IntersectionObserver(
 function register(el: HTMLElement): void {
   if (registered.has(el)) return
   registered.add(el)
-  const scale = el.matches(SOFT_SELECTOR) ? SOFT_SCALE : 1
+  const scale = el.matches(RAIL_SELECTOR) ? RAIL_SCALE : el.matches(SOFT_SELECTOR) ? SOFT_SCALE : 1
   states.set(el, {
     visible: false,
     hovered: false,
