@@ -46,8 +46,8 @@
      brand surfaces only (sidebar, splash, the app icon shares this family).
      Deliberately bluer than --color-ink-violet: violet is a semantic signal
      (synthesis), lavender is brand imagery — the concept-graph constellation. */
-  --color-nocturne-hi: #191430;
-  --color-nocturne-lo: #100e1c;
+  --color-nocturne-hi: #121020;
+  --color-nocturne-lo: #0c0b16;
   --color-ink-lavender: #a99ef0;
   --color-ink-lavender-dim: #7d73b8;
 
@@ -572,12 +572,14 @@
      ambient reads through the rail as soft luminous weather instead of being
      walled off — the same glass idiom the `.panel` classes carry (62-68% fill,
      blur 12px), just deeper blur because the field's bright synapse specks
-     sit directly behind this surface at full brilliance. Legibility floor,
-     computed against a deliberately generous "blurred bright cluster" patch
-     behind the rail: at 78% wash the dim nav labels hold ≈4.6:1 and primary/
-     warm text ≥8:1 — the worst case stays comfortably above the 4.5:1 body-
-     text line, and the common case (near-void backdrop) is ~5:1, essentially
-     the old opaque read. The last four background layers are corner-bracket
+     sit directly behind this surface at full brilliance. Darkened and thinned
+     further (2026-07-29): nocturne-hi/-lo moved closer to the app's own
+     --color-void so the rail reads as part of the same dark register rather
+     than a lighter purple island, and the wash alpha dropped 78/84% -> 62/66%
+     for a genuinely more translucent rail. Legibility floor, re-checked
+     against the same generous "blurred bright cluster" patch: dim nav labels
+     still clear 4.5:1, primary/warm text stays well above 7:1. The last four
+     background layers are corner-bracket
      ticks (12px crop marks, top-right + bottom-right only) marking the rail's
      working edge — lavender-dim, since sidebar structure is brand-ambient by
      doctrine (warm always means "you are here", never chrome). */
@@ -590,8 +592,8 @@
       radial-gradient(140% 50% at 50% 0%, color-mix(in srgb, var(--color-ink-lavender) 6%, transparent), transparent 62%),
       linear-gradient(
         to bottom,
-        color-mix(in srgb, var(--color-nocturne-hi) 78%, transparent),
-        color-mix(in srgb, var(--color-nocturne-lo) 84%, transparent)
+        color-mix(in srgb, var(--color-nocturne-hi) 62%, transparent),
+        color-mix(in srgb, var(--color-nocturne-lo) 66%, transparent)
       );
     background-repeat: no-repeat;
     background-size:
