@@ -7,10 +7,10 @@ import {
   nodeMarkPath,
   ringMarkPath,
   diamondMarkPath,
-  territoryGroups,
   regionGroups,
+  regionName,
   hullPath,
-  hullCentroid,
+  hullTopAnchor,
   plateStats,
   type PlateNode,
 } from '../components/graph2d/plate'
@@ -353,16 +353,20 @@ export function mapToPrintHtml(
   retrievability: Map<string, number> | null,
   annotations: MapAnnotations | null,
 ): string {
-  // Regions threaded into settle geometry for parity with the on-screen
-  // plate (pure ⇒ identical output to GraphView's own regionGroups(graph)
-  // call). The print wash render itself stays territoryGroups this wave.
+  // Regions feed BOTH the settle geometry and the printed sectors/captions
+  // themselves — a pure function of `graph`, so this is bit-identical to
+  // GraphView's own regionGroups(graph) call; the printed plate's regions
+  // can never drift from what's on screen. Print always renders the WHOLE
+  // territory unfocused/unhovered (no focusedRegion concept here at all —
+  // see the header comment's screen-only-state list above) and un-lensed
+  // (dueLens is resolved OFF for print already), so there is no equivalent
+  // of the screen's hover readout or focus dimming on paper.
   const regions = regionGroups(graph)
   const plate: Map<string, PlateNode> = settlePlate(graph, PLATE_W, PLATE_H, regions)
   const edges = buildEdges(graph)
   const frontierIds = computeFrontierIds(graph)
   const forwardAdjacency = computeForwardAdjacency(edges)
   const hubNodeIds = computeHubNodeIds(graph)
-  const territories = territoryGroups(graph)
   const stats = plateStats(graph, retrievability)
   const visibleEdges = edges.filter((e) => isEdgeVisible(e, hubNodeIds, forwardAdjacency))
   const t = 0 // frozen — see the header comment above
@@ -386,8 +390,9 @@ export function mapToPrintHtml(
 
   svg.push(`<g>`)
 
-  // Territory washes
-  for (const members of territories.values()) {
+  // Region washes — same hulls the settle geometry above already clustered
+  // by (regionGroups, not the old nearest-root territoryGroups).
+  for (const members of regions.values()) {
     const pts = members.map((id) => plate.get(id)).filter((p): p is PlateNode => !!p)
     if (pts.length < 3) continue
     const d = hullPath(pts, 26)
@@ -398,27 +403,30 @@ export function mapToPrintHtml(
     )
   }
 
-  // Territory labels — always shown (the due lens that hides these on screen
-  // is resolved OFF for print; see the header comment). Their rects are also
-  // fed to `planLabels` below as fixed obstacles — one of the two real
-  // collisions this document shipped with (F2(a)'s own quoted example,
-  // "GeneralizedCapstone Coordinates Dof") was a per-node label landing on
-  // top of one of THESE faint italic captions, not on another per-node
-  // label or a cell — so a placement pass that only knew about cells and
-  // other labels still missed it.
+  // Region labels — short derived names (regionName) at hullTopAnchor
+  // (padded-hull bbox top-center, nudged clear of the stroke), matching the
+  // on-screen plate's caption placement exactly rather than the old raw-id
+  // centroid caption. Always shown (the due lens that hides these on screen
+  // is resolved OFF for print; see the header comment) — print never
+  // composes with focus/hover either, since neither concept exists here (see
+  // the comment above `regions` at the top of this function). Their rects
+  // are also fed to `planLabels` below as fixed obstacles, recomputed at
+  // this new anchor point — one of the two real collisions this document
+  // shipped with (F2(a)'s own quoted example, "GeneralizedCapstone
+  // Coordinates Dof") was a per-node label landing on top of one of THESE
+  // faint italic captions, not on another per-node label or a cell — so a
+  // placement pass that only knew about cells and other labels still missed
+  // it.
   const territoryLabelRects: Rect[] = []
-  for (const [root, members] of territories.entries()) {
+  for (const [seed, members] of regions.entries()) {
     const pts = members.map((id) => plate.get(id)).filter((p): p is PlateNode => !!p)
-    const centroid = hullCentroid(pts)
-    if (!centroid) continue
-    // Tracked uppercase mono, matching the on-screen plate's sector
-    // captions; measured on the UPPERCASED string (wider) so the obstacle
-    // rect fed to planLabels stays honest about the extra width.
-    const territoryLabel = humanizeNodeId(root).toUpperCase()
+    const anchor = hullTopAnchor(pts, 26)
+    if (!anchor) continue
+    const regionLabel = regionName(seed)
     svg.push(
-      `<text x="${centroid.x.toFixed(2)}" y="${centroid.y.toFixed(2)}" text-anchor="middle" font-family="var(--font-data)" font-size="10" letter-spacing="1.6" fill="var(--color-text-dim)" opacity="0.5">${escapeXml(territoryLabel)}</text>`,
+      `<text x="${anchor.x.toFixed(2)}" y="${anchor.y.toFixed(2)}" text-anchor="middle" font-family="var(--font-data)" font-size="10" letter-spacing="1.6" fill="var(--color-text-dim)" opacity="0.5">${escapeXml(regionLabel)}</text>`,
     )
-    territoryLabelRects.push(labelRect(centroid, territoryLabel, { dx: 0, dy: 0, anchor: 'middle', fontSize: 12 }))
+    territoryLabelRects.push(labelRect(anchor, regionLabel, { dx: 0, dy: 0, anchor: 'middle', fontSize: 12 }))
   }
 
   // Edges — flat opacity: no hover/selection trail to promote or dim on paper.

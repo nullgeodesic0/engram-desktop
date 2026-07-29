@@ -6,11 +6,11 @@ import { buildEdges, computeForwardAdjacency, computeFrontierIds, computeHubNode
 import {
   settlePlate,
   nodeMarkPath,
-  territoryGroups,
-  regionGroups,
   hullPath,
-  hullCentroid,
+  hullTopAnchor,
+  regionName,
   plateStats,
+  plateStatsFor,
   ancestorClosure,
   descendantPath,
   type PlateNode,
@@ -206,6 +206,20 @@ interface GraphViewProps {
    * touching a hidden node hides outright. `null`/undefined is the live
    * plate — zero behavior change from before this prop existed. */
   visibleNodes?: Set<string> | null
+  /** Conceptual-branch partition — computed once in TopicMapView
+   * (regionGroups is a pure function of the graph, so a single call there
+   * covers settle geometry, the plate's own sectors/labels, and NodeTable's
+   * chip without risking three independently-computed copies drifting
+   * apart). Seed id -> its member node ids. */
+  regions: Map<string, string[]>
+  /** Click-focused region's seed id, or null — owned by TopicMapView so the
+   * NodeTable chip and the plate can never disagree about which region (if
+   * any) is focused. */
+  focusedRegion: string | null
+  /** Fired on a sector click (toggles focus) or an empty-plate click while a
+   * region is focused (releases it) — both funnel through the same setter
+   * TopicMapView hands the chip's own × button. */
+  onFocusRegion: (seed: string | null) => void
 }
 
 export function GraphView({
@@ -218,11 +232,15 @@ export function GraphView({
   annotations,
   dueLens,
   visibleNodes,
+  regions,
+  focusedRegion,
+  onFocusRegion,
 }: GraphViewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState<{ w: number; h: number } | null>(null)
   const [view, setView] = useState({ x: 0, y: 0, zoom: 1 })
   const [hovered, setHovered] = useState<string | null>(null)
+  const [hoveredRegion, setHoveredRegion] = useState<string | null>(null)
 
   useEffect(() => {
     const el = containerRef.current
@@ -265,10 +283,9 @@ export function GraphView({
   // re-deriving from `size` at every use site.
   const plateW = size?.w ?? 800
   const plateH = size?.h ?? 600
-  // Regions computed once here so the settle can cluster by them — the
-  // territory-wash RENDER swap is a later wave; this wave only threads
-  // regions into geometry.
-  const regions = useMemo(() => regionGroups(graph), [graph])
+  // `regions` is now a prop (TopicMapView computes it once, pure function of
+  // `graph`) — both the settle's clustering and the sectors/labels below read
+  // this exact same partition, never a locally-recomputed copy.
   const plate: Map<string, PlateNode> = useMemo(
     () => settlePlate(graph, plateW, plateH, regions),
     [graph, plateW, plateH, regions],
@@ -346,7 +363,6 @@ export function GraphView({
   const frontierIds = useMemo(() => computeFrontierIds(graph), [graph])
   const forwardAdjacency = useMemo(() => computeForwardAdjacency(edges), [edges])
   const hubNodeIds = useMemo(() => computeHubNodeIds(graph), [graph])
-  const territories = useMemo(() => territoryGroups(graph), [graph])
   const stats = useMemo(() => plateStats(graph, retrievability), [graph, retrievability])
   const visibleEdges = useMemo(
     () => edges.filter((e) => isEdgeVisible(e, hubNodeIds, forwardAdjacency)),
@@ -419,12 +435,22 @@ export function GraphView({
   // The replay floor (visibleNodes) composes the same way: a node not yet
   // "inked" by the scrub position sinks near-invisible regardless of what
   // the search/trail lenses think of it.
+  // Focus lens (region click) — a 4th min-term composing via the same "one
+  // good reason" rule as the other three: a node stays legible if it matches
+  // the query, sits on the active trail, is replay-inked, OR is a member of
+  // the focused region. The spine (hub/capstone nodes — never a region
+  // member) counts as OUTSIDE while a region is focused, same as any other
+  // non-member. Composes with dueLens too: dueLens only ever recolors a
+  // node's fill, never touches opacity, so a focused region still dims its
+  // outside while the lens recolors whatever remains lit.
+  const focusMembers = focusedRegion ? new Set(regions.get(focusedRegion) ?? []) : null
   function nodeOpacity(id: string): number {
     const searchOpacity = matchesQuery(id) ? 1 : 0.18
     const dimFloor = isTrailMode ? 0.15 : 0.22
     const relevanceOpacity = relevantIds && !relevantIds.has(id) ? dimFloor : 1
     const replayOpacity = visibleNodes && !visibleNodes.has(id) ? 0.04 : 1
-    return Math.min(searchOpacity, relevanceOpacity, replayOpacity)
+    const focusOpacity = focusMembers && !focusMembers.has(id) ? 0.18 : 1
+    return Math.min(searchOpacity, relevanceOpacity, replayOpacity, focusOpacity)
   }
 
   // Whether an edge belongs to the ancestor/descendant trail — while
@@ -445,21 +471,62 @@ export function GraphView({
 
   const fontSize = clamp(11 / view.zoom, 8, 13)
 
+  // draggingRef tracks the RUNNING pan delta (updated every move);
+  // downRef/sectorDownRef hold the pointer's ORIGINAL down position,
+  // untouched by moves — the <4px distance from that fixed point is what
+  // tells a click from a drag, on both the background rect and a sector.
   const draggingRef = useRef<{ x: number; y: number } | null>(null)
+  const downRef = useRef<{ x: number; y: number } | null>(null)
+  const sectorDownRef = useRef<{ x: number; y: number } | null>(null)
+  function panMove(clientX: number, clientY: number) {
+    if (!draggingRef.current) return
+    const dx = clientX - draggingRef.current.x
+    const dy = clientY - draggingRef.current.y
+    draggingRef.current = { x: clientX, y: clientY }
+    setView((v) => ({ ...v, x: v.x + dx, y: v.y + dy }))
+  }
   function onBgPointerDown(e: React.PointerEvent<SVGRectElement>) {
     cancelPanAnimation()
     draggingRef.current = { x: e.clientX, y: e.clientY }
+    downRef.current = { x: e.clientX, y: e.clientY }
     e.currentTarget.setPointerCapture(e.pointerId)
   }
   function onBgPointerMove(e: React.PointerEvent<SVGRectElement>) {
-    if (!draggingRef.current) return
-    const dx = e.clientX - draggingRef.current.x
-    const dy = e.clientY - draggingRef.current.y
-    draggingRef.current = { x: e.clientX, y: e.clientY }
-    setView((v) => ({ ...v, x: v.x + dx, y: v.y + dy }))
+    panMove(e.clientX, e.clientY)
   }
-  function onBgPointerUp() {
+  function onBgPointerUp(e: React.PointerEvent<SVGRectElement>) {
     draggingRef.current = null
+    const down = downRef.current
+    downRef.current = null
+    // Empty-plate click (not a drag) while a region is focused releases it —
+    // clicking nothing is as valid a "step back" gesture as Esc.
+    if (down && focusedRegion) {
+      const dist = Math.hypot(e.clientX - down.x, e.clientY - down.y)
+      if (dist < 4) onFocusRegion(null)
+    }
+  }
+  // Sectors share the SAME pan-drag handlers as the background rect (a
+  // sector now catches pointer events, so a drag started on one must still
+  // pan the plate rather than getting eaten) plus their own <4px
+  // click-vs-drag disambiguation, which toggles that sector's focus instead
+  // of releasing it.
+  function onSectorPointerDown(e: React.PointerEvent<SVGPathElement>) {
+    cancelPanAnimation()
+    draggingRef.current = { x: e.clientX, y: e.clientY }
+    sectorDownRef.current = { x: e.clientX, y: e.clientY }
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+  function onSectorPointerMove(e: React.PointerEvent<SVGPathElement>) {
+    panMove(e.clientX, e.clientY)
+  }
+  function onSectorPointerUp(e: React.PointerEvent<SVGPathElement>, seed: string) {
+    draggingRef.current = null
+    const down = sectorDownRef.current
+    sectorDownRef.current = null
+    if (down) {
+      const dist = Math.hypot(e.clientX - down.x, e.clientY - down.y)
+      if (dist < 4) onFocusRegion(focusedRegion === seed ? null : seed)
+    }
   }
 
   // Pan-to-selected: whenever `selected` changes to a real node (deep-link,
@@ -495,6 +562,66 @@ export function GraphView({
     return () => cancelPanAnimation()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, plate])
+
+  // Pan-to-focused-region — the same eased-ease clone as pan-to-selected
+  // above, just framing a region's member bbox (+60px margin) instead of one
+  // node's point, and clamping zoom to a tamer 0.35-2 range (a single small
+  // region shouldn't zoom in as tight as a single node does). Reduced-motion
+  // jumps straight to the target in one step rather than animating.
+  useEffect(() => {
+    if (!focusedRegion) return
+    const members = regions.get(focusedRegion) ?? []
+    const pts = members.map((id) => plate.get(id)).filter((p): p is PlateNode => !!p)
+    if (pts.length === 0) return
+    const el = containerRef.current
+    if (!el) return
+    let minX = Infinity
+    let maxX = -Infinity
+    let minY = Infinity
+    let maxY = -Infinity
+    for (const p of pts) {
+      minX = Math.min(minX, p.x - p.r)
+      maxX = Math.max(maxX, p.x + p.r)
+      minY = Math.min(minY, p.y - p.r)
+      maxY = Math.max(maxY, p.y + p.r)
+    }
+    const focusMargin = 60
+    minX -= focusMargin
+    maxX += focusMargin
+    minY -= focusMargin
+    maxY += focusMargin
+    const rect = el.getBoundingClientRect()
+    const w = rect.width || size?.w || 800
+    const h = rect.height || size?.h || 600
+    const bboxW = Math.max(1, maxX - minX)
+    const bboxH = Math.max(1, maxY - minY)
+    const cx = (minX + maxX) / 2
+    const cy = (minY + maxY) / 2
+    const targetZoom = clamp(Math.min(w / bboxW, h / bboxH), 0.35, 2)
+    cancelPanAnimation()
+    const start = { ...view }
+    const targetX = w / 2 - cx * targetZoom
+    const targetY = h / 2 - cy * targetZoom
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setView({ x: targetX, y: targetY, zoom: targetZoom })
+      return
+    }
+    const duration = 450
+    const t0 = performance.now()
+    function step(now: number) {
+      const t = clamp((now - t0) / duration, 0, 1)
+      const eased = 1 - Math.pow(1 - t, 3)
+      setView({
+        x: start.x + (targetX - start.x) * eased,
+        y: start.y + (targetY - start.y) * eased,
+        zoom: start.zoom + (targetZoom - start.zoom) * eased,
+      })
+      panAnimRef.current = t < 1 ? requestAnimationFrame(step) : null
+    }
+    panAnimRef.current = requestAnimationFrame(step)
+    return () => cancelPanAnimation()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusedRegion])
 
   return (
     <div
@@ -588,59 +715,112 @@ export function GraphView({
         />
         <rect x={0} y={0} width={plateW} height={plateH} fill="url(#plate-vignette)" pointerEvents="none" />
         <g transform={`translate(${view.x} ${view.y}) scale(${view.zoom})`}>
-          {/* Territory sectors — the same convex hulls, now drawn as quiet
-              faceted regions (angular hullPath, no blur): a barely-there
-              warm fill whose depth still tracks the group's consolidated
-              fraction, plus a hairline boundary so the sector reads as a
-              charted region rather than an atmospheric wash. */}
-          {Array.from(territories.entries()).map(([root, members]) => {
+          {/* Region sectors — conceptual-branch hulls (regionGroups, not the
+              old nearest-root territoryGroups), drawn as quiet faceted
+              regions: a barely-there warm fill whose depth still tracks the
+              region's consolidated fraction, plus a hairline boundary so the
+              sector reads as a charted region rather than an atmospheric
+              wash. Interactive during a normal view (visiblePainted — the
+              faint fill still counts as "painted" so the sector catches
+              hover/click across its whole footprint, not just the stroke);
+              during replay a sector is pure static geography again —
+              pointer-events off, no hover state possible. */}
+          {Array.from(regions.entries()).map(([seed, members]) => {
             const pts = members.map((id) => plate.get(id)).filter((p): p is PlateNode => !!p)
             if (pts.length < 3) return null
             const d = hullPath(pts, 26)
             if (!d) return null
             const consolidatedFraction =
               members.filter((id) => graph.nodes[id]?.state === 'review').length / members.length
+            const isHovered = !visibleNodes && hoveredRegion === seed
+            const isFocused = focusedRegion === seed
             return (
               <path
-                key={root}
+                key={seed}
                 d={d}
                 fill="var(--color-ink-warm)"
-                fillOpacity={0.02 + 0.06 * consolidatedFraction}
+                fillOpacity={0.02 + 0.06 * consolidatedFraction + (isHovered ? 0.04 : 0) + (isFocused ? 0.05 : 0)}
                 stroke="var(--color-ink-warm)"
-                strokeOpacity={0.14}
+                strokeOpacity={isHovered ? 0.3 : isFocused ? 0.35 : 0.14}
                 strokeWidth={1}
-                pointerEvents="none"
+                pointerEvents={visibleNodes ? 'none' : 'visiblePainted'}
+                style={{ cursor: visibleNodes ? 'default' : 'pointer' }}
+                onPointerEnter={() => setHoveredRegion(seed)}
+                onPointerLeave={() => setHoveredRegion((h) => (h === seed ? null : h))}
+                onPointerDown={onSectorPointerDown}
+                onPointerMove={onSectorPointerMove}
+                onPointerUp={(e) => onSectorPointerUp(e, seed)}
+                onPointerCancel={() => {
+                  draggingRef.current = null
+                  sectorDownRef.current = null
+                }}
               />
             )
           })}
 
-          {/* Territory labels — faint serif captions at each wash's hull
-              centroid (same hull convexHull feeds hullPath), named from the
-              group's root node id. Hidden under the due lens: that view
-              wants the plate reading as pure schedule, not competing with
-              wash captions. */}
-          {!dueLens &&
-            Array.from(territories.entries()).map(([root, members]) => {
-              const pts = members.map((id) => plate.get(id)).filter((p): p is PlateNode => !!p)
-              const centroid = hullCentroid(pts)
-              if (!centroid) return null
-              return (
+          {/* Region labels — short derived names (regionName) at
+              hullTopAnchor (padded-hull bbox top-center, nudged clear of the
+              stroke) rather than the old raw-id centroid caption. Quiet at
+              rest (0.25 — no longer hidden under the due lens; regions
+              persist as a stable geography the lens recolors bodies on top
+              of, same composition rule as the focus lens), brighten to 0.85
+              on hover/focus. A single 12px upward nudge fires if the anchor
+              would otherwise land on top of a member's own circle — no
+              solver, just the one case worth handling without one. Hover
+              also reveals a second, zero-layout-shift readout line
+              (`consolidated N/M · due K`, warm tspan numerals) directly
+              beneath the name. */}
+          {Array.from(regions.entries()).map(([seed, members]) => {
+            const pts = members.map((id) => plate.get(id)).filter((p): p is PlateNode => !!p)
+            const anchor = hullTopAnchor(pts, 26)
+            if (!anchor) return null
+            const isHovered = !visibleNodes && hoveredRegion === seed
+            const isFocused = focusedRegion === seed
+            const overlapsMember = pts.some((p) => Math.hypot(p.x - anchor.x, p.y - anchor.y) < p.r + 10)
+            const labelY = overlapsMember ? anchor.y - 12 : anchor.y
+            const regionStats = isHovered ? plateStatsFor(graph, retrievability, members) : null
+            const dueCount = isHovered
+              ? members.filter((id) => {
+                  const n = graph.nodes[id]
+                  const status = n ? dueStatusFor(n) : null
+                  return status === 'overdue' || status === 'today'
+                }).length
+              : 0
+            return (
+              <g key={`region-label-${seed}`} pointerEvents="none">
                 <text
-                  key={`territory-label-${root}`}
-                  x={centroid.x}
-                  y={centroid.y}
+                  x={anchor.x}
+                  y={labelY}
                   textAnchor="middle"
                   fontFamily="var(--font-data)"
                   fontSize={10}
                   letterSpacing={1.6}
                   fill="var(--color-text-dim)"
-                  opacity={0.4}
-                  pointerEvents="none"
+                  opacity={visibleNodes ? 0.25 : isHovered || isFocused ? 0.85 : 0.25}
                 >
-                  {humanizeNodeId(root).toUpperCase()}
+                  {regionName(seed)}
                 </text>
-              )
-            })}
+                {regionStats && (
+                  <text
+                    x={anchor.x}
+                    y={labelY + 11}
+                    textAnchor="middle"
+                    fontFamily="var(--font-data)"
+                    fontSize={9}
+                    fill="var(--color-text-dim)"
+                    opacity={0.85}
+                  >
+                    <tspan>consolidated </tspan>
+                    <tspan fill="var(--color-ink-warm)">
+                      {regionStats.consolidated}/{regionStats.total}
+                    </tspan>
+                    <tspan> · due </tspan>
+                    <tspan fill="var(--color-ink-warm)">{dueCount}</tspan>
+                  </text>
+                )}
+              </g>
+            )
+          })}
 
           {/* Edges — dimmed off-trail while selected so the promoted
               ancestor/descendant chain reads clearly; unchanged (flat 0.35)
@@ -667,7 +847,11 @@ export function GraphView({
             if (visibleNodes && (!visibleNodes.has(e.source) || !visibleNodes.has(e.target))) return null
             const style = EDGE_STYLE[e.kind]
             const onTrail = isAncestorTrailEdge(e) || isDescendantTrailEdge(e)
-            const opacity = trailEdgesActive ? (onTrail ? 0.5 : 0.08) : 0.35
+            // Focus dims any edge touching a non-member endpoint (spine
+            // included) to a quarter strength — orthogonal to the trail
+            // dimming above, so the two multiply rather than override.
+            const focusDim = focusMembers && (!focusMembers.has(e.source) || !focusMembers.has(e.target)) ? 0.25 : 1
+            const opacity = (trailEdgesActive ? (onTrail ? 0.5 : 0.08) : 0.35) * focusDim
 
             if (e.kind === 'requires') {
               const d = stringEdgePath(e.source, e.target, a, b, 'requires', t)

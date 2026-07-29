@@ -89,16 +89,37 @@ export function NodeTable({
   graph,
   selectedNode,
   onSelectNode,
+  restrictIds,
+  restrictLabel,
+  onClearRestrict,
 }: {
   graph: TopicGraph
   selectedNode: string | null
   onSelectNode: (id: string) => void
+  /** A focused map region's member ids (TopicMapView's `focusedRegion`,
+   * resolved via `regions.get(...)`) — when present, every count/filter/row
+   * in this table scopes to the intersection with this set, so the chip's
+   * own N always matches what's actually browsable underneath it. Undefined
+   * (no region focused) leaves every existing behavior untouched. */
+  restrictIds?: string[]
+  /** The focused region's short display name (plate.ts's `regionName`),
+   * shown on the chip. Only meaningful alongside `restrictIds`. */
+  restrictLabel?: string
+  /** Fired by the chip's × — clears the SHARED `focusedRegion` in
+   * TopicMapView, so the map and this table can never disagree about which
+   * region (if any) is focused. */
+  onClearRestrict?: () => void
 }) {
   const [sortKey, setSortKey] = useState<SortKey>('node')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [activeFilters, setActiveFilters] = useState<Set<FilterKey>>(new Set())
 
-  const territoryIds = useMemo(() => graph.order.filter((id) => !graph.nodes[id]?.capstone), [graph])
+  const territoryIds = useMemo(() => {
+    const base = graph.order.filter((id) => !graph.nodes[id]?.capstone)
+    if (!restrictIds) return base
+    const restrictSet = new Set(restrictIds)
+    return base.filter((id) => restrictSet.has(id))
+  }, [graph, restrictIds])
 
   // Counts per facet over the WHOLE territory (not the current filtered
   // subset) — clicking one chip doesn't move another chip's number, so each
@@ -149,6 +170,14 @@ export function NodeTable({
   return (
     <div className="h-full flex flex-col">
       <div role="group" aria-label="Filter nodes" className="shrink-0 flex items-center gap-1.5 px-3 py-2 flex-wrap">
+        {restrictIds && restrictLabel && (
+          <button
+            onClick={onClearRestrict}
+            className="focus-ring label-data text-[10px] uppercase tracking-[0.16em] px-2 py-1 border bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] border-[var(--color-ink-warm)] text-[var(--color-ink-warm)]"
+          >
+            {`REGION — ${restrictLabel} ${territoryIds.length} ×`}
+          </button>
+        )}
         {FILTER_ORDER.map((key) => {
           const pressed = activeFilters.has(key)
           return (

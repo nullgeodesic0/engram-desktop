@@ -3,7 +3,6 @@ import {
   buildEdges,
   initSimNodes,
   stepSimulation,
-  layersOf,
   seeded,
   computeHubNodeIds,
   computeForwardAdjacency,
@@ -261,48 +260,10 @@ export function cellBodyPath(id: string, r: number): string {
   return d
 }
 
-/** Group non-capstone nodes by their nearest layer-0 ancestor (breadth-first
- * up the requires edges; a layer-0 node roots its own group). Ties resolve to
- * the first root encountered in BFS order — stable per graph. */
-export function territoryGroups(graph: TopicGraph): Map<string, string[]> {
-  const layers = layersOf(graph)
-  const groups = new Map<string, string[]>()
-  for (const id of graph.order) {
-    if (graph.nodes[id]?.capstone) continue
-    let root: string | null = null
-    if ((layers.get(id) ?? 0) === 0) {
-      root = id
-    } else {
-      const queue = [id]
-      const seen = new Set<string>([id])
-      while (queue.length > 0 && root == null) {
-        const cur = queue.shift()!
-        for (const req of graph.nodes[cur]?.edges.requires ?? []) {
-          if (seen.has(req)) continue
-          seen.add(req)
-          if ((layers.get(req) ?? 0) === 0) {
-            root = req
-            break
-          }
-          queue.push(req)
-        }
-      }
-    }
-    if (root == null) root = id
-    if (!groups.has(root!)) groups.set(root!, [])
-    groups.get(root!)!.push(id)
-  }
-  // Drop singleton territories — a wash behind one node is noise, not shape.
-  for (const [root, members] of [...groups]) {
-    if (members.length < 3) groups.delete(root)
-  }
-  return groups
-}
-
 /** Deterministic seeded partition of a topic into 3-6 conceptual branches —
- * the regions the plate hulls, hovers, and focuses. Unlike `territoryGroups`
- * (nearest-layer-0-ancestor, always produces exactly one region per root),
- * this spreads members across several roughly-balanced branches via a
+ * the regions the plate hulls, hovers, and focuses. Unlike the retired
+ * nearest-layer-0-ancestor grouping this replaced (always exactly one region
+ * per root), this spreads members across several roughly-balanced branches via a
  * level-synchronous BFS from a handful of foundational seed nodes.
  *
  * Hub nodes (`computeHubNodeIds` — capstone-like near-universal-fan-in nodes,
