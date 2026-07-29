@@ -27,7 +27,7 @@ export function RateLimitBanner({ status, resetsAt, onRetry }: RateLimitBannerPr
       {blocking && (
         <button
           onClick={onRetry}
-          className="focus-ring shrink-0 text-xs px-3 py-1.5 rounded-lg bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)] text-[var(--color-text-primary)] hover:bg-[color-mix(in_srgb,var(--color-surface-2)_78%,transparent)]"
+          className="focus-ring shrink-0 text-xs px-3 py-1.5 rounded-lg bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] text-[var(--color-text-primary)] hover:bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)]"
         >
           Try again
         </button>

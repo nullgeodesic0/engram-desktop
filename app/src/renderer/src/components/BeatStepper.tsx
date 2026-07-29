@@ -46,7 +46,7 @@ export function BeatStepper({ current, trail }: { current: string | null; trail?
               title={s.label}
               aria-current={active ? 'step' : undefined}
               className={`flex items-center gap-1 px-2 py-1 text-[10px] label-data transition-colors duration-[var(--dur-base)] ${
-                active ? 'bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)] text-[var(--color-ink-warm)]' : outcomeClass
+                active ? 'bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] text-[var(--color-ink-warm)]' : outcomeClass
               }`}
             >
               <span className="relative inline-flex w-4 shrink-0 justify-center" aria-hidden="true">

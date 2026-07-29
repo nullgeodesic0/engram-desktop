@@ -64,7 +64,7 @@ export function NewTopicModal({ onClose, onStart }: NewTopicModalProps) {
           rows={4}
           autoFocus
           placeholder="e.g. “Understand special relativity well enough to derive time dilation from the postulates, for a qual exam in 6 weeks”"
-          className="focus-ring panel px-3 py-2 text-sm bg-[color-mix(in_srgb,var(--color-surface-2)_78%,transparent)] text-[var(--color-text-primary)] resize-none"
+          className="focus-ring panel px-3 py-2 text-sm bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] text-[var(--color-text-primary)] resize-none"
         />
 
         {/* Same two levers the per-topic settings expose after creation
@@ -79,7 +79,7 @@ export function NewTopicModal({ onClose, onStart }: NewTopicModalProps) {
             onChange={(e) => setInstructions(e.target.value)}
             rows={2}
             placeholder="e.g. “Use LaTeX for all equations; ground examples in rowing”"
-            className="focus-ring panel px-3 py-2 text-sm bg-[color-mix(in_srgb,var(--color-surface-2)_78%,transparent)] text-[var(--color-text-primary)] resize-none"
+            className="focus-ring panel px-3 py-2 text-sm bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] text-[var(--color-text-primary)] resize-none"
           />
         </div>
 
@@ -91,7 +91,7 @@ export function NewTopicModal({ onClose, onStart }: NewTopicModalProps) {
                 <span
                   key={path}
                   title={path}
-                  className="label-data text-[10px] px-1.5 py-0.5 rounded bg-[color-mix(in_srgb,var(--color-surface-2)_78%,transparent)] text-[var(--color-text-dim)] inline-flex items-center gap-1"
+                  className="label-data text-[10px] px-1.5 py-0.5 rounded bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] text-[var(--color-text-dim)] inline-flex items-center gap-1"
                 >
                   📎 {fileName(path)}
                   <button

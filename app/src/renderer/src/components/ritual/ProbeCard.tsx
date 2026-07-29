@@ -40,7 +40,7 @@ export const ProbeCard = memo(function ProbeCard({
       <div className="flex items-center gap-2.5 flex-wrap">
         <span
           className="label-data text-[10px] px-1.5 py-0.5 rounded tabular-nums"
-          style={{ color: accent, background: 'color-mix(in srgb, var(--color-surface-2) 78%, transparent)' }}
+          style={{ color: accent, background: 'color-mix(in srgb, var(--color-surface-2) 68%, transparent)' }}
         >
           {header.index}/{header.total}
         </span>

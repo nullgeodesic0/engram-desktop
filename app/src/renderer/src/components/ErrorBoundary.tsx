@@ -39,7 +39,7 @@ export class ErrorBoundary extends Component<Props, State> {
           </div>
           <button
             onClick={() => window.location.reload()}
-            className="focus-ring self-start px-4 py-2 rounded-lg text-sm bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)] text-[var(--color-ink-warm)] hover:bg-[color-mix(in_srgb,var(--color-surface-2)_78%,transparent)]"
+            className="focus-ring self-start px-4 py-2 rounded-lg text-sm bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] text-[var(--color-ink-warm)] hover:bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)]"
           >
             Reload
           </button>

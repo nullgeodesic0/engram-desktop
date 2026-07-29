@@ -666,8 +666,8 @@ export function TopicMapView({
               title={t.title}
               className={`focus-ring max-w-64 px-3 py-1.5 rounded-lg text-sm text-left truncate transition-colors ${
                 selectedTopic === t.topic
-                  ? 'bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)] text-[var(--color-ink-warm)]'
-                  : 'text-[var(--color-text-dim)] hover:bg-[color-mix(in_srgb,var(--color-surface-2)_78%,transparent)]'
+                  ? 'bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] text-[var(--color-ink-warm)]'
+                  : 'text-[var(--color-text-dim)] hover:bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)]'
               }`}
             >
               {t.topic}
@@ -731,7 +731,7 @@ export function TopicMapView({
                     aria-pressed={plateView === v}
                     className={`focus-ring label-data text-[10px] uppercase tracking-wide px-2.5 py-1 rounded-md transition-colors ${
                       plateView === v
-                        ? 'bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)] text-[var(--color-ink-warm)]'
+                        ? 'bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] text-[var(--color-ink-warm)]'
                         : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]'
                     }`}
                   >
@@ -839,7 +839,7 @@ export function TopicMapView({
                     aria-pressed={replayActive}
                     className={`focus-ring px-1.5 py-0.5 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                       replayActive
-                        ? 'bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)] text-[var(--color-ink-warm)]'
+                        ? 'bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] text-[var(--color-ink-warm)]'
                         : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]'
                     }`}
                   >
@@ -852,7 +852,7 @@ export function TopicMapView({
                     title={replayActive ? 'One lens at a time — close the replay first' : undefined}
                     className={`focus-ring px-1.5 py-0.5 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                       dueLens && !replayActive
-                        ? 'bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)] text-[var(--color-ink-warm)]'
+                        ? 'bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] text-[var(--color-ink-warm)]'
                         : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]'
                     }`}
                   >
@@ -977,7 +977,7 @@ export function TopicMapView({
                   <button
                     onClick={() => setOpenNode(selectedNode)}
                     title="Open full node"
-                    className="focus-ring text-[10px] label-data px-2 py-1 bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)] text-[var(--color-ink-warm)] hover:text-[var(--color-text-primary)]"
+                    className="focus-ring text-[10px] label-data px-2 py-1 bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] text-[var(--color-ink-warm)] hover:text-[var(--color-text-primary)]"
                   >
                     Open ↗
                   </button>
@@ -994,22 +994,22 @@ export function TopicMapView({
               <div className="p-4 flex flex-col gap-3 divide-y divide-[var(--color-hairline)] [&>*:not(:first-child)]:pt-3">
                 <div className="flex gap-1.5 flex-wrap">
                   {node.capstone && (
-                    <span className="text-[10px] px-1.5 py-0.5 label-data" style={{ background: 'color-mix(in srgb, var(--color-surface-3) 78%, transparent)', color: 'var(--color-ink-hot)' }}>
+                    <span className="text-[10px] px-1.5 py-0.5 label-data" style={{ background: 'color-mix(in srgb, var(--color-surface-3) 68%, transparent)', color: 'var(--color-ink-hot)' }}>
                       ★ capstone
                     </span>
                   )}
                   {node.threshold && (
-                    <span className="text-[10px] px-1.5 py-0.5 label-data" style={{ background: 'color-mix(in srgb, var(--color-surface-3) 78%, transparent)', color: 'var(--color-ink-hot)' }}>
+                    <span className="text-[10px] px-1.5 py-0.5 label-data" style={{ background: 'color-mix(in srgb, var(--color-surface-3) 68%, transparent)', color: 'var(--color-ink-hot)' }}>
                       † threshold
                     </span>
                   )}
                   {node.arbitrary && (
-                    <span className="text-[10px] px-1.5 py-0.5 label-data bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)] text-[var(--color-text-dim)]">
+                    <span className="text-[10px] px-1.5 py-0.5 label-data bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] text-[var(--color-text-dim)]">
                       arbitrary
                     </span>
                   )}
                   {node.artifact && (
-                    <span className="text-[10px] px-1.5 py-0.5 label-data bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)] text-[var(--color-ink-violet)]">
+                    <span className="text-[10px] px-1.5 py-0.5 label-data bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] text-[var(--color-ink-violet)]">
                       explorable
                     </span>
                   )}
@@ -1018,7 +1018,7 @@ export function TopicMapView({
                 {node.artifact && (
                   <button
                     onClick={() => setExplorableNode(selectedNode)}
-                    className="focus-ring self-start px-3 py-1.5 text-xs bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)] text-[var(--color-ink-violet)] hover:bg-[color-mix(in_srgb,var(--color-surface-2)_78%,transparent)]"
+                    className="focus-ring self-start px-3 py-1.5 text-xs bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] text-[var(--color-ink-violet)] hover:bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)]"
                   >
                     Open explorable ↗
                   </button>
@@ -1144,17 +1144,17 @@ export function TopicMapView({
 
             <div className="flex gap-1.5 flex-wrap">
               {opened.capstone && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded label-data" style={{ background: 'color-mix(in srgb, var(--color-surface-3) 78%, transparent)', color: 'var(--color-ink-hot)' }}>
+                <span className="text-[10px] px-1.5 py-0.5 rounded label-data" style={{ background: 'color-mix(in srgb, var(--color-surface-3) 68%, transparent)', color: 'var(--color-ink-hot)' }}>
                   ★ capstone
                 </span>
               )}
               {opened.threshold && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded label-data" style={{ background: 'color-mix(in srgb, var(--color-surface-3) 78%, transparent)', color: 'var(--color-ink-hot)' }}>
+                <span className="text-[10px] px-1.5 py-0.5 rounded label-data" style={{ background: 'color-mix(in srgb, var(--color-surface-3) 68%, transparent)', color: 'var(--color-ink-hot)' }}>
                   † threshold
                 </span>
               )}
               {opened.arbitrary && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded label-data bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)] text-[var(--color-text-dim)]">
+                <span className="text-[10px] px-1.5 py-0.5 rounded label-data bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] text-[var(--color-text-dim)]">
                   arbitrary — sequence is bookkeeping, not physics
                 </span>
               )}
@@ -1241,7 +1241,7 @@ export function TopicMapView({
                           key={r}
                           onClick={() => setOpenNode(r)}
                           title={r}
-                          className="focus-ring text-xs px-2 py-1 rounded bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)] text-[var(--color-ink-cool)] hover:text-[var(--color-text-primary)]"
+                          className="focus-ring text-xs px-2 py-1 rounded bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] text-[var(--color-ink-cool)] hover:text-[var(--color-text-primary)]"
                         >
                           {humanizeNodeId(r)}
                         </button>
@@ -1278,7 +1278,7 @@ export function TopicMapView({
             {opened.artifact && (
               <button
                 onClick={() => setExplorableNode(openNode)}
-                className="focus-ring self-start mt-1 px-4 py-2 rounded-lg text-sm bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)] text-[var(--color-ink-violet)] hover:bg-[color-mix(in_srgb,var(--color-surface-2)_78%,transparent)]"
+                className="focus-ring self-start mt-1 px-4 py-2 rounded-lg text-sm bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] text-[var(--color-ink-violet)] hover:bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)]"
               >
                 Open explorable ↗
               </button>
