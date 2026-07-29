@@ -338,5 +338,5 @@ export function NeuralField() {
     }
   }, [])
 
-  return <div ref={containerRef} className="fixed inset-0 pointer-events-none" aria-hidden />
+  return <div ref={containerRef} className="fixed inset-0 pointer-events-none neural-field-root" aria-hidden />
 }
