@@ -43,7 +43,7 @@ export function EnvironmentGate({ children }: { children: ReactNode }) {
         <div className="flex items-center justify-between">
           <button
             onClick={() => window.engram.environmentCheck().then(setResult)}
-            className="focus-ring px-4 py-2 rounded-lg text-sm bg-[var(--color-surface-3)] text-[var(--color-ink-warm)] hover:bg-[var(--color-surface-2)]"
+            className="focus-ring px-4 py-2 rounded-lg text-sm bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)] text-[var(--color-ink-warm)] hover:bg-[color-mix(in_srgb,var(--color-surface-2)_78%,transparent)]"
           >
             Check again
           </button>

@@ -46,7 +46,7 @@ export function HelpSheet({ open, onClose }: { open: boolean; onClose: () => voi
                         {row.keys.map((k, ki) => (
                           <span key={ki} className="flex items-center gap-1.5">
                             {ki > 0 && <span className="text-[var(--color-text-faint)]">or</span>}
-                            <kbd className="label-data px-1.5 py-0.5 rounded border border-[var(--color-hairline)] bg-[var(--color-surface-2)] text-[var(--color-text-primary)] text-xs">
+                            <kbd className="label-data px-1.5 py-0.5 rounded border border-[var(--color-hairline)] bg-[color-mix(in_srgb,var(--color-surface-2)_78%,transparent)] text-[var(--color-text-primary)] text-xs">
                               {k}
                             </kbd>
                           </span>

@@ -69,13 +69,13 @@ export function GrowthScrubber({ t, onChangeT, dateLabel, inked, total }: Growth
     <div
       role="group"
       aria-label="Growth time-lapse"
-      className="absolute bottom-3 left-1/2 -translate-x-1/2 panel bg-[var(--color-surface)]/90 backdrop-blur px-3 py-2 flex items-center gap-3 w-[min(420px,90%)]"
+      className="absolute bottom-3 left-1/2 -translate-x-1/2 panel px-3 py-2 flex items-center gap-3 w-[min(420px,90%)]"
     >
       <button
         onClick={() => setPlaying((v) => !v)}
         aria-label={playing ? 'Pause growth time-lapse' : 'Play growth time-lapse'}
         aria-pressed={playing}
-        className="focus-ring shrink-0 w-7 h-7 flex items-center justify-center text-[var(--color-ink-warm)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-3)]"
+        className="focus-ring shrink-0 w-7 h-7 flex items-center justify-center text-[var(--color-ink-warm)] hover:text-[var(--color-text-primary)] hover:bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)]"
       >
         {playing ? (
           <svg width={11} height={11} viewBox="0 0 11 11" aria-hidden="true">

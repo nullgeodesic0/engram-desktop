@@ -128,7 +128,7 @@ export function ExplorableViewer({
           </div>
         </div>
 
-        <div className="flex-1 min-h-0 rounded-lg border border-[var(--color-hairline)] bg-[var(--color-surface-2)] overflow-hidden">
+        <div className="flex-1 min-h-0 rounded-lg border border-[var(--color-hairline)] bg-[color-mix(in_srgb,var(--color-surface-2)_78%,transparent)] overflow-hidden">
           {state.kind === 'loading' && (
             <div className="h-full flex items-center justify-center text-sm text-[var(--color-text-dim)]">
               Loading explorable…

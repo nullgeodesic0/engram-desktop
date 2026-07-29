@@ -102,7 +102,7 @@ export function TopicCard({ variant, topic: t, onOpen, resumable = false, onSett
         <div className="text-sm text-[var(--color-text-primary)] flex items-center gap-2">
           <span className="truncate">{t.title}</span>
           {resumable && (
-            <span className="label-data text-[10px] px-1.5 py-0.5 rounded text-[var(--color-ink-cool)] bg-[var(--color-surface-3)] shrink-0">
+            <span className="label-data text-[10px] px-1.5 py-0.5 rounded text-[var(--color-ink-cool)] bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)] shrink-0">
               continuing
             </span>
           )}

@@ -67,7 +67,7 @@ export function PressureReadout({
           : undefined
 
   return (
-    <div className="panel p-3 flex flex-col gap-2 bg-[var(--color-surface)]/90 backdrop-blur">
+    <div className="panel p-3 flex flex-col gap-2">
       <div className="fig-caption">Fig. — exam mode</div>
       <div className="grid grid-cols-2 gap-2">
         <StatBlock compact label="Unencoded" value={String(p.nodesRemaining)} tone="cool" />

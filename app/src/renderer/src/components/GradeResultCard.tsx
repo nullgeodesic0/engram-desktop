@@ -220,7 +220,7 @@ export function GradeResultCard({
       </div>
       {result.sBefore !== null && (
         <div className="flex items-center gap-2">
-          <div className="relative flex-1 h-1.5 border border-[var(--color-hairline)] bg-[var(--color-surface-2)] overflow-hidden">
+          <div className="relative flex-1 h-1.5 border border-[var(--color-hairline)] bg-[color-mix(in_srgb,var(--color-surface-2)_78%,transparent)] overflow-hidden">
             <div
               className="absolute inset-y-0 left-0 bg-[var(--color-ink-cool-dim)] transition-all duration-500"
               style={{ width: `${beforePct}%` }}
