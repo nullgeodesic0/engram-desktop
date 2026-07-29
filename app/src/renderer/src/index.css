@@ -408,7 +408,7 @@
      TRANSLUCENT since the glass-rail pass: the wash carries alpha (78% at the
      top easing to 84% at the foot) over a backdrop blur, so the NeuralField
      ambient reads through the rail as soft luminous weather instead of being
-     walled off — the same glass idiom the `.panel` classes carry (74-78% fill,
+     walled off — the same glass idiom the `.panel` classes carry (62-68% fill,
      blur 12px), just deeper blur because the field's bright synapse specks
      sit directly behind this surface at full brilliance. Legibility floor,
      computed against a deliberately generous "blurred bright cluster" patch
@@ -536,7 +536,7 @@
        through every card the way it reads through the rail (whose 78-84%
        wash set the precedent and the legibility floor). Deeper blur than the
        old 6px smooths the field's bright specks into weather behind text. */
-    background: color-mix(in srgb, var(--color-surface) 74%, transparent);
+    background: color-mix(in srgb, var(--color-surface) 62%, transparent);
     border: 1px solid var(--color-edge);
     border-radius: 0;
     box-shadow: inset 0 1px 0 rgba(228, 231, 237, 0.04), 0 8px 20px -12px rgba(0, 0, 0, 0.5);
@@ -544,7 +544,7 @@
     backdrop-filter: blur(12px);
   }
   .panel-raised {
-    background: color-mix(in srgb, var(--color-surface-2) 78%, transparent);
+    background: color-mix(in srgb, var(--color-surface-2) 68%, transparent);
     border: 1px solid var(--color-edge);
     border-radius: 0;
     box-shadow: inset 0 1px 0 rgba(228, 231, 237, 0.05), 0 8px 20px -12px rgba(0, 0, 0, 0.5);
@@ -557,7 +557,7 @@
      left-edge accent bar, since a canonical reveal isn't "one item in a
      column" the way a beat or probe is — it's the fixed, published answer. */
   .panel-plate {
-    background: color-mix(in srgb, var(--color-surface) 78%, transparent);
+    background: color-mix(in srgb, var(--color-surface) 68%, transparent);
     border: 1px solid var(--color-edge);
     border-radius: 0;
     box-shadow: inset 0 0 0 1px var(--color-ink-warm-dim), inset 0 1px 0 rgba(228, 231, 237, 0.04), 0 8px 20px -12px rgba(0, 0, 0, 0.5);

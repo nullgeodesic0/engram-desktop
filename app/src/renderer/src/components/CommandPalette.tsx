@@ -231,7 +231,7 @@ export function CommandPalette({ open, onClose, navCommands, onGoTopic, onGoNode
                   onMouseEnter={() => setActiveIdx(i)}
                   className={`focus-ring no-press w-full flex items-center justify-between px-4 py-2.5 text-left text-sm border ${
                     i === activeIdx
-                      ? 'bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)] border-[var(--color-ink-warm)] text-[var(--color-ink-warm)]'
+                      ? 'bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] border-[var(--color-ink-warm)] text-[var(--color-ink-warm)]'
                       : 'border-transparent text-[var(--color-text-primary)]'
                   }`}
                 >

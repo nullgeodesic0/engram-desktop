@@ -55,13 +55,13 @@ export function StabilityMovement({ results }: { results: GradeResult[] }) {
                 {humanizeNodeId(r.node)}
               </span>
               <div className="flex-1 flex flex-col gap-[2px] min-w-0">
-                <div className="h-[3px] bg-[color-mix(in_srgb,var(--color-surface-2)_78%,transparent)] overflow-hidden">
+                <div className="h-[3px] bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] overflow-hidden">
                   <div
                     className="h-full bg-[var(--color-ink-cool-dim)]"
                     style={{ width: `${beforePct}%` }}
                   />
                 </div>
-                <div className="h-[3px] bg-[color-mix(in_srgb,var(--color-surface-2)_78%,transparent)] overflow-hidden">
+                <div className="h-[3px] bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] overflow-hidden">
                   <div
                     className="h-full"
                     style={{ width: `${afterPct}%`, background: GRADE_COLOR[r.grade] }}

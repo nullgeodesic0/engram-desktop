@@ -25,7 +25,7 @@ export function TitleBar() {
       // Glass sweep: tier-1 alpha (74%), no backdrop-blur — this bar sits in
       // normal flow at the top of the window frame, nothing scrolls or
       // drifts behind it, so a blur would smooth nothing and just cost GPU.
-      className="app-drag shrink-0 h-9 flex items-center px-3 gap-3 border-b border-[var(--color-hairline)] bg-[color-mix(in_srgb,var(--color-surface)_74%,transparent)]"
+      className="app-drag shrink-0 h-9 flex items-center px-3 gap-3 border-b border-[var(--color-hairline)] bg-[color-mix(in_srgb,var(--color-surface)_62%,transparent)]"
       onDoubleClick={() => window.engram.windowMaximize()}
     >
       <div

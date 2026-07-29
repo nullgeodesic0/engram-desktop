@@ -77,7 +77,7 @@ export function MessageComposer({
             <span
               key={path}
               title={path}
-              className="label-data text-[10px] px-1.5 py-0.5 rounded bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)] text-[var(--color-text-dim)] flex items-center gap-1"
+              className="label-data text-[10px] px-1.5 py-0.5 rounded bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] text-[var(--color-text-dim)] flex items-center gap-1"
             >
               📎 {fileName(path)}
               <button
@@ -113,7 +113,7 @@ export function MessageComposer({
           placeholder={placeholder}
           aria-label={placeholder}
           rows={chamber ? 12 : markdownPreview ? 8 : 4}
-          className="focus-ring panel px-4 py-3 text-sm bg-[color-mix(in_srgb,var(--color-surface-2)_78%,transparent)] text-[var(--color-text-primary)] resize-none w-full"
+          className="focus-ring panel px-4 py-3 text-sm bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] text-[var(--color-text-primary)] resize-none w-full"
         />
         {markdownPreview && (
           <div className="panel px-4 py-3 overflow-y-auto" style={{ maxHeight: '13rem' }}>
@@ -126,7 +126,7 @@ export function MessageComposer({
           <button
             onClick={onAttach}
             title="Attach files"
-            className="focus-ring px-3 py-2 rounded-lg text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] hover:bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)]"
+            className="focus-ring px-3 py-2 rounded-lg text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] hover:bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)]"
           >
             📎 Attach
           </button>
@@ -134,7 +134,7 @@ export function MessageComposer({
             onClick={onToggleMarkdownPreview}
             title="Toggle a live rendered preview of your answer (Markdown + LaTeX) alongside the input"
             aria-pressed={markdownPreview}
-            className={`focus-ring px-3 py-2 rounded-lg text-xs hover:bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)] ${
+            className={`focus-ring px-3 py-2 rounded-lg text-xs hover:bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] ${
               markdownPreview ? 'text-[var(--color-ink-warm)]' : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]'
             }`}
           >
@@ -145,7 +145,7 @@ export function MessageComposer({
               onClick={() => onChamberChange(!chamber)}
               title="A blurred transcript, so recall comes from you, not the page above"
               aria-pressed={chamber}
-              className={`focus-ring px-3 py-2 rounded-lg text-xs hover:bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)] ${
+              className={`focus-ring px-3 py-2 rounded-lg text-xs hover:bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] ${
                 chamber ? 'text-[var(--color-ink-warm)]' : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]'
               } ${inviteChamber && !chamber ? 'chamber-invite' : ''}`}
             >
@@ -156,7 +156,7 @@ export function MessageComposer({
             <button
               onClick={useAssist}
               title="Prefills an honest blank — you still have to send it yourself"
-              className="focus-ring px-3 py-2 rounded-lg text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] hover:bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)]"
+              className="focus-ring px-3 py-2 rounded-lg text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] hover:bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)]"
             >
               {assist.label}
             </button>
@@ -167,7 +167,7 @@ export function MessageComposer({
           <button
             onClick={submit}
             disabled={!production.trim() || !!disabledReason}
-            className="focus-ring px-4 py-2 rounded-lg text-sm bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)] text-[var(--color-ink-warm)] hover:bg-[color-mix(in_srgb,var(--color-surface-2)_78%,transparent)] disabled:opacity-40"
+            className="focus-ring px-4 py-2 rounded-lg text-sm bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] text-[var(--color-ink-warm)] hover:bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] disabled:opacity-40"
           >
             Submit
           </button>

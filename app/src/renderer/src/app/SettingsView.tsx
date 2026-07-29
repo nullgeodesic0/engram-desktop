@@ -217,7 +217,7 @@ function RestoreModal({ sessionActive, onClose }: { sessionActive: boolean; onCl
                 value={confirmText}
                 onChange={(e) => setConfirmText(e.target.value)}
                 placeholder="restore"
-                className="focus-ring panel px-3 py-2 text-sm bg-[color-mix(in_srgb,var(--color-surface-2)_78%,transparent)] text-[var(--color-text-primary)]"
+                className="focus-ring panel px-3 py-2 text-sm bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] text-[var(--color-text-primary)]"
               />
             </div>
 
@@ -300,8 +300,8 @@ function ToggleRow({
             onClick={() => onPick(opt.value)}
             className={`focus-ring px-3 py-1.5 rounded-lg text-xs ${
               current === opt.value
-                ? 'bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)] text-[var(--color-ink-warm)]'
-                : 'bg-[color-mix(in_srgb,var(--color-surface-2)_78%,transparent)] text-[var(--color-text-dim)] hover:text-[var(--color-text-primary)]'
+                ? 'bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] text-[var(--color-ink-warm)]'
+                : 'bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] text-[var(--color-text-dim)] hover:text-[var(--color-text-primary)]'
             }`}
           >
             {opt.label}
@@ -641,13 +641,13 @@ export function SettingsView() {
                 value={cueInput}
                 onChange={(e) => setCueInput(e.target.value)}
                 placeholder="Cue — e.g. “when I open the terminal in the morning”"
-                className="focus-ring panel px-3 py-2 text-sm bg-[color-mix(in_srgb,var(--color-surface-2)_78%,transparent)] text-[var(--color-text-primary)]"
+                className="focus-ring panel px-3 py-2 text-sm bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] text-[var(--color-text-primary)]"
               />
               <input
                 value={actionInput}
                 onChange={(e) => setActionInput(e.target.value)}
                 placeholder="Action — e.g. “I clear one review”"
-                className="focus-ring panel px-3 py-2 text-sm bg-[color-mix(in_srgb,var(--color-surface-2)_78%,transparent)] text-[var(--color-text-primary)]"
+                className="focus-ring panel px-3 py-2 text-sm bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] text-[var(--color-text-primary)]"
               />
               <div className="flex gap-2">
                 <Button variant="ghost" onClick={submitCommitment} disabled={!cueInput.trim() || !actionInput.trim()}>
@@ -674,7 +674,7 @@ export function SettingsView() {
         {model.interests.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {model.interests.map((i) => (
-              <span key={i} className="text-xs px-2 py-1 rounded-lg bg-[color-mix(in_srgb,var(--color-surface-2)_78%,transparent)] text-[var(--color-text-dim)]">
+              <span key={i} className="text-xs px-2 py-1 rounded-lg bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] text-[var(--color-text-dim)]">
                 {i}
               </span>
             ))}
@@ -688,7 +688,7 @@ export function SettingsView() {
               if (e.key === 'Enter') addInterest()
             }}
             placeholder="Add an interest — e.g. “sailing”"
-            className="focus-ring panel px-3 py-2 text-sm bg-[color-mix(in_srgb,var(--color-surface-2)_78%,transparent)] text-[var(--color-text-primary)] flex-1 max-w-xs"
+            className="focus-ring panel px-3 py-2 text-sm bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] text-[var(--color-text-primary)] flex-1 max-w-xs"
           />
           <Button variant="ghost" onClick={addInterest} disabled={!interestInput.trim()}>
             + Add
@@ -705,7 +705,7 @@ export function SettingsView() {
         {model.goals.length > 0 ? (
           <div className="flex flex-wrap gap-2">
             {model.goals.map((g) => (
-              <span key={g} className="text-xs px-2 py-1 rounded-lg bg-[color-mix(in_srgb,var(--color-surface-2)_78%,transparent)] text-[var(--color-text-dim)]">
+              <span key={g} className="text-xs px-2 py-1 rounded-lg bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] text-[var(--color-text-dim)]">
                 {g}
               </span>
             ))}
@@ -727,7 +727,7 @@ export function SettingsView() {
         {model.accessibility.length > 0 ? (
           <div className="flex flex-wrap gap-2">
             {model.accessibility.map((a) => (
-              <span key={a} className="text-xs px-2 py-1 rounded-lg bg-[color-mix(in_srgb,var(--color-surface-2)_78%,transparent)] text-[var(--color-text-dim)]">
+              <span key={a} className="text-xs px-2 py-1 rounded-lg bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] text-[var(--color-text-dim)]">
                 {a}
               </span>
             ))}
@@ -749,7 +749,7 @@ export function SettingsView() {
         {Object.keys(model.rhythms).length > 0 && (
           <div className="flex flex-wrap gap-2">
             {Object.entries(model.rhythms).map(([k, v]) => (
-              <span key={k} className="text-xs px-2 py-1 rounded-lg bg-[color-mix(in_srgb,var(--color-surface-2)_78%,transparent)] text-[var(--color-text-dim)]">
+              <span key={k} className="text-xs px-2 py-1 rounded-lg bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] text-[var(--color-text-dim)]">
                 {k}: {String(v)}
               </span>
             ))}
@@ -760,7 +760,7 @@ export function SettingsView() {
             value={rhythmKeyInput}
             onChange={(e) => setRhythmKeyInput(e.target.value)}
             placeholder="Key — e.g. “best_slot”"
-            className="focus-ring panel px-3 py-2 text-sm bg-[color-mix(in_srgb,var(--color-surface-2)_78%,transparent)] text-[var(--color-text-primary)] flex-1 max-w-[9rem]"
+            className="focus-ring panel px-3 py-2 text-sm bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] text-[var(--color-text-primary)] flex-1 max-w-[9rem]"
           />
           <input
             value={rhythmValueInput}
@@ -769,7 +769,7 @@ export function SettingsView() {
               if (e.key === 'Enter') addRhythm()
             }}
             placeholder="Value — e.g. “evening”"
-            className="focus-ring panel px-3 py-2 text-sm bg-[color-mix(in_srgb,var(--color-surface-2)_78%,transparent)] text-[var(--color-text-primary)] flex-1 max-w-xs"
+            className="focus-ring panel px-3 py-2 text-sm bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] text-[var(--color-text-primary)] flex-1 max-w-xs"
           />
           <Button variant="ghost" onClick={addRhythm} disabled={!rhythmKeyInput.trim() || !rhythmValueInput.trim()}>
             + Add

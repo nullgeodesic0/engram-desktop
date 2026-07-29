@@ -249,7 +249,7 @@ export const TranscriptMinimap = memo(function TranscriptMinimap({
           the component doctrine comment), just fed the LIVE scrollTop
           instead of a landing-target one. */}
       <div
-        className="absolute left-0 right-0 rounded-sm bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)] opacity-70 pointer-events-none"
+        className="absolute left-0 right-0 rounded-sm bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] opacity-70 pointer-events-none"
         style={{ top: `${bandStart}%`, height: `${Math.max(1.5, bandEnd - bandStart)}%` }}
         aria-hidden="true"
       />

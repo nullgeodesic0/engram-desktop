@@ -107,7 +107,7 @@ export const AskCard = memo(function AskCard({
                   <button
                     key={opt.label}
                     onClick={() => onAnswer?.([opt.label])}
-                    className="focus-ring panel px-3 py-3 flex flex-col items-center gap-1.5 text-center hover:bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)] hover:border-[var(--color-ink-warm-dim)] transition-colors duration-[var(--dur-base)]"
+                    className="focus-ring panel px-3 py-3 flex flex-col items-center gap-1.5 text-center hover:bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] hover:border-[var(--color-ink-warm-dim)] transition-colors duration-[var(--dur-base)]"
                   >
                     <span className="text-lg leading-none" aria-hidden="true" style={{ color: style.color }}>
                       {style.icon}
@@ -124,7 +124,7 @@ export const AskCard = memo(function AskCard({
                 <button
                   key={opt.label}
                   onClick={() => onAnswer?.([opt.label])}
-                  className="focus-ring panel px-4 py-2.5 text-left hover:bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)] hover:border-[var(--color-ink-warm-dim)] transition-colors duration-[var(--dur-base)]"
+                  className="focus-ring panel px-4 py-2.5 text-left hover:bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] hover:border-[var(--color-ink-warm-dim)] transition-colors duration-[var(--dur-base)]"
                 >
                   <MathRenderer text={opt.label} inlineOnly className="text-sm text-[var(--color-text-primary)]" />
                   {opt.description && (
@@ -149,7 +149,7 @@ export const AskCard = memo(function AskCard({
               value={otherText}
               onChange={(e) => setOtherText(e.target.value)}
               placeholder="Type an answer, or leave blank to skip"
-              className="focus-ring panel px-3 py-2 text-sm bg-[color-mix(in_srgb,var(--color-surface-2)_78%,transparent)] text-[var(--color-text-primary)]"
+              className="focus-ring panel px-3 py-2 text-sm bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] text-[var(--color-text-primary)]"
             />
             <div className="flex gap-2 justify-end">
               <button onClick={() => onAnswer?.(null)} className="focus-ring text-xs text-[var(--color-text-faint)] px-3 py-1.5">

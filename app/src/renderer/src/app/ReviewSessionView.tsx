@@ -1270,7 +1270,7 @@ export function ReviewSessionView({ onActivity, onGoHome }: ReviewSessionViewPro
                         title={ticketPinned ? 'Unpin — tuck away unless the cursor visits the left edge' : 'Pin — keep the ticket out'}
                         className={`focus-ring no-press absolute bottom-1.5 right-1.5 h-5 w-5 flex items-center justify-center transition-colors duration-[var(--dur-fast)] ${
                           ticketPinned
-                            ? 'text-[var(--color-ink-warm)] bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)]'
+                            ? 'text-[var(--color-ink-warm)] bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)]'
                             : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]'
                         }`}
                       >
@@ -1351,7 +1351,7 @@ export function ReviewSessionView({ onActivity, onGoHome }: ReviewSessionViewPro
                           title={probePinned ? 'Unpin — tuck away unless the cursor visits the top' : 'Pin — keep the probe out'}
                           className={`focus-ring no-press absolute bottom-1.5 right-1.5 h-5 w-5 flex items-center justify-center transition-colors duration-[var(--dur-fast)] ${
                             probePinned
-                              ? 'text-[var(--color-ink-warm)] bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)]'
+                              ? 'text-[var(--color-ink-warm)] bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)]'
                               : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]'
                           }`}
                         >
@@ -1456,7 +1456,7 @@ export function ReviewSessionView({ onActivity, onGoHome }: ReviewSessionViewPro
                     <ActivityLine activity={tutorActivity.activity} />
                     <button
                       onClick={stopSession}
-                      className="focus-ring text-xs px-2.5 py-1 rounded-lg text-[var(--color-text-faint)] hover:text-[var(--color-ink-danger)] hover:bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)]"
+                      className="focus-ring text-xs px-2.5 py-1 rounded-lg text-[var(--color-text-faint)] hover:text-[var(--color-ink-danger)] hover:bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)]"
                     >
                       Stop
                     </button>

@@ -16,7 +16,7 @@ export function SegmentedControl<T extends string>({
           onClick={() => onChange(o.value)}
           className={`focus-ring px-3 py-1.5 text-xs transition-colors ${
             o.value === value
-              ? 'bg-[color-mix(in_srgb,var(--color-surface-3)_78%,transparent)] text-[var(--color-ink-warm)]'
+              ? 'bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] text-[var(--color-ink-warm)]'
               : 'text-[var(--color-text-dim)] hover:text-[var(--color-text-primary)]'
           }`}
         >

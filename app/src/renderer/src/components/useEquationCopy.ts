@@ -52,7 +52,7 @@ function showCopiedWhisper(x: number, y: number): void {
   el.textContent = 'Copied'
   el.setAttribute('aria-hidden', 'true')
   el.className =
-    'fixed z-[60] pointer-events-none label-data text-[10px] text-[var(--color-ink-warm)] bg-[color-mix(in_srgb,var(--color-surface-2)_78%,transparent)] border border-[var(--color-hairline)] rounded px-2 py-1 shadow-lg transition-opacity ease-out'
+    'fixed z-[60] pointer-events-none label-data text-[10px] text-[var(--color-ink-warm)] bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] border border-[var(--color-hairline)] rounded px-2 py-1 shadow-lg transition-opacity ease-out'
   el.style.left = `${x + 12}px`
   el.style.top = `${y - 10}px`
   el.style.transitionDuration = `${WHISPER_FADE_MS}ms`
