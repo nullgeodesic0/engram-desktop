@@ -97,7 +97,7 @@ export function ExplorableViewer({
       <div className="flex flex-col gap-3 h-full">
         <div className="flex items-start justify-between gap-3 shrink-0">
           <div>
-            <h2 className="font-[var(--font-display)] text-xl text-[var(--color-text-primary)]">{displayTitle}</h2>
+            <h2 className="font-(family-name:--font-display) text-xl text-[var(--color-text-primary)]">{displayTitle}</h2>
             {nodeId && (
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="label-data text-[10px] text-[var(--color-text-faint)]">{nodeId}</span>

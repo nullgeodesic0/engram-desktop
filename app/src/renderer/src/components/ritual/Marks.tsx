@@ -167,7 +167,7 @@ export const BeatMarkCard = memo(function BeatMarkCard({ beat, content }: { beat
         <MathRenderer
           text={excerpt}
           inlineOnly
-          className="font-[var(--font-serif)] italic text-xs text-[var(--color-text-dim)] flex-1 min-w-0 overflow-hidden whitespace-nowrap text-ellipsis"
+          className="font-(family-name:--font-serif) italic text-xs text-[var(--color-text-dim)] flex-1 min-w-0 overflow-hidden whitespace-nowrap text-ellipsis"
         />
       )}
       <span className="h-px w-6 shrink-0 bg-[var(--color-hairline)]" />
@@ -230,7 +230,7 @@ export const StashStamp = memo(function StashStamp() {
 export const FigureCard = memo(function FigureCard({ title, body }: { title: string | null; body: string }) {
   return (
     <div className="tilt-card-soft panel px-4 py-3 max-w-[92%] flex flex-col gap-2">
-      {title && <div className="font-[var(--font-serif)] text-sm text-[var(--color-text-primary)]">{title}</div>}
+      {title && <div className="font-(family-name:--font-serif) text-sm text-[var(--color-text-primary)]">{title}</div>}
       <MarkdownPreview source={body} />
     </div>
   )

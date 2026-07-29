@@ -31,7 +31,7 @@ export function HelpSheet({ open, onClose }: { open: boolean; onClose: () => voi
     >
       <div className="flex flex-col gap-7">
         <section className="flex flex-col gap-3">
-          <h3 className="font-[var(--font-display)] text-sm text-[var(--color-text-primary)]">Keyboard reference</h3>
+          <h3 className="font-(family-name:--font-display) text-sm text-[var(--color-text-primary)]">Keyboard reference</h3>
           <p className="fig-caption">Fig. — every shortcut that actually does something. Two keys on one row do the same thing.</p>
           <div className="flex flex-col gap-4">
             {SHORTCUT_GROUPS.map((group) => (
@@ -65,12 +65,12 @@ export function HelpSheet({ open, onClose }: { open: boolean; onClose: () => voi
         </section>
 
         <section className="flex flex-col gap-3">
-          <h3 className="font-[var(--font-display)] text-sm text-[var(--color-text-primary)]">Glossary</h3>
+          <h3 className="font-(family-name:--font-display) text-sm text-[var(--color-text-primary)]">Glossary</h3>
           <p className="fig-caption">Fig. — the vocabulary this app uses constantly and never otherwise defines.</p>
           <dl className="flex flex-col gap-4">
             {GLOSSARY.map((g) => (
               <div key={g.term} className="flex flex-col gap-1">
-                <dt className="font-[var(--font-serif)] text-[var(--color-ink-warm)]">{g.term}</dt>
+                <dt className="font-(family-name:--font-serif) text-[var(--color-ink-warm)]">{g.term}</dt>
                 <dd className="text-sm text-[var(--color-text-primary)]">{g.definition}</dd>
                 <dd className="fig-caption">Seen in: {g.seenIn}</dd>
               </div>

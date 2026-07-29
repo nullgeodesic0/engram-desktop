@@ -28,7 +28,7 @@ export const Frontispiece = memo(function Frontispiece({ phase }: { phase: strin
           <circle cx="7.5" cy="7.5" r="5.5" stroke="currentColor" strokeWidth="1" />
           <path d="M7.5 3.5 V11.5 M3.5 7.5 H11.5" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
         </svg>
-        <span className="font-[var(--font-serif)] italic text-sm text-[var(--color-text-primary)] tracking-wide whitespace-nowrap">
+        <span className="font-(family-name:--font-serif) italic text-sm text-[var(--color-text-primary)] tracking-wide whitespace-nowrap">
           {title}
         </span>
       </div>

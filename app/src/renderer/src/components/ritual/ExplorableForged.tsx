@@ -65,7 +65,7 @@ export const ExplorableForged = memo(function ExplorableForged({
           </svg>
           <span className="label-data text-[10px] tracking-[0.14em] text-[var(--color-ink-violet)]">EXPLORABLE FORGED</span>
         </div>
-        <div className="font-[var(--font-serif)] text-sm text-[var(--color-text-primary)]">{title}</div>
+        <div className="font-(family-name:--font-serif) text-sm text-[var(--color-text-primary)]">{title}</div>
         {node && <div className="fig-caption">for {humanizeNodeId(node)}</div>}
 
         {path && status !== 'missing' && (

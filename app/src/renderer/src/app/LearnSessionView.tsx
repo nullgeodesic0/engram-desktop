@@ -1567,7 +1567,7 @@ export function LearnSessionView({
               "Learn" h1, no repeated title on the opening plate below. */}
           {started ? (
             <div className="flex flex-col gap-0.5 min-w-0">
-              <h1 className="font-[var(--font-serif)] text-xl leading-tight text-[var(--color-text-primary)] truncate">
+              <h1 className="font-(family-name:--font-serif) text-xl leading-tight text-[var(--color-text-primary)] truncate">
                 {activeTopic ? activeTopic.title : 'New topic'}
               </h1>
               {/* The identity sub-line: current node · position · walk, in
@@ -1606,7 +1606,7 @@ export function LearnSessionView({
             </div>
           ) : (
             <div className="flex flex-col gap-2">
-              <h1 className="font-[var(--font-serif)] text-[length:var(--text-display)] text-[var(--color-text-primary)]">Learn</h1>
+              <h1 className="font-(family-name:--font-serif) text-[length:var(--text-display)] text-[var(--color-text-primary)]">Learn</h1>
               {/* The shelf's briefing figure (ui/PlateFigure — the ready-room
                   grammar): territory count as the headline, the atlas-wide due
                   total as its note. Same numbers the old faint one-line
@@ -1714,7 +1714,7 @@ export function LearnSessionView({
             {whyChain.map((step, i) => (
               <div key={i} className="flex items-start gap-2">
                 <InkNode id={`why-${i}`} variant="outlined" color="var(--color-ink-cool)" size={10} />
-                <span className="text-xs font-[var(--font-serif)] text-[var(--color-text-dim)]">{step}</span>
+                <span className="text-xs font-(family-name:--font-serif) text-[var(--color-text-dim)]">{step}</span>
               </div>
             ))}
           </div>
@@ -1755,7 +1755,7 @@ export function LearnSessionView({
             {topics !== null && topics.length === 0 && envBroken && envCheck && (
               <div className="flex flex-col items-start gap-3 py-10 w-full max-w-lg">
                 <div className="fig-caption">Fig. — setup needed before your first topic</div>
-                <div className="font-[var(--font-serif)] text-[length:var(--text-display)] text-[var(--color-text-primary)]">
+                <div className="font-(family-name:--font-serif) text-[length:var(--text-display)] text-[var(--color-text-primary)]">
                   Two things first.
                 </div>
                 <p className="text-sm text-[var(--color-text-dim)] max-w-md">
@@ -1773,7 +1773,7 @@ export function LearnSessionView({
             {topics !== null && topics.length === 0 && envCheck !== null && !envBroken && (
               <Card className="px-5 py-4 flex flex-col gap-3 items-start">
                 <div className="fig-caption">Fig. — no territories mapped yet</div>
-                <div className="font-[var(--font-serif)] text-[length:var(--text-display)] text-[var(--color-text-primary)]">
+                <div className="font-(family-name:--font-serif) text-[length:var(--text-display)] text-[var(--color-text-primary)]">
                   Every topic starts as a first-principles map.
                 </div>
                 <Button variant="primary" onClick={() => setNewTopicOpen(true)} disabled={rateLimitBlocking}>

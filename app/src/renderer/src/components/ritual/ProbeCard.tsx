@@ -44,7 +44,7 @@ export const ProbeCard = memo(function ProbeCard({
         >
           {header.index}/{header.total}
         </span>
-        <span className="font-[var(--font-serif)] text-sm text-[var(--color-text-primary)]">
+        <span className="font-(family-name:--font-serif) text-sm text-[var(--color-text-primary)]">
           {humanizeNodeId(header.node)}
         </span>
         {header.topic && (

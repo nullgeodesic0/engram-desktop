@@ -238,7 +238,7 @@ export function TopicDrilldownView({ topic, topicSummary, due, history, graphs, 
         </Button>
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
-            <h1 className="font-[var(--font-serif)] text-[length:var(--text-display)] text-[var(--color-text-primary)]">
+            <h1 className="font-(family-name:--font-serif) text-[length:var(--text-display)] text-[var(--color-text-primary)]">
               {topicSummary.title}
             </h1>
             <div className="label-data text-xs text-[var(--color-text-faint)] mt-1">{topic}</div>

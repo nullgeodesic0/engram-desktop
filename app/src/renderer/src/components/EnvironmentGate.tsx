@@ -31,7 +31,7 @@ export function EnvironmentGate({ children }: { children: ReactNode }) {
     <div className="h-full flex items-center justify-center p-8">
       <div className="panel-raised max-w-lg w-full p-7 flex flex-col gap-5">
         <div>
-          <h1 className="font-[var(--font-display)] text-xl text-[var(--color-text-primary)]">Setup needed</h1>
+          <h1 className="font-(family-name:--font-display) text-xl text-[var(--color-text-primary)]">Setup needed</h1>
           <p className="text-sm text-[var(--color-text-dim)] mt-1">
             Engram Desktop scripts the Claude Code CLI directly — it needs both of these in place before a
             learning session can run.

@@ -81,7 +81,7 @@ export const SessionCeremony = memo(function SessionCeremony({
         </div>
       )}
       {commitment && (
-        <div className="border-t border-[var(--color-hairline)] pt-2.5 font-[var(--font-serif)] italic text-xs text-[var(--color-text-dim)] flex items-baseline gap-1 flex-wrap">
+        <div className="border-t border-[var(--color-hairline)] pt-2.5 font-(family-name:--font-serif) italic text-xs text-[var(--color-text-dim)] flex items-baseline gap-1 flex-wrap">
           <span>“</span>
           <MathRenderer text={commitment} inlineOnly />
           <span>”</span>
