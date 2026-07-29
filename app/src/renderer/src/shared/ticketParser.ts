@@ -37,17 +37,32 @@ function parseRows(lines: string[]): { key: string; value: string }[] {
     // that starts with a digit, since every observed value leads with a
     // count. A naive "last token is the value" split (the old approach)
     // mis-parses "frontier 18 new" as key "frontier 18" / value "new".
+    //
+    // A cell that OPENS with "(" (e.g. "due  13  (showing 12)") is a
+    // parenthetical qualifier of the value just parsed on this same line,
+    // not a new key/value pair — without this, it mis-splits into a bogus
+    // {key: "(showing", value: "12)"} field, since the digit-anchor regex
+    // below happily matches "(showing 12)" as key "(showing" / value "12)".
+    // Fold it onto the immediately-preceding field on this line instead.
     const cells = line.trim().split(/\s{2,}/)
     let pendingKey: string | null = null
+    let lastField: { key: string; value: string } | null = null
     for (const cell of cells) {
+      if (cell.startsWith('(') && lastField) {
+        lastField.value = `${lastField.value} ${cell}`
+        continue
+      }
       if (pendingKey !== null) {
-        fields.push({ key: pendingKey, value: cell })
+        lastField = { key: pendingKey, value: cell }
+        fields.push(lastField)
         pendingKey = null
         continue
       }
       const m = cell.match(/^(.+?)\s+(\d\S*(?:\s\S+)*)$/)
-      if (m) fields.push({ key: m[1].trim(), value: m[2] })
-      else pendingKey = cell
+      if (m) {
+        lastField = { key: m[1].trim(), value: m[2] }
+        fields.push(lastField)
+      } else pendingKey = cell
     }
   }
   return fields

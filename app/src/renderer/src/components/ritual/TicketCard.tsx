@@ -7,16 +7,33 @@ import { StatFraction } from '../ui/StatFraction'
  * shared `.stat-fraction` anatomy instead of flat mono text. */
 const FRACTION_RE = /^(\d+)\s*\/\s*(\d+)(.*)$/
 
+/** Matches a trailing parenthetical qualifier on an otherwise plain value
+ * (e.g. "13 (showing 12)") so it can render dimmer/smaller than the value it
+ * qualifies, instead of running together as one flat string. */
+const PAREN_TAIL_RE = /^(.*?)\s*(\(.*\))$/
+
 function FieldValue({ value }: { value: string }) {
-  const m = FRACTION_RE.exec(value.trim())
-  if (!m) return <span className="label-data text-xs text-[var(--color-text-dim)]">{value}</span>
-  const tail = m[3].trim()
-  return (
-    <span className="label-data text-xs text-[var(--color-text-dim)] inline-flex items-baseline gap-1">
-      <StatFraction n={m[1]} d={m[2]} className="text-xs" />
-      {tail && <span>{tail}</span>}
-    </span>
-  )
+  const trimmed = value.trim()
+  const fracMatch = FRACTION_RE.exec(trimmed)
+  if (fracMatch) {
+    const tail = fracMatch[3].trim()
+    return (
+      <span className="label-data text-xs text-[var(--color-text-dim)] inline-flex items-baseline gap-1">
+        <StatFraction n={fracMatch[1]} d={fracMatch[2]} className="text-xs" />
+        {tail && <span>{tail}</span>}
+      </span>
+    )
+  }
+  const parenMatch = PAREN_TAIL_RE.exec(trimmed)
+  if (parenMatch && parenMatch[1]) {
+    return (
+      <span className="label-data text-xs text-[var(--color-text-dim)] inline-flex items-baseline gap-1">
+        <span>{parenMatch[1]}</span>
+        <span className="text-[var(--color-text-faint)]">{parenMatch[2]}</span>
+      </span>
+    )
+  }
+  return <span className="label-data text-xs text-[var(--color-text-dim)]">{value}</span>
 }
 
 /** The session ticket — the dialogue grammar's fenced mono block given a home
@@ -46,6 +63,28 @@ export const TicketCard = memo(function TicketCard({
   const topic = ticket.fields.find((f) => f.key.toLowerCase() === 'topic')
   const rest = ticket.fields.filter((f) => f !== topic)
   const padX = compact ? 'px-3' : 'px-4'
+  // Every ticket shape gets a real headline, not just the ones with a
+  // `topic` field: Review tickets aggregate across multiple topics (no
+  // single `topic` value exists to promote), which previously left this
+  // variant with zero large-type hierarchy — just the small tracked-uppercase
+  // band line and label-data rows. When `topic` is present it stays the
+  // headline (unchanged). When it's absent, the ticket's own kind/mode —
+  // already stated small in the band — is restated here at headline weight
+  // ("Review · Standard"), the same font-display treatment as the topic
+  // case. This deliberately does NOT reuse PlateFigure/`.figure-display`
+  // (ReadyRoomPlate's big serif due-count): that class is pinned by comment
+  // in index.css to one size "by decree" so every decision-moment plate
+  // rhymes at full scale, and this compact, chat-embedded, max-w-sm ticket
+  // card is not that surface — shrinking `.figure-display` down to fit would
+  // both violate that decree and invent a second scale for the same class.
+  // Reusing the existing topic-headline pattern instead is zero new
+  // typography, matches the "one number, said once, big" READING at this
+  // card's own scale via the kind/mode words, and needs no new component.
+  const headline = topic
+    ? topic.value
+    : `${ticket.kind[0]?.toUpperCase()}${ticket.kind.slice(1)}${
+        ticket.mode ? ` · ${ticket.mode[0]?.toUpperCase()}${ticket.mode.slice(1)}` : ''
+      }`
   return (
     <div
       className={`tilt-card-soft panel-raised relative ${pinned ? 'dogear' : ''} ${compact ? '' : 'max-w-sm'}`}
@@ -64,13 +103,11 @@ export const TicketCard = memo(function TicketCard({
         )}
       </div>
       <div className={`${padX} ${compact ? 'py-2' : 'py-2.5'}`}>
-        {topic && (
-          <div className={`font-(family-name:--font-display) font-semibold text-[var(--color-text-primary)] ${compact ? 'text-sm' : 'text-lg'}`}>
-            {topic.value}
-          </div>
-        )}
+        <div className={`font-(family-name:--font-display) font-semibold text-[var(--color-text-primary)] ${compact ? 'text-sm' : 'text-lg'}`}>
+          {headline}
+        </div>
         {rest.length > 0 && (
-          <div className={`${topic ? (compact ? 'mt-1.5' : 'mt-2') : ''} divide-y divide-[var(--color-hairline)] border-t border-[var(--color-hairline)]`}>
+          <div className={`${compact ? 'mt-1.5' : 'mt-2'} divide-y divide-[var(--color-hairline)] border-t border-[var(--color-hairline)]`}>
             {rest.map((f) => (
               <div key={f.key} className={`flex items-baseline justify-between gap-3 ${compact ? 'py-1' : 'py-1.5'}`}>
                 <span className="label-data text-[10px] text-[var(--color-text-faint)] uppercase tracking-wider">{f.key}</span>
