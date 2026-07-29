@@ -658,20 +658,26 @@ export function TopicMapView({
     <div className="p-8 flex flex-col gap-4 h-full min-h-0">
       <div className="shrink-0 flex flex-col gap-3">
         <PageHeader title="Topic Map" />
-        <div className="flex gap-2 flex-wrap">
-          {topics.map((t) => (
-            <button
-              key={t.topic}
-              onClick={() => setSelectedTopic(t.topic)}
-              title={t.title}
-              className={`focus-ring max-w-64 px-3 py-1.5 rounded-lg text-sm text-left truncate transition-colors ${
-                selectedTopic === t.topic
-                  ? 'bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] text-[var(--color-ink-warm)]'
-                  : 'text-[var(--color-text-dim)] hover:bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)]'
-              }`}
-            >
-              {t.topic}
-            </button>
+        {/* Topic selector — the masthead command-bar idiom (tracked
+            uppercase .cmd-items, hairline separators between items) instead
+            of the old filled pill chips. The selected topic is warm and
+            holds the cmd-item's underline open ([&::after]:scale-x-100 —
+            the same 1px rule the idiom slides in on hover). */}
+        <div role="group" aria-label="Topics" className="flex items-center gap-x-3 gap-y-2 flex-wrap">
+          {topics.map((t, i) => (
+            <span key={t.topic} className="inline-flex items-center gap-x-3 min-w-0">
+              {i > 0 && <span className="h-3 w-px bg-[var(--color-hairline)] shrink-0" aria-hidden="true" />}
+              <button
+                onClick={() => setSelectedTopic(t.topic)}
+                title={t.title}
+                aria-pressed={selectedTopic === t.topic}
+                className={`focus-ring cmd-item label-data text-[10px] uppercase tracking-[0.16em] max-w-64 truncate text-left ${
+                  selectedTopic === t.topic ? 'text-[var(--color-ink-warm)] [&::after]:scale-x-100' : ''
+                }`}
+              >
+                {t.topic}
+              </button>
+            </span>
           ))}
         </div>
       </div>
@@ -699,11 +705,13 @@ export function TopicMapView({
               the map without touching the map's own ink — the plate reads as
               the thing in focus, everything else as depth. */}
           <div className="relative flex-1 min-w-0 flex flex-col rounded-xl overflow-hidden backdrop-blur-md bg-[var(--color-void)]/55">
-            {/* Plate header — map/table toggle. A real header bar rather than
-                another floating overlay: the table's own column headers need
-                the top-left/top-right corners the map's search box and stats
-                readout already occupy, so the toggle lives above both instead
-                of stacking on top of either. */}
+            {/* Plate header — the command bar. One cluster now owns every
+                view control: Export on the left; the lenses (replay, due
+                lens — previously buttons living inside the legend's Key
+                header, a control hiding in a readout) and the map/table
+                toggle on the right, hairline-separated, all in the masthead
+                command-bar idiom. Lenses only render in map view — they
+                bend the map's ink, not the table. */}
             <div className="shrink-0 flex items-center justify-between gap-3 px-3 py-2 border-b border-[var(--color-hairline)]">
               <div className="flex items-center gap-3 min-w-0">
                 {mapExportStatus && (
@@ -718,26 +726,55 @@ export function TopicMapView({
                   onClick={handleExportMap}
                   disabled={exportingMap || !decayReady}
                   title={!decayReady ? 'Waiting on this topic’s decay figures before the plate can print them faithfully…' : undefined}
-                  className="focus-ring no-press text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] disabled:opacity-50"
+                  className="focus-ring no-press cmd-item label-data text-[10px] uppercase tracking-[0.16em] disabled:opacity-50"
                 >
-                  {exportingMap ? 'Exporting…' : decayReady ? 'Export plate ↗' : 'Preparing plate…'}
+                  {exportingMap ? 'Exporting…' : decayReady ? 'Export plate' : 'Preparing…'}
                 </button>
               </div>
-              <div role="group" aria-label="Map or table view" className="flex items-center gap-0.5 panel p-0.5">
-                {(['map', 'table'] as const).map((v) => (
-                  <button
-                    key={v}
-                    onClick={() => setPlateView(v)}
-                    aria-pressed={plateView === v}
-                    className={`focus-ring label-data text-[10px] uppercase tracking-wide px-2.5 py-1 rounded-md transition-colors ${
-                      plateView === v
-                        ? 'bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] text-[var(--color-ink-warm)]'
-                        : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]'
-                    }`}
-                  >
-                    {v === 'map' ? 'Map' : 'Table'}
-                  </button>
-                ))}
+              <div className="flex items-center gap-3">
+                {plateView === 'map' && (
+                  <>
+                    <div role="group" aria-label="Map lenses" className="flex items-center gap-3">
+                      <button
+                        onClick={() => setReplayActive((v) => !v)}
+                        disabled={!growthTimeline}
+                        title={growthTimeline ? undefined : 'Nothing dated yet to replay'}
+                        aria-pressed={replayActive}
+                        className={`focus-ring cmd-item label-data text-[10px] uppercase tracking-[0.16em] disabled:opacity-40 disabled:cursor-not-allowed ${
+                          replayActive ? 'text-[var(--color-ink-warm)] [&::after]:scale-x-100' : ''
+                        }`}
+                      >
+                        Replay
+                      </button>
+                      <button
+                        onClick={() => setDueLens((v) => !v)}
+                        aria-pressed={dueLens && !replayActive}
+                        disabled={replayActive}
+                        title={replayActive ? 'One lens at a time — close the replay first' : undefined}
+                        className={`focus-ring cmd-item label-data text-[10px] uppercase tracking-[0.16em] disabled:opacity-40 disabled:cursor-not-allowed ${
+                          dueLens && !replayActive ? 'text-[var(--color-ink-warm)] [&::after]:scale-x-100' : ''
+                        }`}
+                      >
+                        Due lens
+                      </button>
+                    </div>
+                    <span className="h-4 w-px bg-[var(--color-hairline)] shrink-0" aria-hidden="true" />
+                  </>
+                )}
+                <div role="group" aria-label="Map or table view" className="flex items-center gap-3">
+                  {(['map', 'table'] as const).map((v) => (
+                    <button
+                      key={v}
+                      onClick={() => setPlateView(v)}
+                      aria-pressed={plateView === v}
+                      className={`focus-ring cmd-item label-data text-[10px] uppercase tracking-[0.16em] ${
+                        plateView === v ? 'text-[var(--color-ink-warm)] [&::after]:scale-x-100' : ''
+                      }`}
+                    >
+                      {v === 'map' ? 'Map' : 'Table'}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -790,8 +827,11 @@ export function TopicMapView({
                 only ever present when this topic has a targetDate set;
                 PressureReadout itself renders null otherwise, so the stack
                 collapses to just the territory readout with no gap or empty
-                chrome left behind. */}
-            {stats && (
+                chrome left behind. Hidden while the replay lens is up — the
+                plate then shows a past cutoff while these figures describe
+                today, and the scrubber's own inked/total is the one honest
+                count for that view. */}
+            {stats && !replayActive && (
               <div className="absolute top-4 right-4 z-10 w-52 flex flex-col gap-3">
                 <div className="panel p-3 flex flex-col gap-2">
                   <div className="fig-caption">Fig. — state of the territory</div>
@@ -829,36 +869,11 @@ export function TopicMapView({
                   </clipPath>
                 </defs>
               </svg>
-              <div className="flex items-center justify-between gap-3 pb-1 mb-0.5 border-b border-[var(--color-hairline)]">
-                <span className="uppercase tracking-wide">Key</span>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => setReplayActive((v) => !v)}
-                    disabled={!growthTimeline}
-                    title={growthTimeline ? undefined : 'Nothing dated yet to replay'}
-                    aria-pressed={replayActive}
-                    className={`focus-ring px-1.5 py-0.5 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                      replayActive
-                        ? 'bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] text-[var(--color-ink-warm)]'
-                        : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]'
-                    }`}
-                  >
-                    replay
-                  </button>
-                  <button
-                    onClick={() => setDueLens((v) => !v)}
-                    aria-pressed={dueLens && !replayActive}
-                    disabled={replayActive}
-                    title={replayActive ? 'One lens at a time — close the replay first' : undefined}
-                    className={`focus-ring px-1.5 py-0.5 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                      dueLens && !replayActive
-                        ? 'bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] text-[var(--color-ink-warm)]'
-                        : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]'
-                    }`}
-                  >
-                    due lens
-                  </button>
-                </div>
+              {/* Pure key now — the replay/due-lens toggles moved up into the
+                  plate header's command bar, so this readout no longer hides
+                  controls inside itself. */}
+              <div className="pb-1 mb-0.5 border-b border-[var(--color-hairline)]">
+                <span className="uppercase tracking-[0.16em]">Key</span>
               </div>
               {/* Keyed on the same EFFECTIVE expression GraphView receives —
                   the legend must never explain a lens the plate isn't wearing
@@ -945,8 +960,8 @@ export function TopicMapView({
                   </div>
                 </div>
               )}
-              <div className="border-t border-[var(--color-hairline)] mt-1 pt-1 text-[var(--color-text-faint)]">
-                double-click to open
+              <div className="border-t border-[var(--color-hairline)] mt-1 pt-1.5">
+                <span className="kbd-hint">2×click — open</span>
               </div>
             </div>
             </div>
@@ -963,7 +978,11 @@ export function TopicMapView({
               hairline-topped detail-footer holding the drawer's one primary action. */}
           {node && (
             <div className="w-72 shrink-0 panel corner-brackets flex flex-col overflow-y-auto">
-              <div className="detail-title-band flex items-start justify-between gap-2 px-4 py-3 shrink-0">
+              {/* The band wears the dogear: this drawer IS the selected
+                  node's plate — the one genuinely active thing on the right
+                  edge — same band-carries-the-fold precedent the pinned
+                  session ticket set. Nothing else on this surface folds. */}
+              <div className="detail-title-band dogear flex items-start justify-between gap-2 px-4 py-3 shrink-0">
                 <div>
                   <div className="text-sm font-medium text-[var(--color-text-primary)]">{humanizeNodeId(selectedNode!)}</div>
                   <div className="text-xs label-data text-[var(--color-text-faint)] uppercase tracking-wide mt-0.5">
@@ -1117,31 +1136,49 @@ export function TopicMapView({
         </div>
       )}
 
-      <Modal open={Boolean(opened && openNode)} onClose={() => setOpenNode(null)} wide>
-        {opened && openNode && (
-          <div className="flex flex-col gap-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-xs label-data text-[var(--color-text-faint)] uppercase tracking-wide">
-                  {selectedTopic}
-                </div>
-                <h2 className="font-[var(--font-display)] text-xl text-[var(--color-text-primary)] mt-1">
-                  {humanizeNodeId(openNode)}
-                </h2>
-                <div className="label-data text-[10px] text-[var(--color-text-faint)] mt-0.5">{openNode}</div>
-                <div className="text-xs mt-1" style={{ color: 'var(--color-ink-warm)' }}>
-                  {opened.state && stateLabel(opened.state)}
-                </div>
+      {/* Full-node modal — the complete detail anatomy now: Modal's own
+          .detail-title-band (title, tracked topic·id line and the italic
+          state subtitle in-band), a hairline-divided body, and a
+          .detail-footer holding the one primary action plus the esc hint
+          (Modal really does close on Escape — the hint never lies). The
+          hand-rolled header and its × went; the band + esc + scrim cover
+          closing. */}
+      <Modal
+        open={Boolean(opened && openNode)}
+        onClose={() => setOpenNode(null)}
+        wide
+        title={opened && openNode ? humanizeNodeId(openNode) : undefined}
+        subtitle={
+          opened && openNode ? (
+            <>
+              <div className="label-data not-italic uppercase tracking-wide text-[10px] text-[var(--color-text-faint)]">
+                {selectedTopic} · {openNode}
               </div>
-              <button
-                onClick={() => setOpenNode(null)}
-                className="focus-ring text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] text-2xl leading-none"
-                aria-label="Close"
-              >
-                ×
-              </button>
-            </div>
-
+              {opened.state && (
+                <div className="mt-0.5" style={{ color: 'var(--color-ink-warm)' }}>
+                  {stateLabel(opened.state)}
+                </div>
+              )}
+            </>
+          ) : undefined
+        }
+        footer={
+          opened && openNode ? (
+            <>
+              {onGoTopic ? (
+                <Button variant="ghost" onClick={() => onGoTopic(selectedTopic!)}>
+                  Continue in Learn
+                </Button>
+              ) : (
+                <span />
+              )}
+              <span className="kbd-hint">esc — close</span>
+            </>
+          ) : undefined
+        }
+      >
+        {opened && openNode && (
+          <div className="flex flex-col gap-4 divide-y divide-[var(--color-hairline)] [&>*:not(:first-child)]:pt-4">
             <div className="flex gap-1.5 flex-wrap">
               {opened.capstone && (
                 <span className="text-[10px] px-1.5 py-0.5 rounded label-data" style={{ background: 'color-mix(in srgb, var(--color-surface-3) 68%, transparent)', color: 'var(--color-ink-hot)' }}>
@@ -1282,12 +1319,6 @@ export function TopicMapView({
               >
                 Open explorable ↗
               </button>
-            )}
-
-            {onGoTopic && (
-              <Button variant="ghost" className="self-start" onClick={() => onGoTopic(selectedTopic!)}>
-                Continue in Learn
-              </Button>
             )}
           </div>
         )}

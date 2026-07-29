@@ -156,13 +156,19 @@ export function NodeTable({
               key={key}
               onClick={() => toggleFilter(key)}
               aria-pressed={pressed}
-              className={`focus-ring label-data text-[10px] uppercase tracking-wide px-2 py-1 border transition-colors ${
+              className={`focus-ring label-data text-[10px] uppercase tracking-[0.16em] px-2 py-1 border transition-colors ${
                 pressed
                   ? 'bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] border-[var(--color-ink-warm)] text-[var(--color-ink-warm)]'
                   : 'border-[var(--color-hairline)] text-[var(--color-text-dim)] hover:text-[var(--color-text-primary)]'
               }`}
             >
-              {FILTER_LABEL[key]} <span className="label-data">{filterCounts[key]}</span>
+              {FILTER_LABEL[key]}{' '}
+              {/* Roster-chip count in the fraction voice — a lone numerator
+                  (no denominator; the bar's own shown/total fraction at the
+                  right is the one place the territory total is said). */}
+              <span className="stat-fraction ml-0.5">
+                <span className={pressed ? 'frac-n' : 'frac-d'}>{filterCounts[key]}</span>
+              </span>
             </button>
           )
         })}
@@ -190,11 +196,11 @@ export function NodeTable({
                     key={col.key}
                     scope="col"
                     aria-sort={active ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
-                    className="text-left font-normal py-1.5 pr-3 first:pl-0"
+                    className="text-left font-normal py-1.5 pr-3 first:pl-2"
                   >
                     <button
                       onClick={() => toggleSort(col.key)}
-                      className={`focus-ring label-data text-[10px] uppercase tracking-wide flex items-center gap-1 whitespace-nowrap ${
+                      className={`focus-ring label-data text-[10px] uppercase tracking-[0.16em] flex items-center gap-1 whitespace-nowrap ${
                         active ? 'text-[var(--color-ink-warm)]' : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-dim)]'
                       }`}
                     >
@@ -211,15 +217,32 @@ export function NodeTable({
               const node = graph.nodes[id]
               const dueStatus = dueStatusFor(node)
               const isSelected = selectedNode === id
+              // Roster-row states: hover is the one-step lighten (the
+              // frame-hover wash, drawn on the row itself — an offset frame
+              // is too loud for a dense roster) plus a thin warm-dim left
+              // accent on the first cell; the SELECTED row (the one whose
+              // drawer is open — the genuinely active state) holds the same
+              // accent at full warm. The accent is an inset box-shadow on
+              // the first td, not the tr — td shadows render reliably under
+              // border-collapse. No dogear here: at row density the accent
+              // is the active mark.
               return (
                 <tr
                   key={id}
                   onClick={() => onSelectNode(id)}
-                  className={`cursor-pointer transition-colors ${
-                    isSelected ? 'bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)]' : 'hover:bg-[color-mix(in_srgb,var(--color-surface-2)_47%,transparent)]'
+                  className={`group cursor-pointer transition-colors ${
+                    isSelected
+                      ? 'bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)]'
+                      : 'hover:bg-[color-mix(in_srgb,var(--color-surface-3)_55%,transparent)]'
                   }`}
                 >
-                  <td className="py-1.5 pr-3 first:pl-0">
+                  <td
+                    className={`py-1.5 pr-3 first:pl-2 ${
+                      isSelected
+                        ? 'shadow-[inset_2px_0_0_var(--color-ink-warm)]'
+                        : 'group-hover:shadow-[inset_2px_0_0_var(--color-ink-warm-dim)]'
+                    }`}
+                  >
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
@@ -245,7 +268,7 @@ export function NodeTable({
                     {node.fsrs.due ? formatMonthDay(node.fsrs.due) : '—'}
                   </td>
                   <td className="label-data py-1.5 pr-3 text-[var(--color-text-dim)]">
-                    {node.fsrs.reps} / {node.fsrs.lapses}
+                    <StatFraction n={node.fsrs.reps} d={node.fsrs.lapses} />
                   </td>
                   <td className="py-1.5 pr-3 text-[var(--color-ink-hot)]">{node.threshold ? '†' : ''}</td>
                 </tr>
