@@ -68,7 +68,7 @@ export function ChatScrollRegion({
     // sibling below) hugs this same box's right edge, so its top/bottom ends
     // sit near this element's own corner marks; both are thin, low-opacity
     // hairline elements, and in practice they don't visually compete.
-    <div className="relative flex-1 min-h-0 corner-brackets">
+    <div className="chat-glass relative flex-1 min-h-0 corner-brackets">
       {/* `scroll-fade-top`: content dissolves into the top edge instead of
           being guillotined by it, so the transcript reads as continuing past
           the viewport rather than being clipped at an arbitrary line — and
