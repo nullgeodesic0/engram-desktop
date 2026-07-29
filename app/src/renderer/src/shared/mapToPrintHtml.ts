@@ -8,6 +8,7 @@ import {
   ringMarkPath,
   diamondMarkPath,
   territoryGroups,
+  regionGroups,
   hullPath,
   hullCentroid,
   plateStats,
@@ -352,7 +353,11 @@ export function mapToPrintHtml(
   retrievability: Map<string, number> | null,
   annotations: MapAnnotations | null,
 ): string {
-  const plate: Map<string, PlateNode> = settlePlate(graph, PLATE_W, PLATE_H)
+  // Regions threaded into settle geometry for parity with the on-screen
+  // plate (pure ⇒ identical output to GraphView's own regionGroups(graph)
+  // call). The print wash render itself stays territoryGroups this wave.
+  const regions = regionGroups(graph)
+  const plate: Map<string, PlateNode> = settlePlate(graph, PLATE_W, PLATE_H, regions)
   const edges = buildEdges(graph)
   const frontierIds = computeFrontierIds(graph)
   const forwardAdjacency = computeForwardAdjacency(edges)
