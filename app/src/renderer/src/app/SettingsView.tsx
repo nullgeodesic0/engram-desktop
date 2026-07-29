@@ -17,6 +17,7 @@ import { PageHeader } from '../components/ui/PageHeader'
 import { SectionBanner } from '../components/ui/SectionBanner'
 import { soundOn, setSoundOn } from '../shared/soundscape'
 import { friendlyErrorText } from '../shared/friendlyError'
+import { getStoredThemeChoice, setThemeChoice, type ThemeChoice } from '../shared/theme'
 
 // Mirrors docs/development.md's "Packaged install flow" exactly — keep the two
 // in sync if the packaging steps ever change.
@@ -336,6 +337,33 @@ function PickerRow<T extends string>({
   )
 }
 
+/** Light/dark toggle — 'system' (the default) tracks the OS setting until the
+ * learner picks an explicit theme, which then wins regardless of the OS.
+ * Local component state only (not the learner-model settings object): the
+ * theme is a renderer-local preference persisted to localStorage via
+ * shared/theme.ts, not part of engram.py's learner-model settings — there's
+ * no backend round-trip here, just an immediate localStorage write + DOM
+ * attribute flip. */
+function ThemePickerRow() {
+  const [choice, setChoice] = useState<ThemeChoice>(getStoredThemeChoice())
+  return (
+    <PickerRow
+      label="Theme"
+      hint="System follows your Mac's appearance setting"
+      current={choice}
+      onPick={(v) => {
+        setThemeChoice(v)
+        setChoice(v)
+      }}
+      options={[
+        { value: 'system', label: 'System' },
+        { value: 'dark', label: 'Dark' },
+        { value: 'light', label: 'Light' },
+      ]}
+    />
+  )
+}
+
 export function SettingsView() {
   const [model, setModel] = useState<LearnerModel | null>(null)
   const [sessionActive, setSessionActive] = useState(false)
@@ -537,6 +565,8 @@ export function SettingsView() {
       )}
 
       <div className="panel px-5 py-5 flex flex-col gap-5">
+        <SectionBanner label="Appearance" className="border-t-0" />
+        <ThemePickerRow />
         <PickerRow
           label="Session mode"
           hint="Default mode when starting a /learn session"

@@ -93,6 +93,74 @@
   --radius-4xl: 0px;
 }
 
+/* "Atlas by Daylight" — the light theme. Same sepia-ink identity as Night
+   Atlas, inverted the other direction: a parchment-bright ground with dark
+   warm ink on top, not a generic "flip every color" light mode. Applied via
+   `data-theme="light"` on <html> (see shared/theme.ts) — recomputed as a
+   deliberate colorimetric pass, not a copy of the dark values.
+
+   Computed contrast (WCAG relative-luminance formula, against this block's
+   own --color-void #f2ece0, L≈0.842):
+     text-primary #2b2016 vs void   → 13.5:1  (body text floor 4.5:1)
+     text-dim     #6b5c46 vs void   →  5.5:1
+     ink-warm     #8f5416 vs void   →  5.2:1  (was 3.9:1 at a naive mid-tone —
+                                                darkened until body-text-safe)
+     ink-cool     #1f6b86 vs void   →  5.1:1
+     ink-danger   #a13527 vs void   →  5.8:1
+     ink-violet   #6b4fa0 vs void   →  5.5:1
+   The *-dim variants stay in the 3–4:1 band on purpose (they back borders
+   and low-alpha washes, never body text — the 3:1 non-text-UI floor, not
+   4.5:1). --color-edge is NOT redefined below: it's a color-mix() of
+   --color-hairline and --color-text-faint, so it re-resolves automatically
+   once those two are overridden, and it inherits the dark theme's own
+   deliberate choice to sit under the 3:1 floor as a quiet drawn line rather
+   than a hard UI border (see that token's doctrine comment above). */
+:root[data-theme='light'] {
+  --color-void: #f2ece0;
+  --color-surface: #ece1cd;
+  --color-surface-2: #e0d2b8;
+  --color-surface-3: #d3c19f;
+  --color-hairline: #c9bc9e;
+
+  --color-ink-cool: #1f6b86;
+  --color-ink-cool-dim: #3f7f92;
+  --color-ink-warm: #8f5416;
+  --color-ink-warm-dim: #a06f2e;
+  --color-ink-hot: #c99a2a;
+  --color-ink-danger: #a13527;
+  --color-ink-danger-dim: #b5695c;
+
+  --color-ink-violet: #6b4fa0;
+  --color-ink-violet-dim: #8f74bd;
+
+  --color-ink-paper: #2b2016;
+  --color-text-primary: #2b2016;
+  --color-text-dim: #6b5c46;
+  --color-text-faint: #93856c;
+}
+
+/* NeuralField ambient layer under light: the field is glowing synapses on
+   dark space by construction (additive-blend particles + lines) — the same
+   geometry reads as bright fireflies floating over parchment, which breaks
+   the "ambient ink field" identity rather than continuing it. Full
+   suppression would lose the identity entirely (an empty parchment void has
+   no atlas left in it), and a from-scratch light-mode renderer is a second
+   WebGL scene to maintain. The judgment call: keep the SAME field — its
+   particle/line colors already derive from the (now re-tuned, darker,
+   light-safe) ink tokens via cssColor() at mount — and fade its opacity down
+   hard, so what was "glowing neurons" reads instead as a faint graphite
+   watermark just barely alive under the page, the way foxed ink shows
+   through the back of an old atlas leaf. NeuralField.tsx is remounted on
+   theme change (see main.tsx) so its particle palette is re-sampled from the
+   fresh light-mode tokens rather than carrying the dark palette forward. */
+.neural-field-root {
+  opacity: 1;
+  transition: opacity var(--dur-base) var(--ease-out-soft);
+}
+:root[data-theme='light'] .neural-field-root {
+  opacity: 0.16;
+}
+
 @layer base {
   html,
   body,
@@ -448,6 +516,27 @@
       0 0;
     backdrop-filter: blur(14px);
   }
+  /* Light theme: the sidebar stays a deliberate "night pane" — brand chrome
+     is doctrine-separate from the semantic palette (see the doctrine comment
+     above), and many light-mode apps keep exactly this kind of dark rail
+     (a fixed indigo island, not a content surface that should read as
+     "paper"). --color-nocturne-hi/-lo and --color-ink-lavender(-dim) are
+     never redefined by the light override above, so the wash itself is
+     already theme-invariant; what WOULD break is every token the nav rows
+     borrow from the semantic ramp (text/warm/surface-3/hairline), since
+     those flip to dark-ink-on-light values globally. Re-pinning them to
+     their dark-theme values, scoped to this subtree only, keeps the rail's
+     own text/accent legible against its own permanently-dark wash without
+     touching a single component class. */
+  :root[data-theme='light'] .sidebar-nocturne {
+    --color-text-primary: #e6dfd0;
+    --color-text-dim: #8b8878;
+    --color-text-faint: #545248;
+    --color-ink-warm: #e8a857;
+    --color-ink-warm-dim: #8a6533;
+    --color-hairline: #262a36;
+    --color-surface-3: #262937;
+  }
   /* Sidebar nav item accent doctrine, tokenized (App.tsx used to carry these
      as raw inline color-mix classes per button — one source now).
      Lavender is brand-ambient: it's the sidebar's own gradient wash and the
@@ -574,6 +663,34 @@
     box-shadow: inset 0 0 0 1px var(--color-ink-warm-dim), inset 0 1px 0 rgba(228, 231, 237, 0.04), 0 8px 20px -12px rgba(0, 0, 0, 0.5);
     transition: border-color var(--dur-base) var(--ease-out-soft), box-shadow var(--dur-base) var(--ease-out-soft);
     backdrop-filter: blur(12px);
+  }
+  /* Light theme: the dark-tuned alphas above assumed a dark void behind the
+     blur, where a light inset highlight (rgba(228,231,237,…)) reads as a
+     believable top-edge catch-light and a heavy black drop shadow reads as
+     depth. On parchment both invert — a light-on-light inset highlight is
+     invisible, and a 0.5-alpha black shadow reads as a bruise, not a lift.
+     Alphas are also bumped a few points (62/68/68% → 78/84/82%): the field
+     behind the blur is itself pale in light mode (see the NeuralField
+     dim-down below), so a card needs more of its own fill to stay legibly
+     "a surface" rather than smearing into the page around it — recomputed,
+     not carried over from the dark percentages. */
+  :root[data-theme='light'] .panel {
+    background: color-mix(in srgb, var(--color-surface) 78%, transparent);
+    box-shadow: inset 0 1px 0 rgba(43, 32, 22, 0.05), 0 6px 16px -12px rgba(43, 32, 22, 0.22);
+  }
+  :root[data-theme='light'] .panel-raised {
+    background: color-mix(in srgb, var(--color-surface-2) 84%, transparent);
+    box-shadow: inset 0 1px 0 rgba(43, 32, 22, 0.06), 0 6px 16px -12px rgba(43, 32, 22, 0.22);
+  }
+  :root[data-theme='light'] .panel-plate {
+    background: color-mix(in srgb, var(--color-surface) 82%, transparent);
+    box-shadow: inset 0 0 0 1px var(--color-ink-warm-dim), inset 0 1px 0 rgba(43, 32, 22, 0.05), 0 6px 16px -12px rgba(43, 32, 22, 0.22);
+  }
+  :root[data-theme='light'] .chat-glass .panel {
+    background: color-mix(in srgb, var(--color-surface) 90%, transparent);
+  }
+  :root[data-theme='light'] .chat-glass .panel-raised {
+    background: color-mix(in srgb, var(--color-surface-2) 93%, transparent);
   }
   .label-data {
     font-family: var(--font-data);
