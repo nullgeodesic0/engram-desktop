@@ -130,12 +130,23 @@
    ground / dark text), not a copy of that pass's exact hex values — the
    node-state inks, surface tiers, and shadow treatment below are recomputed
    fresh against this specific bright cream rather than restored verbatim. */
+/* Chrome elements retune: the void stays bright cream (per the correction
+   above); only the panel/chrome tier (surface/surface-2/surface-3/hairline,
+   and --color-edge which derives from hairline) moves off the warm-cream
+   family to a desaturated slate blue-gray — low chroma, not a vivid blue —
+   so panels/cards/chips/borders read as cool "greyish blue" elements sitting
+   on top of the unchanged white/cream ground. Deliberately kept far from
+   --color-ink-cool (the semantic "unconsolidated node" ink, #1f6b86): that
+   token stays a dark, saturated teal (HSL ~196°, L 32%, S 62%) used as text/
+   ink, while this new neutral family sits at the same broad blue hue
+   (~210-213°) but far lighter and far less saturated (L 70-91%, S 17-20%) —
+   a pale muted chrome color, not a competing semantic ink. */
 :root[data-theme='light'] {
   --color-void: #f4efe4;
-  --color-surface: #ede5d4;
-  --color-surface-2: #e3d8c1;
-  --color-surface-3: #d6c7a9;
-  --color-hairline: #cbbb98;
+  --color-surface: #e4e8ec;
+  --color-surface-2: #d3dae1;
+  --color-surface-3: #bcc6d2;
+  --color-hairline: #a5b2c0;
 
   --color-ink-cool: #1f6b86;
   --color-ink-cool-dim: #4f8ea3;
