@@ -94,13 +94,16 @@ const SOFT_SCALE = 1 // one scale by user decision (2026-07-28): the chat-bubble
 // values became the app-wide values, so soft === full today. The class split
 // (.tilt-card vs .tilt-card-soft) is kept so the surfaces can re-diverge later.
 /** `.tilt-card-rail`'s per-element multiplier — same mechanism as
- * `SOFT_SCALE`, tuned quieter for the nav rail's small, tightly-packed
- * buttons (see the doctrine comment above). At this scale idle drift tops
- * out well under a third of a degree and pointer-tilt under 1.1deg, which
- * keeps a hovered nav item's corner displacement to a fraction of a pixel at
- * its ~36px height/~192px expanded width — felt as a faint liveliness, not a
- * wobble neighbors visibly fight for the same 2px gap. */
-const RAIL_SCALE = 0.75
+ * `SOFT_SCALE`. Reads BIGGER than the base tier, not smaller: user
+ * correction (2026-07-29) — the smaller the element, the more its tilt
+ * should read, not less. A short lever arm needs a wider angle to displace
+ * its corner by the same felt amount a large card gets from a shallow one;
+ * tuning small buttons quieter (the original 0.4, then 0.75) made them read
+ * as inert rather than alive. At 2.4x idle drift spans ~1–1.9deg and
+ * pointer-tilt reaches ~6.5deg — clearly felt on a ~36px-tall button without
+ * neighbors visibly colliding (independent phase per element keeps the row
+ * from moving in lockstep). */
+const RAIL_SCALE = 2.4
 /** Critically-damped-feel exponential smoothing time constant. */
 const SMOOTH_TAU_MS = 150
 /** Idle-drift concurrency cap — hover responsiveness is never capped. Bumped
