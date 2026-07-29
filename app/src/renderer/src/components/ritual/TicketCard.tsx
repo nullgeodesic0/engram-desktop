@@ -65,7 +65,7 @@ export const TicketCard = memo(function TicketCard({
       </div>
       <div className={`${padX} ${compact ? 'py-2' : 'py-2.5'}`}>
         {topic && (
-          <div className={`font-[var(--font-serif)] text-[var(--color-text-primary)] ${compact ? 'text-sm' : 'text-lg'}`}>
+          <div className={`font-(family-name:--font-display) font-semibold text-[var(--color-text-primary)] ${compact ? 'text-sm' : 'text-lg'}`}>
             {topic.value}
           </div>
         )}

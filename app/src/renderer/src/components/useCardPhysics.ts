@@ -94,16 +94,15 @@ const SOFT_SCALE = 1 // one scale by user decision (2026-07-28): the chat-bubble
 // values became the app-wide values, so soft === full today. The class split
 // (.tilt-card vs .tilt-card-soft) is kept so the surfaces can re-diverge later.
 /** `.tilt-card-rail`'s per-element multiplier — same mechanism as
- * `SOFT_SCALE`. Reads BIGGER than the base tier, not smaller: user
- * correction (2026-07-29) — the smaller the element, the more its tilt
- * should read, not less. A short lever arm needs a wider angle to displace
- * its corner by the same felt amount a large card gets from a shallow one;
- * tuning small buttons quieter (the original 0.4, then 0.75) made them read
- * as inert rather than alive. At 2.4x idle drift spans ~1–1.9deg and
- * pointer-tilt reaches ~6.5deg — clearly felt on a ~36px-tall button without
- * neighbors visibly colliding (independent phase per element keeps the row
- * from moving in lockstep). */
-const RAIL_SCALE = 2.4
+ * `SOFT_SCALE`. Reads BIGGER than the base tier, not smaller: the smaller
+ * the element, the more its tilt should read, not less — a short lever arm
+ * needs a wider angle to displace its corner by the same felt amount a
+ * large card gets from a shallow one. Pushed further per a second round of
+ * feedback (2026-07-29): at 4x idle drift spans ~1.6–3.2deg and pointer-tilt
+ * reaches ~10.8deg on a ~36px-tall button — unmistakably alive. Independent
+ * per-element phase keeps the row from moving in lockstep even at this
+ * amplitude. */
+const RAIL_SCALE = 4
 /** Critically-damped-feel exponential smoothing time constant. */
 const SMOOTH_TAU_MS = 150
 /** Idle-drift concurrency cap — hover responsiveness is never capped. Bumped

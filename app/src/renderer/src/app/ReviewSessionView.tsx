@@ -1342,7 +1342,7 @@ export function ReviewSessionView({ onActivity, onGoHome }: ReviewSessionViewPro
                         </div>
                         <div className="px-5 py-3 flex flex-col gap-2">
                           <div className="min-w-0">
-                            <div className="text-sm font-medium text-[var(--color-text-primary)] truncate">
+                            <div className="font-(family-name:--font-display) font-semibold text-sm text-[var(--color-text-primary)] truncate">
                               {humanizeNodeId(current.id)}
                             </div>
                             <div className="label-data text-xs text-[var(--color-text-faint)] mt-0.5 uppercase tracking-wider truncate">
