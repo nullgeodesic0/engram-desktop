@@ -14,8 +14,8 @@ import { humanizeNodeId } from '../../../shared/humanizeId'
 import { ACHIEVEMENTS, type AchievementDef } from '../../../shared/achievements'
 import { AchievementToast } from '../components/AchievementToast'
 import { InkNode } from '../components/ui/InkNode'
-import { TopicCard } from '../components/TopicCard'
-import { topicBucket } from '../shared/topicShelf'
+import { HealthRing } from '../components/ui/HealthRing'
+import { topicBucket, topicChips } from '../shared/topicShelf'
 import { DueForecast } from '../components/DueForecast'
 import { DendriteDivider } from '../components/ui/DendriteDivider'
 import { StatFraction } from '../components/ui/StatFraction'
@@ -109,9 +109,12 @@ function greeting(): string {
   return 'Good evening'
 }
 
-/** A group of topic tiles under a small subheading — hidden entirely (no
- * heading, no empty grid) when the bucket is empty, same discipline as the
- * rest of Home. */
+/** One register of the atlas plate — a bucket of topics as hairline-plate
+ * ROWS in ReadyRoomPlate's exact row grammar (InkNode + title on the left, a
+ * dim mono count on the right, a faint-mono indented second line beneath),
+ * replacing the old tile grid. Hidden entirely when the bucket is empty,
+ * same discipline as the rest of Home. `first` suppresses the hairline-top
+ * the later registers use to divide themselves from the one above. */
 function TopicGroup({
   heading,
   caption,
@@ -119,6 +122,7 @@ function TopicGroup({
   onGoTopic,
   resumableTopics,
   grades,
+  first = false,
 }: {
   heading: string
   caption?: string
@@ -128,32 +132,57 @@ function TopicGroup({
    * the "Continue learning" call below; the Consolidated/Not started groups
    * never resolve resumability for their own topics, so they always render
    * plain (see the `.dogear` scarcity doctrine in index.css: it marks "the
-   * one you're in", not every card in a list). */
+   * one you're in", not every row in a list). */
   resumableTopics?: Set<string>
-  /** Per-topic grade, threaded through to each TopicCard's badge — absent
-   * (undefined map) renders every card with no badge, same as before this
-   * existed, rather than blocking the whole group on grade data loading. */
+  /** Per-topic grade for the row's letter badge — absent (undefined map)
+   * renders every row with no badge rather than blocking the whole group on
+   * grade data loading. */
   grades?: Map<string, TopicGradeResult>
+  first?: boolean
 }) {
   if (topics.length === 0) return null
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-baseline gap-2">
+    <div className={`flex flex-col gap-1 ${first ? '' : 'border-t border-[var(--color-hairline)] pt-3'}`}>
+      <div className="flex items-baseline gap-2 mb-1">
         <span className="text-[10px] label-data uppercase tracking-wide text-[var(--color-text-faint)]">{heading}</span>
-        {caption && <span className="text-xs text-[var(--color-text-faint)]">{caption}</span>}
+        {caption && <span className="fig-caption">{caption}</span>}
       </div>
-      <div className="grid grid-cols-1 min-[760px]:grid-cols-2 min-[1080px]:grid-cols-3 gap-3">
-        {topics.map((t) => (
-          <TopicCard
+      {topics.map((t) => {
+        const total = t.states.new + t.states.learning + t.states.review
+        const grade = grades?.get(t.topic)?.overall
+        const resumable = resumableTopics?.has(t.topic) ?? false
+        const chips = topicChips(t).map((c) => c.label)
+        if (resumable) chips.push('continuing')
+        return (
+          <button
             key={t.topic}
-            variant="tile"
-            topic={t}
-            onOpen={() => onGoTopic(t.topic)}
-            resumable={resumableTopics?.has(t.topic)}
-            grade={grades?.get(t.topic)?.overall}
-          />
-        ))}
-      </div>
+            onClick={() => onGoTopic(t.topic)}
+            className={`focus-ring relative text-left flex flex-col gap-0.5 px-2 -mx-2 py-1.5 hover:bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] transition-colors duration-[var(--dur-fast)] ${
+              resumable ? 'dogear' : ''
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2 min-w-0">
+                <InkNode id={t.topic} variant={t.states.review > 0 ? 'filled' : 'outlined'} size={14} />
+                <HealthRing consolidated={t.states.review} total={total} due={t.due} size={16} />
+                <span className="text-[var(--color-text-primary)] truncate">{t.title}</span>
+                {grade?.available && (
+                  <span className={`label-data text-[10px] font-medium shrink-0 ${letterColorClass(grade.letter)}`}>{grade.letter}</span>
+                )}
+              </div>
+              <span className="label-data text-[var(--color-text-dim)] shrink-0">
+                {t.due > 0 ? `${t.due} due` : `${t.states.review}/${total}`}
+              </span>
+            </div>
+            {/* Same faint-mono second-line register as ReadyRoomPlate's due
+                node names — the topic's state chips as quiet dot-joined
+                prose, never a row of colored pills. */}
+            {chips.length > 0 && (
+              <div className="label-data text-[10px] text-[var(--color-text-faint)] pl-[22px] truncate">{chips.join(' · ')}</div>
+            )}
+          </button>
+        )
+      })}
     </div>
   )
 }
@@ -402,11 +431,11 @@ export function HomeView({
   // to that screen. Coach's line replaces the old standalone "Coach →"
   // button below (removed — same fact, shown once, not twice).
   const teasers: Partial<Record<string, string>> = {}
-  if (dueCount != null && dueCount > 0) teasers.review = String(dueCount)
+  if (dueCount != null && dueCount > 0) teasers.review = `${dueCount} due now`
   if (topics) {
     const resumableActive = active.find((t) => resumableTopics.has(t.topic))
     teasers.learn = resumableActive ? resumableActive.title : `${active.length} in progress`
-    teasers.topics = `${topics.length} topics, ${topics.reduce((sum, t) => sum + t.nodes, 0)} nodes mapped`
+    teasers.topics = `${topics.length} topics · ${topics.reduce((sum, t) => sum + t.nodes, 0)} nodes mapped`
   }
   if (stats) {
     teasers.dashboard =
@@ -416,7 +445,7 @@ export function HomeView({
           ? `${stats.misconceptions_open} filed for re-testing`
           : 'nothing filed for re-testing'
   }
-  if (gpa?.available) teasers.grades = gpa.letter ?? undefined
+  if (gpa?.available && gpa.letter) teasers.grades = `GPA ${gpa.letter}`
   if (artifactCount != null) teasers.artifacts = `${artifactCount} artifact${artifactCount === 1 ? '' : 's'}`
 
   return (
@@ -455,40 +484,17 @@ export function HomeView({
           <MainMenuView nav={nav} teasers={teasers} activity={activity} visited={visited} onGoView={onGoView} />
         </div>
 
-        {/* "Needs attention" — a single computed prompt, never invented: only
-            renders when a topic is genuinely struggling (D/F) or has due
-            items waiting. Sits between the nav grid and the due-count plate —
-            the thing Home wants noticed before it asks you to just clear
-            today's queue. */}
-        {needsAttention && (
-          <button
-            onClick={() => onGoTopic(needsAttention.topic.topic)}
-            className="panel px-4 py-2.5 flex items-center justify-between gap-3 text-left frame-hover"
-          >
-            <span className="text-sm text-[var(--color-text-primary)]">
-              {needsAttention.reason === 'due'
-                ? `${needsAttention.topic.title} has ${needsAttention.topic.due} due`
-                : `${needsAttention.topic.title} needs attention`}
-            </span>
-            <span
-              className={`label-data text-xs shrink-0 ${
-                needsAttention.reason === 'due' ? 'text-[var(--color-ink-warm)]' : letterColorClass(grades?.get(needsAttention.topic.topic)?.overall.letter ?? null)
-              }`}
-            >
-              {needsAttention.reason === 'due' ? `${needsAttention.topic.due} due` : grades?.get(needsAttention.topic.topic)?.overall.letter}
-            </span>
-          </button>
-        )}
-
-        {/* The due briefing plate — Home's own ready-room (the anatomy the
-            Review plate established, via the shared PlateFigure): the due-now
-            count as THE figure, the old CTA sub-line re-set as its note, the
-            old Due-now StatBlock's caption kept as the fig-caption, and the
-            review CTA as the plate's action row. The one-shot pulse (real
-            count increases only — see the localStorage tracking above) now
-            lands on the figure itself. */}
+        {/* The briefing plate — Home's own ready-room, now in ReadyRoomPlate's
+            FULL document grammar rather than three sibling panels: the due-now
+            count as THE figure (one count, said once, big), the needs-attention
+            prompt as a warm prose paragraph (the same register the review
+            plate's amnesty paragraph uses — a sentence, not a chip), then the
+            streak and coming-week forecast as one hairline-divided register of
+            labeled rows, the serif fig-caption aside, and the review CTA as
+            the plate's action row. The one-shot pulse (real count increases
+            only — see the localStorage tracking above) lands on the figure. */}
         {stats && (
-          <div className="tilt-card panel px-6 py-5 flex flex-col gap-4">
+          <div className="tilt-card-soft panel px-6 py-6 flex flex-col gap-4">
             <PlateFigure
               value={stats.due_now}
               tone={stats.due_now > 0 ? 'warm' : 'dim'}
@@ -497,7 +503,51 @@ export function HomeView({
               pulse={duePulse}
               onPulseEnd={() => setDuePulse(false)}
             />
-            <div className="fig-caption">Fig. — items awaiting free recall</div>
+
+            {/* "Needs attention" — a single computed prompt, never invented:
+                only renders when a topic is genuinely struggling (D/F) or has
+                due items waiting. A clickable warm sentence, same voice as the
+                review plate's own amnesty paragraph. */}
+            {needsAttention && (
+              <button
+                onClick={() => onGoTopic(needsAttention.topic.topic)}
+                className="focus-ring text-left text-sm text-[var(--color-ink-warm)] leading-relaxed hover:text-[var(--color-ink-hot)] transition-colors duration-[var(--dur-fast)]"
+              >
+                {needsAttention.reason === 'due'
+                  ? `${needsAttention.topic.title} is carrying ${needsAttention.topic.due} of these — start there.`
+                  : `${needsAttention.topic.title} is sitting at a ${grades?.get(needsAttention.topic.topic)?.overall.letter} — worth a look before it slides further.`}
+              </button>
+            )}
+
+            {/* Streak + coming week — one hairline register of labeled rows,
+                the same anatomy as the review plate's per-topic rows, with
+                each row's chart directly beneath its label. */}
+            <div className="flex flex-col gap-2.5 border-t border-[var(--color-hairline)] pt-3">
+              <div className="flex items-center justify-between gap-2 text-xs">
+                <span className="text-[var(--color-text-primary)]">Streak</span>
+                <span className="label-data text-[var(--color-text-dim)] shrink-0">
+                  {stats.streak_days} {stats.streak_days === 1 ? 'day' : 'days'}
+                </span>
+              </div>
+              {receiptsHistory && <ActivityStrip data={receiptsHistory.days} />}
+              <div className="flex items-center justify-between gap-2 text-xs">
+                <span className="text-[var(--color-text-primary)]">Coming week</span>
+                <span className="label-data text-[var(--color-text-dim)] shrink-0">
+                  {forecast ? `${forecast.reduce((a, b) => a + b, 0)} scheduled` : '…'}
+                </span>
+              </div>
+              {forecast ? (
+                <DueForecast buckets={forecast} />
+              ) : (
+                <div className="flex flex-col gap-1.5">
+                  <SkeletonBar height={32} />
+                  <SkeletonBar width="40%" height={10} />
+                </div>
+              )}
+            </div>
+
+            <div className="fig-caption">Fig. — items awaiting free recall; streak and the coming week beneath</div>
+
             {stats.due_now > 0 && (
               <div className="flex gap-3 items-center">
                 <Button variant="primary" size="lg" onClick={onGoReview}>
@@ -508,39 +558,18 @@ export function HomeView({
           </div>
         )}
 
-        {stats && (
-          <div className="flex items-stretch gap-3 flex-wrap">
-            {/* Same StatBlock anatomy (label/value/caption), hand-built here
-                instead of the shared component so a real streak shape —
-                ActivityStrip, previously Coach-only — can render underneath
-                the bare number, inside the same panel. */}
-            <div className="tilt-card panel p-3 flex flex-col gap-1.5">
-              <div className="text-[length:var(--text-caption)] tracking-wider text-[var(--color-text-dim)] label-data uppercase">Streak</div>
-              <div className="label-data mt-0.5 text-lg text-[var(--color-ink-warm)]">{stats.streak_days}</div>
-              {receiptsHistory && <ActivityStrip data={receiptsHistory.days} />}
-              <div className="fig-caption mt-1">Fig. — days of uninterrupted recall</div>
-            </div>
-            <div className="panel tilt-card p-3 flex-1 min-w-[180px] flex flex-col justify-center">
-              {forecast ? (
-                <DueForecast buckets={forecast} />
-              ) : (
-                <div className="flex flex-col gap-1.5">
-                  <SkeletonBar height={32} />
-                  <SkeletonBar width="40%" height={10} />
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
         <ExperimentBanner experiment={activeExperiment} />
 
+        {/* Flashback — same plate grammar: a faint mono register line, the
+            claim in the serif voice (it IS the concept speaking), the node's
+            name as the faint-mono second line. */}
         {flashback && (
-          <div className="panel tilt-card px-5 py-4 flex flex-col gap-1.5">
-            <SectionBanner label={`${flashback.daysAgo} days ago · ${flashback.topicTitle}`} className="border-t-0" />
-            <DendriteDivider className="mb-3" />
-            <p className="text-sm text-[var(--color-text-dim)]">{flashback.claim}</p>
-            <div className="text-xs text-[var(--color-text-faint)] mt-0.5">{humanizeNodeId(flashback.node)}</div>
+          <div className="tilt-card-soft panel px-6 py-5 flex flex-col gap-2">
+            <span className="label-data text-[10px] uppercase tracking-wide text-[var(--color-text-faint)]">
+              {flashback.daysAgo} days ago · {flashback.topicTitle}
+            </span>
+            <p className="font-(family-name:--font-serif) text-sm text-[var(--color-text-dim)] leading-relaxed">{flashback.claim}</p>
+            <div className="label-data text-[10px] text-[var(--color-text-faint)]">{humanizeNodeId(flashback.node)}</div>
           </div>
         )}
 
@@ -603,17 +632,34 @@ export function HomeView({
             than by special-casing review, so the fallback has no case left to
             catch and is gone — a fully-encoded-only library now shows its
             "Consolidated" group instead of a false "start a new topic" nudge. */}
-        <div className="flex flex-col gap-6">
-          <TopicGroup heading="Continue learning" topics={active} onGoTopic={onGoTopic} resumableTopics={resumableTopics} grades={grades} />
-          <TopicGroup
-            heading="Consolidated"
-            caption="fully encoded — held by review alone"
-            topics={consolidated}
-            onGoTopic={onGoTopic}
-            grades={grades}
-          />
-          <TopicGroup heading="Not started" topics={notStarted} onGoTopic={onGoTopic} grades={grades} />
-        </div>
+        {topics !== null && topics.length > 0 && (
+          <div className="tilt-card-soft panel px-6 py-6 flex flex-col gap-4">
+            <TopicGroup
+              heading="Continue learning"
+              topics={active}
+              onGoTopic={onGoTopic}
+              resumableTopics={resumableTopics}
+              grades={grades}
+              first
+            />
+            <TopicGroup
+              heading="Consolidated"
+              caption="fully encoded — held by review alone"
+              topics={consolidated}
+              onGoTopic={onGoTopic}
+              grades={grades}
+              first={active.length === 0}
+            />
+            <TopicGroup
+              heading="Not started"
+              topics={notStarted}
+              onGoTopic={onGoTopic}
+              grades={grades}
+              first={active.length === 0 && consolidated.length === 0}
+            />
+            <div className="fig-caption">the atlas, grouped by where each topic stands</div>
+          </div>
+        )}
       </section>
 
       {/* Register 3 — trails: quietest register, the last few nodes/sittings
@@ -625,22 +671,24 @@ export function HomeView({
       {recent.length > 0 && (
         <>
           <DendriteDivider />
-          <div className="flex flex-col gap-6">
-            <div className="flex flex-col gap-2">
-              <SectionBanner label="Recently viewed" count={recent.length} />
-              <div className="flex items-center gap-2 flex-wrap">
-                {recent.map((v) => (
-                  <button
-                    key={v.kind === 'node' ? `n:${v.topic}:${v.node}` : `s:${v.sessionId}`}
-                    onClick={() => (v.kind === 'node' ? onGoNode(v.topic, v.node) : onGoSitting(v.sessionId))}
-                    title={v.kind === 'node' ? `${v.label} — ${v.topicTitle}` : v.label}
-                    className="focus-ring flex items-center gap-1.5 px-2.5 py-1 text-xs text-[var(--color-text-dim)] bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] hover:bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] hover:text-[var(--color-text-primary)] transition-colors duration-[var(--dur-fast)]"
-                  >
-                    {v.kind === 'node' && <InkNode id={v.node} variant="outlined" color="var(--color-ink-cool)" size={10} />}
-                    <span className="truncate max-w-[9rem]">{v.label}</span>
-                  </button>
-                ))}
-              </div>
+          {/* Same plate grammar as everything above: register line in faint
+              mono, then the trails as quiet mono-adjacent chips. */}
+          <div className="tilt-card-soft panel px-6 py-5 flex flex-col gap-2.5">
+            <span className="label-data text-[10px] uppercase tracking-wide text-[var(--color-text-faint)]">
+              Recently viewed · {recent.length}
+            </span>
+            <div className="flex items-center gap-2 flex-wrap">
+              {recent.map((v) => (
+                <button
+                  key={v.kind === 'node' ? `n:${v.topic}:${v.node}` : `s:${v.sessionId}`}
+                  onClick={() => (v.kind === 'node' ? onGoNode(v.topic, v.node) : onGoSitting(v.sessionId))}
+                  title={v.kind === 'node' ? `${v.label} — ${v.topicTitle}` : v.label}
+                  className="focus-ring flex items-center gap-1.5 px-2.5 py-1 text-xs text-[var(--color-text-dim)] bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] hover:bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] hover:text-[var(--color-text-primary)] transition-colors duration-[var(--dur-fast)]"
+                >
+                  {v.kind === 'node' && <InkNode id={v.node} variant="outlined" color="var(--color-ink-cool)" size={10} />}
+                  <span className="truncate max-w-[9rem]">{v.label}</span>
+                </button>
+              ))}
             </div>
           </div>
         </>
