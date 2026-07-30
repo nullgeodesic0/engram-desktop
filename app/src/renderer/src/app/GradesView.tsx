@@ -355,16 +355,21 @@ export function GradesView() {
           </Button>
           <ModeToggle mode={mode} onChange={setMode} />
         </div>
-        <PlateFigure
-          value={openGrade.overall.available ? openGrade.overall.letter : '—'}
-          title={open.title}
-          note={
-            openGrade.overall.available
-              ? `${Math.round(openGrade.overall.score ?? 0)} composite`
-              : 'not enough data yet for an overall grade'
-          }
-          tone={LETTER_TONE[openGrade.overall.letter ?? ''] ?? 'dim'}
-        />
+        {/* Same plate anatomy as ReadyRoomPlate's own — a tilt-card panel
+            wrapping the PlateFigure, never a bare figure floating with no
+            card underneath it. */}
+        <div className="tilt-card panel px-6 py-6 flex flex-col gap-2">
+          <PlateFigure
+            value={openGrade.overall.available ? openGrade.overall.letter : '—'}
+            title={open.title}
+            note={
+              openGrade.overall.available
+                ? `${Math.round(openGrade.overall.score ?? 0)} composite`
+                : 'not enough data yet for an overall grade'
+            }
+            tone={LETTER_TONE[openGrade.overall.letter ?? ''] ?? 'dim'}
+          />
+        </div>
         {openTrend.filter((p) => p.result.overall.available).length >= 2 && (
           <>
             <SectionBanner label="Grade Trend" />
@@ -375,7 +380,10 @@ export function GradesView() {
           </>
         )}
         <SectionBanner label="Subgrades" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {/* `items-start` — without it, the Recall tile's sparkline (the
+            other four tiles have no chart) stretches every tile in its row
+            to match, leaving visible dead space in the shorter siblings. */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 items-start gap-3">
           {COMPONENT_ORDER.map((key) => (
             <SubgradeTile
               key={key}
@@ -425,7 +433,10 @@ export function GradesView() {
 
   return (
     <div className="h-full overflow-y-auto p-6 flex flex-col gap-4 max-w-2xl">
-      <div className="flex items-center justify-between gap-3">
+      {/* Same plate anatomy as ReadyRoomPlate's own — a tilt-card panel
+          wrapping the PlateFigure, never a bare figure floating with no
+          card underneath it. */}
+      <div className="tilt-card panel px-6 py-6 flex items-center justify-between gap-3">
         <PlateFigure
           value={gpa.available ? gpa.letter : '—'}
           title="GPA across your topics"
