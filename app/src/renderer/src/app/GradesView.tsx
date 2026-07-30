@@ -8,6 +8,7 @@ import {
   buildTopicAssignments,
   groupAssignmentsByNode,
   letterColorClass,
+  formatAssignmentDate,
   type AssignmentRow,
   type ComponentGrade,
   type GradeComponentKey,
@@ -130,26 +131,43 @@ function TrendArrow({ trend }: { trend: TopicGradeTrendPoint[] }) {
   )
 }
 
-/** A literal graded event — "Inertia Tensor — First Learn", "Reduced Mass —
- * Review, Jul 22" — not a style choice. This is the audit trail underneath
- * the Subgrades' numbers, not a second weighted score of its own. */
+/** What each event kind is called on an assignment row — structural, from
+ * AssignmentRow.kind, never re-parsed out of the label prose. */
+const KIND_LABEL: Record<AssignmentRow['kind'], string> = {
+  encode: 'First Learn',
+  review: 'Review',
+  transfer: 'Transfer Probe',
+  unstarted: 'Not Yet Started',
+}
+
+/** A literal graded event inside its node's group — kind + date + letter as
+ * three structured registers (the node's own name lives on the group header,
+ * never repeated per row). This is the audit trail underneath the Subgrades'
+ * numbers, not a second weighted score of its own. */
 function AssignmentRowView({ row }: { row: AssignmentRow }) {
-  // Letter-colored via the ONE shared scale (A warm, C cool, F danger fall
-  // out of it naturally); unstarted rows have no letter and stay faint.
   const tone = row.outcome === 'unstarted' ? 'text-[var(--color-text-faint)]' : letterColorClass(row.letter)
   return (
-    <div className="flex items-center justify-between gap-3 py-1.5 border-b border-[var(--color-hairline)] last:border-b-0">
-      <span className="text-sm text-[var(--color-text-primary)] truncate min-w-0">{row.label}</span>
-      <span className={`label-data text-xs shrink-0 ${tone}`}>{row.outcome === 'unstarted' ? 'not started' : row.letter}</span>
+    <div className="flex items-center justify-between gap-3 py-1.5">
+      <span className="label-data text-[10px] uppercase tracking-wide text-[var(--color-text-dim)] shrink-0">
+        {KIND_LABEL[row.kind]}
+      </span>
+      <div className="flex items-center gap-3 shrink-0">
+        {row.date && <span className="label-data text-[10px] text-[var(--color-text-faint)]">{formatAssignmentDate(row.date)}</span>}
+        <span className={`label-data text-sm font-medium w-4 text-right ${tone}`}>
+          {row.outcome === 'unstarted' ? '—' : row.letter}
+        </span>
+      </div>
     </div>
   )
 }
 
-/** A collapsible group of assignment rows for one node — collapsed by
- * default (a mature topic's 44+ individual reviews would otherwise be one
- * long undifferentiated scroll). The header states the node name + count +
- * (if available) that node's own most recent outcome, so a collapsed group
- * still carries useful information without expanding it. */
+/** One node's assignments as a bordered group card (the same 1px edge-line
+ * row idiom Home's topic rows use), collapsed by default — a mature topic's
+ * 44+ individual reviews would otherwise be one long undifferentiated
+ * scroll. The COLLAPSED header already carries the story: the node's name,
+ * a faint-mono tally line (recalled/partial/lapsed counts + the date span,
+ * ReadyRoomPlate's own second-line register), the event count, and the most
+ * recent letter at figure scale. Expanding reveals the per-event rows. */
 function AssignmentGroupView({
   node,
   rows,
@@ -161,27 +179,57 @@ function AssignmentGroupView({
   expanded: boolean
   onToggle: () => void
 }) {
+  const graded = rows.filter((r) => r.outcome !== 'unstarted')
+  const recalled = graded.filter((r) => r.outcome === 'recalled').length
+  const partial = graded.filter((r) => r.outcome === 'partial').length
+  const lapsed = graded.filter((r) => r.outcome === 'lapsed').length
+  const dates = graded.map((r) => r.date).filter((d): d is string => d !== null).sort()
+  const span =
+    dates.length === 0
+      ? null
+      : dates[0] === dates[dates.length - 1]
+        ? formatAssignmentDate(dates[0])
+        : `${formatAssignmentDate(dates[0])} – ${formatAssignmentDate(dates[dates.length - 1])}`
+  const unstartedOnly = graded.length === 0
   const mostRecent = rows.find((r) => r.date) ?? rows[0]
+  const tally = unstartedOnly
+    ? 'not yet started'
+    : [
+        recalled > 0 ? `${recalled} recalled` : null,
+        partial > 0 ? `${partial} partial` : null,
+        lapsed > 0 ? `${lapsed} lapsed` : null,
+        span,
+      ]
+        .filter(Boolean)
+        .join(' · ')
   return (
-    <div className="border-b border-[var(--color-hairline)] last:border-b-0">
-      <button onClick={onToggle} className="flex items-center justify-between gap-3 py-2 w-full text-left">
-        <span className="text-sm text-[var(--color-text-primary)] truncate min-w-0 flex items-center gap-2">
-          <span className="text-[var(--color-text-faint)] text-xs">{expanded ? '▾' : '▸'}</span>
-          {humanizeNodeId(node)}
-          <span className="label-data text-[10px] text-[var(--color-text-faint)]">{rows.length}</span>
-        </span>
-        {!expanded && mostRecent && (
+    <div className="border border-[var(--color-edge)]">
+      <button
+        onClick={onToggle}
+        className="focus-ring w-full text-left px-3 py-2 flex items-center justify-between gap-3 hover:bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] transition-colors duration-[var(--dur-fast)]"
+      >
+        <div className="min-w-0 flex flex-col gap-0.5">
+          <div className="flex items-center gap-2 text-sm text-[var(--color-text-primary)]">
+            <span className="text-[var(--color-text-faint)] text-xs shrink-0">{expanded ? '▾' : '▸'}</span>
+            <span className="truncate">{humanizeNodeId(node)}</span>
+          </div>
+          <div className="label-data text-[10px] text-[var(--color-text-faint)] pl-[18px] truncate">{tally}</div>
+        </div>
+        <div className="flex items-center gap-3 shrink-0">
+          <span className="label-data text-[10px] text-[var(--color-text-dim)]">
+            {graded.length > 0 ? `${graded.length} ${graded.length === 1 ? 'event' : 'events'}` : ''}
+          </span>
           <span
-            className={`label-data text-xs shrink-0 ${
-              mostRecent.outcome === 'unstarted' ? 'text-[var(--color-text-faint)]' : letterColorClass(mostRecent.letter)
+            className={`figure-display text-2xl ${
+              unstartedOnly ? 'text-[var(--color-text-faint)]' : letterColorClass(mostRecent?.letter ?? null)
             }`}
           >
-            {mostRecent.outcome === 'unstarted' ? 'not started' : mostRecent.letter}
+            {unstartedOnly ? '—' : mostRecent?.letter}
           </span>
-        )}
+        </div>
       </button>
       {expanded && (
-        <div className="pl-4 pb-2 flex flex-col">
+        <div className="border-t border-[var(--color-hairline)] px-3 pl-[30px] flex flex-col divide-y divide-[var(--color-hairline)]">
           {rows.map((row) => (
             <AssignmentRowView key={row.key} row={row} />
           ))}
@@ -368,7 +416,9 @@ export function GradesView() {
         {openTrend.filter((p) => p.result.overall.available).length >= 2 && (
           <>
             <SectionBanner label="Grade Trend" />
-            <div className="panel px-4 py-3 flex flex-col gap-1">
+            {/* `tilt-card` — the same card physics every other plate on this
+                screen already carries. */}
+            <div className="tilt-card panel px-4 py-3 flex flex-col gap-1">
               <RetentionCurve data={trendToWeekRetention(openTrend)} />
               <div className="fig-caption">completed-work trend — coverage isn't reconstructable historically</div>
             </div>
@@ -401,7 +451,10 @@ export function GradesView() {
             Lapsed only
           </button>
         </div>
-        <div className="panel px-4 flex flex-col">
+        {/* One plate of bordered group cards — the same plate-of-rows
+            anatomy Home's Sections and topic registers use, replacing the
+            old cramped shared-panel text list. */}
+        <div className="tilt-card-soft panel px-6 py-5 flex flex-col gap-2">
           {assignments.length === 0 && (
             <div className="fig-caption py-3">{lapsedOnly ? 'No lapsed reviews — nothing to re-review.' : 'No graded work yet.'}</div>
           )}
