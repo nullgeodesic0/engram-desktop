@@ -15,9 +15,12 @@ export type AuditVerdict = 'pending' | 'agreed' | 'disputed'
  * assessor runs as a background agent, and its completion lands as a
  * `<task-notification>` string that SessionManager.ts's live event parser
  * doesn't forward at all today. `disputedNodes` names exactly the nodes the
- * assessor disagreed on, parsed from its own documented `audit.agree` output
- * contract (`agents/engram-assessor.md`) — never invented, never guessed;
- * a parse failure anywhere in the verdict just leaves the mark at `pending`. */
+ * assessor disagreed on, parsed by `parseAssessorAuditVerdict` in
+ * shared/taskNotification.ts from either shape the engine has ever written —
+ * the flat top-level `agree` (`agents/engram-assessor.md`, engine 1.10.1+) or
+ * the older nested `audit.agree` (engine 1.0.7, still the shape on every
+ * historical transcript) — never invented, never guessed; a parse failure
+ * anywhere in the verdict just leaves the mark at `pending`. */
 export const AuditCard = memo(function AuditCard({
   itemCount,
   verdict,
