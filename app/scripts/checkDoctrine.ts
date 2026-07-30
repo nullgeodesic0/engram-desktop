@@ -306,7 +306,7 @@ const permissionTs = read('main/session/permissionConfig.ts')
 const injectedStrings = [...permissionTs.matchAll(/`([^`]{40,})`|'([^']{40,})'/g)]
   .map((m) => m[1] ?? m[2])
   .join('\n---\n')
-const PINNED_PROMPT_HASH = '1f820454f0f96532'
+const PINNED_PROMPT_HASH = '88e9274bd205166e'
 if (sha(injectedStrings) !== PINNED_PROMPT_HASH) {
   fail(
     'D3.systemPrompt',
@@ -341,6 +341,7 @@ if (!eq(disallowed, PINNED_DISALLOWED)) {
 const PINNED_BRIDGE_TOOLS = [
   'ask_user_question', 'render_beat', 'session_phase', 'beat_outcome',
   'spotlight_node', 'show_figure', 'suggest_action', 'annotate_node', 'progress_note',
+  'render_ticket',
 ]
 const workerMjs = read('main/bridge/mcpBridgeWorker.mjs')
 const registered = [...workerMjs.matchAll(/registerTool\(\s*'([a-z_]+)'/g)].map((m) => m[1])

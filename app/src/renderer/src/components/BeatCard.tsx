@@ -65,7 +65,14 @@ export const BeatCard = memo(function BeatCard({
 /** Fallback for unlabeled prose chunks — a plain dialogue block, never a hard
  * failure. A session-ticket fence inside the prose renders as the themed
  * TicketCard in place of the raw mono block (parse is exact; anything that
- * isn't a well-formed ticket falls through untouched). */
+ * isn't a well-formed ticket falls through untouched).
+ *
+ * Known coexistence gap: a tutor that ALSO calls the render_ticket bridge
+ * tool (see Marks.tsx's `ticket` mark) gets a second TicketCard from that
+ * mark, since this text-fence path is never suppressed by a mark existing.
+ * Unreachable today — no installed skill calls render_ticket — so left
+ * undeduplicated rather than adding cross-layer coordination for a case that
+ * can't yet happen; revisit if a tutor ever calls both for the same ticket. */
 export const PlainDialogueBlock = memo(function PlainDialogueBlock({
   text,
   trailingCaret,

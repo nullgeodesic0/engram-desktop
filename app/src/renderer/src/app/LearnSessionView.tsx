@@ -712,6 +712,21 @@ export function LearnSessionView({
           pushMark({ kind: 'figure', title, body: payload.body })
           break
         }
+        case 'render_ticket': {
+          if (typeof payload.kind !== 'string') return
+          if (payload.mode !== undefined && typeof payload.mode !== 'string') return
+          if (!Array.isArray(payload.fields)) return
+          const fields: { key: string; value: string }[] = []
+          for (const f of payload.fields) {
+            if (typeof f !== 'object' || f === null) return
+            const rec = f as Record<string, unknown>
+            if (typeof rec.key !== 'string' || typeof rec.value !== 'string') return
+            fields.push({ key: rec.key, value: rec.value })
+          }
+          if (fields.length === 0) return
+          pushMark({ kind: 'ticket', ticket: { kind: payload.kind, mode: (payload.mode as string) ?? null, fields } })
+          break
+        }
         case 'suggest_action': {
           if (!Array.isArray(payload.actions) || payload.actions.length > 3) return
           const actions: SuggestedAction[] = []

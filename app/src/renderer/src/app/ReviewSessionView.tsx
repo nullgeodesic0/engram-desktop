@@ -264,7 +264,14 @@ export function ReviewSessionView({ onActivity, onGoHome }: ReviewSessionViewPro
   // Ritual marks — Review's own minimal slice of Learn's atIndex-interleave
   // plumbing (LearnSessionView), needed here only for the opening docket
   // (one-time, `kind: 'docket'`) and the lapse rite (derivable, `kind:
-  // 'lapse'`) — see the doctrine comment on RitualMark in Marks.tsx.
+  // 'lapse'`) — see the doctrine comment on RitualMark in Marks.tsx. Review
+  // has no `onBridgeUi` listener at all (only `onBridgeAsk`), unlike Learn —
+  // so the `render_ticket` bridge tool (Marks.tsx's `kind: 'ticket'`) is
+  // deliberately Learn-only for now; Review's ticket keeps rendering through
+  // the existing text-fence path (BeatCard's `splitAroundTicket`), which
+  // already works correctly and needs no change. Adding a new live IPC
+  // listener here for a tool no installed skill calls yet isn't worth the
+  // structural change to this KeepMounted view — extend if/when it's needed.
   const [marks, setMarks] = useState<RitualMark[]>([])
   // Chat Presence Wave D — renderer-local, live-only "what's the tutor doing
   // right now" (shared/tutorActivity.ts's doctrine comment has the full
