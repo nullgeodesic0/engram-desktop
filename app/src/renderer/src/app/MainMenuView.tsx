@@ -119,7 +119,13 @@ export function MainMenuView({
               ))}
             </div>
           ) : (
-            <div className={`grid grid-cols-1 ${group === 'study' ? 'sm:grid-cols-2' : 'sm:grid-cols-2 lg:grid-cols-3'} gap-4`}>
+            // `items-start` — the fix for the "dead real estate" the flat
+            // stretch-to-tallest-row-member default produced: a card with a
+            // one-word teaser ("D") no longer gets forced to the same height
+            // as a sibling with a full sentence, leaving a visible gap of
+            // nothing between the teaser and the ⌘-hint. Every card now sizes
+            // to its own content, same as ReadyRoomPlate's own plate does.
+            <div className={`grid grid-cols-1 items-start ${group === 'study' ? 'sm:grid-cols-2' : 'sm:grid-cols-2 lg:grid-cols-3'} gap-4`}>
               {items.map((n) => {
                 const inProgress = (n.id === 'learn' || n.id === 'review' || n.id === 'dashboard') && visited[n.id as 'learn' | 'review' | 'dashboard']
                 const pulsing = (n.id === 'learn' || n.id === 'review') && activity[n.id as 'learn' | 'review'].active
@@ -128,8 +134,8 @@ export function MainMenuView({
                   <button
                     key={n.id}
                     onClick={() => onGoView(n.id)}
-                    className={`tilt-card panel-raised text-left frame-hover flex flex-col gap-3 ${
-                      hero ? 'px-6 py-8' : 'px-5 py-6'
+                    className={`tilt-card panel-raised text-left frame-hover flex flex-col gap-2 ${
+                      hero ? 'px-6 py-6' : 'px-5 py-5'
                     } ${inProgress ? 'dogear' : ''}`}
                   >
                     <div className="flex items-center justify-between">
@@ -139,10 +145,13 @@ export function MainMenuView({
                     <div className={`font-(family-name:--font-display) text-[var(--color-text-primary)] ${hero ? 'text-xl' : 'text-lg'}`}>
                       {n.label}
                     </div>
-                    {teasers?.[n.id] !== undefined && (
-                      <div className={`label-data ${hero ? 'text-lg' : 'text-sm'} text-[var(--color-ink-warm)]`}>{teasers[n.id]}</div>
-                    )}
-                    <div className="label-data text-[10px] text-[var(--color-text-faint)] mt-auto">⌘{n.hint}</div>
+                    {/* Same register as ReadyRoomPlate's own `.fig-caption`
+                        ("a normal sitting covers about 12, most-overdue
+                        first") — a quiet serif-italic aside, never a bold
+                        colored stat-block readout competing with the label
+                        above it. */}
+                    {teasers?.[n.id] !== undefined && <div className="fig-caption">{teasers[n.id]}</div>}
+                    <div className="label-data text-[10px] text-[var(--color-text-faint)] pt-1">⌘{n.hint}</div>
                   </button>
                 )
               })}
