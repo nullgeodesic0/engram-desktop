@@ -14,8 +14,10 @@ import { MilestoneCard } from './MilestoneCard'
 import { ToolFailureCard } from './ToolFailureCard'
 import { AskCard, type AskCardOption } from './AskCard'
 import { CheckpointAnchor } from '../CheckpointAnchor'
+import { TicketCard } from './TicketCard'
 import type { ToolFailureKind } from '../../../../shared/signals/tutorSignals'
 import type { StabilityMilestoneScale } from '../../../../shared/gradeResult'
+import type { ParsedTicket } from '../../shared/ticketParser'
 
 /** Abbreviate to ~cap chars on a word boundary WITHOUT cutting inside a math
  * span — a dangling delimiter would make KaTeX render the tail as garbled
@@ -79,10 +81,15 @@ function abbreviateOutsideMath(text: string, cap: number): string {
  * them instead of leaving a resumed sitting's history bare. The rest are
  * genuinely one-time signals with no durable record to replay from —
  * `stamp` (a stash confirmation), `figure` (a `show_figure` aside), `atlas`
- * (a topic's birth), and `docket` (Review's opening `due()` snapshot — the
+ * (a topic's birth), `docket` (Review's opening `due()` snapshot — the
  * read itself never lands in the transcript, only its downstream `rate`
- * calls do) — those stay live-session-only, same pattern as grade cards and
- * JobsRail.
+ * calls do), and `ticket` (a `render_ticket` bridge:ui call — a purely
+ * additional, live-session-only path to the SAME card the fenced-text
+ * `parseTicket`/`splitAroundTicket` path already renders from the tutor's
+ * printed ticket block; a tutor that never calls this tool, and every
+ * historical/replayed transcript, keeps working exactly as before through
+ * that existing text path) — those stay live-session-only, same pattern as
+ * grade cards and JobsRail.
  *
  * `ask` (Wave E, Task 11) — the bridge:ask prompt (including the fixed
  * Confidence picker, see AskCard's own doctrine comment), now inline in the
@@ -122,6 +129,7 @@ export type RitualMark = { id: string; atIndex: number } & (
   | { kind: 'audit'; itemCount: number | null; verdict: AuditVerdict; disputedNodes: string[] }
   | { kind: 'milestone'; node: string; scale: StabilityMilestoneScale; sBefore: number; sAfter: number }
   | { kind: 'tool-failure'; failureKind: ToolFailureKind }
+  | { kind: 'ticket'; ticket: ParsedTicket }
   | {
       kind: 'ask'
       requestId: string
@@ -325,6 +333,7 @@ export function MarkView({
       />
     )
   else if (mark.kind === 'tool-failure') content = <ToolFailureCard failureKind={mark.failureKind} />
+  else if (mark.kind === 'ticket') content = <TicketCard ticket={mark.ticket} />
   else if (mark.kind === 'ask') {
     content = (
       <AskCard

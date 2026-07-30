@@ -143,5 +143,16 @@ server.registerTool('progress_note', {
   inputSchema: { text: z.string() },
 }, async (args) => fireUi('progress_note', args))
 
+server.registerTool('render_ticket', {
+  title: 'Render Ticket',
+  description:
+    "Advisory, best-effort: when you print the session's opening ticket block (the fenced \"engram · <kind>\" summary the display formats describe), you may also call this with the same data so the app renders it from structured fields instead of re-parsing your printed text. Still print the fenced block as documented — this is an additional path to the same card, never a replacement for it.",
+  inputSchema: {
+    kind: z.string(),
+    mode: z.string().optional(),
+    fields: z.array(z.object({ key: z.string(), value: z.string() })),
+  },
+}, async (args) => fireUi('render_ticket', args))
+
 const transport = new StdioServerTransport()
 await server.connect(transport)
