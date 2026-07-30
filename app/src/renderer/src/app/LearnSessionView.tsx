@@ -2040,7 +2040,19 @@ export function LearnSessionView({
         />
       )}
       {settingsFor && (
-        <TopicSettingsModal topicId={settingsFor.topic} topicTitle={settingsFor.title} onClose={() => setSettingsFor(null)} />
+        <TopicSettingsModal
+          topicId={settingsFor.topic}
+          topicTitle={settingsFor.title}
+          onClose={() => {
+            setSettingsFor(null)
+            // A save may have just changed this topic's display name — and
+            // this view is KeepMounted (never remounts), so without an
+            // explicit refetch the shelf would keep the old title until the
+            // app restarts. getTopicsCached applies the rename overlay per
+            // call, so one refetch is all it takes.
+            refreshTopics()
+          }}
+        />
       )}
       {newTopicOpen && <NewTopicModal onClose={() => setNewTopicOpen(false)} onStart={startNewTopic} />}
     </div>
