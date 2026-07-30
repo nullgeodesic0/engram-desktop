@@ -20,6 +20,7 @@ import { TranscriptMinimap } from '../components/TranscriptMinimap'
 import { deriveInstrumentMoments, type InstrumentMoment } from '../shared/instrumentMoments'
 import { jumpToCheckpoint } from '../shared/jumpToCheckpoint'
 import { allProbeHeaders } from '../../../shared/reviewCrossing'
+import { endsWithBareProbeHeader } from '../../../shared/probeHeader'
 import { useTutorActivity, composerDisabledReason } from '../shared/tutorActivity'
 import { parseTranscriptToMessages, type ChatMessage } from '../../../shared/chatMessages'
 import { extractLastUsageFromTranscript } from '../../../shared/sessionUsage'
@@ -818,7 +819,11 @@ export function LearnSessionView({
         assistantBoundaryRef.current = false
         setMessages((prev) => {
           const last = prev[prev.length - 1]
-          if (last && last.role === 'assistant' && !breakBubble) {
+          // Bare-probe-header exception (see `endsWithBareProbeHeader`'s own
+          // doctrine comment) — a header-only bubble absorbs the text that
+          // follows a mark-boundary tool call (typically `render_beat`
+          // posting the probe itself) instead of starting a new bubble.
+          if (last && last.role === 'assistant' && (!breakBubble || endsWithBareProbeHeader(last.text))) {
             const text = last.text + event.text
             // Best-effort fallback only: the bolded-label convention rarely
             // appears in real prose, so a null here means "no signal", not

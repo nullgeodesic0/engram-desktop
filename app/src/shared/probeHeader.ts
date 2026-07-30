@@ -101,3 +101,24 @@ export function splitAroundProbeHeader(text: string): { before: string; header: 
 export function parseProbeHeader(text: string): ProbeHeader | null {
   return splitAroundProbeHeader(text)?.header ?? null
 }
+
+/** True when `text` is (up to trailing whitespace) NOTHING but a bare probe
+ * header — matched, and `header.body` empty. This is the shape a tutor's
+ * text block has when it emits `**[3/5] · \`node\`**` and then immediately
+ * calls a bridge tool (`render_beat`, in the real corpus case this guards)
+ * before writing the probe question itself: the header line lands as its
+ * OWN assistant text block, with the question following in a SEPARATE block
+ * after the tool call. The interleave fix (`isMarkBoundaryToolUse`) would
+ * otherwise split that following block into its own bubble, stranding the
+ * header in a title-only `ProbeCard` with the question rendered as
+ * unrelated prose underneath — a real, reported bug (see
+ * `probe-card-question-fix-report.md`). Callers use this to special-case
+ * that ONE boundary: when the bubble about to close is a bare header like
+ * this, the next text block is folded into the SAME bubble instead of
+ * starting a new one, so `splitAroundProbeHeader` sees header + body
+ * together and `ProbeCard` renders the question inside the card, as it
+ * already does whenever both arrive in one block. */
+export function endsWithBareProbeHeader(text: string): boolean {
+  const split = splitAroundProbeHeader(text)
+  return split !== null && split.header.body === ''
+}
