@@ -1212,7 +1212,11 @@
   /* The transcript reads as a set page, not a chat log — one reading measure,
      centered when the window is wide. */
   .transcript-measure {
-    max-width: 78ch;
+    /* 78ch → 92ch when the persistent sidebar was removed — the rail's
+       ~192px came back to the window, and the transcript is the surface
+       that earns it. Bubbles cap at percentages of this measure, so they
+       widen with it automatically. */
+    max-width: 92ch;
     width: 100%;
     margin-inline: auto;
   }

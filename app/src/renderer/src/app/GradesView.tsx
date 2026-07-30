@@ -1,5 +1,14 @@
 import { useEffect, useState } from 'react'
-import type { DayActivity, GraderHealthResult, Misconception, RawReceipt, TopicGraph, TopicListEntry, WeekRetention } from '../../../shared/types'
+import type {
+  DayActivity,
+  GraderHealthResult,
+  Misconception,
+  NodeProvenance,
+  RawReceipt,
+  TopicGraph,
+  TopicListEntry,
+  WeekRetention,
+} from '../../../shared/types'
 import {
   computeTopicGrade,
   computeCrossTopicGPA,
@@ -143,20 +152,53 @@ const KIND_LABEL: Record<AssignmentRow['kind'], string> = {
 /** A literal graded event inside its node's group — kind + date + letter as
  * three structured registers (the node's own name lives on the group header,
  * never repeated per row). This is the audit trail underneath the Subgrades'
- * numbers, not a second weighted score of its own. */
-function AssignmentRowView({ row }: { row: AssignmentRow }) {
+ * numbers, not a second weighted score of its own.
+ *
+ * When the event's own sitting could be resolved from the topic's
+ * provenance index (`sessionId` non-null), the whole row becomes a LINK to
+ * that conversation — a small tilt card whose kind label carries the app's
+ * cool link ink and an ↗, opening the sitting in the session drawer. An
+ * event whose transcript couldn't be located renders as the plain static
+ * row rather than a dead link. */
+function AssignmentRowView({
+  row,
+  sessionId,
+  onGoSitting,
+}: {
+  row: AssignmentRow
+  sessionId: string | null
+  onGoSitting?: (sessionId: string) => void
+}) {
   const tone = row.outcome === 'unstarted' ? 'text-[var(--color-text-faint)]' : letterColorClass(row.letter)
+  const linked = sessionId !== null && onGoSitting !== undefined
+  const right = (
+    <div className="flex items-center gap-3 shrink-0">
+      {row.date && <span className="label-data text-[10px] text-[var(--color-text-faint)]">{formatAssignmentDate(row.date)}</span>}
+      <span className={`label-data text-sm font-medium w-4 text-right ${tone}`}>
+        {row.outcome === 'unstarted' ? '—' : row.letter}
+      </span>
+    </div>
+  )
+  if (linked) {
+    return (
+      <button
+        onClick={() => onGoSitting(sessionId)}
+        title="Open this sitting's conversation"
+        className="focus-ring tilt-card-rail w-full flex items-center justify-between gap-3 py-1.5 px-2 -mx-2 text-left hover:bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] transition-colors duration-[var(--dur-fast)]"
+      >
+        <span className="label-data text-[10px] uppercase tracking-wide text-[var(--color-ink-cool)] shrink-0">
+          {KIND_LABEL[row.kind]} ↗
+        </span>
+        {right}
+      </button>
+    )
+  }
   return (
     <div className="flex items-center justify-between gap-3 py-1.5">
       <span className="label-data text-[10px] uppercase tracking-wide text-[var(--color-text-dim)] shrink-0">
         {KIND_LABEL[row.kind]}
       </span>
-      <div className="flex items-center gap-3 shrink-0">
-        {row.date && <span className="label-data text-[10px] text-[var(--color-text-faint)]">{formatAssignmentDate(row.date)}</span>}
-        <span className={`label-data text-sm font-medium w-4 text-right ${tone}`}>
-          {row.outcome === 'unstarted' ? '—' : row.letter}
-        </span>
-      </div>
+      {right}
     </div>
   )
 }
@@ -173,11 +215,17 @@ function AssignmentGroupView({
   rows,
   expanded,
   onToggle,
+  resolveSession,
+  onGoSitting,
 }: {
   node: string
   rows: AssignmentRow[]
   expanded: boolean
   onToggle: () => void
+  /** Row → the sessionId of the sitting that produced it, or null when the
+   * topic's provenance index has no matching transcript event. */
+  resolveSession: (row: AssignmentRow) => string | null
+  onGoSitting?: (sessionId: string) => void
 }) {
   const graded = rows.filter((r) => r.outcome !== 'unstarted')
   const recalled = graded.filter((r) => r.outcome === 'recalled').length
@@ -231,7 +279,7 @@ function AssignmentGroupView({
       {expanded && (
         <div className="border-t border-[var(--color-hairline)] px-3 pl-[30px] flex flex-col divide-y divide-[var(--color-hairline)]">
           {rows.map((row) => (
-            <AssignmentRowView key={row.key} row={row} />
+            <AssignmentRowView key={row.key} row={row} sessionId={resolveSession(row)} onGoSitting={onGoSitting} />
           ))}
         </div>
       )}
@@ -303,7 +351,7 @@ const COMPONENT_ORDER: GradeComponentKey[] = ['recall', 'punctuality', 'coverage
  * on both the roster and the drilldown — not two independent controls —
  * since it's the same underlying question ("count unfinished work against
  * me or not") regardless of which screen is showing it. */
-export function GradesView() {
+export function GradesView({ onGoSitting }: { onGoSitting?: (sessionId: string) => void } = {}) {
   const [topics, setTopics] = useState<TopicListEntry[] | null>(null)
   const [receipts, setReceipts] = useState<RawReceipt[] | null>(null)
   const [misconceptions, setMisconceptions] = useState<Misconception[] | null>(null)
@@ -317,6 +365,10 @@ export function GradesView() {
   const [openGraph, setOpenGraph] = useState<TopicGraph | null>(null)
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set())
   const [lapsedOnly, setLapsedOnly] = useState(false)
+  // The open topic's node→sittings index (same source the map drawer's
+  // provenance block reads) — what turns each assignment row into a link to
+  // the conversation that produced it.
+  const [provenance, setProvenance] = useState<Record<string, NodeProvenance> | null>(null)
 
   useEffect(() => {
     window.engram.topics().then(setTopics)
@@ -335,12 +387,20 @@ export function GradesView() {
   useEffect(() => {
     if (!openTopic) {
       setOpenGraph(null)
+      setProvenance(null)
       return
     }
     let cancelled = false
     window.engram.topicGraph(openTopic).then((g) => {
       if (!cancelled) setOpenGraph(g as TopicGraph)
     })
+    // Best-effort: rows without a resolvable transcript just render unlinked.
+    window.engram
+      .nodeProvenance(openTopic)
+      .then((p) => {
+        if (!cancelled) setProvenance(p)
+      })
+      .catch(() => {})
     return () => {
       cancelled = true
     }
@@ -390,6 +450,22 @@ export function GradesView() {
     const assignments = lapsedOnly ? allAssignments.filter((r) => r.outcome === 'lapsed') : allAssignments
     const assignmentGroups = groupAssignmentsByNode(assignments)
     const recallSparkline = topicWeekRetention(days, open.topic)
+    // Row → sitting: match the provenance index's events by node + date,
+    // preferring the event whose kind agrees with the row's (an encode row
+    // matches the transcript's encode/pretest event, a review/transfer row
+    // its review events); same-date fallback covers kind-ambiguous days.
+    // Null (unlinked row) whenever no transcript event matches — an honest
+    // plain row beats a dead link.
+    const resolveSession = (row: AssignmentRow): string | null => {
+      if (!row.date || !provenance) return null
+      const p = provenance[row.node]
+      if (!p) return null
+      const events = [...(p.firstEncoded ? [p.firstEncoded] : []), ...p.reviews]
+      const kindMatch = events.find(
+        (e) => e.date === row.date && (row.kind === 'encode' ? e.kind !== 'review' : e.kind === 'review'),
+      )
+      return (kindMatch ?? events.find((e) => e.date === row.date))?.sessionId ?? null
+    }
     return (
       <div className="h-full overflow-y-auto p-8 flex flex-col gap-4 w-full">
         <div className="flex items-center justify-between gap-3">
@@ -464,6 +540,8 @@ export function GradesView() {
               node={group.node}
               rows={group.rows}
               expanded={expandedNodes.has(group.node)}
+              resolveSession={resolveSession}
+              onGoSitting={onGoSitting}
               onToggle={() =>
                 setExpandedNodes((prev) => {
                   const next = new Set(prev)
