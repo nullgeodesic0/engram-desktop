@@ -325,11 +325,19 @@ export function diagnosticGateOnNextNode(gate: DiagnosticGate, itemCount: number
 //     a `<task-notification>` string landing in an ordinary `type: "user"`
 //     transcript line, matched back to the spawn via `<tool-use-id>`, gated on
 //     `<status>completed</status>`. That notification's `<result>` embeds a
-//     fenced ```json array — and its shape exactly matches the documented
-//     output contract in `agents/engram-assessor.md`: `"audit": {"tutor_rating":
+//     fenced ```json array — and this real sitting's shape (engine 1.0.7, the
+//     version running when it was recorded) is: `"audit": {"tutor_rating":
 //     "...", "agree": true|false, "note": "..."}` per item (verified against
 //     both the real transcript's actual JSON AND the agent spec's own
-//     example — two independent sources agreeing, not a single guessed shape).
+//     example at that version — two independent sources agreeing, not a
+//     single guessed shape). The engine was later updated to 1.10.1, which
+//     FLATTENED this: `agents/engram-assessor.md` and `engram.py`'s
+//     `apply_item` now document/consume top-level `kind: "audit"`, `rating`,
+//     `audited_rating`, `agree` fields instead of a nested `audit` object.
+//     `parseAssessorAuditVerdict` in shared/taskNotification.ts tries the
+//     flat shape first and falls back to this nested one, so this historical
+//     sitting keeps parsing exactly as it always did (replay parity) while a
+//     fresh 1.10.1 sitting also resolves.
 //
 // That async hand-off matters for where this can ever resolve: SessionManager.ts's
 // `type === 'user'` branch only forwards `tool_result` blocks out of an ARRAY

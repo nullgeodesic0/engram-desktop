@@ -14,16 +14,33 @@
  *
  * `parseAssessorAuditVerdict` is the ONLY function anywhere in this codebase
  * permitted to parse the assessor's JSON body, and its closed return type IS
- * the doctrine boundary: it extracts strictly `node` and `audit.agree` and
- * NOTHING else — never `rubric_notes`, `probe`, `production`, `feedback_line`,
- * `misconceptions`, `confidence`. The assessor's receipt carries all of those
- * because `agents/engram-assessor.md` documents a richer contract than a
- * ritual mark needs, but a UI surface that ever rendered `rubric_notes` or
- * `feedback_line` back at the learner would be handing them exactly the
- * graded-against material the loop's own compartmentalization keeps behind
- * the confidence pick — the same leak `checkDoctrine.ts`'s D4 section guards
- * against for `claim`/`rubric`/`transfer_probe` on the tutor's own side. Widen
- * this return type only with the same scrutiny that would take. */
+ * the doctrine boundary: it extracts strictly `node` and the item's agree
+ * verdict and NOTHING else — never `rubric_notes`, `probe`, `production`,
+ * `feedback_line`, `misconceptions`, `confidence`. The assessor's receipt
+ * carries all of those because `agents/engram-assessor.md` documents a
+ * richer contract than a ritual mark needs, but a UI surface that ever
+ * rendered `rubric_notes` or `feedback_line` back at the learner would be
+ * handing them exactly the graded-against material the loop's own
+ * compartmentalization keeps behind the confidence pick — the same leak
+ * `checkDoctrine.ts`'s D4 section guards against for `claim`/`rubric`/
+ * `transfer_probe` on the tutor's own side. Widen this return type only with
+ * the same scrutiny that would take.
+ *
+ * TWO REAL SHAPES, both honored (schema drift, engine 1.0.7 -> 1.10.1): every
+ * historical transcript on disk was written under the plugin's 1.0.7 audit
+ * contract, which nested the verdict as `item.audit.agree` (verified verbatim
+ * against `~/.claude/projects/-Users-tylerhadsell/6130a05d-...jsonl`, e.g.
+ * `"audit": {"tutor_rating": "hard", "agree": true, "note": "..."}`). The
+ * engine was updated to 1.10.1, whose `agents/engram-assessor.md` and
+ * `engram.py`'s `apply_item`/`cmd_rate` now document and consume a FLAT
+ * top-level shape instead: `"kind": "audit", "rating": "hard",
+ * "audited_rating": "good", "agree": false` — no nested `audit` object at
+ * all. Replay parity requires the old nested transcripts to parse exactly as
+ * they always did, forever, while a fresh session run under 1.10.1 must also
+ * resolve — so this function tries the flat top-level `agree` first, then
+ * falls back to the nested `item.audit.agree`, and treats whichever is
+ * present as authoritative for that item. Do not collapse this to one shape:
+ * the other one is real, on disk, right now. */
 
 /** Prefix check — true iff `content` is a background-agent completion
  * envelope rather than a genuine learner turn. Bare `string` content that
@@ -55,9 +72,14 @@ export function parseTaskNotificationEnvelope(
  * comment above for exactly why this is the one and only place that touches
  * the assessor's JSON, and exactly what it is and isn't allowed to extract.
  * Returns null on ANY parse failure or shape mismatch (no fenced ```json
- * block, invalid JSON, an empty array, an item missing the documented
- * `node`/`audit.agree` fields): a mark stuck at `pending` forever is honest;
- * a fabricated verdict is not. */
+ * block, invalid JSON, an empty array, an item missing `node` and missing
+ * BOTH the flat top-level `agree` and the nested `audit.agree`): a mark stuck
+ * at `pending` forever is honest; a fabricated verdict is not.
+ *
+ * Each item is checked for the flat 1.10.1 shape first (top-level `agree`
+ * boolean, sitting alongside `kind: "audit"`), falling back to the nested
+ * 1.0.7 shape (`item.audit.agree`) only when the flat field is absent — see
+ * the module doctrine comment for the exact verbatim shapes of both. */
 export function parseAssessorAuditVerdict(
   resultText: string,
 ): { itemCount: number; disputedNodes: string[] } | null {
@@ -74,9 +96,16 @@ export function parseAssessorAuditVerdict(
   for (const item of parsed) {
     if (typeof item !== 'object' || item === null) return null
     const node = (item as Record<string, unknown>).node
-    const audit = (item as Record<string, unknown>).audit
-    if (typeof node !== 'string' || typeof audit !== 'object' || audit === null) return null
-    const agree = (audit as Record<string, unknown>).agree
+    if (typeof node !== 'string') return null
+    const flatAgree = (item as Record<string, unknown>).agree
+    let agree: unknown
+    if (typeof flatAgree === 'boolean') {
+      agree = flatAgree
+    } else {
+      const audit = (item as Record<string, unknown>).audit
+      if (typeof audit !== 'object' || audit === null) return null
+      agree = (audit as Record<string, unknown>).agree
+    }
     if (typeof agree !== 'boolean') return null
     if (!agree) disputedNodes.push(node)
   }
