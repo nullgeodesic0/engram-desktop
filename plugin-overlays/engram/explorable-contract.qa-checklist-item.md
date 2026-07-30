@@ -1,0 +1,1 @@
+- [ ] House style: tokens declared verbatim for both themes, sharp 0-radius glass panels, tracked-uppercase section labels, serif claim-voice against sans/mono chrome — quote which panel/label uses which
