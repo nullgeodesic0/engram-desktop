@@ -1,5 +1,5 @@
 import type { DayActivity, WeekRetention, ReceiptItem, TopicGraph } from '../../../shared/types'
-import type { ConfidencePick } from './calibrationStore'
+import { feltSure as pickFeltSure, type ConfidencePick } from './calibrationStore'
 import { humanizeNodeId } from '../../../shared/humanizeId'
 
 /** Monday of the ISO week containing this date — mirrors
@@ -171,8 +171,9 @@ export function computeWeekDigest(input: WeekDigestInput): WeekDigestOutput {
       const match = items.find((it) => it.topic === pick.topic && it.node === pick.node)
       if (!match) continue
       total++
-      const feltSure = pick.index >= 2
-      if (feltSure && match.grade !== 'recalled') overconfident++
+      // Via the store's own classifier — the picker is most-confident-first,
+      // so the raw `>= 2` this replaces counted the UNSURE bands as sure.
+      if (pickFeltSure(pick.index) && match.grade !== 'recalled') overconfident++
     }
     return { overconfident, total }
   }

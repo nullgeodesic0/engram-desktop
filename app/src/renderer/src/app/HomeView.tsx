@@ -168,18 +168,24 @@ function TopicGroup({
               resumable ? 'dogear' : ''
             }`}
           >
-            <div className="flex items-center justify-between gap-2 text-xs">
+            <div className="flex items-center justify-between gap-3 text-xs">
               <div className="flex items-center gap-2 min-w-0">
                 <InkNode id={t.topic} variant={t.states.review > 0 ? 'filled' : 'outlined'} size={14} />
                 <HealthRing consolidated={t.states.review} total={total} due={t.due} size={16} />
                 <span className="text-[var(--color-text-primary)] truncate">{t.title}</span>
+              </div>
+              {/* Right cluster — the same anatomy as the Grades roster rows:
+                  the count in dim mono, then the letter as a real
+                  figure-display numeral, not a 10px chip lost in the title
+                  line. */}
+              <div className="flex items-center gap-3 shrink-0">
+                <span className="label-data text-[var(--color-text-dim)]">
+                  {t.due > 0 ? `${t.due} due` : `${t.states.review}/${total}`}
+                </span>
                 {grade?.available && (
-                  <span className={`label-data text-[10px] font-medium shrink-0 ${letterColorClass(grade.letter)}`}>{grade.letter}</span>
+                  <span className={`figure-display text-2xl ${letterColorClass(grade.letter)}`}>{grade.letter}</span>
                 )}
               </div>
-              <span className="label-data text-[var(--color-text-dim)] shrink-0">
-                {t.due > 0 ? `${t.due} due` : `${t.states.review}/${total}`}
-              </span>
             </div>
             {/* Same faint-mono second-line register as ReadyRoomPlate's due
                 node names — the topic's state chips as quiet dot-joined
@@ -386,12 +392,13 @@ export function HomeView({
   const notStarted = topics?.filter((t) => topicBucket(t) === 'notStarted') ?? []
   const envBroken = envCheck !== null && !(envCheck.claudeOk && envCheck.pluginOk)
 
-  // Grades — computed once every input is loaded, `total` mode (matches
-  // GradesView's own default) so Home's badges/GPA teaser/callout reflect
-  // the same "does unfinished work count against you" lens by default.
-  // Absent (empty map / unavailable GPA) until then; every consumer below
-  // already guards on that rather than blocking Home's own loading state on
-  // grade data specifically.
+  // Grades — computed once every input is loaded, `completed` mode (matches
+  // GradesView's own default, per the user's explicit call): the GPA and
+  // badges shown around the UI grade the work actually done, not the
+  // unstarted backlog — the total-work lens stays one toggle away on the
+  // Grades screen itself. Absent (empty map / unavailable GPA) until loaded;
+  // every consumer below already guards on that rather than blocking Home's
+  // own loading state on grade data specifically.
   const gradesReady = topics && receiptsHistory && misconceptions
   const grades = gradesReady
     ? new Map<string, TopicGradeResult>(
@@ -404,7 +411,7 @@ export function HomeView({
             misconceptions,
             days: receiptsHistory.days,
             picks: allPicks(),
-            mode: 'total',
+            mode: 'completed',
           }),
         ]),
       )

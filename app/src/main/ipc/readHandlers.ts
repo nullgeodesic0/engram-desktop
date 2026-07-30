@@ -11,6 +11,7 @@ import { getTopicsCached } from '../engramCli/topicsCache'
 import { readReceiptsHistory } from '../engramCli/receiptsHistory'
 import { readGraderAuditHistory } from '../engramCli/graderAuditHistory'
 import { getMapAnnotations } from '../session/mapAnnotations'
+import { getDisplayTitles } from '../session/topicSettings'
 import { nodeProvenance } from '../session/sessionScan'
 import type {
   TopicGraph,
@@ -109,7 +110,16 @@ export function registerReadHandlers(): void {
   // and `bias_note`, which `grader-health` omits (see graderAuditHistory.ts).
   ipcMain.handle('engram:graderAuditHistory', (): Promise<GraderAuditFile[]> => readGraderAuditHistory())
   ipcMain.handle('engram:topicStatusText', (_e, topic: string) => engramTopicStatusText(topic))
-  ipcMain.handle('engram:topicGraph', (_e, topic: string) => readTopicGraph(topic))
+  // Display-rename overlay on the graph's own title too — same single-point
+  // treatment getTopicsCached applies to the topics list, so every consumer
+  // of either source (map header, Home's flashback, print export) shows the
+  // learner's chosen name. The graph on DISK is never written (read-only
+  // doctrine); only the IPC payload's `title` field is swapped in transit.
+  ipcMain.handle('engram:topicGraph', async (_e, topic: string) => {
+    const graph = (await readTopicGraph(topic)) as TopicGraph
+    const rename = (await getDisplayTitles())[topic]
+    return rename ? { ...graph, title: rename } : graph
+  })
   ipcMain.handle('engram:artifactList', (): Promise<ArtifactEntry[]> => artifactListWithMtime())
   ipcMain.handle('engram:receiptsHistory', () => readReceiptsHistory())
   ipcMain.handle('engram:misconceptions', async (): Promise<Misconception[]> => {

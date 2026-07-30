@@ -1,11 +1,14 @@
 import type { DayActivity } from '../../../../shared/types'
-import type { ConfidencePick } from '../../shared/calibrationStore'
+import { feltSure, confidenceRank, type ConfidencePick } from '../../shared/calibrationStore'
 import { seeded } from '../graph3d/layout'
 import { humanizeNodeId } from '../../../../shared/humanizeId'
 import { useChartHover } from './useChartHover'
 import { ChartTooltip } from './ChartTooltip'
 
-const CONFIDENCE_LABEL = ['unsure', 'unsure', 'confident', 'confident'] as const
+/** X-axis tick labels by ascending confidence RANK (confidenceRank's own
+ * order: 0 = Just guessing … 3 = Certain) — the picker's real band names,
+ * not bare index numbers, so the axis states what a position means. */
+const RANK_LABELS = ['just guessing', 'half unsure', 'pretty sure', 'certain'] as const
 
 const WIDTH = 600
 const HEIGHT = 150
@@ -33,7 +36,7 @@ export function CalibrationScatter({ data }: { data: CalibrationScatterData }) {
   const { hover, showHover, hideHover } = useChartHover<{
     node: string
     topic: string
-    confidenceIndex: number
+    label: string
     recalled: boolean
   }>()
   const itemsByDay = new Map(data.days.map((d) => [d.date, d.items]))
@@ -51,7 +54,7 @@ export function CalibrationScatter({ data }: { data: CalibrationScatterData }) {
     key: string
     node: string
     topic: string
-    confidenceIndex: number
+    label: string
   }[] = []
   let overconfident = 0
   let underconfident = 0
@@ -68,9 +71,13 @@ export function CalibrationScatter({ data }: { data: CalibrationScatterData }) {
     if (!match) return
 
     const recalled = match.grade === 'recalled'
-    const feltSure = pick.index >= 2
-    if (feltSure && !recalled) overconfident++
-    else if (!feltSure && recalled) underconfident++
+    // Via the store's own classifier — the picker is most-confident-FIRST
+    // (index 0 = Certain), so the raw `>= 2` this replaces both swapped the
+    // over/underconfident tallies AND plotted Certain picks at the axis's
+    // "low" end (the flipped x-axis caught live on Coach).
+    const sure = feltSure(pick.index)
+    if (sure && !recalled) overconfident++
+    else if (!sure && recalled) underconfident++
     else calibrated++
 
     const key = `${pick.topic}:${pick.node}:${pick.ts}:${idx}`
@@ -81,13 +88,15 @@ export function CalibrationScatter({ data }: { data: CalibrationScatterData }) {
     const jitterY = (seeded(key, 2) - 0.5) * innerH * 0.22
     const baseY = recalled ? rowY.recalled : rowY.lapsed
     points.push({
-      x: toX(pick.index) + jitterX,
+      // confidenceRank, not the raw index — ascending confidence must move
+      // RIGHT to match the "low → high" axis caption.
+      x: toX(confidenceRank(pick.index)) + jitterX,
       y: baseY + jitterY,
       recalled,
       key,
       node: pick.node,
       topic: pick.topic,
-      confidenceIndex: pick.index,
+      label: pick.label,
     })
   })
 
@@ -121,16 +130,16 @@ export function CalibrationScatter({ data }: { data: CalibrationScatterData }) {
         </text>
         <line x1={PAD_L} y1={PAD_T} x2={PAD_L} y2={HEIGHT - PAD_B} stroke="var(--color-hairline)" strokeWidth={1} />
         <line x1={PAD_L} y1={HEIGHT - PAD_B} x2={WIDTH - PAD_R} y2={HEIGHT - PAD_B} stroke="var(--color-hairline)" strokeWidth={1} />
-        {[0, 1, 2, 3].map((i) => (
+        {RANK_LABELS.map((bandLabel, rank) => (
           <text
-            key={i}
-            x={toX(i)}
+            key={bandLabel}
+            x={toX(rank)}
             y={HEIGHT - PAD_B + 14}
             textAnchor="middle"
             className="label-data"
             style={{ fontSize: 9, fill: 'var(--color-text-dim)' }}
           >
-            {i}
+            {bandLabel}
           </text>
         ))}
         <text x={(PAD_L + WIDTH - PAD_R) / 2} y={HEIGHT - 2} textAnchor="middle" style={{ fontSize: 9, fill: 'var(--color-text-faint)' }}>
@@ -145,9 +154,7 @@ export function CalibrationScatter({ data }: { data: CalibrationScatterData }) {
               r={2.6}
               fill={p.recalled ? 'var(--color-ink-warm)' : 'var(--color-ink-violet)'}
               fillOpacity={0.8}
-              onMouseEnter={(e) =>
-                showHover(e, { node: p.node, topic: p.topic, confidenceIndex: p.confidenceIndex, recalled: p.recalled })
-              }
+              onMouseEnter={(e) => showHover(e, { node: p.node, topic: p.topic, label: p.label, recalled: p.recalled })}
               onMouseLeave={hideHover}
             />
           ))}
@@ -163,7 +170,7 @@ export function CalibrationScatter({ data }: { data: CalibrationScatterData }) {
             {humanizeNodeId(hover.node)} · {hover.topic}
           </div>
           <div className="text-[var(--color-text-dim)] mt-0.5">
-            {CONFIDENCE_LABEL[hover.confidenceIndex]} · {hover.recalled ? 'recalled' : 'lapsed'}
+            felt “{hover.label}” · {hover.recalled ? 'recalled' : 'lapsed'}
           </div>
         </ChartTooltip>
       )}

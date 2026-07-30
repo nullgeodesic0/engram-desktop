@@ -17,6 +17,12 @@ export function TopicSettingsModal({ topicId, topicTitle, onClose }: TopicSettin
   const [value, setValue] = useState('')
   const [contextFiles, setContextFiles] = useState<string[]>([])
   const [targetDate, setTargetDate] = useState<string | null>(null)
+  const [displayTitle, setDisplayTitle] = useState('')
+  // The engine's own generated title, for the rename field's reference line —
+  // `topicTitle` (the prop) may already BE a rename, so it can't serve as
+  // "what the engine calls this". getTopicsCached preserves the original as
+  // `engineTitle` whenever a rename is active.
+  const [engineTitle, setEngineTitle] = useState<string | null>(null)
   const [loaded, setLoaded] = useState(false)
   const [saving, setSaving] = useState(false)
 
@@ -25,7 +31,12 @@ export function TopicSettingsModal({ topicId, topicTitle, onClose }: TopicSettin
       setValue(s.systemPromptExtra)
       setContextFiles(s.contextFiles)
       setTargetDate(s.targetDate ?? null)
+      setDisplayTitle(s.displayTitle ?? '')
       setLoaded(true)
+    })
+    window.engram.topics().then((list) => {
+      const entry = list.find((t) => t.topic === topicId)
+      if (entry) setEngineTitle(entry.engineTitle ?? entry.title)
     })
   }, [topicId])
 
@@ -40,7 +51,12 @@ export function TopicSettingsModal({ topicId, topicTitle, onClose }: TopicSettin
 
   async function save() {
     setSaving(true)
-    await window.engram.setTopicSettings(topicId, { systemPromptExtra: value.trim(), contextFiles, targetDate })
+    await window.engram.setTopicSettings(topicId, {
+      systemPromptExtra: value.trim(),
+      contextFiles,
+      targetDate,
+      displayTitle: displayTitle.trim() || null,
+    })
     setSaving(false)
     onClose()
   }
@@ -74,6 +90,27 @@ export function TopicSettingsModal({ topicId, topicTitle, onClose }: TopicSettin
       }
     >
       <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-2">
+          <label className="text-sm text-[var(--color-text-primary)]">Display name</label>
+          <p className="text-xs text-[var(--color-text-faint)]">
+            Shown across the app in place of the engine’s generated title. Display only — the engine’s own records
+            never change. Leave empty to use the engine’s title.
+          </p>
+          <input
+            type="text"
+            value={displayTitle}
+            onChange={(e) => setDisplayTitle(e.target.value)}
+            disabled={!loaded}
+            placeholder={engineTitle ?? topicTitle}
+            className="focus-ring panel px-3 py-2 text-sm bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] text-[var(--color-text-primary)] disabled:opacity-50"
+          />
+          {engineTitle && displayTitle.trim() && (
+            <div className="label-data text-[10px] text-[var(--color-text-faint)] truncate" title={engineTitle}>
+              engine’s title: {engineTitle}
+            </div>
+          )}
+        </div>
+
         <div className="flex flex-col gap-2">
           <label className="text-sm text-[var(--color-text-primary)]">Extra instructions for this topic</label>
           <p className="text-xs text-[var(--color-text-faint)]">

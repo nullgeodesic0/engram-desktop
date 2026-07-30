@@ -58,6 +58,7 @@ export type GradeComponentKey = keyof typeof WEIGHTS
 export type GradeMode = 'completed' | 'total'
 
 const LETTER_CUTOFFS: [number, string][] = [
+  [95, 'S'],
   [90, 'A'],
   [80, 'B'],
   [70, 'C'],
@@ -74,13 +75,17 @@ export function scoreToLetter(score: number): string {
   return 'F'
 }
 
-/** Shared letter→ink-tone mapping, used everywhere a grade letter renders
- * (Grades' roster/drilldown, Home's TopicCard badge/needs-attention callout)
- * so a "B" is the same color wherever it appears. */
+/** Shared letter→ink mapping, used everywhere a grade letter renders
+ * (Grades' roster/drilldown, assignments, Home's topic rows and
+ * needs-attention callout) so a "B" is the same color wherever it appears.
+ * The user's explicit scale: S purple (a rank above A, cut in at 95),
+ * A/B orange, C/D blue, F red — violet/warm/cool/danger, the ink family's
+ * own four signals, no new hue needed. */
 export function letterColorClass(letter: string | null): string {
+  if (letter === 'S') return 'text-[var(--color-ink-violet)]'
   if (letter === 'A' || letter === 'B') return 'text-[var(--color-ink-warm)]'
-  if (letter === 'C') return 'text-[var(--color-ink-cool)]'
-  if (letter === 'D' || letter === 'F') return 'text-[var(--color-ink-danger)]'
+  if (letter === 'C' || letter === 'D') return 'text-[var(--color-ink-cool)]'
+  if (letter === 'F') return 'text-[var(--color-ink-danger)]'
   return 'text-[var(--color-text-faint)]'
 }
 

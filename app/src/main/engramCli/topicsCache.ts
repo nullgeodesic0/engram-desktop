@@ -2,6 +2,7 @@ import { readdir, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { engramRead } from './readOnly'
+import { getDisplayTitles } from '../session/topicSettings'
 import type { TopicListEntry } from '../../shared/types'
 
 // Matches readTopicGraph's existing convention (see readOnly.ts) — not
@@ -40,10 +41,20 @@ async function computeSignature(): Promise<string> {
  */
 export async function getTopicsCached(): Promise<TopicListEntry[]> {
   const signature = await computeSignature()
-  if (cache && cache.signature === signature) return cache.topics
-  const topics = await engramRead<TopicListEntry[]>('topics')
-  cache = { signature, topics }
-  return topics
+  let topics: TopicListEntry[]
+  if (cache && cache.signature === signature) {
+    topics = cache.topics
+  } else {
+    topics = await engramRead<TopicListEntry[]>('topics')
+    cache = { signature, topics }
+  }
+  // Display-rename overlay — applied per CALL on top of the cache, never
+  // baked into it: a rename changes topic-settings.json but no graph mtime,
+  // so an overlay stored in the cache would go stale invisibly. Purely
+  // presentational; the engine's own title survives as `engineTitle`.
+  const renames = await getDisplayTitles()
+  if (Object.keys(renames).length === 0) return topics
+  return topics.map((t) => (renames[t.topic] ? { ...t, engineTitle: t.title, title: renames[t.topic] } : t))
 }
 
 export function invalidateTopicsCache(): void {
