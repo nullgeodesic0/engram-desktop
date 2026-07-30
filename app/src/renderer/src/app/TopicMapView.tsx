@@ -24,6 +24,17 @@ import { stateLabel, formatMonthDay } from '../shared/nodeDisplay'
 /** `date` is a local YYYY-MM-DD string (see ProvenanceEvent) — parsed without
  * a `Z` suffix so `Date` reads it in local time instead of shifting it a day
  * at UTC-negative offsets. */
+/** Map-chrome control cards — every toolbar button/toggle on this page is a
+ * small bordered tilt card (`tilt-card-rail`: small chrome tilts MORE, by
+ * standing decree), replacing the old bare `cmd-item` text-links.
+ * Transparent at rest; the FILLED variants mark importance — an active
+ * lens/toggle or the page's primary actions (warm), the explorable opener
+ * (violet, that signal's own ink). */
+const CTRL =
+  'focus-ring tilt-card-rail label-data text-[10px] uppercase tracking-[0.16em] px-2.5 py-1 border transition-colors duration-[var(--dur-fast)]'
+const CTRL_QUIET = `${CTRL} border-[var(--color-edge)] text-[var(--color-text-dim)] hover:text-[var(--color-text-primary)]`
+const CTRL_FILLED = `${CTRL} border-[var(--color-ink-warm-dim)] bg-[color-mix(in_srgb,var(--color-ink-warm)_16%,transparent)] text-[var(--color-ink-warm)]`
+
 function formatProvenanceDate(date: string): string {
   return new Date(`${date}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
@@ -691,20 +702,16 @@ export function TopicMapView({
             holds the cmd-item's underline open ([&::after]:scale-x-100 —
             the same 1px rule the idiom slides in on hover). */}
         <div role="group" aria-label="Topics" className="flex items-center gap-x-3 gap-y-2 flex-wrap">
-          {topics.map((t, i) => (
-            <span key={t.topic} className="inline-flex items-center gap-x-3 min-w-0">
-              {i > 0 && <span className="h-3 w-px bg-[var(--color-hairline)] shrink-0" aria-hidden="true" />}
-              <button
-                onClick={() => setSelectedTopic(t.topic)}
-                title={t.title}
-                aria-pressed={selectedTopic === t.topic}
-                className={`focus-ring cmd-item label-data text-[10px] uppercase tracking-[0.16em] max-w-64 truncate text-left ${
-                  selectedTopic === t.topic ? 'text-[var(--color-ink-warm)] [&::after]:scale-x-100' : ''
-                }`}
-              >
-                {t.topic}
-              </button>
-            </span>
+          {topics.map((t) => (
+            <button
+              key={t.topic}
+              onClick={() => setSelectedTopic(t.topic)}
+              title={t.title}
+              aria-pressed={selectedTopic === t.topic}
+              className={`${selectedTopic === t.topic ? CTRL_FILLED : CTRL_QUIET} max-w-64 truncate text-left`}
+            >
+              {t.topic}
+            </button>
           ))}
         </div>
       </div>
@@ -753,7 +760,7 @@ export function TopicMapView({
                   onClick={handleExportMap}
                   disabled={exportingMap || !decayReady}
                   title={!decayReady ? 'Waiting on this topic’s decay figures before the plate can print them faithfully…' : undefined}
-                  className="focus-ring no-press cmd-item label-data text-[10px] uppercase tracking-[0.16em] disabled:opacity-50"
+                  className={`${CTRL_FILLED} no-press disabled:opacity-50`}
                 >
                   {exportingMap ? 'Exporting…' : decayReady ? 'Export plate' : 'Preparing…'}
                 </button>
@@ -778,9 +785,7 @@ export function TopicMapView({
                         disabled={!growthTimeline}
                         title={growthTimeline ? undefined : 'Nothing dated yet to replay'}
                         aria-pressed={replayActive}
-                        className={`focus-ring cmd-item label-data text-[10px] uppercase tracking-[0.16em] disabled:opacity-40 disabled:cursor-not-allowed ${
-                          replayActive ? 'text-[var(--color-ink-warm)] [&::after]:scale-x-100' : ''
-                        }`}
+                        className={`${replayActive ? CTRL_FILLED : CTRL_QUIET} disabled:opacity-40 disabled:cursor-not-allowed`}
                       >
                         Replay
                       </button>
@@ -789,9 +794,7 @@ export function TopicMapView({
                         aria-pressed={dueLens && !replayActive}
                         disabled={replayActive}
                         title={replayActive ? 'One lens at a time — close the replay first' : undefined}
-                        className={`focus-ring cmd-item label-data text-[10px] uppercase tracking-[0.16em] disabled:opacity-40 disabled:cursor-not-allowed ${
-                          dueLens && !replayActive ? 'text-[var(--color-ink-warm)] [&::after]:scale-x-100' : ''
-                        }`}
+                        className={`${dueLens && !replayActive ? CTRL_FILLED : CTRL_QUIET} disabled:opacity-40 disabled:cursor-not-allowed`}
                       >
                         Due lens
                       </button>
@@ -805,9 +808,7 @@ export function TopicMapView({
                       key={v}
                       onClick={() => setPlateView(v)}
                       aria-pressed={plateView === v}
-                      className={`focus-ring cmd-item label-data text-[10px] uppercase tracking-[0.16em] ${
-                        plateView === v ? 'text-[var(--color-ink-warm)] [&::after]:scale-x-100' : ''
-                      }`}
+                      className={plateView === v ? CTRL_FILLED : CTRL_QUIET}
                     >
                       {v === 'map' ? 'Map' : 'Table'}
                     </button>
@@ -1045,13 +1046,13 @@ export function TopicMapView({
                   <button
                     onClick={() => setOpenNode(selectedNode)}
                     title="Open full node"
-                    className="focus-ring text-[10px] label-data px-2 py-1 bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] text-[var(--color-ink-warm)] hover:text-[var(--color-text-primary)]"
+                    className="focus-ring tilt-card-rail text-[10px] label-data px-2 py-1 border border-[var(--color-ink-warm-dim)] bg-[color-mix(in_srgb,var(--color-ink-warm)_16%,transparent)] text-[var(--color-ink-warm)] hover:text-[var(--color-text-primary)]"
                   >
                     Open ↗
                   </button>
                   <button
                     onClick={() => setSelectedNode(null)}
-                    className="focus-ring text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] text-lg leading-none"
+                    className="focus-ring tilt-card-rail h-6 w-6 flex items-center justify-center border border-[var(--color-edge)] text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] leading-none"
                     aria-label="Close"
                   >
                     ×
@@ -1086,7 +1087,7 @@ export function TopicMapView({
                 {node.artifact && (
                   <button
                     onClick={() => setExplorableNode(selectedNode)}
-                    className="focus-ring self-start px-3 py-1.5 text-xs bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] text-[var(--color-ink-violet)] hover:bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)]"
+                    className="focus-ring tilt-card-rail self-start px-3 py-1.5 text-xs border border-[var(--color-ink-violet-dim)] bg-[color-mix(in_srgb,var(--color-ink-violet)_14%,transparent)] text-[var(--color-ink-violet)] hover:bg-[color-mix(in_srgb,var(--color-ink-violet)_22%,transparent)]"
                   >
                     Open explorable ↗
                   </button>
@@ -1327,7 +1328,7 @@ export function TopicMapView({
                           key={r}
                           onClick={() => setOpenNode(r)}
                           title={r}
-                          className="focus-ring text-xs px-2 py-1 rounded bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] text-[var(--color-ink-cool)] hover:text-[var(--color-text-primary)]"
+                          className="focus-ring tilt-card-rail text-xs px-2 py-1 border border-[var(--color-edge)] bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] text-[var(--color-ink-cool)] hover:text-[var(--color-text-primary)]"
                         >
                           {humanizeNodeId(r)}
                         </button>
@@ -1364,7 +1365,7 @@ export function TopicMapView({
             {opened.artifact && (
               <button
                 onClick={() => setExplorableNode(openNode)}
-                className="focus-ring self-start mt-1 px-4 py-2 rounded-lg text-sm bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] text-[var(--color-ink-violet)] hover:bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)]"
+                className="focus-ring tilt-card-rail self-start mt-1 px-4 py-2 text-sm border border-[var(--color-ink-violet-dim)] bg-[color-mix(in_srgb,var(--color-ink-violet)_14%,transparent)] text-[var(--color-ink-violet)] hover:bg-[color-mix(in_srgb,var(--color-ink-violet)_22%,transparent)]"
               >
                 Open explorable ↗
               </button>

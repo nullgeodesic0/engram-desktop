@@ -173,7 +173,7 @@ export function NodeTable({
         {restrictIds && restrictLabel && (
           <button
             onClick={onClearRestrict}
-            className="focus-ring label-data text-[10px] uppercase tracking-[0.16em] px-2 py-1 border bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] border-[var(--color-ink-warm)] text-[var(--color-ink-warm)]"
+            className="focus-ring tilt-card-rail label-data text-[10px] uppercase tracking-[0.16em] px-2 py-1 border bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] border-[var(--color-ink-warm)] text-[var(--color-ink-warm)]"
           >
             {`REGION — ${restrictLabel} ${territoryIds.length} ×`}
           </button>
@@ -185,10 +185,10 @@ export function NodeTable({
               key={key}
               onClick={() => toggleFilter(key)}
               aria-pressed={pressed}
-              className={`focus-ring label-data text-[10px] uppercase tracking-[0.16em] px-2 py-1 border transition-colors ${
+              className={`focus-ring tilt-card-rail label-data text-[10px] uppercase tracking-[0.16em] px-2 py-1 border transition-colors ${
                 pressed
                   ? 'bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] border-[var(--color-ink-warm)] text-[var(--color-ink-warm)]'
-                  : 'border-[var(--color-hairline)] text-[var(--color-text-dim)] hover:text-[var(--color-text-primary)]'
+                  : 'border-[var(--color-edge)] text-[var(--color-text-dim)] hover:text-[var(--color-text-primary)]'
               }`}
             >
               {FILTER_LABEL[key]}{' '}
@@ -204,9 +204,9 @@ export function NodeTable({
         {activeFilters.size > 0 && (
           <button
             onClick={() => setActiveFilters(new Set())}
-            className="focus-ring text-[10px] text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] px-1.5"
+            className="focus-ring tilt-card-rail label-data text-[10px] uppercase tracking-[0.16em] px-2 py-1 border border-[var(--color-edge)] text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]"
           >
-            clear
+            Clear
           </button>
         )}
         <span className="label-data text-[10px] text-[var(--color-text-faint)] ml-auto">

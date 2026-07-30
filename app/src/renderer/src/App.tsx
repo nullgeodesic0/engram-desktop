@@ -315,7 +315,7 @@ export default function App() {
         <div className="flex-1 min-h-0 relative">
           {view === 'grades' && (
             <div key="grades" className="view-transition h-full">
-              <GradesView />
+              <GradesView onGoSitting={goToSitting} />
             </div>
           )}
           {view === 'home' && (
