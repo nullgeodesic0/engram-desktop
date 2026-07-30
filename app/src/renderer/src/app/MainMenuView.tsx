@@ -7,12 +7,16 @@ export interface MainMenuNavItem {
   icon: ReactElement
 }
 
-/** The sidebar's replacement — a landing hub of large glass nav cards
- * instead of a persistent rail. One card per section; the currently-alive
- * KeepMounted session (if any) gets its `.dogear` (active-state corner-fold,
- * reserved for exactly this by house-style decree) so the menu itself
- * signals "you have a session in progress here," reusing the app's existing
- * `activity`/`visited` state rather than inventing new tracking. */
+/** The sidebar's replacement — a grid of large glass nav cards, mounted as
+ * a section INSIDE HomeView (not its own routed screen — Home IS the menu:
+ * "the home menu contains everything else accessible within it," per the
+ * user's own framing, and every other view gets back to it via the single
+ * persistent title-bar Home button, not a separate menu destination). One
+ * card per section; the currently-alive KeepMounted session (if any) gets
+ * its `.dogear` (active-state corner-fold, reserved for exactly this by
+ * house-style decree) so the hub itself signals "you have a session in
+ * progress here," reusing the app's existing `activity`/`visited` state
+ * rather than inventing new tracking. */
 export function MainMenuView({
   nav,
   dueCount,
@@ -27,12 +31,8 @@ export function MainMenuView({
   onGoView: (id: string) => void
 }) {
   return (
-    <div className="h-full overflow-y-auto p-6">
-      <div className="section-banner mb-4">
-        <span>Engram</span>
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {nav.map((n) => {
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {nav.map((n) => {
           const inProgress = (n.id === 'learn' || n.id === 'review' || n.id === 'dashboard') && visited[n.id as 'learn' | 'review' | 'dashboard']
           const pulsing = (n.id === 'learn' || n.id === 'review') && activity[n.id as 'learn' | 'review'].active
           return (
@@ -72,8 +72,7 @@ export function MainMenuView({
               <div className="label-data text-[10px] text-[var(--color-text-faint)] mt-auto">⌘{n.hint}</div>
             </button>
           )
-        })}
-      </div>
+      })}
     </div>
   )
 }
