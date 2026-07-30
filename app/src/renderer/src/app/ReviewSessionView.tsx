@@ -62,6 +62,7 @@ import {
 import { QueueRail } from '../components/ritual/QueueRail'
 import { NodeCrossingDivider } from '../components/ritual/Marks'
 import { deriveReviewCrossings, latestProbeHeader, nextProbeHeaderAt, allProbeHeaders } from '../../../shared/reviewCrossing'
+import { endsWithBareProbeHeader } from '../../../shared/probeHeader'
 import {
   deriveVerdictRegions,
   verdictRegionMessageRenders,
@@ -430,7 +431,11 @@ export function ReviewSessionView({ onActivity, onGoHome }: ReviewSessionViewPro
         assistantBoundaryRef.current = false
         setMessages((prev) => {
           const last = prev[prev.length - 1]
-          if (last && last.role === 'assistant' && !breakBubble) {
+          // Bare-probe-header exception (see `endsWithBareProbeHeader`'s own
+          // doctrine comment) — a header-only bubble absorbs the text that
+          // follows a mark-boundary tool call (typically `render_beat`
+          // posting the probe itself) instead of starting a new bubble.
+          if (last && last.role === 'assistant' && (!breakBubble || endsWithBareProbeHeader(last.text))) {
             return [...prev.slice(0, -1), { ...last, text: last.text + event.text }]
           }
           // `Date.now()` at append time — SessionEvent carries no timestamp

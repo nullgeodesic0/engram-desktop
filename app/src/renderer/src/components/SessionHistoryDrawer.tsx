@@ -13,6 +13,7 @@ import {
 } from '../../../shared/verdictSegments'
 import { isTaskNotificationContent } from '../../../shared/taskNotification'
 import { isMarkBoundaryToolUse } from '../../../shared/signals/tutorSignals'
+import { endsWithBareProbeHeader } from '../../../shared/probeHeader'
 import { sittingToMarkdown, sittingToPrintHtml, type SittingMeta } from '../shared/sittingToMarkdown'
 import { recordView } from '../shared/recentlyViewed'
 import { Modal } from './ui/Modal'
@@ -150,7 +151,12 @@ export function buildHistoryTimeline(
         }
         if (block.type !== 'text' || !block.text) continue
         const last = messages[messages.length - 1]
-        if (last && last.role === 'assistant' && !boundarySinceLastText) {
+        // Bare-probe-header exception — same as chatMessages.ts's own merge
+        // branch (see `endsWithBareProbeHeader`'s doctrine comment): a
+        // header-only bubble absorbs the text that follows a mark-boundary
+        // tool call instead of starting a new bubble, so replay agrees with
+        // the live views' fix for the same corpus bug.
+        if (last && last.role === 'assistant' && (!boundarySinceLastText || endsWithBareProbeHeader(last.text))) {
           // Timestamp intentionally untouched — same "keeps the instant it
           // started at" rule as chatMessages.ts's own merge branch.
           last.text += block.text

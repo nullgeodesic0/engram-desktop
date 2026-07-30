@@ -1,5 +1,6 @@
 import { isTaskNotificationContent } from './taskNotification'
 import { isMarkBoundaryToolUse } from './signals/tutorSignals'
+import { endsWithBareProbeHeader } from './probeHeader'
 
 export interface ChatMessage {
   id: string
@@ -119,7 +120,13 @@ export function parseTranscriptToMessages(rawLines: unknown[]): ChatMessage[] {
         }
         if (block.type !== 'text' || !block.text) continue
         const last = messages[messages.length - 1]
-        if (last && last.role === 'assistant' && !boundarySinceLastText) {
+        // Bare-probe-header exception (see `endsWithBareProbeHeader`'s own
+        // doctrine comment): a header-only bubble immediately followed by a
+        // mark-boundary tool call (typically `render_beat` posting the probe
+        // itself) still absorbs the next text block into the SAME bubble —
+        // the split rule exists for genuine mid-turn interleaving, not for a
+        // single probe utterance that a bridge call happens to interrupt.
+        if (last && last.role === 'assistant' && (!boundarySinceLastText || endsWithBareProbeHeader(last.text))) {
           // Timestamp intentionally untouched — a merged bubble keeps the
           // instant it STARTED at, same rule the live append path uses.
           last.text += block.text
