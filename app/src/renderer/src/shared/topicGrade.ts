@@ -434,6 +434,11 @@ export interface AssignmentRow {
   node: string
   label: string
   date: string | null
+  /** Which kind of graded event this was — carried structurally so the UI
+   * renders "First Learn"/"Review"/"Transfer Probe" from data instead of
+   * re-parsing `label`'s prose. `review` is also the fallback for receipts
+   * with no recorded kind, matching assignmentLabel's own fallback. */
+  kind: 'encode' | 'review' | 'transfer' | 'unstarted'
   outcome: 'recalled' | 'partial' | 'lapsed' | 'unstarted'
   letter: string | null
 }
@@ -444,7 +449,9 @@ const OUTCOME_LETTER: Record<'recalled' | 'partial' | 'lapsed', string> = {
   lapsed: 'F',
 }
 
-function formatAssignmentDate(ts: string): string {
+/** Exported for the Assignments UI's own date renders (group date spans,
+ * per-row dates) — one formatting rule, not two. */
+export function formatAssignmentDate(ts: string): string {
   return new Date(`${ts}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
@@ -480,6 +487,7 @@ export function buildTopicAssignments(
       node: r.node,
       label: assignmentLabel(r.node, r.kind, r.ts),
       date: r.ts,
+      kind: (r.kind === 'encode' || r.kind === 'transfer' ? r.kind : 'review') as 'encode' | 'transfer' | 'review',
       outcome: outcome ?? 'lapsed',
       letter: outcome ? OUTCOME_LETTER[outcome] : null,
     }
@@ -494,6 +502,7 @@ export function buildTopicAssignments(
         node,
         label: `${humanizeNodeId(node)} — Not Yet Started`,
         date: null,
+        kind: 'unstarted',
         outcome: 'unstarted',
         letter: null,
       })
