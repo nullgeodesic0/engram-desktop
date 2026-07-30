@@ -55,6 +55,7 @@ export function installAppMenu(focusOrCreateWindow: (navigateTo?: string) => voi
         { label: 'Topic Map', accelerator: 'Cmd+3', click: () => focusOrCreateWindow('topics') },
         { label: 'Coach', accelerator: 'Cmd+4', click: () => focusOrCreateWindow('dashboard') },
         { label: 'Artifacts', accelerator: 'Cmd+5', click: () => focusOrCreateWindow('artifacts') },
+        { label: 'Grades', accelerator: 'Cmd+7', click: () => focusOrCreateWindow('grades') },
         { type: 'separator' },
         ...(isDev ? ([{ role: 'reload' }, { role: 'toggleDevTools' }, { type: 'separator' }] as Electron.MenuItemConstructorOptions[]) : []),
         { role: 'togglefullscreen' },

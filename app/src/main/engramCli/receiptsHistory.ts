@@ -13,6 +13,8 @@ interface ReceiptLine {
   s_before?: number
   s_after?: number
   capstone?: boolean
+  interval_days?: number
+  due_next?: string
 }
 
 export interface ReceiptItem {
@@ -60,6 +62,17 @@ export interface RawReceipt {
   sBefore: number | null
   sAfter: number | null
   capstone: boolean
+  /** The FSRS interval (days) this receipt's own rating set — engram.py's
+   * `interval_days`, present on every real receipt checked. Distinct from
+   * `dueNext` below: this is the SPAN, that is the resulting DATE. */
+  intervalDays: number | null
+  /** The exact due-date this receipt scheduled the node's next review for —
+   * engram.py's `due_next`, a local 'YYYY-MM-DD' string. Combined with the
+   * NEXT receipt's own `ts` for the same node, this is what
+   * `shared/topicGrade.ts`'s punctuality metric compares against — the
+   * engine's own literal scheduled date, not a reconstruction from
+   * `intervalDays` + an assumed anchor date. */
+  dueNext: string | null
 }
 
 export interface ReceiptsHistory {
@@ -149,6 +162,8 @@ export async function readReceiptsHistory(): Promise<ReceiptsHistory> {
           sBefore: typeof entry.s_before === 'number' ? entry.s_before : null,
           sAfter: typeof entry.s_after === 'number' ? entry.s_after : null,
           capstone: entry.capstone === true,
+          intervalDays: typeof entry.interval_days === 'number' ? entry.interval_days : null,
+          dueNext: typeof entry.due_next === 'string' ? entry.due_next : null,
         })
 
         const entryDate = new Date(`${entry.ts}T00:00:00Z`)
