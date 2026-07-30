@@ -16,7 +16,7 @@ import {
 } from '../../../shared/verdictSegments'
 import { isTaskNotificationContent } from '../../../shared/taskNotification'
 import { isMarkBoundaryToolUse } from '../../../shared/signals/tutorSignals'
-import { endsWithBareProbeHeader } from '../../../shared/probeHeader'
+import { endsWithBareProbeHeader, mergeAssistantText } from '../../../shared/probeHeader'
 import { sittingToMarkdown, sittingToPrintHtml, type SittingMeta } from '../shared/sittingToMarkdown'
 import { recordView } from '../shared/recentlyViewed'
 import { Modal } from './ui/Modal'
@@ -180,7 +180,7 @@ export function buildHistoryTimeline(rawLines: unknown[]): {
         if (last && last.role === 'assistant' && (!boundarySinceLastText || endsWithBareProbeHeader(last.text))) {
           // Timestamp intentionally untouched — same "keeps the instant it
           // started at" rule as chatMessages.ts's own merge branch.
-          last.text += block.text
+          last.text = mergeAssistantText(last.text, boundarySinceLastText, block.text)
         } else {
           messages.push({ id: `t${idCounter++}`, role: 'assistant', text: block.text, timestamp: parseLineTimestamp(line.timestamp) })
           messageSourceIndex.push(idx)
