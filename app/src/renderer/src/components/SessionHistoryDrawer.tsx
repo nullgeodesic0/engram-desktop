@@ -8,8 +8,11 @@ import {
   deriveVerdictRegions,
   verdictRegionMessageRenders,
   shouldSuppressSchedule,
+  parseVerdictHint,
+  REPORT_VERDICT_TOOL,
   type VerdictSegment,
   type ScheduleSegment,
+  type VerdictHint,
 } from '../../../shared/verdictSegments'
 import { isTaskNotificationContent } from '../../../shared/taskNotification'
 import { isMarkBoundaryToolUse } from '../../../shared/signals/tutorSignals'
@@ -98,11 +101,21 @@ export interface GradeBatch {
  * same skip/merge index rules independently — its `atIndex` values already
  * line up with this function's `messages` array without any extra bookkeeping
  * here. */
-export function buildHistoryTimeline(
-  rawLines: unknown[],
-): { messages: ChatMessage[]; grades: GradeBatch[]; messageSourceIndex: number[]; marks: DerivedRitualMark[] } {
+export function buildHistoryTimeline(rawLines: unknown[]): {
+  messages: ChatMessage[]
+  grades: GradeBatch[]
+  messageSourceIndex: number[]
+  marks: DerivedRitualMark[]
+  verdictHints: Map<number, VerdictHint[]>
+} {
   const lines = rawLines as TranscriptLine[]
   const messages: ChatMessage[] = []
+  // report_verdict tool_use calls, keyed by the index of the message that
+  // immediately follows — same `messages.length`-at-call-time convention as
+  // GradeBatch.atIndex above. Populated inside the tool_use branch below,
+  // which already walks every block with isMarkBoundaryToolUse (true for
+  // this tool since Phase 2's addition), so this needs no separate pass.
+  const verdictHints = new Map<number, VerdictHint[]>()
   // Parallel to `messages` — the raw transcript-line index each message was
   // first created from (see GradeBatch.sourceIndex for the matching grade-side
   // field, and ProvenanceEvent.anchor in shared/types.ts for the convention
@@ -146,6 +159,14 @@ export function buildHistoryTimeline(
           block.input !== null &&
           isMarkBoundaryToolUse(block.name, block.input)
         ) {
+          if (block.name === REPORT_VERDICT_TOOL) {
+            const hint = parseVerdictHint(block.input)
+            if (hint) {
+              const list = verdictHints.get(messages.length) ?? []
+              list.push(hint)
+              verdictHints.set(messages.length, list)
+            }
+          }
           boundarySinceLastText = true
           continue
         }
@@ -190,7 +211,7 @@ export function buildHistoryTimeline(
     }
   }
 
-  return { messages, grades, messageSourceIndex, marks: deriveRitualMarks(rawLines) }
+  return { messages, grades, messageSourceIndex, marks: deriveRitualMarks(rawLines), verdictHints }
 }
 
 /** The lab-notebook export's single entry point — shared by the drawer's own
@@ -464,6 +485,7 @@ export function SessionHistoryDrawer({
     grades: GradeBatch[]
     messageSourceIndex: number[]
     marks: DerivedRitualMark[]
+    verdictHints: Map<number, VerdictHint[]>
   } | null>(null)
   const [loadingTranscript, setLoadingTranscript] = useState(false)
   const [exportStatus, setExportStatus] = useState<{ text: string; failed: boolean } | null>(null)
@@ -745,7 +767,7 @@ export function SessionHistoryDrawer({
     const map = new Map<number, { segments: VerdictSegment[]; eyebrowIndex: number | null; batchId: string }>()
     if (!timeline) return map
     for (const region of verdictRegions) {
-      for (const render of verdictRegionMessageRenders(timeline.messages, region)) {
+      for (const render of verdictRegionMessageRenders(timeline.messages, region, timeline.verdictHints)) {
         map.set(render.messageIndex, { segments: render.segments, eyebrowIndex: render.eyebrowSegmentIndex, batchId: region.batchId })
       }
     }
