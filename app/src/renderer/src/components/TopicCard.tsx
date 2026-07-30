@@ -3,6 +3,7 @@ import { InkNode } from './ui/InkNode'
 import { HealthRing } from './ui/HealthRing'
 import { IconButton } from './ui/IconButton'
 import { topicChips } from '../shared/topicShelf'
+import { letterColorClass, type TopicGradeResult } from '../shared/topicGrade'
 
 /** 16px stroked refresh glyph — replaces Learn's old text-glyph `↻` button. */
 function RefreshIcon() {
@@ -46,6 +47,11 @@ interface TopicCardProps {
   resumable?: boolean
   onSettings?: () => void
   onStartFresh?: () => void
+  /** Home's tile variant only, for now — the topic's current letter grade,
+   * rendered as a small chip beside HealthRing. Both are "at a glance"
+   * health signals: HealthRing is the coverage/due shape, the letter is the
+   * accountability number. Absent on shelf/drilldown call sites. */
+  grade?: TopicGradeResult['overall']
 }
 
 /** One topic card, shared by Home's grid and Learn's shelf — same InkNode +
@@ -54,7 +60,7 @@ interface TopicCardProps {
  * (Learn's old local card omitted InkNode and the `learning` chip entirely;
  * Home's never showed a due chip since HealthRing's danger notch already
  * carries that signal here). */
-export function TopicCard({ variant, topic: t, onOpen, resumable = false, onSettings, onStartFresh }: TopicCardProps) {
+export function TopicCard({ variant, topic: t, onOpen, resumable = false, onSettings, onStartFresh, grade }: TopicCardProps) {
   const total = t.states.new + t.states.learning + t.states.review
 
   if (variant === 'tile') {
@@ -78,6 +84,9 @@ export function TopicCard({ variant, topic: t, onOpen, resumable = false, onSett
         <div className="flex items-center gap-2 text-sm text-[var(--color-text-primary)]">
           <InkNode id={t.topic} variant={t.states.review > 0 ? 'filled' : 'outlined'} size={16} />
           <HealthRing consolidated={t.states.review} total={total} due={t.due} size={18} />
+          {grade?.available && (
+            <span className={`label-data text-[10px] font-medium shrink-0 ${letterColorClass(grade.letter)}`}>{grade.letter}</span>
+          )}
           <span className="line-clamp-1">{t.title}</span>
         </div>
         <div className="flex gap-3 text-xs label-data">

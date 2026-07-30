@@ -2,6 +2,7 @@ import type { DayActivity, Misconception, RawReceipt, TopicListEntry } from '../
 import type { ConfidencePick } from './calibrationStore'
 import { computeRetentionBuckets, computeCalibration, RETENTION_BUCKET_MIN_N } from './topicMetrics'
 import { humanizeNodeId } from '../../../shared/humanizeId'
+import { mondayOf } from './weekDigest'
 
 // ============================================================================
 // Per-topic A-F course grade — genuine accountability, not gamification.
@@ -71,6 +72,16 @@ export function scoreToLetter(score: number): string {
     if (score >= min) return letter
   }
   return 'F'
+}
+
+/** Shared letter→ink-tone mapping, used everywhere a grade letter renders
+ * (Grades' roster/drilldown, Home's TopicCard badge/needs-attention callout)
+ * so a "B" is the same color wherever it appears. */
+export function letterColorClass(letter: string | null): string {
+  if (letter === 'A' || letter === 'B') return 'text-[var(--color-ink-warm)]'
+  if (letter === 'C') return 'text-[var(--color-ink-cool)]'
+  if (letter === 'D' || letter === 'F') return 'text-[var(--color-ink-danger)]'
+  return 'text-[var(--color-text-faint)]'
 }
 
 // Local-date day-diff — both inputs are 'YYYY-MM-DD' local dates (engram.py's
@@ -293,6 +304,117 @@ export function computeTopicGrade(inputs: {
 }
 
 // ============================================================================
+// Cross-topic GPA — no new math, aggregates each topic's own already-computed
+// composite. Weighted by node count (a "credit hours" analog: a 40-node
+// topic should move the GPA more than a 3-node one), renormalized over only
+// the topics with an available grade — same "don't let missing data read as
+// zero" discipline computeTopicGrade itself uses for its components.
+// ============================================================================
+
+export interface CrossTopicGPA {
+  available: boolean
+  score: number | null
+  letter: string | null
+  topicsCounted: number
+}
+
+export function computeCrossTopicGPA(topics: TopicListEntry[], grades: Map<string, TopicGradeResult>): CrossTopicGPA {
+  let weightedSum = 0
+  let nodeWeightSum = 0
+  let topicsCounted = 0
+
+  for (const t of topics) {
+    const grade = grades.get(t.topic)
+    if (!grade?.overall.available || grade.overall.score === null || t.nodes === 0) continue
+    weightedSum += grade.overall.score * t.nodes
+    nodeWeightSum += t.nodes
+    topicsCounted++
+  }
+
+  if (nodeWeightSum === 0) return { available: false, score: null, letter: null, topicsCounted: 0 }
+
+  const score = weightedSum / nodeWeightSum
+  return { available: true, score, letter: scoreToLetter(score), topicsCounted }
+}
+
+// ============================================================================
+// Grade trend — completed-mode ONLY, by design, not an oversight. Coverage
+// (the one component that differs between `completed`/`total`) reads a LIVE
+// graph snapshot with no "as-of" query, and a node can regress out of
+// `review` state via forgetting — a `total`-mode historical line would
+// silently disagree with the live coverage number shown elsewhere on this
+// same screen. Rather than invent a second, weaker coverage semantics for
+// "as of the past," the trend only ever charts the `completed` composite.
+// Callers must caption this explicitly (never let a trend line be mistaken
+// for `total` mode's own number).
+// ============================================================================
+
+/** `cutoff` is a local 'YYYY-MM-DD' date — receipts/misconceptions/days are
+ * already stored as matching local-date strings, so `<=` string comparison
+ * is correct for them directly. `picks` is the one exception: ConfidencePick.ts
+ * is a numeric millisecond timestamp, NOT a date string, so it needs a real
+ * timestamp boundary (end of the cutoff day) rather than a string compare —
+ * getting this wrong would silently let every future pick leak into every
+ * historical cutoff. */
+export function computeHistoricalTopicGrade(inputs: {
+  receipts: RawReceipt[]
+  topic: string
+  misconceptions: Misconception[]
+  days: DayActivity[]
+  picks: ConfidencePick[]
+  cutoff: string
+}): TopicGradeResult {
+  const { receipts, topic, misconceptions, days, picks, cutoff } = inputs
+  const cutoffMs = new Date(`${cutoff}T23:59:59`).getTime()
+
+  return computeTopicGrade({
+    receipts: receipts.filter((r) => r.ts <= cutoff),
+    topic,
+    topicEntry: undefined, // coverage is never available historically — see doctrine comment above
+    misconceptions: misconceptions.filter((m) => m.ts <= cutoff),
+    days: days.filter((d) => d.date <= cutoff),
+    picks: picks.filter((p) => p.ts <= cutoffMs),
+    mode: 'completed',
+  })
+}
+
+export interface TopicGradeTrendPoint {
+  cutoff: string
+  result: TopicGradeResult
+}
+
+export function computeTopicGradeTrend(inputs: {
+  receipts: RawReceipt[]
+  topic: string
+  misconceptions: Misconception[]
+  days: DayActivity[]
+  picks: ConfidencePick[]
+  cutoffs: string[]
+}): TopicGradeTrendPoint[] {
+  const { receipts, topic, misconceptions, days, picks, cutoffs } = inputs
+  return cutoffs.map((cutoff) => ({
+    cutoff,
+    result: computeHistoricalTopicGrade({ receipts, topic, misconceptions, days, picks, cutoff }),
+  }))
+}
+
+/** The last `weeks` real Mondays present in `days` (receiptsHistory's own
+ * ~180-day window) — same week-boundary rule `topicWeekRetention` already
+ * uses (`mondayOf`, from weekDigest.ts), so the trend's cadence never
+ * disagrees with any other week-bucketed view in the app. */
+export function weeklyTrendCutoffs(days: DayActivity[], weeks = 12): string[] {
+  const mondays: string[] = []
+  const seen = new Set<string>()
+  for (const d of days) {
+    const monday = mondayOf(d.date)
+    if (seen.has(monday)) continue
+    seen.add(monday)
+    mondays.push(monday)
+  }
+  return mondays.slice(-weeks)
+}
+
+// ============================================================================
 // Literal assignments — a browsable gradebook, not a style choice. Each row
 // is one real graded event ("Inertia Tensor — First Learn", "Reduced Mass —
 // Review, Jul 22"), not an abstract statistical category (those are the
@@ -304,6 +426,7 @@ export function computeTopicGrade(inputs: {
 
 export interface AssignmentRow {
   key: string
+  node: string
   label: string
   date: string | null
   outcome: 'recalled' | 'partial' | 'lapsed' | 'unstarted'
@@ -349,6 +472,7 @@ export function buildTopicAssignments(
       | null
     return {
       key: r.id ?? `${r.node}-${r.ts}-${r.kind ?? ''}`,
+      node: r.node,
       label: assignmentLabel(r.node, r.kind, r.ts),
       date: r.ts,
       outcome: outcome ?? 'lapsed',
@@ -362,6 +486,7 @@ export function buildTopicAssignments(
       if (startedNodes.has(node)) continue
       rows.push({
         key: `${node}-unstarted`,
+        node,
         label: `${humanizeNodeId(node)} — Not Yet Started`,
         date: null,
         outcome: 'unstarted',
@@ -378,4 +503,34 @@ export function buildTopicAssignments(
   })
 
   return rows
+}
+
+export interface AssignmentGroup {
+  node: string
+  rows: AssignmentRow[]
+}
+
+/** Groups a flat assignment list into one entry per node — a mature topic's
+ * 44+ individual review rows collapse into a handful of collapsible groups,
+ * one per node, instead of one long undifferentiated scroll. Ordered by each
+ * group's own newest row (an unstarted-only group has no dated row, so it
+ * sinks last — same rule individual rows already use in buildTopicAssignments). */
+export function groupAssignmentsByNode(rows: AssignmentRow[]): AssignmentGroup[] {
+  const byNode = new Map<string, AssignmentRow[]>()
+  for (const row of rows) {
+    const list = byNode.get(row.node) ?? []
+    list.push(row)
+    byNode.set(row.node, list)
+  }
+
+  const groups: AssignmentGroup[] = [...byNode.entries()].map(([node, groupRows]) => ({ node, rows: groupRows }))
+  groups.sort((a, b) => {
+    const aDate = a.rows.find((r) => r.date)?.date ?? null
+    const bDate = b.rows.find((r) => r.date)?.date ?? null
+    if (!aDate && !bDate) return 0
+    if (!aDate) return 1
+    if (!bDate) return -1
+    return bDate.localeCompare(aDate)
+  })
+  return groups
 }

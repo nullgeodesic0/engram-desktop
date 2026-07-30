@@ -1,5 +1,13 @@
 import { useEffect, useState } from 'react'
-import type { EngramStats, TopicListEntry, TopicGraph, EnvironmentCheckResult, ActiveExperiment } from '../../../shared/types'
+import type {
+  EngramStats,
+  TopicListEntry,
+  TopicGraph,
+  EnvironmentCheckResult,
+  ActiveExperiment,
+  ReceiptsHistory,
+  Misconception,
+} from '../../../shared/types'
 import { SkeletonBar, SkeletonGrid } from '../components/Skeleton'
 import { emitPulse } from '../../../shared/neuralFieldBus'
 import { humanizeNodeId } from '../../../shared/humanizeId'
@@ -10,7 +18,6 @@ import { TopicCard } from '../components/TopicCard'
 import { topicBucket } from '../shared/topicShelf'
 import { DueForecast } from '../components/DueForecast'
 import { DendriteDivider } from '../components/ui/DendriteDivider'
-import { StatBlock } from '../components/ui/StatBlock'
 import { StatFraction } from '../components/ui/StatFraction'
 import { PlateFigure } from '../components/ui/PlateFigure'
 import { SectionBanner } from '../components/ui/SectionBanner'
@@ -20,6 +27,9 @@ import { ExperimentBanner } from '../components/ExperimentBanner'
 import { computeDueBuckets } from '../shared/dueBuckets'
 import { recentViews, type RecentView } from '../shared/recentlyViewed'
 import { MainMenuView, type MainMenuNavItem } from './MainMenuView'
+import { computeTopicGrade, computeCrossTopicGPA, letterColorClass, type TopicGradeResult } from '../shared/topicGrade'
+import { allPicks } from '../shared/calibrationStore'
+import { ActivityStrip } from '../components/charts/ActivityStrip'
 
 const LAST_SEEN_STREAK_KEY = 'engram-desktop:last-seen-streak-days'
 const LAST_SEEN_DUE_KEY = 'engram-desktop:last-seen-due-now'
@@ -108,6 +118,7 @@ function TopicGroup({
   topics,
   onGoTopic,
   resumableTopics,
+  grades,
 }: {
   heading: string
   caption?: string
@@ -119,6 +130,10 @@ function TopicGroup({
    * plain (see the `.dogear` scarcity doctrine in index.css: it marks "the
    * one you're in", not every card in a list). */
   resumableTopics?: Set<string>
+  /** Per-topic grade, threaded through to each TopicCard's badge — absent
+   * (undefined map) renders every card with no badge, same as before this
+   * existed, rather than blocking the whole group on grade data loading. */
+  grades?: Map<string, TopicGradeResult>
 }) {
   if (topics.length === 0) return null
   return (
@@ -135,6 +150,7 @@ function TopicGroup({
             topic={t}
             onOpen={() => onGoTopic(t.topic)}
             resumable={resumableTopics?.has(t.topic)}
+            grade={grades?.get(t.topic)?.overall}
           />
         ))}
       </div>
@@ -144,7 +160,6 @@ function TopicGroup({
 
 interface HomeViewProps {
   onGoReview: () => void
-  onGoCoach: () => void
   onGoTopic: (topicId: string) => void
   onNewTopic: () => void
   /** Deep-link targets for the "Recently viewed" row below — same
@@ -155,9 +170,12 @@ interface HomeViewProps {
   /** The sidebar's former job — Home IS the menu now: "the home menu
    * contains everything else accessible within it," per the user's own
    * framing. `nav` is App.tsx's NAV array verbatim; `onGoView` is
-   * `goToView` verbatim (not the narrower onGoReview/onGoCoach above, which
-   * predate this and stay for their own specific wiring — e.g. onGoCoach
-   * also bumps coachHomeSignal). */
+   * `goToView` verbatim — it already bumps coachHomeSignal for 'dashboard'
+   * internally, so no separate onGoCoach wiring is needed here (the old
+   * standalone "Coach →" button that used to need it is gone, its teaser
+   * folded into the Track group's Coach card instead). `onGoReview` above
+   * stays: it's the due-count plate's own primary CTA, a distinct affordance
+   * from the nav grid, not a duplicate of it. */
   nav: MainMenuNavItem[]
   dueCount: number | null
   activity: Record<'learn' | 'review', { active: boolean; busy: boolean }>
@@ -174,7 +192,6 @@ interface HomeViewProps {
  * back here. */
 export function HomeView({
   onGoReview,
-  onGoCoach,
   onGoTopic,
   onNewTopic,
   onGoNode,
@@ -186,6 +203,9 @@ export function HomeView({
   onGoView,
 }: HomeViewProps) {
   const [stats, setStats] = useState<EngramStats | null>(null)
+  const [receiptsHistory, setReceiptsHistory] = useState<ReceiptsHistory | null>(null)
+  const [misconceptions, setMisconceptions] = useState<Misconception[] | null>(null)
+  const [artifactCount, setArtifactCount] = useState<number | null>(null)
   // Snapshot at mount, not a subscription — this view fully remounts on every
   // visit to Home (see App.tsx's `view === 'home'` branch, not KeepMounted),
   // so a fresh localStorage read here already picks up anything recorded
@@ -264,11 +284,17 @@ export function HomeView({
     })
     window.engram.topics().then(setTopics)
     window.engram.environmentCheck().then(setEnvCheck)
+    // Feeds the Grades teaser, TopicCard badges, and the needs-attention
+    // callout below — same `misconceptions()`/`artifactList()` IPC calls
+    // GradesView/ArtifactGalleryView already make, no new handlers.
+    window.engram.misconceptions().then(setMisconceptions)
+    window.engram.artifactList().then((list) => setArtifactCount(list.length))
 
     // "On this day" — the most recent day with real activity that's old enough to
     // feel like a callback rather than "yesterday" (a strict exact-N-days-ago
     // anniversary would usually be empty this early in real usage).
     window.engram.receiptsHistory().then(async (history) => {
+      setReceiptsHistory(history)
       const candidateDays = [...history.days].reverse().filter((d) => d.items.length > 0 && daysAgo(d.date) >= FLASHBACK_MIN_DAYS_AGO)
       // One graph read per topic, reused across candidates — the walk below can
       // touch several items before finding one whose answer is safe to print.
@@ -324,6 +350,75 @@ export function HomeView({
   const notStarted = topics?.filter((t) => topicBucket(t) === 'notStarted') ?? []
   const envBroken = envCheck !== null && !(envCheck.claudeOk && envCheck.pluginOk)
 
+  // Grades — computed once every input is loaded, `total` mode (matches
+  // GradesView's own default) so Home's badges/GPA teaser/callout reflect
+  // the same "does unfinished work count against you" lens by default.
+  // Absent (empty map / unavailable GPA) until then; every consumer below
+  // already guards on that rather than blocking Home's own loading state on
+  // grade data specifically.
+  const gradesReady = topics && receiptsHistory && misconceptions
+  const grades = gradesReady
+    ? new Map<string, TopicGradeResult>(
+        topics.map((t) => [
+          t.topic,
+          computeTopicGrade({
+            receipts: receiptsHistory.receipts,
+            topic: t.topic,
+            topicEntry: t,
+            misconceptions,
+            days: receiptsHistory.days,
+            picks: allPicks(),
+            mode: 'total',
+          }),
+        ]),
+      )
+    : undefined
+  const gpa = topics && grades ? computeCrossTopicGPA(topics, grades) : null
+
+  // "Needs attention" — the lowest-graded topic if it's genuinely struggling
+  // (D/F: a grade problem is more actionable, there's a drilldown to explain
+  // why), otherwise the topic with the most due items right now if any
+  // exist. Ties on either axis broken by due count. No callout when neither
+  // signal fires — never invent something to say.
+  const needsAttention = (() => {
+    if (!topics || !grades) return null
+    const graded = topics
+      .map((t) => ({ topic: t, grade: grades.get(t.topic) }))
+      .filter((x): x is { topic: TopicListEntry; grade: TopicGradeResult } => x.grade?.overall.available === true)
+      .sort((a, b) => (a.grade.overall.score ?? 0) - (b.grade.overall.score ?? 0))
+    const worst = graded[0]
+    if (worst && (worst.grade.overall.letter === 'D' || worst.grade.overall.letter === 'F')) {
+      return { topic: worst.topic, reason: `graded ${worst.grade.overall.letter}` as const }
+    }
+    const mostDue = [...topics].sort((a, b) => b.due - a.due)[0]
+    if (mostDue && mostDue.due > 0) return { topic: mostDue, reason: 'due' as const }
+    return null
+  })()
+
+  // Sections teasers — computed here (not in MainMenuView, which stays
+  // presentational) so each is exactly the fact that surface already knows,
+  // never a fresh guess. Grades' GPA letter is Home's one deliberate
+  // exception to "no letter grades outside Grades" — it's the entry point
+  // to that screen. Coach's line replaces the old standalone "Coach →"
+  // button below (removed — same fact, shown once, not twice).
+  const teasers: Partial<Record<string, string>> = {}
+  if (dueCount != null && dueCount > 0) teasers.review = String(dueCount)
+  if (topics) {
+    const resumableActive = active.find((t) => resumableTopics.has(t.topic))
+    teasers.learn = resumableActive ? resumableActive.title : `${active.length} in progress`
+    teasers.topics = `${topics.length} topics, ${topics.reduce((sum, t) => sum + t.nodes, 0)} nodes mapped`
+  }
+  if (stats) {
+    teasers.dashboard =
+      stats.pending_verify > 0
+        ? `${stats.pending_verify} pending grading`
+        : stats.misconceptions_open > 0
+          ? `${stats.misconceptions_open} filed for re-testing`
+          : 'nothing filed for re-testing'
+  }
+  if (gpa?.available) teasers.grades = gpa.letter ?? undefined
+  if (artifactCount != null) teasers.artifacts = `${artifactCount} artifact${artifactCount === 1 ? '' : 's'}`
+
   return (
     <div className="p-8 flex flex-col gap-8 w-full h-full overflow-y-auto">
       {/* Register 1 — status band: the greeting IS the page title (the app's
@@ -357,8 +452,33 @@ export function HomeView({
             due-count plate, not after it. */}
         <div className="flex flex-col gap-3">
           <SectionBanner label="Sections" />
-          <MainMenuView nav={nav} dueCount={dueCount} activity={activity} visited={visited} onGoView={onGoView} />
+          <MainMenuView nav={nav} teasers={teasers} activity={activity} visited={visited} onGoView={onGoView} />
         </div>
+
+        {/* "Needs attention" — a single computed prompt, never invented: only
+            renders when a topic is genuinely struggling (D/F) or has due
+            items waiting. Sits between the nav grid and the due-count plate —
+            the thing Home wants noticed before it asks you to just clear
+            today's queue. */}
+        {needsAttention && (
+          <button
+            onClick={() => onGoTopic(needsAttention.topic.topic)}
+            className="panel px-4 py-2.5 flex items-center justify-between gap-3 text-left frame-hover"
+          >
+            <span className="text-sm text-[var(--color-text-primary)]">
+              {needsAttention.reason === 'due'
+                ? `${needsAttention.topic.title} has ${needsAttention.topic.due} due`
+                : `${needsAttention.topic.title} needs attention`}
+            </span>
+            <span
+              className={`label-data text-xs shrink-0 ${
+                needsAttention.reason === 'due' ? 'text-[var(--color-ink-warm)]' : letterColorClass(grades?.get(needsAttention.topic.topic)?.overall.letter ?? null)
+              }`}
+            >
+              {needsAttention.reason === 'due' ? `${needsAttention.topic.due} due` : grades?.get(needsAttention.topic.topic)?.overall.letter}
+            </span>
+          </button>
+        )}
 
         {/* The due briefing plate — Home's own ready-room (the anatomy the
             Review plate established, via the shared PlateFigure): the due-now
@@ -390,12 +510,16 @@ export function HomeView({
 
         {stats && (
           <div className="flex items-stretch gap-3 flex-wrap">
-            <StatBlock
-              label="Streak"
-              value={String(stats.streak_days)}
-              tone="warm"
-              caption="Fig. — days of uninterrupted recall"
-            />
+            {/* Same StatBlock anatomy (label/value/caption), hand-built here
+                instead of the shared component so a real streak shape —
+                ActivityStrip, previously Coach-only — can render underneath
+                the bare number, inside the same panel. */}
+            <div className="tilt-card panel p-3 flex flex-col gap-1.5">
+              <div className="text-[length:var(--text-caption)] tracking-wider text-[var(--color-text-dim)] label-data uppercase">Streak</div>
+              <div className="label-data mt-0.5 text-lg text-[var(--color-ink-warm)]">{stats.streak_days}</div>
+              {receiptsHistory && <ActivityStrip data={receiptsHistory.days} />}
+              <div className="fig-caption mt-1">Fig. — days of uninterrupted recall</div>
+            </div>
             <div className="panel tilt-card p-3 flex-1 min-w-[180px] flex flex-col justify-center">
               {forecast ? (
                 <DueForecast buckets={forecast} />
@@ -480,64 +604,44 @@ export function HomeView({
             catch and is gone — a fully-encoded-only library now shows its
             "Consolidated" group instead of a false "start a new topic" nudge. */}
         <div className="flex flex-col gap-6">
-          <TopicGroup heading="Continue learning" topics={active} onGoTopic={onGoTopic} resumableTopics={resumableTopics} />
+          <TopicGroup heading="Continue learning" topics={active} onGoTopic={onGoTopic} resumableTopics={resumableTopics} grades={grades} />
           <TopicGroup
             heading="Consolidated"
             caption="fully encoded — held by review alone"
             topics={consolidated}
             onGoTopic={onGoTopic}
+            grades={grades}
           />
-          <TopicGroup heading="Not started" topics={notStarted} onGoTopic={onGoTopic} />
+          <TopicGroup heading="Not started" topics={notStarted} onGoTopic={onGoTopic} grades={grades} />
         </div>
       </section>
 
       {/* Register 3 — trails: quietest register, the last few nodes/sittings
-          opened elsewhere in the app and the coach summary row. Only rendered
-          at all (divider included) when there's at least one of the two —
-          same "no empty chrome" discipline as the rest of Home. */}
-      {(recent.length > 0 || stats) && (
+          opened elsewhere in the app. The old coach summary row that used to
+          live here moved into the Sections grid's Coach card teaser — same
+          fact, shown once, not twice. Only rendered at all (divider
+          included) when there's something to show — same "no empty chrome"
+          discipline as the rest of Home. */}
+      {recent.length > 0 && (
         <>
           <DendriteDivider />
           <div className="flex flex-col gap-6">
-            {/* Hidden entirely when there's nothing yet. See
-                shared/recentlyViewed.ts; selecting one reuses the exact
-                goToNode/goToSitting paths the Topic Map and the command
-                palette already use. */}
-            {recent.length > 0 && (
-              <div className="flex flex-col gap-2">
-                <SectionBanner label="Recently viewed" count={recent.length} />
-                <div className="flex items-center gap-2 flex-wrap">
-                  {recent.map((v) => (
-                    <button
-                      key={v.kind === 'node' ? `n:${v.topic}:${v.node}` : `s:${v.sessionId}`}
-                      onClick={() => (v.kind === 'node' ? onGoNode(v.topic, v.node) : onGoSitting(v.sessionId))}
-                      title={v.kind === 'node' ? `${v.label} — ${v.topicTitle}` : v.label}
-                      className="focus-ring flex items-center gap-1.5 px-2.5 py-1 text-xs text-[var(--color-text-dim)] bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] hover:bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] hover:text-[var(--color-text-primary)] transition-colors duration-[var(--dur-fast)]"
-                    >
-                      {v.kind === 'node' && <InkNode id={v.node} variant="outlined" color="var(--color-ink-cool)" size={10} />}
-                      <span className="truncate max-w-[9rem]">{v.label}</span>
-                    </button>
-                  ))}
-                </div>
+            <div className="flex flex-col gap-2">
+              <SectionBanner label="Recently viewed" count={recent.length} />
+              <div className="flex items-center gap-2 flex-wrap">
+                {recent.map((v) => (
+                  <button
+                    key={v.kind === 'node' ? `n:${v.topic}:${v.node}` : `s:${v.sessionId}`}
+                    onClick={() => (v.kind === 'node' ? onGoNode(v.topic, v.node) : onGoSitting(v.sessionId))}
+                    title={v.kind === 'node' ? `${v.label} — ${v.topicTitle}` : v.label}
+                    className="focus-ring flex items-center gap-1.5 px-2.5 py-1 text-xs text-[var(--color-text-dim)] bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] hover:bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] hover:text-[var(--color-text-primary)] transition-colors duration-[var(--dur-fast)]"
+                  >
+                    {v.kind === 'node' && <InkNode id={v.node} variant="outlined" color="var(--color-ink-cool)" size={10} />}
+                    <span className="truncate max-w-[9rem]">{v.label}</span>
+                  </button>
+                ))}
               </div>
-            )}
-
-            {stats && (
-              <Button
-                variant="ghost"
-                size="lg"
-                onClick={onGoCoach}
-                className="tilt-card w-full flex items-center justify-between text-left"
-              >
-                <div className="text-sm">
-                  {stats.pending_verify > 0 ? `${stats.pending_verify} pending grading · ` : ''}
-                  {stats.misconceptions_open > 0
-                    ? `${stats.misconceptions_open} noticed, filed for re-testing`
-                    : 'Nothing filed for re-testing'}
-                </div>
-                <span className="text-sm">Coach →</span>
-              </Button>
-            )}
+            </div>
           </div>
         </>
       )}
