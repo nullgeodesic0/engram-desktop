@@ -10,8 +10,17 @@ const DOTS: { key: 'close' | 'min' | 'zoom'; color: string; glyph: string; label
  * The dots stay visible in fullscreen too — with frame:false there are no
  * native controls to defer to, so ours are the only pointer path out (the
  * (+) dot toggles fullscreen). Double-click on the bar maximizes, matching
- * native title-bar zoom. */
-export function TitleBar() {
+ * native title-bar zoom.
+ *
+ * `onOpenMenu` — the ONE persistent affordance that survives the sidebar's
+ * removal (see MainMenuView.tsx's own doctrine comment). A sidebar is a
+ * persistent LIST of destinations; this is a single button that opens the
+ * menu screen, which is not the same thing — it's the "get back to the menu
+ * from deep inside a Learn/Review session without losing your place" path,
+ * a plain view switch that never touches KeepMounted state. Optional so
+ * this component still renders standalone (e.g. a future secondary window)
+ * without wiring it. */
+export function TitleBar({ onOpenMenu }: { onOpenMenu?: () => void } = {}) {
   const [hovered, setHovered] = useState(false)
 
   function act(key: 'close' | 'min' | 'zoom') {
@@ -54,6 +63,18 @@ export function TitleBar() {
         </span>
         <span className="font-(family-name:--font-serif) text-xs text-[var(--color-text-dim)] tracking-wide">Engram</span>
       </div>
+      {onOpenMenu && (
+        <button
+          onClick={onOpenMenu}
+          aria-label="Main Menu"
+          title="Main Menu"
+          className="app-no-drag focus-ring no-press ml-auto h-6 w-6 flex items-center justify-center rounded text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]"
+        >
+          <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" aria-hidden="true">
+            <path d="M4 6h12M4 10h12M4 14h12" />
+          </svg>
+        </button>
+      )}
     </div>
   )
 }

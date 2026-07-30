@@ -4,13 +4,13 @@ import { DashboardView } from './app/DashboardView'
 import { ReviewSessionView } from './app/ReviewSessionView'
 import { LearnSessionView } from './app/LearnSessionView'
 import { SettingsView } from './app/SettingsView'
+import { MainMenuView } from './app/MainMenuView'
+import { GradesView } from './app/GradesView'
 import { CommandPalette } from './components/CommandPalette'
 import { SessionHistoryDrawer, ALL_HISTORY_KEY } from './components/SessionHistoryDrawer'
 import { TitleBar } from './components/TitleBar'
 import { SkeletonBar, SkeletonGrid } from './components/Skeleton'
 import { HelpSheet } from './components/HelpSheet'
-import { NeuronMark } from './components/BrandMark'
-import { DendriteConstellation } from './components/ui/DendriteConstellation'
 import { useCardPhysics } from './components/useCardPhysics'
 
 // Code-split: both views unmount on tab switch already (they're not inside
@@ -24,7 +24,7 @@ const ArtifactGalleryView = lazy(() =>
   import('./app/ArtifactGalleryView').then((m) => ({ default: m.ArtifactGalleryView })),
 )
 
-type View = 'home' | 'topics' | 'dashboard' | 'artifacts' | 'review' | 'learn' | 'settings'
+type View = 'home' | 'menu' | 'topics' | 'dashboard' | 'artifacts' | 'review' | 'learn' | 'settings' | 'grades'
 
 const NAV: { id: View; label: string; hint: string; icon: ReactElement }[] = [
   {
@@ -66,6 +66,12 @@ const NAV: { id: View; label: string; hint: string; icon: ReactElement }[] = [
     icon: <path d="M3 16V9m4.5 7V5m4.5 11v-8m4.5 8V7" />,
   },
   {
+    id: 'grades',
+    label: 'Grades',
+    hint: '7',
+    icon: <path d="M4 4h12v9l-6 4-6-4V4Zm0 0 6 4 6-4M7 9.5h6M7 12h4" />,
+  },
+  {
     id: 'artifacts',
     label: 'Artifacts',
     hint: '5',
@@ -80,10 +86,6 @@ const NAV: { id: View; label: string; hint: string; icon: ReactElement }[] = [
     ),
   },
 ]
-
-/** Collapses the rail to icon-only below this window width — a real breakpoint
- * here since the Electron window itself is the viewport, not a component. */
-const COLLAPSE_WIDTH = 760
 
 /** Wrapper for the keep-mounted views (Learn/Review/Coach — see `visited` below):
  * those divs never unmount once visited, they just toggle visibility, so the
@@ -115,8 +117,6 @@ export default function App() {
     learn: { active: false, busy: false },
     review: { active: false, busy: false },
   })
-  const [narrow, setNarrow] = useState(window.innerWidth < COLLAPSE_WIDTH)
-  const [pinnedOpen, setPinnedOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   // Owned at the App level, not any one view — the drawer it opens spans
   // every topic and both loops, so it isn't scoped to whichever view is
@@ -160,12 +160,6 @@ export default function App() {
   // stays hidden rather than flashing "0" before anything real is known.
   const [dueCount, setDueCount] = useState<number | null>(null)
 
-  useEffect(() => {
-    const onResize = () => setNarrow(window.innerWidth < COLLAPSE_WIDTH)
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
-  }, [])
-
   // Deep-link target from a tray click or a background review-due notification —
   // fires even if this window was just recreated (see main/index.ts's focusOrCreateWindow).
   useEffect(() => {
@@ -183,7 +177,16 @@ export default function App() {
         setHelpOpen(true)
         return
       }
-      if (v === 'home' || v === 'topics' || v === 'dashboard' || v === 'artifacts' || v === 'review' || v === 'learn' || v === 'settings') {
+      if (
+        v === 'home' ||
+        v === 'topics' ||
+        v === 'dashboard' ||
+        v === 'artifacts' ||
+        v === 'review' ||
+        v === 'learn' ||
+        v === 'settings' ||
+        v === 'grades'
+      ) {
         goToView(v)
       }
     })
@@ -289,8 +292,6 @@ export default function App() {
     setAllHistoryOpen(true)
   }
 
-  const collapsed = narrow && !pinnedOpen
-
   // Card physics — ONE container wires the whole app: every `.tilt-card`/
   // `.tilt-card-soft` anywhere in this subtree (present or future, including
   // inside modals' children and KeepMounted views) is discovered and driven
@@ -300,144 +301,8 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-full" ref={cardPhysicsRef}>
-      <TitleBar />
+      <TitleBar onOpenMenu={() => goToView('menu')} />
       <div className="flex flex-1 min-h-0 relative">
-      <aside
-        className={`shrink-0 border-r border-[var(--color-edge)] sidebar-nocturne flex flex-col transition-[width] duration-[var(--dur-base)] ease-out ${
-          collapsed ? 'w-14' : 'w-48'
-        } ${narrow ? 'absolute inset-y-0 left-0 z-20 shadow-[8px_0_24px_rgba(0,0,0,0.4)]' : 'relative'}`}
-      >
-        {/* Brand lockup — separated from the nav by a full-width hairline
-            (the plain hairline, not the card edge: this is an interior rule
-            on the rail's own surface, same register as a section banner). */}
-        <div className={`relative z-10 flex items-center gap-2.5 px-4 py-5 border-b border-[var(--color-hairline)] mb-2 ${collapsed ? 'justify-center px-0' : ''}`}>
-          <NeuronMark size={22} />
-          {!collapsed && (
-            <div>
-              {/* Deliberately NOT the hero banner's lockup (serif ENGRAM +
-                  "learn anything. keep it." — BootSplash wears that one): the
-                  sidebar carries the app's own face — Space Grotesk wordmark,
-                  night-atlas tagline. `font-display` is the Tailwind v4 token
-                  utility for --font-display; the font-[var(...)] arbitrary
-                  form compiles to an invalid font-weight and applies nothing. */}
-              <div className="font-display font-semibold text-[16px] tracking-tight text-[var(--color-text-primary)] leading-none">
-                Engram
-              </div>
-              <div className="text-[8.5px] whitespace-nowrap tracking-[0.14em] text-[var(--color-ink-lavender-dim)] label-data leading-none mt-1.5">the night atlas</div>
-            </div>
-          )}
-        </div>
-        <nav className="relative z-10 flex flex-col gap-0.5 px-2" aria-label="Primary">
-          {NAV.map((n) => {
-            const active = view === n.id
-            return (
-              <button
-                key={n.id}
-                title={collapsed ? `${n.label} (⌘${n.hint})` : undefined}
-                aria-label={n.label}
-                aria-current={active ? 'page' : undefined}
-                aria-keyshortcuts={`Meta+${n.hint}`}
-                onClick={() => {
-                  goToView(n.id)
-                  if (narrow) setPinnedOpen(false)
-                }}
-                className={`focus-ring group relative flex items-center gap-2.5 text-left px-3 py-2 text-sm transition-colors duration-[var(--dur-fast)] tilt-card-rail ${
-                  collapsed ? 'justify-center px-0' : ''
-                } ${active ? 'nav-item-active' : 'nav-item'} ${active && !collapsed ? 'dogear' : ''}`}
-              >
-                {active && (
-                  <span className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-0.5 bg-[var(--color-ink-warm)]" aria-hidden="true" />
-                )}
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 20 20"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.4"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="shrink-0 opacity-80 group-hover:opacity-100"
-                  aria-hidden="true"
-                >
-                  {n.icon}
-                </svg>
-                {!collapsed && <span className="truncate label-data uppercase tracking-wide">{n.label}</span>}
-                {/* Review's due-count micro-pill — fed by Task 7's due-count
-                    plumbing (App's `dueCount` state). Hidden until the first
-                    push/refresh lands (`null`) and at 0 — an empty queue gets
-                    no badge, not a "0" badge. */}
-                {!collapsed && n.id === 'review' && dueCount != null && dueCount > 0 && (
-                  <span className="label-data text-[10px] leading-none px-1.5 py-1 bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] text-[var(--color-ink-warm)] shrink-0">
-                    {dueCount}
-                  </span>
-                )}
-                {collapsed && n.id === 'review' && dueCount != null && dueCount > 0 && (
-                  <span
-                    className="absolute top-1.5 right-2.5 h-1.5 w-1.5 rounded-full bg-[var(--color-ink-warm)]"
-                    aria-hidden="true"
-                  />
-                )}
-                {!collapsed && (
-                  <span className="ml-auto flex items-center gap-1.5">
-                    {(n.id === 'learn' || n.id === 'review') && activity[n.id].active && !active && (
-                      <span className="relative inline-flex h-1.5 w-1.5 shrink-0">
-                        {activity[n.id].busy && (
-                          <span className="absolute inline-flex h-full w-full rounded-full bg-[var(--color-ink-warm)] animate-consolidate-ping" />
-                        )}
-                        <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[var(--color-ink-warm)]" />
-                      </span>
-                    )}
-                    {n.id === 'topics' && pendingSpotlight != null && !active && (
-                      <span className="relative inline-flex h-1.5 w-1.5 shrink-0">
-                        <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[var(--color-ink-warm)]" />
-                      </span>
-                    )}
-                    <span className="text-[10px] label-data text-[var(--color-text-faint)] opacity-0 group-hover:opacity-100 transition-opacity duration-[var(--dur-fast)]">
-                      ⌘{n.hint}
-                    </span>
-                  </span>
-                )}
-                {/* Collapsed-rail hint — the native `title` tooltip above only
-                    shows on mouse hover, never on keyboard focus. This floating
-                    label repeats the same "Label (⌘n)" text, visible only via
-                    focus-visible, so tabbing through the collapsed rail is never
-                    silent about what each icon does or its shortcut. */}
-                {collapsed && (
-                  <span
-                    className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 z-20 whitespace-nowrap rounded-md bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] px-2 py-1 text-[10px] label-data text-[var(--color-text-primary)] opacity-0 group-focus-visible:opacity-100 transition-opacity duration-[var(--dur-fast)]"
-                  >
-                    {n.label} · ⌘{n.hint}
-                  </span>
-                )}
-              </button>
-            )
-          })}
-        </nav>
-        {/* Dendrite constellation footer — extracted to ui/DendriteConstellation.tsx
-            (verbatim); hidden while collapsed — at rail width it would just
-            read as noise. */}
-        {!collapsed && <DendriteConstellation />}
-        {narrow && (
-          <button
-            onClick={() => setPinnedOpen((v) => !v)}
-            aria-label={pinnedOpen ? 'Collapse navigation' : 'Expand navigation'}
-            className="focus-ring relative z-10 mt-auto mb-3 mx-2 flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] hover:bg-[color-mix(in_srgb,var(--color-ink-lavender)_8%,transparent)]"
-          >
-            <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
-              {pinnedOpen ? <path d="M12.5 5 7.5 10l5 5" /> : <path d="M7.5 5 12.5 10l-5 5" />}
-            </svg>
-            {!collapsed && (pinnedOpen ? 'Collapse' : 'Expand')}
-          </button>
-        )}
-      </aside>
-      {narrow && pinnedOpen && (
-        <button
-          aria-label="Close navigation"
-          onClick={() => setPinnedOpen(false)}
-          className="absolute inset-0 z-10 bg-black/40 backdrop-blur-[1px]"
-        />
-      )}
       {/* Each view now owns its own scroll region (h-full + overflow-y-auto, or a
           flex column with an internal scrollable pane like LearnSessionView) so a
           chat-style view can anchor its header/input and scroll only the middle. */}
@@ -449,6 +314,22 @@ export default function App() {
             a live session's UI state. Cheap/stateless views (and the Map, whose
             WebGL scene must not run hidden) still unmount on switch. */}
         <div className="flex-1 min-h-0 relative">
+          {view === 'menu' && (
+            <div key="menu" className="view-transition h-full">
+              <MainMenuView
+                nav={NAV}
+                dueCount={dueCount}
+                activity={activity}
+                visited={visited}
+                onGoView={(id) => goToView(id as View)}
+              />
+            </div>
+          )}
+          {view === 'grades' && (
+            <div key="grades" className="view-transition h-full">
+              <GradesView />
+            </div>
+          )}
           {view === 'home' && (
             <div key="home" className="view-transition h-full">
               <HomeView
@@ -528,6 +409,7 @@ export default function App() {
         onGoNode={goToNode}
         onGoSitting={goToSitting}
         navCommands={[
+          { id: 'nav:menu', label: 'Main Menu', hint: '', action: () => goToView('menu') },
           ...NAV.map((n) => ({ id: `nav:${n.id}`, label: n.label, hint: `⌘${n.hint}`, action: () => goToView(n.id) })),
           { id: 'nav:history', label: 'Session History', hint: '⇧⌘H', action: () => setAllHistoryOpen(true) },
         ]}

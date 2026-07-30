@@ -12,6 +12,7 @@
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "check:topic-metrics": "tsx scripts/checkTopicMetricsAgreement.ts",
+    "check:punctuality-sanity": "tsx scripts/checkPunctualitySanity.ts",
     "check:doctrine": "tsx scripts/checkDoctrine.ts",
     "test": "vitest run",
     "check:ritual-snapshot": "tsx scripts/snapshotRitual.ts",

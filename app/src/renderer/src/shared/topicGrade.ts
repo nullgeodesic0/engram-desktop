@@ -1,0 +1,279 @@
+import type { DayActivity, Misconception, RawReceipt, TopicListEntry } from '../../../shared/types'
+import type { ConfidencePick } from './calibrationStore'
+import { computeRetentionBuckets, computeCalibration, RETENTION_BUCKET_MIN_N } from './topicMetrics'
+
+// ============================================================================
+// Per-topic A-F course grade — genuine accountability, not gamification.
+// Every input here is already computed/loaded elsewhere in the app
+// (computeRetentionBuckets/computeCalibration from topicMetrics.ts, the
+// topics()/receiptsHistory()/misconceptions() calls DashboardView and
+// TopicDrilldownView already make) except the punctuality metric, which is
+// new: see `computeTopicPunctuality` below for why it's derivable from data
+// already on disk, with no engine change.
+//
+// The assessor's own global self-audit (grader-health) is deliberately NOT a
+// component here — it's the same number for every topic, so folding it into
+// a weighted score would just shift every topic's grade by a constant,
+// defeating the whole point of a grade that differentiates one course's
+// standing from another's. It belongs on the Grades screen as a footnote,
+// not a tile.
+// ============================================================================
+
+/** Below this many consecutive dated review pairs, a punctuality median is
+ * noise, not a number — same small-n honesty rule as
+ * RETENTION_BUCKET_MIN_N/CALIBRATION_MIN_N, just a smaller floor since a
+ * punctuality PAIR needs two receipts where a retention tally only needs one. */
+export const PUNCTUALITY_MIN_N = 3
+
+/** Minimum sample before a component renders a number instead of "not enough
+ * data yet". Coverage has no natural n (it's a ratio of current graph
+ * state, always computable once a topic exists at all) so it isn't gated. */
+const COMPONENT_MIN_N: Record<'recall' | 'punctuality' | 'conceptual' | 'calibration', number> = {
+  recall: RETENTION_BUCKET_MIN_N,
+  punctuality: PUNCTUALITY_MIN_N,
+  conceptual: 1, // any misconception history at all is real signal
+  calibration: RETENTION_BUCKET_MIN_N,
+}
+
+const WEIGHTS = {
+  recall: 0.45,
+  punctuality: 0.2,
+  coverage: 0.15,
+  conceptual: 0.1,
+  calibration: 0.1,
+} as const
+
+export type GradeComponentKey = keyof typeof WEIGHTS
+
+const LETTER_CUTOFFS: [number, string][] = [
+  [90, 'A'],
+  [80, 'B'],
+  [70, 'C'],
+  [60, 'D'],
+]
+
+/** Fixed absolute cutoffs, not curved — there's one student here, no cohort
+ * to curve against, and a self-recalibrating scale would defeat the point of
+ * a stable yardstick to watch drift over weeks. */
+export function scoreToLetter(score: number): string {
+  for (const [min, letter] of LETTER_CUTOFFS) {
+    if (score >= min) return letter
+  }
+  return 'F'
+}
+
+// Local-date day-diff — both inputs are 'YYYY-MM-DD' local dates (engram.py's
+// own date.today() convention, same as nodeIntervalHistory.ts's daysBetween),
+// so a bare local-midnight parse (no timezone suffix) is the correct read.
+function daysBetween(a: string, b: string): number {
+  const da = new Date(`${a}T00:00:00`)
+  const db = new Date(`${b}T00:00:00`)
+  return Math.round((db.getTime() - da.getTime()) / 86400000)
+}
+
+function median(values: number[]): number | null {
+  if (values.length === 0) return null
+  const sorted = [...values].sort((a, b) => a - b)
+  const mid = Math.floor(sorted.length / 2)
+  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid]
+}
+
+export interface PunctualityResult {
+  n: number
+  medianDaysLate: number | null
+}
+
+/** For consecutive dated receipts on the same node, `daysLate = actual review
+ * date − the PRIOR receipt's own due_next`. Positive = late, ≤0 = on-time or
+ * early. Median (not mean) per topic across every node's pairs — lateness
+ * deltas are right-skewed by occasional bad weeks, and a median reflects
+ * typical habit rather than being dragged by one outlier, which fits
+ * "accountability" better than a GPA-style average would.
+ *
+ * Uses `receipts` directly (not the day-bucketed `ReceiptsHistory.days`,
+ * which only carries {topic,node,grade} and has no due-date field) — the
+ * FULL unwindowed receipt list, same population computeRetentionBuckets/
+ * computeMomentum already use, so a node's early history isn't silently
+ * excluded the way a 180-day window would. */
+export function computeTopicPunctuality(receipts: RawReceipt[], topic: string): PunctualityResult {
+  const byNode = new Map<string, RawReceipt[]>()
+  for (const r of receipts) {
+    if (r.topic !== topic) continue
+    const list = byNode.get(r.node) ?? []
+    list.push(r)
+    byNode.set(r.node, list)
+  }
+
+  const deltas: number[] = []
+  for (const list of byNode.values()) {
+    const sorted = [...list].sort((a, b) => a.ts.localeCompare(b.ts))
+    for (let i = 0; i < sorted.length - 1; i++) {
+      const prior = sorted[i]
+      const next = sorted[i + 1]
+      if (!prior.dueNext) continue
+      deltas.push(daysBetween(prior.dueNext, next.ts))
+    }
+  }
+
+  return { n: deltas.length, medianDaysLate: median(deltas) }
+}
+
+export interface ComponentGrade {
+  available: boolean
+  n: number
+  /** Raw number in the component's own natural unit (a percent for
+   * recall/calibration, days for punctuality, a 0-1 ratio for coverage,
+   * an open-misconception count for conceptual) — the tile shows this
+   * alongside the letter, never the letter alone. */
+  raw: number | null
+  score: number | null // 0-100, this component's own contribution before weighting
+  letter: string | null
+  weight: number
+}
+
+export interface TopicGradeResult {
+  topic: string
+  overall: { available: boolean; score: number | null; letter: string | null }
+  components: Record<GradeComponentKey, ComponentGrade>
+}
+
+function notEnoughData(weight: number): ComponentGrade {
+  return { available: false, n: 0, raw: null, score: null, letter: null, weight }
+}
+
+export function computeTopicGrade(inputs: {
+  receipts: RawReceipt[]
+  topic: string
+  topicEntry: TopicListEntry | undefined
+  misconceptions: Misconception[]
+  days: DayActivity[]
+  picks: ConfidencePick[]
+}): TopicGradeResult {
+  const { receipts, topic, topicEntry, misconceptions, days, picks } = inputs
+
+  // --- recall accuracy: blended (recalled+partial)/n across every bucket,
+  // not any single bucket — the buckets are time-since-encode windows, and a
+  // course grade wants ONE overall accuracy number, not "which window do I
+  // read". ---
+  const buckets = computeRetentionBuckets(receipts, topic)
+  let recalledOrPartial = 0
+  let recallN = 0
+  for (const b of Object.values(buckets)) {
+    recalledOrPartial += b.recalled + b.partial
+    recallN += b.n
+  }
+  const recall: ComponentGrade =
+    recallN < COMPONENT_MIN_N.recall
+      ? notEnoughData(WEIGHTS.recall)
+      : {
+          available: true,
+          n: recallN,
+          raw: recalledOrPartial / recallN,
+          score: (recalledOrPartial / recallN) * 100,
+          letter: scoreToLetter((recalledOrPartial / recallN) * 100),
+          weight: WEIGHTS.recall,
+        }
+
+  // --- punctuality: median days late, mapped onto the same 0-100 scale via
+  // a linear falloff — 0 days late (or earlier) is full credit, 14+ days
+  // late is zero credit, matching FSRS's own typical short-interval scale
+  // (a review lapsed by two weeks has usually already lapsed the node
+  // itself, per the engine's own grading). ---
+  const punctuality = computeTopicPunctuality(receipts, topic)
+  const PUNCTUALITY_ZERO_AT_DAYS = 14
+  const punctualityComponent: ComponentGrade =
+    punctuality.n < COMPONENT_MIN_N.punctuality || punctuality.medianDaysLate === null
+      ? notEnoughData(WEIGHTS.punctuality)
+      : (() => {
+          const score = Math.max(0, Math.min(100, 100 - (punctuality.medianDaysLate / PUNCTUALITY_ZERO_AT_DAYS) * 100))
+          return {
+            available: true,
+            n: punctuality.n,
+            raw: punctuality.medianDaysLate,
+            score,
+            letter: scoreToLetter(score),
+            weight: WEIGHTS.punctuality,
+          }
+        })()
+
+  // --- coverage: how much of the curriculum is actually consolidated
+  // (review-state) vs. still new/learning — a live graph snapshot, not a
+  // history, so it's never gated on a minimum sample; a topic with any nodes
+  // at all has a real coverage ratio. ---
+  const coverage: ComponentGrade = (() => {
+    if (!topicEntry || topicEntry.nodes === 0) return notEnoughData(WEIGHTS.coverage)
+    const ratio = topicEntry.states.review / topicEntry.nodes
+    const score = ratio * 100
+    return {
+      available: true,
+      n: topicEntry.nodes,
+      raw: ratio,
+      score,
+      letter: scoreToLetter(score),
+      weight: WEIGHTS.coverage,
+    }
+  })()
+
+  // --- conceptual health: resolved / (open + resolved) — a topic with zero
+  // misconceptions ever logged has nothing to penalize OR reward, so it's
+  // "not enough data" rather than a free A. ---
+  const topicMisconceptions = misconceptions.filter((m) => m.topic === topic)
+  const openCount = topicMisconceptions.filter((m) => m.status === 'open').length
+  const resolvedCount = topicMisconceptions.filter((m) => m.status === 'resolved').length
+  const conceptualTotal = openCount + resolvedCount
+  const conceptual: ComponentGrade =
+    conceptualTotal < COMPONENT_MIN_N.conceptual
+      ? notEnoughData(WEIGHTS.conceptual)
+      : {
+          available: true,
+          n: conceptualTotal,
+          raw: openCount,
+          score: (resolvedCount / conceptualTotal) * 100,
+          letter: scoreToLetter((resolvedCount / conceptualTotal) * 100),
+          weight: WEIGHTS.conceptual,
+        }
+
+  // --- calibration: felt-confidence vs. graded outcome. ---
+  const cal = computeCalibration(days, picks, topic)
+  const calibration: ComponentGrade =
+    cal.total < COMPONENT_MIN_N.calibration
+      ? notEnoughData(WEIGHTS.calibration)
+      : {
+          available: true,
+          n: cal.total,
+          raw: cal.calibrated / cal.total,
+          score: (cal.calibrated / cal.total) * 100,
+          letter: scoreToLetter((cal.calibrated / cal.total) * 100),
+          weight: WEIGHTS.calibration,
+        }
+
+  const components: Record<GradeComponentKey, ComponentGrade> = {
+    recall,
+    punctuality: punctualityComponent,
+    coverage,
+    conceptual,
+    calibration,
+  }
+
+  // Renormalize weights across only the AVAILABLE components — a brand-new
+  // topic missing several components must never read as a confident F from
+  // treating the missing ones as zero.
+  const availableWeightSum = Object.values(components)
+    .filter((c) => c.available)
+    .reduce((sum, c) => sum + c.weight, 0)
+
+  if (availableWeightSum === 0) {
+    return { topic, overall: { available: false, score: null, letter: null }, components }
+  }
+
+  const overallScore = Object.values(components).reduce(
+    (sum, c) => (c.available && c.score !== null ? sum + (c.score * c.weight) / availableWeightSum : sum),
+    0,
+  )
+
+  return {
+    topic,
+    overall: { available: true, score: overallScore, letter: scoreToLetter(overallScore) },
+    components,
+  }
+}

@@ -331,6 +331,13 @@ export interface RawReceipt {
    * `kind: transfer`, never an encode) as a genuine retrieval rather than
    * silently swallowing it. */
   capstone: boolean
+  /** The FSRS interval (days) this receipt's own rating set — engram.py's
+   * `interval_days`, present on every real receipt checked. */
+  intervalDays: number | null
+  /** The exact due-date this receipt scheduled the node's next review for —
+   * engram.py's `due_next`, a local 'YYYY-MM-DD' string. See
+   * `shared/topicGrade.ts`'s punctuality metric. */
+  dueNext: string | null
 }
 
 export interface ReceiptsHistory {
