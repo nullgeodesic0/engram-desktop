@@ -1,19 +1,28 @@
 import { useEffect, useState } from 'react'
-import type { DayActivity, GraderHealthResult, Misconception, RawReceipt, TopicGraph, TopicListEntry } from '../../../shared/types'
+import type { DayActivity, GraderHealthResult, Misconception, RawReceipt, TopicGraph, TopicListEntry, WeekRetention } from '../../../shared/types'
 import {
   computeTopicGrade,
+  computeCrossTopicGPA,
+  computeTopicGradeTrend,
+  weeklyTrendCutoffs,
   buildTopicAssignments,
+  groupAssignmentsByNode,
+  letterColorClass,
   type AssignmentRow,
   type ComponentGrade,
   type GradeComponentKey,
   type GradeMode,
   type TopicGradeResult,
+  type TopicGradeTrendPoint,
 } from '../shared/topicGrade'
+import { topicWeekRetention } from '../shared/topicMetrics'
 import { allPicks } from '../shared/calibrationStore'
 import { SectionBanner } from '../components/ui/SectionBanner'
 import { PlateFigure } from '../components/ui/PlateFigure'
 import { Button } from '../components/ui/Button'
 import { SkeletonBar } from '../components/Skeleton'
+import { RetentionCurve } from '../components/charts/RetentionCurve'
+import { humanizeNodeId } from '../../../shared/humanizeId'
 
 const LETTER_TONE: Record<string, 'warm' | 'cool' | 'primary' | 'dim'> = {
   A: 'warm',
@@ -21,13 +30,6 @@ const LETTER_TONE: Record<string, 'warm' | 'cool' | 'primary' | 'dim'> = {
   C: 'cool',
   D: 'cool',
   F: 'dim',
-}
-
-function letterColorClass(letter: string | null): string {
-  if (letter === 'A' || letter === 'B') return 'text-[var(--color-ink-warm)]'
-  if (letter === 'C') return 'text-[var(--color-ink-cool)]'
-  if (letter === 'D' || letter === 'F') return 'text-[var(--color-ink-danger)]'
-  return 'text-[var(--color-text-faint)]'
 }
 
 const COMPONENT_META: Record<GradeComponentKey, { label: string; description: string }> = {
@@ -57,8 +59,20 @@ function formatRaw(key: GradeComponentKey, c: ComponentGrade): string {
 /** One of the five statistical components the composite is weighted from —
  * NOT the same thing as an "assignment" (see AssignmentTile below), which is
  * a literal individual graded event. Kept as its own section, "Subgrades",
- * per the user's explicit call to keep both. */
-function SubgradeTile({ gradeKey, component }: { gradeKey: GradeComponentKey; component: ComponentGrade }) {
+ * per the user's explicit call to keep both.
+ *
+ * `sparkline` — only ever passed for the Recall Accuracy tile: a compact
+ * `RetentionCurve` reusing the existing per-topic weekly-retention data as
+ * supporting evidence beside the letter, not a decorative addition. */
+function SubgradeTile({
+  gradeKey,
+  component,
+  sparkline,
+}: {
+  gradeKey: GradeComponentKey
+  component: ComponentGrade
+  sparkline?: WeekRetention[]
+}) {
   const meta = COMPONENT_META[gradeKey]
   return (
     <div className="tilt-card panel px-4 py-3 flex flex-col gap-1 min-w-0">
@@ -70,8 +84,46 @@ function SubgradeTile({ gradeKey, component }: { gradeKey: GradeComponentKey; co
         {component.available ? component.letter : <span className="text-[var(--color-text-faint)] text-base">not enough data yet</span>}
       </div>
       <div className="label-data text-[10px] text-[var(--color-text-faint)]">{formatRaw(gradeKey, component)}</div>
+      {sparkline && sparkline.some((w) => w.total > 0) && (
+        <div className="mt-1">
+          <RetentionCurve data={sparkline} compact />
+        </div>
+      )}
       <div className="fig-caption mt-1">{meta.description}</div>
     </div>
+  )
+}
+
+/** Adapts a completed-mode grade trend into the shape `RetentionCurve`
+ * already renders (`WeekRetention`) — reused as-is, not forked, per the
+ * "reuse over invention" rule: an unavailable point becomes a null-rate
+ * entry so the line breaks there instead of interpolating through it, the
+ * same gap discipline `RetentionCurve` already applies to a real missing
+ * review week. */
+function trendToWeekRetention(trend: TopicGradeTrendPoint[]): WeekRetention[] {
+  return trend.map((p) => ({
+    weekStart: p.cutoff,
+    total: p.result.overall.available ? 1 : 0,
+    recalled: p.result.overall.available ? (p.result.overall.score ?? 0) / 100 : 0,
+    rate: p.result.overall.available ? (p.result.overall.score ?? 0) / 100 : null,
+  }))
+}
+
+/** ▲/▼/– point delta between the oldest and newest computed trend points —
+ * completed-mode only (see `computeHistoricalTopicGrade`'s own doctrine
+ * comment on why total mode's coverage can't be reconstructed historically). */
+function TrendArrow({ trend }: { trend: TopicGradeTrendPoint[] }) {
+  const available = trend.filter((p) => p.result.overall.available)
+  if (available.length < 2) return null
+  const oldest = available[0].result.overall.score ?? 0
+  const newest = available[available.length - 1].result.overall.score ?? 0
+  const delta = Math.round(newest - oldest)
+  if (delta === 0) return <span className="label-data text-[10px] text-[var(--color-text-faint)]">–</span>
+  const up = delta > 0
+  return (
+    <span className={`label-data text-[10px] ${up ? 'text-[var(--color-ink-warm)]' : 'text-[var(--color-ink-danger)]'}`}>
+      {up ? '▲' : '▼'} {Math.abs(delta)}
+    </span>
   )
 }
 
@@ -95,7 +147,69 @@ function AssignmentRowView({ row }: { row: AssignmentRow }) {
   )
 }
 
-function TopicRosterRow({ entry, grade, onOpen }: { entry: TopicListEntry; grade: TopicGradeResult; onOpen: () => void }) {
+/** A collapsible group of assignment rows for one node — collapsed by
+ * default (a mature topic's 44+ individual reviews would otherwise be one
+ * long undifferentiated scroll). The header states the node name + count +
+ * (if available) that node's own most recent outcome, so a collapsed group
+ * still carries useful information without expanding it. */
+function AssignmentGroupView({
+  node,
+  rows,
+  expanded,
+  onToggle,
+}: {
+  node: string
+  rows: AssignmentRow[]
+  expanded: boolean
+  onToggle: () => void
+}) {
+  const mostRecent = rows.find((r) => r.date) ?? rows[0]
+  return (
+    <div className="border-b border-[var(--color-hairline)] last:border-b-0">
+      <button onClick={onToggle} className="flex items-center justify-between gap-3 py-2 w-full text-left">
+        <span className="text-sm text-[var(--color-text-primary)] truncate min-w-0 flex items-center gap-2">
+          <span className="text-[var(--color-text-faint)] text-xs">{expanded ? '▾' : '▸'}</span>
+          {humanizeNodeId(node)}
+          <span className="label-data text-[10px] text-[var(--color-text-faint)]">{rows.length}</span>
+        </span>
+        {!expanded && mostRecent && (
+          <span
+            className={`label-data text-xs shrink-0 ${
+              mostRecent.outcome === 'unstarted'
+                ? 'text-[var(--color-text-faint)]'
+                : mostRecent.outcome === 'recalled'
+                  ? 'text-[var(--color-ink-warm)]'
+                  : mostRecent.outcome === 'partial'
+                    ? 'text-[var(--color-ink-cool)]'
+                    : 'text-[var(--color-ink-danger)]'
+            }`}
+          >
+            {mostRecent.outcome === 'unstarted' ? 'not started' : mostRecent.letter}
+          </span>
+        )}
+      </button>
+      {expanded && (
+        <div className="pl-4 pb-2 flex flex-col">
+          {rows.map((row) => (
+            <AssignmentRowView key={row.key} row={row} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TopicRosterRow({
+  entry,
+  grade,
+  trend,
+  onOpen,
+}: {
+  entry: TopicListEntry
+  grade: TopicGradeResult
+  trend: TopicGradeTrendPoint[]
+  onOpen: () => void
+}) {
   return (
     <button onClick={onOpen} className="tilt-card panel-raised px-4 py-3 flex items-center justify-between gap-4 w-full text-left frame-hover">
       <div className="min-w-0">
@@ -104,9 +218,12 @@ function TopicRosterRow({ entry, grade, onOpen }: { entry: TopicListEntry; grade
           {entry.states.review}/{entry.nodes} consolidated
         </div>
       </div>
-      <span className={`figure-display text-3xl ${letterColorClass(grade.overall.letter)}`}>
-        {grade.overall.available ? grade.overall.letter : '—'}
-      </span>
+      <div className="flex items-center gap-2 shrink-0">
+        <TrendArrow trend={trend} />
+        <span className={`figure-display text-3xl ${letterColorClass(grade.overall.letter)}`}>
+          {grade.overall.available ? grade.overall.letter : '—'}
+        </span>
+      </div>
     </button>
   )
 }
@@ -155,6 +272,8 @@ export function GradesView() {
   const [openTopic, setOpenTopic] = useState<string | null>(null)
   const [mode, setMode] = useState<GradeMode>('total')
   const [openGraph, setOpenGraph] = useState<TopicGraph | null>(null)
+  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set())
+  const [lapsedOnly, setLapsedOnly] = useState(false)
 
   useEffect(() => {
     window.engram.topics().then(setTopics)
@@ -205,11 +324,29 @@ export function GradesView() {
     ]),
   )
 
+  // Grade trend — completed-mode only (see computeHistoricalTopicGrade's own
+  // doctrine comment), computed once per topic regardless of the current
+  // `mode` toggle: the roster's arrow and the drilldown's chart both read
+  // from this same list, never a second trend computation.
+  const cutoffs = weeklyTrendCutoffs(days, 12)
+  const trends = new Map<string, TopicGradeTrendPoint[]>(
+    topics.map((t) => [
+      t.topic,
+      computeTopicGradeTrend({ receipts, topic: t.topic, misconceptions, days, picks, cutoffs }),
+    ]),
+  )
+
+  const gpa = computeCrossTopicGPA(topics, grades)
+
   const open = openTopic ? topics.find((t) => t.topic === openTopic) : null
   const openGrade = openTopic ? grades.get(openTopic) : null
+  const openTrend = openTopic ? (trends.get(openTopic) ?? []) : []
 
   if (open && openGrade) {
-    const assignments = buildTopicAssignments(receipts, open.topic, mode, openGraph?.order)
+    const allAssignments = buildTopicAssignments(receipts, open.topic, mode, openGraph?.order)
+    const assignments = lapsedOnly ? allAssignments.filter((r) => r.outcome === 'lapsed') : allAssignments
+    const assignmentGroups = groupAssignmentsByNode(assignments)
+    const recallSparkline = topicWeekRetention(days, open.topic)
     return (
       <div className="h-full overflow-y-auto p-6 flex flex-col gap-4 max-w-2xl">
         <div className="flex items-center justify-between gap-3">
@@ -228,17 +365,58 @@ export function GradesView() {
           }
           tone={LETTER_TONE[openGrade.overall.letter ?? ''] ?? 'dim'}
         />
+        {openTrend.filter((p) => p.result.overall.available).length >= 2 && (
+          <>
+            <SectionBanner label="Grade Trend" />
+            <div className="panel px-4 py-3 flex flex-col gap-1">
+              <RetentionCurve data={trendToWeekRetention(openTrend)} />
+              <div className="fig-caption">completed-work trend — coverage isn't reconstructable historically</div>
+            </div>
+          </>
+        )}
         <SectionBanner label="Subgrades" />
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {COMPONENT_ORDER.map((key) => (
-            <SubgradeTile key={key} gradeKey={key} component={openGrade.components[key]} />
+            <SubgradeTile
+              key={key}
+              gradeKey={key}
+              component={openGrade.components[key]}
+              sparkline={key === 'recall' ? recallSparkline : undefined}
+            />
           ))}
         </div>
-        <SectionBanner label="Assignments" count={assignments.length} />
+        <div className="flex items-center justify-between gap-3">
+          <SectionBanner label="Assignments" count={assignments.length} className="flex-1" />
+          <button
+            onClick={() => setLapsedOnly((v) => !v)}
+            className={`label-data text-[10px] uppercase tracking-wide px-2.5 py-1 border shrink-0 ${
+              lapsedOnly
+                ? 'border-[var(--color-ink-danger)] text-[var(--color-ink-danger)]'
+                : 'border-[var(--color-hairline)] text-[var(--color-text-faint)]'
+            }`}
+          >
+            Lapsed only
+          </button>
+        </div>
         <div className="panel px-4 flex flex-col">
-          {assignments.length === 0 && <div className="fig-caption py-3">No graded work yet.</div>}
-          {assignments.map((row) => (
-            <AssignmentRowView key={row.key} row={row} />
+          {assignments.length === 0 && (
+            <div className="fig-caption py-3">{lapsedOnly ? 'No lapsed reviews — nothing to re-review.' : 'No graded work yet.'}</div>
+          )}
+          {assignmentGroups.map((group) => (
+            <AssignmentGroupView
+              key={group.node}
+              node={group.node}
+              rows={group.rows}
+              expanded={expandedNodes.has(group.node)}
+              onToggle={() =>
+                setExpandedNodes((prev) => {
+                  const next = new Set(prev)
+                  if (next.has(group.node)) next.delete(group.node)
+                  else next.add(group.node)
+                  return next
+                })
+              }
+            />
           ))}
         </div>
       </div>
@@ -248,9 +426,15 @@ export function GradesView() {
   return (
     <div className="h-full overflow-y-auto p-6 flex flex-col gap-4 max-w-2xl">
       <div className="flex items-center justify-between gap-3">
-        <SectionBanner label="Grades" count={topics.length} />
+        <PlateFigure
+          value={gpa.available ? gpa.letter : '—'}
+          title="GPA across your topics"
+          note={gpa.available ? `composite across ${gpa.topicsCounted} of ${topics.length} topics` : 'not enough data yet'}
+          tone={LETTER_TONE[gpa.letter ?? ''] ?? 'dim'}
+        />
         <ModeToggle mode={mode} onChange={setMode} />
       </div>
+      <SectionBanner label="Grades" count={topics.length} />
       {health && (
         <div className="label-data text-[10px] text-[var(--color-text-faint)]">
           Grader self-audit: {health.verdict} — see Coach → Grader Audit. Not a factor in any topic's grade below.
@@ -260,7 +444,15 @@ export function GradesView() {
         {topics.map((t) => {
           const grade = grades.get(t.topic)
           if (!grade) return null
-          return <TopicRosterRow key={t.topic} entry={t} grade={grade} onOpen={() => setOpenTopic(t.topic)} />
+          return (
+            <TopicRosterRow
+              key={t.topic}
+              entry={t}
+              grade={grade}
+              trend={trends.get(t.topic) ?? []}
+              onOpen={() => setOpenTopic(t.topic)}
+            />
+          )
         })}
         {topics.length === 0 && <div className="fig-caption">No topics yet — start one from Learn.</div>}
       </div>

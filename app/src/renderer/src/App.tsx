@@ -322,7 +322,6 @@ export default function App() {
             <div key="home" className="view-transition h-full">
               <HomeView
                 onGoReview={() => goToView('review')}
-                onGoCoach={() => goToView('dashboard')}
                 onGoTopic={goToTopic}
                 onNewTopic={() => setView('learn')}
                 onGoNode={goToNode}
