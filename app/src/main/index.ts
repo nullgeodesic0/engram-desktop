@@ -21,9 +21,15 @@ import { startReviewNotifier, stopReviewNotifier, checkReviewsNow, refreshDueCou
 import { checkForUpdate, getCachedUpdateCheck, maybeAutoCheckForUpdate } from './session/updateCheck'
 import { restoreWindowState, trackWindowState } from './windowState'
 import { installAppMenu } from './appMenu'
+import { installGlobalErrorHandlers, getCrashLog } from './session/crashLog'
 import type { EnvironmentCheckResult } from '../shared/types'
 
 const execFileAsync = promisify(execFile)
+
+// Installed before anything else can throw — see crashLog.ts's own doctrine
+// comment for why this exists (previously: zero handler at all, so a main-
+// process crash left no trace anywhere the learner could find).
+installGlobalErrorHandlers()
 
 // Set as early as possible so the app name is correct everywhere that reads
 // it — the About panel, the menu bar's first item, dev-mode window chrome —
@@ -296,6 +302,7 @@ app.whenReady().then(() => {
   })
   ipcMain.handle('app:checkForUpdate', () => checkForUpdate())
   ipcMain.handle('app:getCachedUpdateCheck', () => getCachedUpdateCheck())
+  ipcMain.handle('app:getCrashLog', () => getCrashLog())
   ipcMain.handle('app:getVersion', () => app.getVersion())
 
   ipcMain.handle('achievements:getUnlocked', () => getUnlockedAchievements())

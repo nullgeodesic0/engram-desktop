@@ -6,6 +6,7 @@ import type {
   LearnerModel,
   NotifierSettings,
   UpdateCheckResult,
+  CrashLogEntry,
 } from '../../../shared/types'
 import { AchievementsPanel } from '../components/AchievementsPanel'
 import { SegmentedControl } from '../components/ui/SegmentedControl'
@@ -125,6 +126,43 @@ function DoctorFindings({ doctor }: { doctor: DoctorResult }) {
             ))}
           </div>
         </details>
+      )}
+    </div>
+  )
+}
+
+/** Local crash visibility (Phase 3) — same quiet-status-row idiom as
+ * `DoctorFindings` above. Empty state reads as reassurance, not an absence;
+ * a non-empty log shows most-recent-first (already sorted that way by
+ * `getCrashLog` in the main process) with the raw message and, behind a
+ * disclosure (same pattern as DoctorFindings' notes), the stack trace —
+ * useful for reporting a bug, noisy for everyday reading. */
+function CrashLogSection({ entries }: { entries: CrashLogEntry[] }) {
+  if (entries.length === 0) {
+    return (
+      <div className="panel px-4 py-3 flex items-center gap-3">
+        <span className="text-[var(--color-ink-warm)]">✓</span>
+        <div className="text-sm text-[var(--color-text-primary)]">No crashes recorded</div>
+      </div>
+    )
+  }
+  return (
+    <div className="flex flex-col gap-1.5">
+      {entries.slice(0, 20).map((entry, i) => (
+        <details key={i} className="panel border-[var(--color-ink-danger-dim)] px-3 py-2 text-xs">
+          <summary className="cursor-pointer text-[var(--color-ink-danger)]">
+            <span className="label-data">{new Date(entry.timestamp).toLocaleString()}</span> · {entry.source} ·{' '}
+            {entry.message}
+          </summary>
+          {entry.stack && (
+            <pre className="mt-2 text-[10px] text-[var(--color-text-faint)] whitespace-pre-wrap font-mono">
+              {entry.stack}
+            </pre>
+          )}
+        </details>
+      ))}
+      {entries.length > 20 && (
+        <div className="fig-caption">+{entries.length - 20} older, not shown</div>
       )}
     </div>
   )
@@ -390,6 +428,11 @@ export function SettingsView() {
   const [doctor, setDoctor] = useState<DoctorResult | null>(null)
   const [doctorRunning, setDoctorRunning] = useState(false)
   const [doctorError, setDoctorError] = useState<string | null>(null)
+  // Crash log (Phase 3) — unlike `doctor`, this is a plain local file read
+  // (no engram.py shell-out), so it's cheap enough to load on mount rather
+  // than gating behind a button: a learner who just had the app disappear
+  // on them shouldn't have to know to ask for the reason.
+  const [crashLog, setCrashLog] = useState<CrashLogEntry[]>([])
 
   function refresh() {
     window.engram.model().then(setModel)
@@ -397,6 +440,7 @@ export function SettingsView() {
     window.engram.getNotifierSettings().then(setNotifier)
     window.engram.getLoginItemSettings().then((s) => setLaunchAtLoginState(s.openAtLogin))
     window.engram.getBackupInfo().then(setBackupInfo)
+    window.engram.getCrashLog().then(setCrashLog)
     window.engram.getCachedUpdateCheck().then(setUpdate)
     window.engram.getVersion().then(setVersion)
   }
@@ -947,6 +991,18 @@ export function SettingsView() {
         <Button variant="ghost" onClick={runDoctor} disabled={doctorRunning} className="self-start">
           {doctorRunning ? 'Checking…' : doctor ? 'Run again' : 'Run diagnostics'}
         </Button>
+      </div>
+
+      <div className="panel px-5 py-5 flex flex-col gap-3">
+        <div>
+          <SectionBanner label="Crash log" className="border-t-0" />
+          <div className="text-xs text-[var(--color-text-faint)] mt-1.5">
+            Local only — never sent anywhere. Recorded whenever the app hits an error it can't recover from, so "it
+            just closed" has an actual reason attached the next time you look.
+          </div>
+        </div>
+        <DendriteDivider />
+        <CrashLogSection entries={crashLog} />
       </div>
 
       <div className="panel px-5 py-5 flex flex-col gap-3">

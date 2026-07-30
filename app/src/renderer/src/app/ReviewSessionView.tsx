@@ -135,6 +135,8 @@ export function ReviewSessionView({ onActivity, onGoHome }: ReviewSessionViewPro
   const [attachedFiles, setAttachedFiles] = useState<string[]>([])
   const [markdownPreview, setMarkdownPreview] = useState(false)
   const [busy, setBusy] = useState(false)
+  // Watchdog (Phase 3) — see LearnSessionView's twin doctrine comment.
+  const [stalled, setStalled] = useState(false)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [contextUsage, setContextUsage] = useState<{ usedTokens: number; contextWindow: number } | null>(null)
   const [rateLimit, setRateLimit] = useState<{ status: string; resetsAt: number | null } | null>(null)
@@ -476,6 +478,11 @@ export function ReviewSessionView({ onActivity, onGoHome }: ReviewSessionViewPro
     // as `deriveRitualMarks` gets every walked transcript event; unlike that
     // function, this one is live-only and has no replay counterpart.
     tutorActivity.dispatchSessionEvent(event)
+    if (event.type === 'stall') {
+      setStalled(true)
+      return
+    }
+    if (stalled) setStalled(false)
     switch (event.type) {
       case 'text': {
         // The interleave fix — a mark-producing tool_use since the last delta
@@ -1530,6 +1537,11 @@ export function ReviewSessionView({ onActivity, onGoHome }: ReviewSessionViewPro
                     >
                       Stop
                     </button>
+                  </div>
+                )}
+                {busy && stalled && (
+                  <div className="fig-caption text-[var(--color-ink-warm)]">
+                    No response in over a minute — the app is still running; Stop above cancels it if you'd rather not wait.
                   </div>
                 )}
                 {log.length > 0 && (
