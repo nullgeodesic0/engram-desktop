@@ -67,8 +67,10 @@ import {
   deriveVerdictRegions,
   verdictRegionMessageRenders,
   shouldSuppressSchedule,
+  parseVerdictHint,
   type VerdictSegment,
   type ScheduleSegment,
+  type VerdictHint,
 } from '../../../shared/verdictSegments'
 
 type Phase = 'loading' | 'empty' | 'ready' | 'in-session' | 'done' | 'closed-unexpectedly'
@@ -264,14 +266,15 @@ export function ReviewSessionView({ onActivity, onGoHome }: ReviewSessionViewPro
   // Ritual marks — Review's own minimal slice of Learn's atIndex-interleave
   // plumbing (LearnSessionView), needed here only for the opening docket
   // (one-time, `kind: 'docket'`) and the lapse rite (derivable, `kind:
-  // 'lapse'`) — see the doctrine comment on RitualMark in Marks.tsx. Review
-  // has no `onBridgeUi` listener at all (only `onBridgeAsk`), unlike Learn —
-  // so the `render_ticket` bridge tool (Marks.tsx's `kind: 'ticket'`) is
-  // deliberately Learn-only for now; Review's ticket keeps rendering through
-  // the existing text-fence path (BeatCard's `splitAroundTicket`), which
-  // already works correctly and needs no change. Adding a new live IPC
-  // listener here for a tool no installed skill calls yet isn't worth the
-  // structural change to this KeepMounted view — extend if/when it's needed.
+  // 'lapse'`) — see the doctrine comment on RitualMark in Marks.tsx. Review's
+  // one `onBridgeUi` listener (added for report_verdict, below) is scoped to
+  // exactly that tool — every OTHER bridge tool (session_phase, show_figure,
+  // render_ticket, etc) stays Learn-only for now: `render_ticket` in
+  // particular is deliberately not wired here, since Review's ticket already
+  // renders correctly through the existing text-fence path (BeatCard's
+  // `splitAroundTicket`) and adding a second generic listener for tools no
+  // installed skill calls yet isn't worth the structural change — extend if/
+  // when it's needed.
   const [marks, setMarks] = useState<RitualMark[]>([])
   // Chat Presence Wave D — renderer-local, live-only "what's the tutor doing
   // right now" (shared/tutorActivity.ts's doctrine comment has the full
@@ -290,6 +293,14 @@ export function ReviewSessionView({ onActivity, onGoHome }: ReviewSessionViewPro
   const abortedRef = useRef(false)
   const messagesRef = useRef<ChatMessage[]>([])
   messagesRef.current = messages
+  // report_verdict hints (Phase 2), keyed by the message index they apply
+  // to — same `messagesRef.current.length`-at-call-time convention as every
+  // atIndex above, captured in the onBridgeUi handler below. A ref, not
+  // state: the useMemo that reads it (verdictRenderByMessage) is already
+  // recomputed by the `messages` state update the following text always
+  // triggers, so no separate re-render is needed for this to take effect —
+  // same reasoning LearnSessionView's pushMark-based marks rely on.
+  const verdictHintsRef = useRef<Map<number, VerdictHint[]>>(new Map())
   const markSeq = useRef(0)
   // Live-session audit spawns awaiting their `<task-notification>` verdict —
   // matched by tool-use-id, same FIFO-by-arrival-then-match discipline as
@@ -431,9 +442,27 @@ export function ReviewSessionView({ onActivity, onGoHome }: ReviewSessionViewPro
       ])
       tutorActivity.dispatchAskOpened()
     })
+    // report_verdict (Phase 2) — Review's first onBridgeUi listener; every
+    // other bridge tool (session_phase, show_figure, etc) is Learn-only
+    // today (see the verdictHintsRef doctrine comment above and the
+    // `marks` state's own comment for why Review never needed this
+    // generic channel before). Payload shape-guarded via the same
+    // `parseVerdictHint` replay's `buildHistoryTimeline` uses, so live and
+    // replay can never disagree about what counts as a well-formed hint.
+    const offUi = window.engram.onBridgeUi((req) => {
+      if (req.sessionId !== sessionIdRef.current) return
+      if (req.tool !== 'report_verdict') return
+      const hint = parseVerdictHint(req.payload)
+      if (!hint) return
+      const idx = messagesRef.current.length
+      const list = verdictHintsRef.current.get(idx) ?? []
+      list.push(hint)
+      verdictHintsRef.current.set(idx, list)
+    })
     return () => {
       offEvent()
       offAsk()
+      offUi()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -948,7 +977,7 @@ export function ReviewSessionView({ onActivity, onGoHome }: ReviewSessionViewPro
   const verdictRenderByMessage = useMemo(() => {
     const map = new Map<number, { segments: VerdictSegment[]; eyebrowIndex: number | null; batchId: string }>()
     for (const region of verdictRegions) {
-      for (const render of verdictRegionMessageRenders(messages, region)) {
+      for (const render of verdictRegionMessageRenders(messages, region, verdictHintsRef.current)) {
         map.set(render.messageIndex, { segments: render.segments, eyebrowIndex: render.eyebrowSegmentIndex, batchId: region.batchId })
       }
     }

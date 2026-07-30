@@ -142,6 +142,54 @@ export interface ScheduleSegment {
 
 export type VerdictSegment = ProseSegment | CanonicalSegment | RatingSegment | ConfidenceSegment | ScheduleSegment
 
+/** A `report_verdict` bridge-tool call's payload — the tutor's OWN advance
+ * declaration of an upcoming paragraph's role, carrying its exact text
+ * verbatim. Exists to raise this module's corpus-measured 34% recall on
+ * canonical/confidence paragraphs: the marker-word regexes above are
+ * 100%-precision but miss the other 66% of real verdicts, where the tutor
+ * reveals the answer or echoes confidence without ever writing the literal
+ * word "Canonical:"/"Confidence:". A hint reclassifies a paragraph the
+ * regex would otherwise leave as plain prose — it never overrides a
+ * paragraph the regex already classified (they'd agree in that case
+ * anyway), and a message with no hints classifies exactly as before this
+ * type existed. Read verbatim off the tool call, never off a node — same
+ * D4 non-concern as the rest of this file (see the doctrine note above). */
+export interface VerdictHint {
+  kind: 'canonical' | 'confidence'
+  text: string
+}
+
+/** The report_verdict bridge tool's full MCP name, as it appears in a raw
+ * transcript's `tool_use` blocks — same naming convention as
+ * ritualFromTranscript.ts's `RENDER_BEAT`/`SESSION_PHASE`/etc constants. */
+export const REPORT_VERDICT_TOOL = 'mcp__engram-ui-bridge__report_verdict'
+
+/** Validates and extracts a VerdictHint from a report_verdict tool_use
+ * call's raw `input` — the ONE place both the live bridge:ui handler
+ * (ReviewSessionView.tsx) and replay's transcript walker
+ * (SessionHistoryDrawer.tsx's `buildHistoryTimeline`) parse this payload,
+ * so they can never disagree about what counts as a well-formed hint. */
+export function parseVerdictHint(input: unknown): VerdictHint | null {
+  if (typeof input !== 'object' || input === null) return null
+  const rec = input as Record<string, unknown>
+  if (rec.kind !== 'canonical' && rec.kind !== 'confidence') return null
+  if (typeof rec.text !== 'string' || rec.text.trim().length === 0) return null
+  return { kind: rec.kind, text: rec.text }
+}
+
+/** Loose-equality match between a hint's declared text and a paragraph's
+ * actual text — whitespace-normalized containment either direction, so
+ * minor formatting drift between what the tutor DECLARED via the tool call
+ * and what it actually WROTE (a trailing period, a collapsed newline)
+ * doesn't silently miss the match. */
+function hintMatches(hint: VerdictHint, trimmed: string): boolean {
+  const norm = (s: string) => s.replace(/\s+/g, ' ').trim()
+  const a = norm(hint.text)
+  const b = norm(trimmed)
+  if (a.length === 0 || b.length === 0) return false
+  return b.includes(a) || a.includes(b)
+}
+
 // ===========================================================================
 // The schedule regex family
 // ===========================================================================
@@ -433,7 +481,7 @@ function splitIntoParagraphs(text: string): RawParagraph[] {
   return paragraphs
 }
 
-function classifyParagraph(raw: string, fenced: boolean): VerdictSegment {
+function classifyParagraph(raw: string, fenced: boolean, hints: VerdictHint[]): VerdictSegment {
   const trimmed = raw.trim()
   if (fenced || trimmed.length === 0 || trimmed.startsWith('>')) {
     return { kind: 'prose', raw }
@@ -454,6 +502,14 @@ function classifyParagraph(raw: string, fenced: boolean): VerdictSegment {
   if (schedule) {
     return { kind: 'schedule', facts: schedule.facts, bare: schedule.bare, raw }
   }
+  // Marker-less recall recovery — only reached when none of the regexes
+  // above already classified this paragraph, so a hint can never disagree
+  // with an explicit marker the tutor actually wrote.
+  for (const hint of hints) {
+    if (!hintMatches(hint, trimmed)) continue
+    if (hint.kind === 'canonical') return { kind: 'canonical', marker: 'Canonical', body: trimmed, raw }
+    return { kind: 'confidence', band: extractConfidenceBand(trimmed), raw }
+  }
   return { kind: 'prose', raw }
 }
 
@@ -468,9 +524,14 @@ function classifyParagraph(raw: string, fenced: boolean): VerdictSegment {
  * praise codas are declared hopeless and stay prose forever.
  *
  * Invariant every caller may rely on: `segmentVerdictText(text).map(s =>
- * s.raw).join('')` is byte-identical to `text`. */
-export function segmentVerdictText(text: string): VerdictSegment[] {
-  return splitIntoParagraphs(text).map((p) => classifyParagraph(p.raw, p.fenced))
+ * s.raw).join('')` is byte-identical to `text`.
+ *
+ * `hints` (optional, defaults to none — every existing call site and every
+ * historical transcript classifies byte-identically without them) are this
+ * message's own `report_verdict` bridge-tool calls, if any; see VerdictHint's
+ * doctrine comment. */
+export function segmentVerdictText(text: string, hints: VerdictHint[] = []): VerdictSegment[] {
+  return splitIntoParagraphs(text).map((p) => classifyParagraph(p.raw, p.fenced, hints))
 }
 
 // ===========================================================================
@@ -767,7 +828,11 @@ export interface VerdictMessageRender {
  * — defensively guarded there, never actually reachable for a `region` this
  * module itself derived from the same `messages` array — can never desync
  * `messageIndex` from the text it segments. */
-export function verdictRegionMessageRenders(messages: ChatMessage[], region: VerdictRegion): VerdictMessageRender[] {
+export function verdictRegionMessageRenders(
+  messages: ChatMessage[],
+  region: VerdictRegion,
+  hintsByMessageIndex?: Map<number, VerdictHint[]>,
+): VerdictMessageRender[] {
   if (region.endIndex < region.startIndex) return []
   const out: VerdictMessageRender[] = []
   for (let i = region.startIndex; i <= region.endIndex; i++) {
@@ -780,7 +845,7 @@ export function verdictRegionMessageRenders(messages: ChatMessage[], region: Ver
     } else {
       text = message.text
     }
-    out.push({ messageIndex: i, segments: segmentVerdictText(text), eyebrowSegmentIndex: null })
+    out.push({ messageIndex: i, segments: segmentVerdictText(text, hintsByMessageIndex?.get(i) ?? []), eyebrowSegmentIndex: null })
   }
   outer: for (const entry of out) {
     for (let si = 0; si < entry.segments.length; si++) {

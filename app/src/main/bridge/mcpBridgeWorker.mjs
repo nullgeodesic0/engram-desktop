@@ -154,5 +154,15 @@ server.registerTool('render_ticket', {
   },
 }, async (args) => fireUi('render_ticket', args))
 
+server.registerTool('report_verdict', {
+  title: 'Report Verdict',
+  description:
+    "Advisory, best-effort, /review only: call this immediately before writing a paragraph that reveals the canonical answer (kind 'canonical') or echoes the learner's confidence pick (kind 'confidence') in your grading feedback. Pass the exact text of that paragraph verbatim in `text` — the app matches it against what you actually write next so it can style that paragraph correctly even when your wording doesn't start with a literal 'Canonical:'/'Confidence:' label. Still write the paragraph as you normally would — this never changes what you say, only how the app displays it.",
+  inputSchema: {
+    kind: z.enum(['canonical', 'confidence']),
+    text: z.string(),
+  },
+}, async (args) => fireUi('report_verdict', args))
+
 const transport = new StdioServerTransport()
 await server.connect(transport)

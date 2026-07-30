@@ -274,7 +274,14 @@ const BRIDGE_TOOL_PREFIX = 'mcp__engram-ui-bridge__'
 export function isMarkBoundaryToolUse(name: string, input: Record<string, unknown>): boolean {
   if (name.startsWith(BRIDGE_TOOL_PREFIX)) {
     const tool = name.slice(BRIDGE_TOOL_PREFIX.length)
-    if (tool === 'render_beat' || tool === 'session_phase' || tool === 'ask_user_question' || tool === 'show_figure') {
+    if (
+      tool === 'render_beat' ||
+      tool === 'session_phase' ||
+      tool === 'ask_user_question' ||
+      tool === 'show_figure' ||
+      tool === 'render_ticket' ||
+      tool === 'report_verdict'
+    ) {
       return true
     }
     if (tool === 'beat_outcome') {
