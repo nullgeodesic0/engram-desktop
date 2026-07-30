@@ -1,6 +1,11 @@
 import type { DayActivity } from '../../../../shared/types'
 import type { ConfidencePick } from '../../shared/calibrationStore'
 import { seeded } from '../graph3d/layout'
+import { humanizeNodeId } from '../../../../shared/humanizeId'
+import { useChartHover } from './useChartHover'
+import { ChartTooltip } from './ChartTooltip'
+
+const CONFIDENCE_LABEL = ['unsure', 'unsure', 'confident', 'confident'] as const
 
 const WIDTH = 600
 const HEIGHT = 150
@@ -25,6 +30,12 @@ export interface CalibrationScatterData {
  * as not recalled — rather than being dropped, so this figure's point count
  * and read never disagree with the StatBlocks above it. */
 export function CalibrationScatter({ data }: { data: CalibrationScatterData }) {
+  const { hover, showHover, hideHover } = useChartHover<{
+    node: string
+    topic: string
+    confidenceIndex: number
+    recalled: boolean
+  }>()
   const itemsByDay = new Map(data.days.map((d) => [d.date, d.items]))
 
   const innerW = WIDTH - PAD_L - PAD_R
@@ -33,7 +44,15 @@ export function CalibrationScatter({ data }: { data: CalibrationScatterData }) {
   const slotW = innerW / 4
   const toX = (index: number) => PAD_L + (index + 0.5) * slotW
 
-  const points: { x: number; y: number; recalled: boolean; key: string }[] = []
+  const points: {
+    x: number
+    y: number
+    recalled: boolean
+    key: string
+    node: string
+    topic: string
+    confidenceIndex: number
+  }[] = []
   let overconfident = 0
   let underconfident = 0
   let calibrated = 0
@@ -61,7 +80,15 @@ export function CalibrationScatter({ data }: { data: CalibrationScatterData }) {
     const jitterX = (seeded(key, 1) - 0.5) * slotW * 0.7
     const jitterY = (seeded(key, 2) - 0.5) * innerH * 0.22
     const baseY = recalled ? rowY.recalled : rowY.lapsed
-    points.push({ x: toX(pick.index) + jitterX, y: baseY + jitterY, recalled, key })
+    points.push({
+      x: toX(pick.index) + jitterX,
+      y: baseY + jitterY,
+      recalled,
+      key,
+      node: pick.node,
+      topic: pick.topic,
+      confidenceIndex: pick.index,
+    })
   })
 
   if (points.length === 0) {
@@ -118,6 +145,10 @@ export function CalibrationScatter({ data }: { data: CalibrationScatterData }) {
               r={2.6}
               fill={p.recalled ? 'var(--color-ink-warm)' : 'var(--color-ink-violet)'}
               fillOpacity={0.8}
+              onMouseEnter={(e) =>
+                showHover(e, { node: p.node, topic: p.topic, confidenceIndex: p.confidenceIndex, recalled: p.recalled })
+              }
+              onMouseLeave={hideHover}
             />
           ))}
         </g>
@@ -126,6 +157,16 @@ export function CalibrationScatter({ data }: { data: CalibrationScatterData }) {
         Fig. — confidence at pick time against graded outcome.{' '}
         <span style={{ fontVariantNumeric: 'tabular-nums' }}>{total}</span> paired pick{total === 1 ? '' : 's'}, {read}
       </div>
+      {hover && (
+        <ChartTooltip x={hover.x} y={hover.y}>
+          <div className="label-data text-[var(--color-text-faint)]">
+            {humanizeNodeId(hover.node)} · {hover.topic}
+          </div>
+          <div className="text-[var(--color-text-dim)] mt-0.5">
+            {CONFIDENCE_LABEL[hover.confidenceIndex]} · {hover.recalled ? 'recalled' : 'lapsed'}
+          </div>
+        </ChartTooltip>
+      )}
     </div>
   )
 }

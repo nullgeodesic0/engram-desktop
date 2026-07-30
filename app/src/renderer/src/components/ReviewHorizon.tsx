@@ -1,4 +1,6 @@
 import { memo } from 'react'
+import { useChartHover } from './charts/useChartHover'
+import { ChartTooltip } from './charts/ChartTooltip'
 
 /** 14-day tick figure of upcoming returns — Review's answer to `DueForecast`,
  * built beside it rather than by generalizing it: DueForecast's day labels
@@ -24,6 +26,7 @@ export const ReviewHorizon = memo(function ReviewHorizon({
   /** Nodes at `fsrs.s >= 21` days of stability — standing, not scheduling. */
   holdingCount: number
 }) {
+  const { hover, showHover, hideHover } = useChartHover<{ label: string; count: number }>()
   const max = Math.max(...buckets, 1)
   const total = buckets.reduce((a, b) => a + b, 0)
 
@@ -44,14 +47,26 @@ export const ReviewHorizon = memo(function ReviewHorizon({
     total === 0 || !nextDate
       ? 'nothing scheduled inside two weeks'
       : `Fig. — the next wave lands ${nextDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+  // RetentionCurve figure-mode's tick-text language, ported to a plain div layout.
+  const tickLabel = { fontSize: 9, fill: 'var(--color-text-faint)' } as const
 
   return (
     <div className="panel px-4 py-3 flex flex-col gap-2 max-w-md">
-      <div className="flex items-end gap-[3px] h-10">
+      <div className="relative flex items-end gap-[3px] h-10 pl-5">
+        {/* Left-edge numeric axis — a hairline plus top/bottom count ticks, so bar
+            heights read against a real scale instead of pure relative-to-max. */}
+        <div className="absolute left-3 top-0 bottom-0 w-px" style={{ background: 'var(--color-hairline)' }} />
+        <span className="absolute left-0 -top-1 label-data leading-none" style={tickLabel}>
+          {max}
+        </span>
+        <span className="absolute left-0 -bottom-1 label-data leading-none" style={tickLabel}>
+          0
+        </span>
         {buckets.map((count, i) => (
           <div
             key={i}
-            title={`${i === 0 ? 'today' : `+${i}d`}: ${count} due`}
+            onMouseEnter={(e) => showHover(e, { label: i === 0 ? 'today' : `+${i}d`, count })}
+            onMouseLeave={hideHover}
             className="flex-1 rounded-t-sm"
             style={{
               height: `${Math.max(count > 0 ? 10 : 3, (count / max) * 100)}%`,
@@ -65,6 +80,13 @@ export const ReviewHorizon = memo(function ReviewHorizon({
       <div className="label-data text-[10px] text-[var(--color-text-faint)]">
         {holdingCount} {holdingCount === 1 ? 'node' : 'nodes'} holding at stability ≥ 21d
       </div>
+      {hover && (
+        <ChartTooltip x={hover.x} y={hover.y}>
+          <div className="label-data text-[var(--color-text-faint)]">
+            {hover.label}: {hover.count} due
+          </div>
+        </ChartTooltip>
+      )}
     </div>
   )
 })
