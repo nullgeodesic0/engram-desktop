@@ -89,7 +89,22 @@ export function TopicSettingsModal({ topicId, topicTitle, onClose }: TopicSettin
         </>
       }
     >
-      <div className="flex flex-col gap-4">
+      <div
+        className="flex flex-col gap-4"
+        // The footer's "↵ save" kbd-hint chip promised this and nothing
+        // implemented it — a bordered key-cap that LOOKS like a second Save
+        // button but did nothing when clicked or pressed (reported live as
+        // "two save buttons, only one clickable"). Enter now genuinely
+        // saves from any single-line field; inside the textarea plain Enter
+        // must keep inserting newlines, so ⌘/Ctrl+Enter saves from there.
+        onKeyDown={(e) => {
+          if (e.key !== 'Enter' || saving || !loaded) return
+          const inTextarea = (e.target as HTMLElement).tagName === 'TEXTAREA'
+          if (inTextarea && !(e.metaKey || e.ctrlKey)) return
+          e.preventDefault()
+          void save()
+        }}
+      >
         <div className="flex flex-col gap-2">
           <label className="text-sm text-[var(--color-text-primary)]">Display name</label>
           <p className="text-xs text-[var(--color-text-faint)]">
