@@ -122,3 +122,33 @@ export function endsWithBareProbeHeader(text: string): boolean {
   const split = splitAroundProbeHeader(text)
   return split !== null && split.header.body === ''
 }
+
+/** Merges a newly-arrived assistant text delta into the PREVIOUS bubble's
+ * text — the ONE place every caller that implements the bare-probe-header
+ * exception (LearnSessionView.tsx, ReviewSessionView.tsx, chatMessages.ts's
+ * `parseTranscriptToMessages`, SessionHistoryDrawer.tsx's
+ * `buildHistoryTimeline`) should build the merged string, so a fix here
+ * can't drift out of sync across the four copies again.
+ *
+ * A bare `existingText + newText` concatenation is only correct for genuine
+ * mid-stream continuation (`breakBubble` false — the model is still writing
+ * the same sentence, delta by delta). When the merge instead happens
+ * THROUGH the bare-header exception (a boundary tool fired, but the
+ * previous bubble is nothing but a header line with no body), the arriving
+ * text is a fresh paragraph from a NEW model turn, and `existingText` has no
+ * trailing newline of its own — the header's text simply stopped the
+ * instant the tool call fired. Without a separator, `HEADER_RE`'s
+ * intentionally permissive trailing `[^\n]*\n?` (there to swallow whatever
+ * decoration trails the header on its OWN line) instead swallows the entire
+ * next sentence as if it were that trailing junk — a real bug hit live in a
+ * /review sitting: the probe's whole question vanished, leaving only its
+ * last sentence ("Take your time; write as much of the chain as you can.")
+ * visible, because the question's first sentence got consumed into the
+ * header match itself and `header.body` started only at the next paragraph
+ * break. Inserting a paragraph break here is what the model's own fresh-turn
+ * boundary already implied; it changes zero words, only restores the break
+ * a raw string concatenation silently erased. */
+export function mergeAssistantText(existingText: string, breakBubble: boolean, newText: string): string {
+  const viaBareHeaderException = breakBubble && endsWithBareProbeHeader(existingText)
+  return existingText + (viaBareHeaderException ? '\n\n' : '') + newText
+}

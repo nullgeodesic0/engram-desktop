@@ -62,7 +62,7 @@ import {
 import { QueueRail } from '../components/ritual/QueueRail'
 import { NodeCrossingDivider } from '../components/ritual/Marks'
 import { deriveReviewCrossings, latestProbeHeader, nextProbeHeaderAt, allProbeHeaders } from '../../../shared/reviewCrossing'
-import { endsWithBareProbeHeader } from '../../../shared/probeHeader'
+import { endsWithBareProbeHeader, mergeAssistantText } from '../../../shared/probeHeader'
 import {
   deriveVerdictRegions,
   verdictRegionMessageRenders,
@@ -490,7 +490,7 @@ export function ReviewSessionView({ onActivity, onGoHome }: ReviewSessionViewPro
           // follows a mark-boundary tool call (typically `render_beat`
           // posting the probe itself) instead of starting a new bubble.
           if (last && last.role === 'assistant' && (!breakBubble || endsWithBareProbeHeader(last.text))) {
-            return [...prev.slice(0, -1), { ...last, text: last.text + event.text }]
+            return [...prev.slice(0, -1), { ...last, text: mergeAssistantText(last.text, breakBubble, event.text) }]
           }
           // `Date.now()` at append time — SessionEvent carries no timestamp
           // of its own; see ChatMessage's own doctrine comment.

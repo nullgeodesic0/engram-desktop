@@ -1,6 +1,6 @@
 import { isTaskNotificationContent } from './taskNotification'
 import { isMarkBoundaryToolUse } from './signals/tutorSignals'
-import { endsWithBareProbeHeader } from './probeHeader'
+import { endsWithBareProbeHeader, mergeAssistantText } from './probeHeader'
 
 export interface ChatMessage {
   id: string
@@ -129,7 +129,7 @@ export function parseTranscriptToMessages(rawLines: unknown[]): ChatMessage[] {
         if (last && last.role === 'assistant' && (!boundarySinceLastText || endsWithBareProbeHeader(last.text))) {
           // Timestamp intentionally untouched — a merged bubble keeps the
           // instant it STARTED at, same rule the live append path uses.
-          last.text += block.text
+          last.text = mergeAssistantText(last.text, boundarySinceLastText, block.text)
         } else {
           messages.push({ id: `t${idCounter++}`, role: 'assistant', text: block.text, timestamp: parseLineTimestamp(line.timestamp) })
         }
