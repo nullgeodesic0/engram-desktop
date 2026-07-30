@@ -22,6 +22,14 @@ interface RawTextBlock {
 }
 type RawContentBlock = RawToolUseBlock | RawTextBlock | { type: string; [k: string]: unknown }
 
+// Watchdog (Phase 3) — how long the child process can go without ANY stdout
+// activity while a turn is outstanding before the UI is told it's stalled.
+// Deliberately generous: a real turn can spend a long time thinking or
+// running a slow Bash call with no partial-message output in between; this
+// is a "something's wrong" signal for a session that's gone truly silent,
+// not a normal-latency warning.
+const STALL_THRESHOLD_MS = 90_000
+
 export class SessionManager extends EventEmitter {
   readonly sessionId: string
   private readonly isResume: boolean
@@ -29,6 +37,8 @@ export class SessionManager extends EventEmitter {
   private splitter = new NdjsonLineSplitter()
   private permissions: SessionPermissionSetup | null = null
   private ended = false
+  private turnOutstanding = false
+  private stallTimer: ReturnType<typeof setTimeout> | null = null
 
   /**
    * `resumeSessionId`, when given, continues a previous Claude Code conversation
@@ -100,13 +110,35 @@ export class SessionManager extends EventEmitter {
     if (!this.child || this.ended) return
     const message = { type: 'user', message: { role: 'user', content: text } }
     this.child.stdin.write(JSON.stringify(message) + '\n')
+    this.turnOutstanding = true
+    this.armStallTimer()
   }
 
   abort(): void {
+    this.clearStallTimer()
     this.child?.kill()
   }
 
+  /** (Re)starts the stall watchdog — called on every genuine stdout activity
+   * while a turn is outstanding, so it only ever fires after a real gap of
+   * total silence, never merely because a turn is taking a while. */
+  private armStallTimer(): void {
+    this.clearStallTimer()
+    if (!this.turnOutstanding) return
+    this.stallTimer = setTimeout(() => {
+      this.emitEvent({ type: 'stall', seconds: STALL_THRESHOLD_MS / 1000 })
+    }, STALL_THRESHOLD_MS)
+  }
+
+  private clearStallTimer(): void {
+    if (this.stallTimer) {
+      clearTimeout(this.stallTimer)
+      this.stallTimer = null
+    }
+  }
+
   private handleStdout(chunk: string): void {
+    this.armStallTimer()
     for (const raw of this.splitter.push(chunk)) {
       this.handleRawEvent(raw as Record<string, unknown>)
     }
@@ -182,6 +214,8 @@ export class SessionManager extends EventEmitter {
         const usedTokens = (usage.input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0)
         this.emitEvent({ type: 'usage', usedTokens, contextWindow })
       }
+      this.turnOutstanding = false
+      this.clearStallTimer()
       this.emitEvent({
         type: 'turn_ended',
         isError: Boolean(d.is_error),
@@ -192,6 +226,8 @@ export class SessionManager extends EventEmitter {
 
   private handleClose(code: number | null): void {
     this.ended = true
+    this.turnOutstanding = false
+    this.clearStallTimer()
     // The process behind any still-open bridge:ask for this session just
     // died (abort, crash, or natural exit — this IS that one path); its
     // pendingAsks entry now holds a resolver for an HTTP response nothing

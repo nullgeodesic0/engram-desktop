@@ -449,6 +449,13 @@ export interface UpdateCheckResult {
   reason?: string
 }
 
+export interface CrashLogEntry {
+  timestamp: string
+  source: 'uncaughtException' | 'unhandledRejection'
+  message: string
+  stack?: string
+}
+
 export interface SessionIndexEntry {
   sessionId: string
   key: string

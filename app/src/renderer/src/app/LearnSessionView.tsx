@@ -300,6 +300,11 @@ export function LearnSessionView({
   const [started, setStarted] = useState(false)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [busy, setBusy] = useState(false)
+  // Watchdog (Phase 3) — true from a `stall` SessionEvent until the next
+  // genuine activity of any other kind. Purely informational (Stop already
+  // exists below for anyone who wants to act on it); this just turns "gone
+  // quiet" into a stated fact instead of an indistinguishable long think.
+  const [stalled, setStalled] = useState(false)
   const [production, setProduction] = useState('')
   const [attachedFiles, setAttachedFiles] = useState<string[]>([])
   const [markdownPreview, setMarkdownPreview] = useState(false)
@@ -821,6 +826,11 @@ export function LearnSessionView({
     // as `deriveRitualMarks` gets every walked transcript event; unlike that
     // function, this one is live-only and has no replay counterpart.
     tutorActivity.dispatchSessionEvent(event)
+    if (event.type === 'stall') {
+      setStalled(true)
+      return
+    }
+    if (stalled) setStalled(false)
     switch (event.type) {
       case 'text': {
         // Append to the running assistant message if we're mid-turn (deltas arrive as
@@ -1960,6 +1970,11 @@ export function LearnSessionView({
                     >
                       Stop
                     </button>
+                  </div>
+                )}
+                {busy && stalled && (
+                  <div className="fig-caption text-[var(--color-ink-warm)]">
+                    No response in over a minute — the app is still running; Stop above cancels it if you'd rather not wait.
                   </div>
                 )}
               </div>

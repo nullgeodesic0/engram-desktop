@@ -71,6 +71,20 @@ export interface SessionUsageEvent {
   contextWindow: number
 }
 
+/** Phase 3 watchdog — fired once when the `claude` child process has gone
+ * quiet (no stdout at all, not even a partial-message delta) for longer than
+ * SessionManager's stall threshold while a turn is still outstanding. Purely
+ * informational: nothing here kills the process or changes its behavior —
+ * it exists so a hung session shows "still working" instead of the same
+ * silent nothing a genuinely-thinking-hard turn also looks like. Cleared by
+ * the next real activity (any other SessionEvent) or by `closed`; the
+ * renderer doesn't need a dedicated "un-stall" event; it just stops
+ * showing the affordance once something else arrives. */
+export interface SessionStallEvent {
+  type: 'stall'
+  seconds: number
+}
+
 export type SessionEvent =
   | SessionTextEvent
   | SessionToolUseEvent
@@ -81,3 +95,4 @@ export type SessionEvent =
   | SessionClosedEvent
   | SessionErrorEvent
   | SessionUsageEvent
+  | SessionStallEvent

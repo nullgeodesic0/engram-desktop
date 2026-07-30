@@ -15,6 +15,7 @@ import type {
   ReceiptsHistory,
   SessionIndexEntry,
   UnlockedAchievement,
+  CrashLogEntry,
   DecayResult,
   NextNodeResult,
   MapAnnotations,
@@ -67,6 +68,7 @@ const engramApi = {
     ipcRenderer.invoke('app:setLoginItemSettings', openAtLogin),
   checkForUpdate: (): Promise<UpdateCheckResult> => ipcRenderer.invoke('app:checkForUpdate'),
   getCachedUpdateCheck: (): Promise<UpdateCheckResult | null> => ipcRenderer.invoke('app:getCachedUpdateCheck'),
+  getCrashLog: (): Promise<CrashLogEntry[]> => ipcRenderer.invoke('app:getCrashLog'),
   getVersion: (): Promise<string> => ipcRenderer.invoke('app:getVersion'),
 
   getUnlockedAchievements: (): Promise<UnlockedAchievement[]> => ipcRenderer.invoke('achievements:getUnlocked'),
