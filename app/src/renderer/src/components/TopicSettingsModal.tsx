@@ -85,7 +85,6 @@ export function TopicSettingsModal({ topicId, topicTitle, onClose }: TopicSettin
               {saving ? 'Saving…' : 'Save'}
             </button>
           </div>
-          <span className="kbd-hint">↵ save</span>
         </>
       }
     >
