@@ -1,4 +1,6 @@
 import type { DayActivity } from '../../../../shared/types'
+import { useChartHover } from './useChartHover'
+import { ChartTooltip } from './ChartTooltip'
 
 const WIDTH = 600
 const HEIGHT = 66
@@ -34,6 +36,8 @@ export function ActivityStrip({ data }: { data: DayActivity[] }) {
   const activeDays = data.filter((d) => d.count > 0).length
   const totalReviews = data.reduce((sum, d) => sum + d.count, 0)
 
+  const { hover, showHover, hideHover } = useChartHover<{ label: string; count: number }>()
+
   return (
     <div className="flex flex-col gap-1.5">
       <svg
@@ -47,6 +51,8 @@ export function ActivityStrip({ data }: { data: DayActivity[] }) {
           const h = d.count > 0 ? Math.max(2, (d.count / max) * BAR_AREA) : 1
           const x = PAD_L + i * tickW
           const y = PAD_T + BAR_AREA - h
+          const dt = new Date(`${d.date}T00:00:00Z`)
+          const label = dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
           return (
             <rect
               key={d.date}
@@ -60,6 +66,8 @@ export function ActivityStrip({ data }: { data: DayActivity[] }) {
               // own 120ms — 370ms total, under the 400ms ceiling regardless
               // of how many days are in `data`.
               style={{ ['--tick-delay' as string]: `${(i / Math.max(1, n - 1)) * 250}ms` }}
+              onMouseEnter={(e) => showHover(e, { label, count: d.count })}
+              onMouseLeave={hideHover}
             />
           )
         })}
@@ -84,6 +92,14 @@ export function ActivityStrip({ data }: { data: DayActivity[] }) {
         Fig. — <span style={{ fontVariantNumeric: 'tabular-nums' }}>{activeDays}</span> active day{activeDays === 1 ? '' : 's'},{' '}
         <span style={{ fontVariantNumeric: 'tabular-nums' }}>{totalReviews}</span> review{totalReviews === 1 ? '' : 's'} over {n} day{n === 1 ? '' : 's'}
       </div>
+      {hover && (
+        <ChartTooltip x={hover.x} y={hover.y}>
+          <div className="font-medium">{hover.label}</div>
+          <div className="text-[var(--color-text-dim)]">
+            {hover.count} review{hover.count === 1 ? '' : 's'}
+          </div>
+        </ChartTooltip>
+      )}
     </div>
   )
 }

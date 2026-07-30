@@ -1,3 +1,6 @@
+import { useChartHover } from './charts/useChartHover'
+import { ChartTooltip } from './charts/ChartTooltip'
+
 const RADIUS = 9
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS
 
@@ -10,6 +13,7 @@ export function ContextGauge({ usedTokens, contextWindow }: { usedTokens: number
   const offset = CIRCUMFERENCE * (1 - pct)
 
   const explainer = 'session depth — how much of the model’s working memory this conversation has used'
+  const { hover, showHover, hideHover } = useChartHover<{ usedTokens: number; contextWindow: number }>()
 
   return (
     <div
@@ -17,6 +21,8 @@ export function ContextGauge({ usedTokens, contextWindow }: { usedTokens: number
       role="img"
       aria-label={explainer}
       className="flex items-center gap-2 text-xs label-data text-[var(--color-text-primary)] panel px-2.5 py-1.5"
+      onMouseEnter={(e) => showHover(e, { usedTokens, contextWindow })}
+      onMouseLeave={hideHover}
     >
       <svg width="24" height="24" viewBox="0 0 24 24" className="shrink-0">
         <circle cx="12" cy="12" r={RADIUS} fill="none" stroke="var(--color-surface-3)" strokeWidth="3.5" />
@@ -35,6 +41,11 @@ export function ContextGauge({ usedTokens, contextWindow }: { usedTokens: number
       </svg>
       <span className="font-medium">{Math.round(pct * 100)}%</span>
       <span className="text-[var(--color-text-faint)]">context</span>
+      {hover && (
+        <ChartTooltip x={hover.x} y={hover.y}>
+          {`${hover.usedTokens.toLocaleString()} / ${hover.contextWindow.toLocaleString()} tokens used`}
+        </ChartTooltip>
+      )}
     </div>
   )
 }

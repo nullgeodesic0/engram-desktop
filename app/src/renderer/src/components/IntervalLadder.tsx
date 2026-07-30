@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import type { GradeResult } from '../../../shared/gradeResult'
 import type { ReceiptsHistory } from '../../../shared/types'
 import { datedGapsForNode, getReceiptsHistoryCached, localToday, type Rung } from '../shared/nodeIntervalHistory'
+import { useChartHover } from './charts/useChartHover'
+import { ChartTooltip } from './charts/ChartTooltip'
 
 const MIN_H = 5
 const MAX_H = 18
@@ -87,6 +89,8 @@ export function IntervalLadder({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [history, result.node, result.intervalDays, result.grade, topic, asOfDate])
 
+  const { hover, showHover, hideHover } = useChartHover<Rung>()
+
   if (!rungs || rungs.length === 0) return null
 
   const elided = rungs.length > CAP
@@ -94,11 +98,7 @@ export function IntervalLadder({
   const tooltip = rungs.map((r) => `${r.days}d`).join(' · ')
 
   return (
-    <div
-      className="scatter-fade-in flex items-end gap-[3px] pb-1.5"
-      title={tooltip}
-      aria-label={`return history: ${tooltip}`}
-    >
+    <div className="scatter-fade-in flex items-end gap-[3px] pb-1.5" aria-label={`return history: ${tooltip}`}>
       {elided && (
         <span className="label-data text-[10px] text-[var(--color-text-faint)] self-end pb-0.5 shrink-0">…</span>
       )}
@@ -111,8 +111,18 @@ export function IntervalLadder({
             background: r.lapsed ? 'var(--color-ink-danger)' : 'var(--color-ink-warm)',
             transform: r.lapsed ? 'translateY(6px)' : undefined,
           }}
+          onMouseEnter={(e) => showHover(e, r)}
+          onMouseLeave={hideHover}
+          onFocus={(e) => showHover(e, r)}
+          onBlur={hideHover}
+          tabIndex={0}
         />
       ))}
+      {hover && (
+        <ChartTooltip x={hover.x} y={hover.y}>
+          {hover.days}d{hover.lapsed ? ' · lapsed' : ''}
+        </ChartTooltip>
+      )}
     </div>
   )
 }
