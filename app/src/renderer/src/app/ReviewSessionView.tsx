@@ -175,16 +175,23 @@ export function ReviewSessionView({ onActivity, onGoHome }: ReviewSessionViewPro
   const [sessionGrades, setSessionGrades] = useState<GradeResult[]>([])
   const [streakDays, setStreakDays] = useState<number | null>(null)
   const [chamber, setChamber] = useState(false)
-  // Two session cards, two edges, two tacks: the ticket slides in from the
-  // LEFT, the probe collapses UPWARD (Learn's masthead grammar). Both float
-  // free of the transcript's layout so the chat owns the column; pinning
-  // either holds it out regardless of the cursor.
+  // Three session cards, three edges, three tacks: the ticket slides in from
+  // the LEFT, the probe collapses UPWARD (Learn's masthead grammar), and the
+  // closing summary collapses DOWNWARD off the bottom edge (the same grammar,
+  // mirrored). All three float free of the transcript's layout so the chat
+  // owns the column; pinning any one holds it out regardless of the cursor.
   const [probePinned, setProbePinned] = useState(false)
   const [probePeek, setProbePeek] = useState(false)
   const [ticketPinned, setTicketPinned] = useState(false)
   const [ticketPeek, setTicketPeek] = useState(false)
+  // The closing summary (SessionCeremony/ScheduleDelta/ReviewHorizon) — see
+  // handleSessionPointer's bottom-edge branch and the `phase === 'done'`
+  // render below.
+  const [summaryPinned, setSummaryPinned] = useState(false)
+  const [summaryPeek, setSummaryPeek] = useState(false)
   const probeLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const ticketLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const summaryLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   /** Shared peek/tuck pair — `armed` guards against continuous motion pushing
    * the tuck deadline forward forever. */
   const makePeek = (
@@ -212,9 +219,12 @@ export function ReviewSessionView({ onActivity, onGoHome }: ReviewSessionViewPro
   })
   const probeCtl = makePeek(probeLeaveTimer, setProbePeek)
   const ticketCtl = makePeek(ticketLeaveTimer, setTicketPeek)
+  const summaryCtl = makePeek(summaryLeaveTimer, setSummaryPeek)
   /** Pointer-position tracking at the device's own mousemove rate. Top strip
    * reveals the probe (and its own height holds it open); left strip reveals
-   * the ticket (its own width holds it open). Pinned cards opt out. */
+   * the ticket (its own width holds it open); bottom strip reveals the
+   * closing summary (its own height holds it open) once the sitting is
+   * `done`. Pinned cards opt out. */
   const handleSessionPointer = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect()
     if (!probePinned) {
@@ -227,10 +237,18 @@ export function ReviewSessionView({ onActivity, onGoHome }: ReviewSessionViewPro
       if (x <= (ticketPeek ? 320 : 28)) ticketCtl.peek()
       else ticketCtl.tuck()
     }
+    if (phase === 'done' && !summaryPinned) {
+      // Mirror of the probe's top-edge check, off the container's BOTTOM
+      // edge instead — the summary tucks downward and reveals upward.
+      const yFromBottom = rect.bottom - e.clientY
+      if (yFromBottom <= (summaryPeek ? 360 : 28)) summaryCtl.peek()
+      else summaryCtl.tuck()
+    }
   }
   useEffect(() => () => {
     if (probeLeaveTimer.current) clearTimeout(probeLeaveTimer.current)
     if (ticketLeaveTimer.current) clearTimeout(ticketLeaveTimer.current)
+    if (summaryLeaveTimer.current) clearTimeout(summaryLeaveTimer.current)
   }, [])
   // The honest-blank affordance's readiness — true once the current item has sat
   // unanswered for 45s. See the effect keyed on `current?.id` below for the timer
@@ -638,6 +656,8 @@ export function ReviewSessionView({ onActivity, onGoHome }: ReviewSessionViewPro
     setChamber(false)
     setProbePinned(false)
     setProbePeek(false)
+    setSummaryPinned(false)
+    setSummaryPeek(false)
     // The queue was last read at mount (or after the previous grade) — a
     // resume especially can be minutes or days later, and a stale head makes
     // the probe card describe work that's already done. Re-read on every
@@ -1240,7 +1260,7 @@ export function ReviewSessionView({ onActivity, onGoHome }: ReviewSessionViewPro
               transcript rather than claiming layout rows of its own. */}
           <div
             className={`relative flex-1 min-h-0 flex flex-col${chamber ? ' chamber-blur' : ''}`}
-            onMouseMove={current || latestTicket ? handleSessionPointer : undefined}
+            onMouseMove={current || latestTicket || phase === 'done' ? handleSessionPointer : undefined}
           >
             {/* Session ticket — floats over the transcript on the LEFT edge,
                 tucking away unless the cursor visits that edge or its tack is
@@ -1488,6 +1508,85 @@ export function ReviewSessionView({ onActivity, onGoHome }: ReviewSessionViewPro
                 )}
               </div>
             </ChatScrollRegion>
+
+            {/* Closing summary — floats OVER the transcript on the BOTTOM
+                edge, mirroring the probe's grid-collapse grammar (same 0fr↔1fr
+                technique, same clear+rearm 400ms tuck / 28px reveal band, same
+                direct onMouseEnter claim) but anchored at the bottom instead
+                of the top: `bottom-0` with no `top` pins the box's bottom
+                edge and lets its height (driven by the grid row) shrink from
+                there, so the content clips from its OWN top down as it tucks
+                — the mirror image of the probe's "collapses upward". This
+                never participates in the flex column above (it's `absolute`,
+                pulled out of flow), so the transcript keeps its full height
+                whether the sitting just finished or not — the previous
+                inline `shrink-0` block below the pane used to steal that
+                height instead. Content is unchanged (same three cards, same
+                props) — only where and how they're revealed changed. */}
+            {phase === 'done' && (() => {
+              const summaryOut = summaryPinned || summaryPeek
+              return (
+                <>
+                  {!summaryOut && (
+                    <div
+                      className="absolute bottom-0 left-0 right-0 z-20 h-2 flex items-center justify-center group cursor-default"
+                      onMouseEnter={summaryCtl.peek}
+                      aria-hidden="true"
+                    >
+                      <span className="h-px w-12 rounded bg-[var(--color-hairline)] group-hover:bg-[var(--color-ink-warm-dim)] transition-colors duration-[var(--dur-fast)]" />
+                    </div>
+                  )}
+                  <div
+                    // Direct hover claims the summary open — authoritative
+                    // over the sampled container-mousemove geometry, same
+                    // discipline as the probe's own onMouseEnter above.
+                    onMouseEnter={summaryCtl.peek}
+                    className={`absolute bottom-0 left-0 right-0 z-20 grid transition-[grid-template-rows] ${
+                      summaryOut
+                        ? 'duration-[var(--dur-base)] ease-[var(--ease-out-soft)]'
+                        : 'duration-[340ms] ease-[cubic-bezier(0.45,0.05,0.25,1)]'
+                    }`}
+                    style={{ gridTemplateRows: summaryOut ? '1fr' : '0fr' }}
+                  >
+                    <div
+                      className={`min-h-0 overflow-hidden transition-[opacity] ${
+                        summaryOut
+                          ? 'duration-[var(--dur-base)] ease-[var(--ease-out-soft)] opacity-100'
+                          : 'duration-[340ms] ease-[cubic-bezier(0.45,0.05,0.25,1)] opacity-0'
+                      }`}
+                    >
+                      <div className="relative flex flex-col gap-4 max-h-[65vh] overflow-y-auto pt-7 pb-2">
+                        <SessionCeremony
+                          results={sessionGrades}
+                          streakDays={streakDays}
+                          commitment={null}
+                          heading="Queue clear"
+                          label="items"
+                        />
+                        {/* Review's queue is mixed-topic, so ScheduleDelta (like IntervalLadder)
+                            matches by node id alone rather than a single topic prop; it renders
+                            its own panel only when at least one row (or the all-lapsed line)
+                            survives, so nothing empty ever shows up here. */}
+                        <ScheduleDelta results={sessionGrades} />
+                        {horizonBuckets && <ReviewHorizon buckets={horizonBuckets} holdingCount={holdingCount} />}
+                        <button
+                          onClick={() => setSummaryPinned((v) => !v)}
+                          aria-label={summaryPinned ? 'Unpin session summary' : 'Pin session summary'}
+                          title={summaryPinned ? 'Unpin — tuck away unless the cursor visits the bottom edge' : 'Pin — keep the summary out'}
+                          className={`focus-ring no-press absolute top-0 right-1 h-5 w-5 flex items-center justify-center transition-colors duration-[var(--dur-fast)] ${
+                            summaryPinned
+                              ? 'text-[var(--color-ink-warm)] bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)]'
+                              : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]'
+                          }`}
+                        >
+                          <PinTackIcon pinned={summaryPinned} size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )
+            })()}
           </div>
 
           {/* Chat Presence Wave D Task 10 — the generic 90s idle cue. Gated on
@@ -1530,24 +1629,6 @@ export function ReviewSessionView({ onActivity, onGoHome }: ReviewSessionViewPro
               }
               disabledReason={composerDisabledReason(tutorActivity.activity)}
             />
-          )}
-
-          {phase === 'done' && (
-            <div className="shrink-0 flex flex-col gap-4">
-              <SessionCeremony
-                results={sessionGrades}
-                streakDays={streakDays}
-                commitment={null}
-                heading="Queue clear"
-                label="items"
-              />
-              {/* Review's queue is mixed-topic, so ScheduleDelta (like IntervalLadder)
-                  matches by node id alone rather than a single topic prop; it renders
-                  its own panel only when at least one row (or the all-lapsed line)
-                  survives, so nothing empty ever shows up here. */}
-              <ScheduleDelta results={sessionGrades} />
-              {horizonBuckets && <ReviewHorizon buckets={horizonBuckets} holdingCount={holdingCount} />}
-            </div>
           )}
         </div>
       )}
