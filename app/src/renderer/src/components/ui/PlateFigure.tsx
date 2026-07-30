@@ -5,6 +5,10 @@ const TONE: Record<string, string> = {
   cool: 'text-[var(--color-ink-cool)]',
   primary: 'text-[var(--color-text-primary)]',
   dim: 'text-[var(--color-text-dim)]',
+  // The grade scale's outer letters (S violet, F danger) — added when the
+  // Grades plates started rendering letters through this figure.
+  violet: 'text-[var(--color-ink-violet)]',
+  danger: 'text-[var(--color-ink-danger)]',
 }
 
 /** The briefing-plate headline anatomy — ONE number, said once and big (the
@@ -32,7 +36,7 @@ export function PlateFigure({
   value: ReactNode
   title: ReactNode
   note?: ReactNode
-  tone?: 'warm' | 'cool' | 'primary' | 'dim'
+  tone?: 'warm' | 'cool' | 'primary' | 'dim' | 'violet' | 'danger'
   pulse?: boolean
   onPulseEnd?: () => void
 }) {

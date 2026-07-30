@@ -6,14 +6,31 @@ export interface ConfidencePick {
   node: string
   label: string
   ts: number
-  /** Index of the chosen option within the picker's fixed option order
-   * (0 = least confident … 3 = most confident). The picker's four band
-   * labels are set by the skill's dialogue-grammar, not the app, so the
-   * Dashboard classifies "felt sure" by this positional index rather than
-   * matching label text — see task-8-brief.md's deviation note. Optional
-   * only because older picks (persisted before this field existed) won't
-   * have it. */
+  /** Index of the chosen option within the picker's fixed option order.
+   * The dialogue grammar pins that order MOST-CONFIDENT-FIRST — Certain
+   * (~90), Pretty sure (~70), Half unsure (~50), Just guessing (~25) — so
+   * **0 = most confident and 3 = least**. An earlier version of this
+   * comment claimed the opposite, and every consumer that trusted it
+   * classified "felt sure" backwards (caught live: the Coach scatter's
+   * x-axis read flipped). Interpret ONLY through `feltSure()`/
+   * `confidenceRank()` below — never a raw `index >= 2` comparison.
+   * Optional only because older picks (persisted before this field
+   * existed) won't have it. */
   index?: number
+}
+
+/** True when the pick was one of the two confident bands (Certain / Pretty
+ * sure — picker positions 0 and 1). THE one classification rule; see the
+ * `index` doc comment above for the ordering this encodes. */
+export function feltSure(index: number): boolean {
+  return index <= 1
+}
+
+/** Ascending-confidence rank for plotting (0 = Just guessing … 3 = Certain)
+ * — the picker's positional index reversed, so a "low → high" axis can stay
+ * a plain left-to-right mapping. */
+export function confidenceRank(index: number): number {
+  return 3 - index
 }
 
 const KEY = 'engram-confidence-picks'

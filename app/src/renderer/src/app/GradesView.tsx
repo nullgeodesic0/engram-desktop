@@ -24,12 +24,15 @@ import { SkeletonBar } from '../components/Skeleton'
 import { RetentionCurve } from '../components/charts/RetentionCurve'
 import { humanizeNodeId } from '../../../shared/humanizeId'
 
-const LETTER_TONE: Record<string, 'warm' | 'cool' | 'primary' | 'dim'> = {
+/** PlateFigure tone per letter — same scale letterColorClass encodes
+ * (S violet · A/B warm · C/D cool · F danger), for the big plate letters. */
+const LETTER_TONE: Record<string, 'warm' | 'cool' | 'primary' | 'dim' | 'violet' | 'danger'> = {
+  S: 'violet',
   A: 'warm',
   B: 'warm',
   C: 'cool',
   D: 'cool',
-  F: 'dim',
+  F: 'danger',
 }
 
 const COMPONENT_META: Record<GradeComponentKey, { label: string; description: string }> = {
@@ -131,14 +134,9 @@ function TrendArrow({ trend }: { trend: TopicGradeTrendPoint[] }) {
  * Review, Jul 22" — not a style choice. This is the audit trail underneath
  * the Subgrades' numbers, not a second weighted score of its own. */
 function AssignmentRowView({ row }: { row: AssignmentRow }) {
-  const tone =
-    row.outcome === 'unstarted'
-      ? 'text-[var(--color-text-faint)]'
-      : row.outcome === 'recalled'
-        ? 'text-[var(--color-ink-warm)]'
-        : row.outcome === 'partial'
-          ? 'text-[var(--color-ink-cool)]'
-          : 'text-[var(--color-ink-danger)]'
+  // Letter-colored via the ONE shared scale (A warm, C cool, F danger fall
+  // out of it naturally); unstarted rows have no letter and stay faint.
+  const tone = row.outcome === 'unstarted' ? 'text-[var(--color-text-faint)]' : letterColorClass(row.letter)
   return (
     <div className="flex items-center justify-between gap-3 py-1.5 border-b border-[var(--color-hairline)] last:border-b-0">
       <span className="text-sm text-[var(--color-text-primary)] truncate min-w-0">{row.label}</span>
@@ -175,13 +173,7 @@ function AssignmentGroupView({
         {!expanded && mostRecent && (
           <span
             className={`label-data text-xs shrink-0 ${
-              mostRecent.outcome === 'unstarted'
-                ? 'text-[var(--color-text-faint)]'
-                : mostRecent.outcome === 'recalled'
-                  ? 'text-[var(--color-ink-warm)]'
-                  : mostRecent.outcome === 'partial'
-                    ? 'text-[var(--color-ink-cool)]'
-                    : 'text-[var(--color-ink-danger)]'
+              mostRecent.outcome === 'unstarted' ? 'text-[var(--color-text-faint)]' : letterColorClass(mostRecent.letter)
             }`}
           >
             {mostRecent.outcome === 'unstarted' ? 'not started' : mostRecent.letter}
@@ -270,7 +262,10 @@ export function GradesView() {
   const [days, setDays] = useState<DayActivity[] | null>(null)
   const [health, setHealth] = useState<GraderHealthResult | null>(null)
   const [openTopic, setOpenTopic] = useState<string | null>(null)
-  const [mode, setMode] = useState<GradeMode>('total')
+  // Defaults to completed-work (per the user's explicit call): the UI's
+  // headline GPA grades the work actually done; the total-work lens stays
+  // one toggle away.
+  const [mode, setMode] = useState<GradeMode>('completed')
   const [openGraph, setOpenGraph] = useState<TopicGraph | null>(null)
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set())
   const [lapsedOnly, setLapsedOnly] = useState(false)

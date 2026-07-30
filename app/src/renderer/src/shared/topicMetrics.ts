@@ -1,5 +1,5 @@
 import type { DayActivity, RawReceipt, TopicGraph, WeekRetention } from '../../../shared/types'
-import type { ConfidencePick } from './calibrationStore'
+import { feltSure, type ConfidencePick } from './calibrationStore'
 import { mondayOf } from './weekDigest'
 
 // ============================================================================
@@ -419,10 +419,14 @@ export function computeCalibration(days: DayActivity[], picks: ConfidencePick[],
     if (!items) continue
     const match = items.find((it) => it.topic === pick.topic && it.node === pick.node)
     if (!match) continue
-    const feltSure = pick.index >= 2
+    // Picker order is most-confident-FIRST (index 0 = Certain) — classify
+    // only via the store's own feltSure(), never a raw index comparison;
+    // the inverted `>= 2` this replaces swapped over/underconfident counts
+    // everywhere downstream (Coach, Grades' calibration subgrade).
+    const sure = feltSure(pick.index)
     const recalled = match.grade === 'recalled'
-    if (feltSure && !recalled) overconfident++
-    else if (!feltSure && recalled) underconfident++
+    if (sure && !recalled) overconfident++
+    else if (!sure && recalled) underconfident++
     else calibrated++
   }
 

@@ -24,6 +24,11 @@ export interface TopicListEntry extends TopicSummary {
   goal: string
   nodes: number
   due: number
+  /** The engine's own generated title, preserved when a `displayTitle`
+   * override — see TopicSettings — has replaced `title` for display. Set by
+   * `getTopicsCached`'s overlay only in that case, so the settings modal
+   * can still show what the engine calls this topic. */
+  engineTitle?: string
 }
 
 export type NodeState = 'new' | 'learning' | 'review'
@@ -195,6 +200,10 @@ export interface TopicSettings {
    * boundary). Optional for the same reason `contextFiles` predates some
    * saved settings on disk. */
   targetDate?: string | null
+  /** App-side display name shown in place of the engine's own generated
+   * title — purely presentational, never written to the graph file, never
+   * seen by the engine. Null/absent = use the engine's title. */
+  displayTitle?: string | null
 }
 
 export interface ArtifactEntry {
