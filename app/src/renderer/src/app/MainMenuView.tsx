@@ -102,8 +102,18 @@ export function MainMenuView({
   return (
     <div className="tilt-card-soft panel px-6 py-6 flex flex-col gap-4">
       {grouped.map(({ group, items }, gi) => (
-        <div key={group} className={`flex flex-col gap-1 ${gi > 0 ? 'border-t border-[var(--color-hairline)] pt-3' : ''}`}>
-          <span className="label-data text-[10px] uppercase tracking-wide text-[var(--color-text-faint)] mb-1">{GROUP_LABEL[group]}</span>
+        <div key={group} className={`flex flex-col gap-1 ${gi > 0 ? 'pt-2' : ''}`}>
+          {/* The TicketCard band's own register — warm tracked-uppercase with
+              a hairline rule running out to the plate's edge — instead of a
+              bare faint label that disappeared into the rows below it. The
+              rule replaces the old border-t group divider (one line, doing
+              both jobs, instead of two stacked ones). */}
+          <div className="flex items-center gap-2.5 mb-1">
+            <span className="label-data text-[10px] uppercase tracking-[0.28em] text-[var(--color-ink-warm)] shrink-0">
+              {GROUP_LABEL[group]}
+            </span>
+            <span className="h-px flex-1 bg-[var(--color-hairline)]" aria-hidden="true" />
+          </div>
           {items.map((n) => {
             const hero = group === 'study'
             const inProgress =
@@ -136,7 +146,9 @@ export function MainMenuView({
                     indented past the icon, truncating — the same treatment
                     its due nodes' names get. */}
                 {teasers?.[n.id] !== undefined && (
-                  <div className={`label-data text-[10px] text-[var(--color-text-faint)] truncate ${hero ? 'pl-[26px]' : 'pl-[23px]'}`}>
+                  <div
+                    className={`label-data text-[var(--color-text-dim)] truncate ${hero ? 'pl-[26px] text-[11px]' : 'pl-[23px] text-[10px]'}`}
+                  >
                     {teasers[n.id]}
                   </div>
                 )}

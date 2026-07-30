@@ -142,10 +142,15 @@ function TopicGroup({
 }) {
   if (topics.length === 0) return null
   return (
-    <div className={`flex flex-col gap-1 ${first ? '' : 'border-t border-[var(--color-hairline)] pt-3'}`}>
-      <div className="flex items-baseline gap-2 mb-1">
-        <span className="text-[10px] label-data uppercase tracking-wide text-[var(--color-text-faint)]">{heading}</span>
-        {caption && <span className="fig-caption">{caption}</span>}
+    <div className={`flex flex-col gap-1 ${first ? '' : 'pt-2'}`}>
+      {/* Same register header as the Sections plate's group bands — warm
+          tracked-uppercase with a hairline rule running to the plate's edge
+          (the TicketCard band's own language), the rule doing the group-
+          divider job the old border-t did. */}
+      <div className="flex items-center gap-2.5 mb-1">
+        <span className="text-[10px] label-data uppercase tracking-[0.28em] text-[var(--color-ink-warm)] shrink-0">{heading}</span>
+        {caption && <span className="fig-caption shrink-0">{caption}</span>}
+        <span className="h-px flex-1 bg-[var(--color-hairline)]" aria-hidden="true" />
       </div>
       {topics.map((t) => {
         const total = t.states.new + t.states.learning + t.states.review
@@ -157,7 +162,9 @@ function TopicGroup({
           <button
             key={t.topic}
             onClick={() => onGoTopic(t.topic)}
-            className={`focus-ring relative text-left flex flex-col gap-0.5 px-2 -mx-2 py-1.5 hover:bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] transition-colors duration-[var(--dur-fast)] ${
+            // Same 1px edge line the Sections rows and every card on this
+            // page draw (.panel's own border token).
+            className={`focus-ring relative text-left flex flex-col gap-0.5 px-3 py-2 border border-[var(--color-edge)] hover:bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] transition-colors duration-[var(--dur-fast)] ${
               resumable ? 'dogear' : ''
             }`}
           >
