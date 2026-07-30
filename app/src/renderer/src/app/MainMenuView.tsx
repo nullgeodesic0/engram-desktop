@@ -90,9 +90,13 @@ export function MainMenuView({
   visited: Record<'learn' | 'review' | 'dashboard', boolean>
   onGoView: (id: string) => void
 }) {
+  // `home` is excluded outright — this plate IS the Home screen, and a
+  // "Home" row pointing at the page you're already on is dead weight (it was
+  // also silently landing in Explore via the `?? 'explore'` fallback, since
+  // it never got a NAV_GROUPS assignment).
   const grouped = GROUP_ORDER.map((group) => ({
     group,
-    items: nav.filter((n) => (NAV_GROUPS[n.id] ?? 'explore') === group),
+    items: nav.filter((n) => n.id !== 'home' && (NAV_GROUPS[n.id] ?? 'explore') === group),
   })).filter((g) => g.items.length > 0)
 
   return (
@@ -109,7 +113,10 @@ export function MainMenuView({
               <button
                 key={n.id}
                 onClick={() => onGoView(n.id)}
-                className={`focus-ring relative text-left flex flex-col gap-0.5 px-2 -mx-2 py-1.5 hover:bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] transition-colors duration-[var(--dur-fast)] ${
+                // The same 1px edge line every card on this page draws
+                // (`.panel`'s own border token) — a row is still a card,
+                // just a full-width one inside the plate.
+                className={`focus-ring relative text-left flex flex-col gap-0.5 px-3 py-2 border border-[var(--color-edge)] hover:bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] transition-colors duration-[var(--dur-fast)] ${
                   inProgress ? 'dogear' : ''
                 }`}
               >

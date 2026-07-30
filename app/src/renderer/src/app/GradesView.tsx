@@ -307,7 +307,7 @@ export function GradesView() {
 
   if (loading) {
     return (
-      <div className="h-full overflow-y-auto p-6 flex flex-col gap-3 max-w-2xl">
+      <div className="h-full overflow-y-auto p-8 flex flex-col gap-3 w-full">
         <SkeletonBar height={24} width="30%" />
         <SkeletonBar height={64} />
         <SkeletonBar height={64} />
@@ -348,7 +348,7 @@ export function GradesView() {
     const assignmentGroups = groupAssignmentsByNode(assignments)
     const recallSparkline = topicWeekRetention(days, open.topic)
     return (
-      <div className="h-full overflow-y-auto p-6 flex flex-col gap-4 max-w-2xl">
+      <div className="h-full overflow-y-auto p-8 flex flex-col gap-4 w-full">
         <div className="flex items-center justify-between gap-3">
           <Button variant="ghost" onClick={() => setOpenTopic(null)}>
             ← All grades
@@ -383,7 +383,7 @@ export function GradesView() {
         {/* `items-start` — without it, the Recall tile's sparkline (the
             other four tiles have no chart) stretches every tile in its row
             to match, leaving visible dead space in the shorter siblings. */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 items-start gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 items-start gap-3">
           {COMPONENT_ORDER.map((key) => (
             <SubgradeTile
               key={key}
@@ -432,7 +432,7 @@ export function GradesView() {
   }
 
   return (
-    <div className="h-full overflow-y-auto p-6 flex flex-col gap-4 max-w-2xl">
+    <div className="h-full overflow-y-auto p-8 flex flex-col gap-4 w-full">
       {/* Same plate anatomy as ReadyRoomPlate's own — a tilt-card panel
           wrapping the PlateFigure, never a bare figure floating with no
           card underneath it. */}

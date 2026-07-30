@@ -25,7 +25,7 @@ export const DueForecast = memo(function DueForecast({ buckets }: { buckets: num
 
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="relative flex items-end gap-1 h-8 pl-5">
+      <div className="relative flex items-end gap-1 h-20 pl-5">
         {/* Left-edge numeric axis — a hairline plus top/bottom count ticks, so bar
             heights read against a real scale instead of pure relative-to-max. */}
         <div className="absolute left-3 top-0 bottom-0 w-px" style={{ background: 'var(--color-hairline)' }} />
@@ -43,7 +43,7 @@ export const DueForecast = memo(function DueForecast({ buckets }: { buckets: num
               key={i}
               onMouseEnter={(e) => showHover(e, { label: dayLabel, count })}
               onMouseLeave={hideHover}
-              className="w-3 rounded-t-sm"
+              className="flex-1 rounded-t-sm"
               style={{
                 height: `${Math.max(count > 0 ? 12 : 4, (count / max) * 100)}%`,
                 background: i === 0 ? 'var(--color-ink-warm)' : 'var(--color-ink-cool-dim)',
