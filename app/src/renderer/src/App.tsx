@@ -4,7 +4,6 @@ import { DashboardView } from './app/DashboardView'
 import { ReviewSessionView } from './app/ReviewSessionView'
 import { LearnSessionView } from './app/LearnSessionView'
 import { SettingsView } from './app/SettingsView'
-import { MainMenuView } from './app/MainMenuView'
 import { GradesView } from './app/GradesView'
 import { CommandPalette } from './components/CommandPalette'
 import { SessionHistoryDrawer, ALL_HISTORY_KEY } from './components/SessionHistoryDrawer'
@@ -24,7 +23,7 @@ const ArtifactGalleryView = lazy(() =>
   import('./app/ArtifactGalleryView').then((m) => ({ default: m.ArtifactGalleryView })),
 )
 
-type View = 'home' | 'menu' | 'topics' | 'dashboard' | 'artifacts' | 'review' | 'learn' | 'settings' | 'grades'
+type View = 'home' | 'topics' | 'dashboard' | 'artifacts' | 'review' | 'learn' | 'settings' | 'grades'
 
 const NAV: { id: View; label: string; hint: string; icon: ReactElement }[] = [
   {
@@ -301,7 +300,7 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-full" ref={cardPhysicsRef}>
-      <TitleBar onOpenMenu={() => goToView('menu')} />
+      <TitleBar onGoHome={() => goToView('home')} />
       <div className="flex flex-1 min-h-0 relative">
       {/* Each view now owns its own scroll region (h-full + overflow-y-auto, or a
           flex column with an internal scrollable pane like LearnSessionView) so a
@@ -314,17 +313,6 @@ export default function App() {
             a live session's UI state. Cheap/stateless views (and the Map, whose
             WebGL scene must not run hidden) still unmount on switch. */}
         <div className="flex-1 min-h-0 relative">
-          {view === 'menu' && (
-            <div key="menu" className="view-transition h-full">
-              <MainMenuView
-                nav={NAV}
-                dueCount={dueCount}
-                activity={activity}
-                visited={visited}
-                onGoView={(id) => goToView(id as View)}
-              />
-            </div>
-          )}
           {view === 'grades' && (
             <div key="grades" className="view-transition h-full">
               <GradesView />
@@ -339,6 +327,11 @@ export default function App() {
                 onNewTopic={() => setView('learn')}
                 onGoNode={goToNode}
                 onGoSitting={goToSitting}
+                nav={NAV}
+                dueCount={dueCount}
+                activity={activity}
+                visited={visited}
+                onGoView={(id) => goToView(id as View)}
               />
             </div>
           )}
@@ -409,7 +402,6 @@ export default function App() {
         onGoNode={goToNode}
         onGoSitting={goToSitting}
         navCommands={[
-          { id: 'nav:menu', label: 'Main Menu', hint: '', action: () => goToView('menu') },
           ...NAV.map((n) => ({ id: `nav:${n.id}`, label: n.label, hint: `⌘${n.hint}`, action: () => goToView(n.id) })),
           { id: 'nav:history', label: 'Session History', hint: '⇧⌘H', action: () => setAllHistoryOpen(true) },
         ]}

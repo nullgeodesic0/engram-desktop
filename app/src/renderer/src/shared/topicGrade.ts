@@ -1,6 +1,7 @@
 import type { DayActivity, Misconception, RawReceipt, TopicListEntry } from '../../../shared/types'
 import type { ConfidencePick } from './calibrationStore'
 import { computeRetentionBuckets, computeCalibration, RETENTION_BUCKET_MIN_N } from './topicMetrics'
+import { humanizeNodeId } from '../../../shared/humanizeId'
 
 // ============================================================================
 // Per-topic A-F course grade — genuine accountability, not gamification.
@@ -44,6 +45,16 @@ const WEIGHTS = {
 } as const
 
 export type GradeComponentKey = keyof typeof WEIGHTS
+
+/** Two ways to read the same topic: `completed` grades only the work
+ * actually done (coverage doesn't apply — by definition you've "covered"
+ * everything you've looked at), `total` additionally weighs in how much of
+ * the curriculum remains untouched, via the coverage component. The other
+ * four components (recall/punctuality/conceptual/calibration) are properties
+ * of the work you've DONE either way — there's no "recall" event for a node
+ * you haven't started, so mode never changes how they're computed, only
+ * whether coverage is folded into the composite. */
+export type GradeMode = 'completed' | 'total'
 
 const LETTER_CUTOFFS: [number, string][] = [
   [90, 'A'],
@@ -148,8 +159,9 @@ export function computeTopicGrade(inputs: {
   misconceptions: Misconception[]
   days: DayActivity[]
   picks: ConfidencePick[]
+  mode: GradeMode
 }): TopicGradeResult {
-  const { receipts, topic, topicEntry, misconceptions, days, picks } = inputs
+  const { receipts, topic, topicEntry, misconceptions, days, picks, mode } = inputs
 
   // --- recall accuracy: blended (recalled+partial)/n across every bucket,
   // not any single bucket — the buckets are time-since-encode windows, and a
@@ -199,8 +211,10 @@ export function computeTopicGrade(inputs: {
   // --- coverage: how much of the curriculum is actually consolidated
   // (review-state) vs. still new/learning — a live graph snapshot, not a
   // history, so it's never gated on a minimum sample; a topic with any nodes
-  // at all has a real coverage ratio. ---
+  // at all has a real coverage ratio. Excluded entirely in `completed` mode —
+  // see GradeMode's own doctrine comment. ---
   const coverage: ComponentGrade = (() => {
+    if (mode === 'completed') return notEnoughData(WEIGHTS.coverage)
     if (!topicEntry || topicEntry.nodes === 0) return notEnoughData(WEIGHTS.coverage)
     const ratio = topicEntry.states.review / topicEntry.nodes
     const score = ratio * 100
@@ -276,4 +290,92 @@ export function computeTopicGrade(inputs: {
     overall: { available: true, score: overallScore, letter: scoreToLetter(overallScore) },
     components,
   }
+}
+
+// ============================================================================
+// Literal assignments — a browsable gradebook, not a style choice. Each row
+// is one real graded event ("Inertia Tensor — First Learn", "Reduced Mass —
+// Review, Jul 22"), not an abstract statistical category (those are the
+// Subgrades above). This is the transparent audit trail underneath the
+// Subgrades' numbers, not a second scoring pass — the weighted composite
+// above already owns the math; assignments exist so "why is my recall
+// accuracy what it is" has real, dated, individually-graded rows to point to.
+// ============================================================================
+
+export interface AssignmentRow {
+  key: string
+  label: string
+  date: string | null
+  outcome: 'recalled' | 'partial' | 'lapsed' | 'unstarted'
+  letter: string | null
+}
+
+const OUTCOME_LETTER: Record<'recalled' | 'partial' | 'lapsed', string> = {
+  recalled: 'A',
+  partial: 'C',
+  lapsed: 'F',
+}
+
+function formatAssignmentDate(ts: string): string {
+  return new Date(`${ts}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+function assignmentLabel(node: string, kind: string | null, ts: string): string {
+  const title = humanizeNodeId(node)
+  if (kind === 'encode') return `${title} — First Learn`
+  if (kind === 'transfer') return `${title} — Transfer Probe, ${formatAssignmentDate(ts)}`
+  return `${title} — Review, ${formatAssignmentDate(ts)}`
+}
+
+/** Most-recent-first. `allNodeIds` (a topic's full `TopicGraph.order`, never
+ * its `nodes` map — see the call site's own comment on why only the bare id
+ * list is fetched) is optional and only consulted in `total` mode: a node
+ * with zero receipts ever gets its own "Not Yet Started" row, contributing
+ * as incomplete/zero to the topic's standing (the user's own call — an
+ * unstarted node counts against the total-work grade, not just a visible
+ * gap) exactly the way the `coverage` component above already treats it. */
+export function buildTopicAssignments(
+  receipts: RawReceipt[],
+  topic: string,
+  mode: GradeMode,
+  allNodeIds?: string[],
+): AssignmentRow[] {
+  const topicReceipts = receipts.filter((r) => r.topic === topic)
+  const rows: AssignmentRow[] = topicReceipts.map((r) => {
+    const outcome = (r.grade === 'recalled' || r.grade === 'partial' || r.grade === 'lapsed' ? r.grade : null) as
+      | 'recalled'
+      | 'partial'
+      | 'lapsed'
+      | null
+    return {
+      key: r.id ?? `${r.node}-${r.ts}-${r.kind ?? ''}`,
+      label: assignmentLabel(r.node, r.kind, r.ts),
+      date: r.ts,
+      outcome: outcome ?? 'lapsed',
+      letter: outcome ? OUTCOME_LETTER[outcome] : null,
+    }
+  })
+
+  if (mode === 'total' && allNodeIds) {
+    const startedNodes = new Set(topicReceipts.map((r) => r.node))
+    for (const node of allNodeIds) {
+      if (startedNodes.has(node)) continue
+      rows.push({
+        key: `${node}-unstarted`,
+        label: `${humanizeNodeId(node)} — Not Yet Started`,
+        date: null,
+        outcome: 'unstarted',
+        letter: null,
+      })
+    }
+  }
+
+  rows.sort((a, b) => {
+    if (!a.date && !b.date) return 0
+    if (!a.date) return 1 // unstarted rows sink to the bottom
+    if (!b.date) return -1
+    return b.date.localeCompare(a.date)
+  })
+
+  return rows
 }

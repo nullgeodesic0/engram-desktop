@@ -19,6 +19,7 @@ import { EnvironmentSteps } from '../components/EnvironmentSteps'
 import { ExperimentBanner } from '../components/ExperimentBanner'
 import { computeDueBuckets } from '../shared/dueBuckets'
 import { recentViews, type RecentView } from '../shared/recentlyViewed'
+import { MainMenuView, type MainMenuNavItem } from './MainMenuView'
 
 const LAST_SEEN_STREAK_KEY = 'engram-desktop:last-seen-streak-days'
 const LAST_SEEN_DUE_KEY = 'engram-desktop:last-seen-due-now'
@@ -151,13 +152,39 @@ interface HomeViewProps {
    * DashboardView, and the command palette. */
   onGoNode: (topicId: string, nodeId: string) => void
   onGoSitting: (sessionId: string) => void
+  /** The sidebar's former job — Home IS the menu now: "the home menu
+   * contains everything else accessible within it," per the user's own
+   * framing. `nav` is App.tsx's NAV array verbatim; `onGoView` is
+   * `goToView` verbatim (not the narrower onGoReview/onGoCoach above, which
+   * predate this and stay for their own specific wiring — e.g. onGoCoach
+   * also bumps coachHomeSignal). */
+  nav: MainMenuNavItem[]
+  dueCount: number | null
+  activity: Record<'learn' | 'review', { active: boolean; busy: boolean }>
+  visited: Record<'learn' | 'review' | 'dashboard', boolean>
+  onGoView: (id: string) => void
 }
 
 /** The app's actual landing screen — streak, what's due, and quick entry points —
  * replacing "always opens on Review" with something that answers "where am I"
  * before asking you to do anything. Also the natural click-through target for a
- * background review-due notification down the line. */
-export function HomeView({ onGoReview, onGoCoach, onGoTopic, onNewTopic, onGoNode, onGoSitting }: HomeViewProps) {
+ * background review-due notification down the line, and — since the sidebar's
+ * removal — the app's one navigational hub: every other section is reachable
+ * from the nav grid below, and every other view's title-bar Home button leads
+ * back here. */
+export function HomeView({
+  onGoReview,
+  onGoCoach,
+  onGoTopic,
+  onNewTopic,
+  onGoNode,
+  onGoSitting,
+  nav,
+  dueCount,
+  activity,
+  visited,
+  onGoView,
+}: HomeViewProps) {
   const [stats, setStats] = useState<EngramStats | null>(null)
   // Snapshot at mount, not a subscription — this view fully remounts on every
   // visit to Home (see App.tsx's `view === 'home'` branch, not KeepMounted),
@@ -322,6 +349,16 @@ export function HomeView({ onGoReview, onGoCoach, onGoTopic, onNewTopic, onGoNod
             </div>
           )}
         </header>
+
+        {/* Register 0 — the nav grid, Home's replacement for the old sidebar.
+            Placed first, right under the greeting: "the home menu contains
+            everything else accessible within it" is the whole point of this
+            screen now, so where everything else lives comes before the
+            due-count plate, not after it. */}
+        <div className="flex flex-col gap-3">
+          <SectionBanner label="Sections" />
+          <MainMenuView nav={nav} dueCount={dueCount} activity={activity} visited={visited} onGoView={onGoView} />
+        </div>
 
         {/* The due briefing plate — Home's own ready-room (the anatomy the
             Review plate established, via the shared PlateFigure): the due-now
