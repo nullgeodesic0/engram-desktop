@@ -8,6 +8,7 @@ import { GradesView } from './app/GradesView'
 import { CommandPalette } from './components/CommandPalette'
 import { SessionHistoryDrawer, ALL_HISTORY_KEY } from './components/SessionHistoryDrawer'
 import { TitleBar } from './components/TitleBar'
+import { CommandStrip } from './components/CommandStrip'
 import { SkeletonBar, SkeletonGrid } from './components/Skeleton'
 import { HelpSheet } from './components/HelpSheet'
 import { MisconceptionLedger } from './components/MisconceptionLedger'
@@ -318,7 +319,19 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-full" ref={cardPhysicsRef}>
-      <TitleBar onGoHome={() => goToView('home')} nav={NAV} onGoView={(id) => goToView(id as View)} currentView={view} />
+      <TitleBar onGoHome={() => goToView('home')} />
+      {/* The command strip — hidden on Home (the Sections grid IS the nav
+          there); everywhere else it renders here, above <main>, which keeps
+          it visible above the chat mastheads even while one is folded. */}
+      {view !== 'home' && (
+        <CommandStrip
+          nav={NAV}
+          currentView={view}
+          onGoView={(id) => goToView(id as View)}
+          activity={activity}
+          dueCount={dueCount}
+        />
+      )}
       <div className="flex flex-1 min-h-0 relative">
       {/* Each view now owns its own scroll region (h-full + overflow-y-auto, or a
           flex column with an internal scrollable pane like LearnSessionView) so a
