@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { MainMenuNavItem } from '../app/MainMenuView'
+import { GROUP_LABEL, GROUP_ORDER, NAV_GROUPS, type MainMenuNavItem } from '../app/MainMenuView'
 
 const DOTS: { key: 'close' | 'min' | 'zoom'; color: string; glyph: string; label: string }[] = [
   { key: 'close', color: 'var(--color-ink-danger)', glyph: 'M3.5 3.5 8.5 8.5 M8.5 3.5 3.5 8.5', label: 'Close window' },
@@ -103,35 +103,53 @@ export function TitleBar({
                 <button aria-hidden="true" tabIndex={-1} onClick={() => setNavOpen(false)} className="fixed inset-0 z-40 cursor-default" />
                 <div
                   role="menu"
-                  className="absolute right-0 top-8 z-50 panel-raised border border-[var(--color-edge)] py-1 min-w-44 flex flex-col"
+                  // Always warm — global shell chrome sits outside any
+                  // environment, so the dropdown never takes a session's
+                  // cool identity.
+                  className="absolute right-0 top-8 z-50 panel-raised border border-[var(--color-edge)] py-1 min-w-52 flex flex-col"
                   onKeyDown={(e) => {
                     if (e.key === 'Escape') setNavOpen(false)
                   }}
                 >
-                  {nav
-                    .filter((n) => n.id !== 'home')
-                    .map((n) => {
-                      const active = n.id === currentView
-                      return (
-                        <button
-                          key={n.id}
-                          role="menuitem"
-                          onClick={() => {
-                            setNavOpen(false)
-                            onGoView(n.id)
-                          }}
-                          className={`focus-ring flex items-center gap-2.5 px-3 py-1.5 text-left text-xs hover:bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] transition-colors duration-[var(--dur-fast)] ${
-                            active ? 'text-[var(--color-ink-warm)]' : 'text-[var(--color-text-primary)]'
-                          }`}
-                        >
-                          <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 opacity-80" aria-hidden="true">
-                            {n.icon}
-                          </svg>
-                          <span className="font-(family-name:--font-display) truncate">{n.label}</span>
-                          <span className="label-data text-[10px] text-[var(--color-text-faint)] ml-auto">⌘{n.hint}</span>
-                        </button>
-                      )
-                    })}
+                  {GROUP_ORDER.map((group, gi) => {
+                    // Same registry the Home Sections plate reads — the
+                    // dropdown is that plate in miniature, purpose groups
+                    // and all (home itself filtered out: it has its own
+                    // button beside this menu).
+                    const items = nav.filter((n) => n.id !== 'home' && (NAV_GROUPS[n.id] ?? 'explore') === group)
+                    if (items.length === 0) return null
+                    return (
+                      <div key={group} className={gi > 0 ? 'border-t border-[var(--color-hairline)] mt-1 pt-1' : ''}>
+                        <div className="label-data text-[9px] uppercase tracking-[0.28em] text-[var(--color-text-faint)] px-3 pt-1 pb-0.5">
+                          {GROUP_LABEL[group]}
+                        </div>
+                        {items.map((n) => {
+                          const active = n.id === currentView
+                          return (
+                            <button
+                              key={n.id}
+                              role="menuitem"
+                              onClick={() => {
+                                setNavOpen(false)
+                                onGoView(n.id)
+                              }}
+                              className={`focus-ring tilt-card-rail w-full flex items-center gap-2.5 px-3 py-1.5 text-left text-xs hover:text-[var(--color-ink-warm)] transition-colors duration-[var(--dur-fast)] ${
+                                active
+                                  ? 'text-[var(--color-ink-warm)] bg-[color-mix(in_srgb,var(--color-ink-warm)_10%,transparent)] shadow-[inset_2px_0_0_var(--color-ink-warm-dim)]'
+                                  : 'text-[var(--color-text-primary)]'
+                              }`}
+                            >
+                              <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 opacity-80" aria-hidden="true">
+                                {n.icon}
+                              </svg>
+                              <span className="font-(family-name:--font-display) truncate">{n.label}</span>
+                              <span className="label-data text-[10px] text-[var(--color-text-faint)] ml-auto">⌘{n.hint}</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )
+                  })}
                 </div>
               </>
             )}
