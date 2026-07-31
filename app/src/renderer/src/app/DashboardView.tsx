@@ -80,6 +80,11 @@ interface DashboardViewProps {
    * same goToNode plumbing App.tsx wires from the command palette, threaded
    * through here rather than the ledger inventing its own navigation. */
   onGoNode?: (topicId: string, nodeId: string) => void
+  /** Ledger "Re-test" — App's retest deep-link into a targeted review
+   * sitting; threaded to this view's MisconceptionLedger instance. */
+  onRetestMisconception?: (row: import('../../../shared/types').Misconception) => void
+  /** True while a review sitting is live — gates the ledger's Re-test. */
+  reviewSessionLive?: boolean
   /** "See all in Artifacts" from a topic drilldown's artifact tiles — routes
    * to the full gallery tab. Threaded down to TopicDrilldownView, never used
    * directly here. */
@@ -97,7 +102,7 @@ interface DashboardViewProps {
   coachHomeSignal?: number
 }
 
-export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts, coachHomeSignal }: DashboardViewProps = {}) {
+export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts, coachHomeSignal, onRetestMisconception, reviewSessionLive }: DashboardViewProps = {}) {
   const [stats, setStats] = useState<EngramStats | null>(null)
   const [history, setHistory] = useState<ReceiptsHistory | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -574,7 +579,13 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts, coachHomeSi
         </>
       )}
 
-      <MisconceptionLedger open={ledgerOpen} onClose={() => setLedgerOpen(false)} onGoNode={onGoNode} />
+      <MisconceptionLedger
+        open={ledgerOpen}
+        onClose={() => setLedgerOpen(false)}
+        onGoNode={onGoNode}
+        onRetest={onRetestMisconception}
+        reviewSessionLive={reviewSessionLive}
+      />
     </div>
   )
 }

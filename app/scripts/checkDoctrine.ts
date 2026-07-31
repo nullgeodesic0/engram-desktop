@@ -435,7 +435,12 @@ for (const f of FILES) {
 // navigational voice. It says nothing about how to teach, what to skip, or
 // how to assess; verified captured un-truncated by this check's printed
 // current-set (the 400-char/no-backtick collector net).
-const PINNED_MESSAGE_HASH = 'dfe380afdd98492f'
+// Second same-day re-pin: the ledger's "Re-test" launcher adds a targeted
+// kickoff naming one open row and the same resolve verb — the learner's own
+// navigational voice ("I picked one open misconception from my ledger"),
+// deferring to the skill for the rest of the sitting. Verified captured
+// un-truncated by the printed current-set.
+const PINNED_MESSAGE_HASH = '7a9b482dbd1030a7'
 if (sha(injectedMessages.sort().join('\n')) !== PINNED_MESSAGE_HASH) {
   fail(
     'D3.kickoff',
