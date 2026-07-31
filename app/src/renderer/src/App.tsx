@@ -300,7 +300,7 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-full" ref={cardPhysicsRef}>
-      <TitleBar onGoHome={() => goToView('home')} />
+      <TitleBar onGoHome={() => goToView('home')} nav={NAV} onGoView={(id) => goToView(id as View)} currentView={view} />
       <div className="flex flex-1 min-h-0 relative">
       {/* Each view now owns its own scroll region (h-full + overflow-y-auto, or a
           flex column with an internal scrollable pane like LearnSessionView) so a
