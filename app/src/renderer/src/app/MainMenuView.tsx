@@ -7,13 +7,13 @@ export interface MainMenuNavItem {
   icon: ReactElement
 }
 
-type Group = 'study' | 'track' | 'explore' | 'system'
+export type Group = 'study' | 'track' | 'explore' | 'system'
 
 /** Purpose grouping — every non-Home NAV id assigned, none left ungrouped.
  * Study (Learn, Review) is the daily-use core and leads with slightly larger
  * rows; Track (Grades, Coach), Explore (Topic Map, Artifacts), and System
  * (Settings) follow as quieter registers of the same plate. */
-const NAV_GROUPS: Record<string, Group> = {
+export const NAV_GROUPS: Record<string, Group> = {
   learn: 'study',
   review: 'study',
   grades: 'track',
@@ -23,14 +23,14 @@ const NAV_GROUPS: Record<string, Group> = {
   settings: 'system',
 }
 
-const GROUP_LABEL: Record<Group, string> = {
+export const GROUP_LABEL: Record<Group, string> = {
   study: 'Study',
   track: 'Track',
   explore: 'Explore',
   system: 'System',
 }
 
-const GROUP_ORDER: Group[] = ['study', 'track', 'explore', 'system']
+export const GROUP_ORDER: Group[] = ['study', 'track', 'explore', 'system']
 
 function NavIcon({ icon, size = 15 }: { icon: ReactElement; size?: number }) {
   return (
