@@ -1049,6 +1049,8 @@ export function SessionHistoryDrawer({
                           const node = probeNodeByMessageIndex.get(i)
                           if (node) setHoveredPairNode(hovering ? node : null)
                         }}
+                        // Replays keep their live environment's chrome accent.
+                        probeAccent={isReviewSitting ? 'cool' : 'warm'}
                       />
                     </div>
                     {!isReviewSitting &&

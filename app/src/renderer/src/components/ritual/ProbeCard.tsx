@@ -2,18 +2,22 @@ import { memo } from 'react'
 import type { ProbeHeader } from '../../../../shared/probeHeader'
 import { humanizeNodeId } from '../../../../shared/humanizeId'
 import { MathRenderer } from '../MathRenderer'
+import { ACCENT, type EnvAccent } from '../../shared/controlChrome'
 
-/** The moment of asking, set as a card rather than left as prose.
+/** The moment of asking, set in the same title-band anatomy as TicketCard —
+ * a solid `.detail-title-band` header carrying position/node/topic/threshold/
+ * overdue, the question body seated below it — while KEEPING the `border-l-2`
+ * accent bar, this card's named house identity.
  *
- * Cool ink throughout: a probe is an open question, and warm is this app's
- * colour for consolidated/settled things — colouring the ask warm would say
- * the wrong thing before you've answered. A threshold node (`†`) gets the
- * violet accent the design language reserves for gateway concepts, and says
- * so in words rather than leaving a dagger to be decoded. */
+ * Accent: the environment's chrome ink by default (Review's cool — an open
+ * question is not-yet-consolidated), but a threshold node's violet is a
+ * SEMANTIC signal and wins outright over any environment accent, stated in
+ * words rather than leaving a dagger to be decoded. */
 export const ProbeCard = memo(function ProbeCard({
   header,
   highlighted,
   onHoverChange,
+  accent = 'cool',
 }: {
   header: ProbeHeader
   /** Chat Instruments Wave B — true while a GradeResultCard for this SAME
@@ -28,19 +32,24 @@ export const ProbeCard = memo(function ProbeCard({
    * live Learn session — neither renders a GradeResultCard inline to pair
    * with). */
   onHoverChange?: (hovering: boolean) => void
+  /** Environment chrome identity (shared/controlChrome.ts) — Review's cool
+   * is the default and today's color, so non-threshold probes change
+   * structurally only. Never overrides threshold violet. */
+  accent?: EnvAccent
 }) {
-  const accent = header.threshold ? 'var(--color-ink-violet)' : 'var(--color-ink-cool)'
+  const ink = header.threshold ? 'var(--color-ink-violet)' : ACCENT[accent].ink
+  const dim = header.threshold ? 'var(--color-ink-violet-dim)' : ACCENT[accent].dim
   return (
     <div
-      className={`tilt-card-soft panel px-5 py-4 flex flex-col gap-3 border-l-2 transition-shadow duration-[var(--dur-fast)] ${highlighted ? 'pair-linked' : ''}`}
-      style={{ borderLeftColor: accent }}
+      className={`tilt-card-soft panel border-l-2 transition-shadow duration-[var(--dur-fast)] ${highlighted ? 'pair-linked' : ''}`}
+      style={{ borderLeftColor: ink }}
       onMouseEnter={onHoverChange ? () => onHoverChange(true) : undefined}
       onMouseLeave={onHoverChange ? () => onHoverChange(false) : undefined}
     >
-      <div className="flex items-center gap-2.5 flex-wrap">
+      <div className="detail-title-band flex items-center gap-2.5 flex-wrap px-4 py-2">
         <span
-          className="label-data text-[10px] px-1.5 py-0.5 rounded tabular-nums"
-          style={{ color: accent, background: 'color-mix(in srgb, var(--color-surface-2) 68%, transparent)' }}
+          className="label-data text-[10px] px-1.5 py-0.5 tabular-nums border inline-block shrink-0"
+          style={{ color: ink, borderColor: dim, background: `color-mix(in srgb, ${ink} 16%, transparent)` }}
         >
           {header.index}/{header.total}
         </span>
@@ -73,10 +82,12 @@ export const ProbeCard = memo(function ProbeCard({
         )}
       </div>
       {header.body && (
-        <MathRenderer
-          text={header.body}
-          className="voice-serif text-[var(--color-text-primary)] leading-relaxed"
-        />
+        <div className="px-4 py-3.5">
+          <MathRenderer
+            text={header.body}
+            className="voice-serif text-[var(--color-text-primary)] leading-relaxed"
+          />
+        </div>
       )}
     </div>
   )

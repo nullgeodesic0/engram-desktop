@@ -1948,6 +1948,7 @@ export function LearnSessionView({
                       dataIndex={i}
                       nodeIds={chipNodeIds}
                       nodeChipTopic={activeTopic?.topic}
+                      probeAccent="warm"
                     />
                     {marks
                       .filter((k) => k.atIndex === i + 1 || (i === messages.length - 1 && k.atIndex > messages.length))
