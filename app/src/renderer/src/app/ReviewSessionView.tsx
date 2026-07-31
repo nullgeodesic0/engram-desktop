@@ -1126,6 +1126,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
       // queue.length === sessionGrades.length, depends on the queue staying
       // the sitting's own remainder).
       window.engram.due().then((all) => setTotalDue(all.length))
+      detachedAtRef.current = Date.now()
       setDetachedFromSitting(true)
     }
   }
@@ -1135,6 +1136,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
    * then start fresh over the remaining queue. */
   function startFreshFromDetached() {
     stopSession()
+    detachedAtRef.current = null // startSession stamps a fresh clock start
     setDetachedFromSitting(false)
     setSummaryPinned(false)
     setSummaryPeek(false)
@@ -1147,6 +1149,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
   useEffect(() => {
     if (!detachedFromSitting || (phase !== 'done' && phase !== 'closed-unexpectedly')) return
     setDetachedFromSitting(false)
+    detachedAtRef.current = null // sitting is over — no clock shift to apply
     if (phase === 'done') {
       setSummaryPinned(false)
       setSummaryPeek(false)
@@ -1155,6 +1158,19 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [detachedFromSitting, phase])
+  // When the learner left for the main page (Back) — lets returnToSitting
+  // shift the sitting clock's start forward by the away time, so the clock
+  // genuinely STOPS while away instead of silently counting it (SittingClock
+  // renders now − startedAt). Appended hook (KeepMounted append rule).
+  const detachedAtRef = useRef<number | null>(null)
+  function returnToSitting() {
+    if (detachedAtRef.current !== null) {
+      const away = Date.now() - detachedAtRef.current
+      detachedAtRef.current = null
+      setSittingStartedAt((prev) => (prev === null ? prev : prev + away))
+    }
+    setDetachedFromSitting(false)
+  }
   // Minimap Precision fix (second report on the same bug) — jumps straight to
   // the checkpoint's OWN `CheckpointAnchor`, never the host message; see
   // shared/jumpToCheckpoint.ts's doctrine comment for the full root-cause
@@ -1169,11 +1185,34 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
     return jumpToCheckpoint(scrollEl, moment.id, fallbackIndex)
   }
 
+  // The chat interface is live and showing — the ONLY state that wears the
+  // session masthead. Every other state (loading/ready/empty/closed, and the
+  // detached main page) gets the same plain shelf header Learn's topic shelf
+  // uses: a display-size serif title over a full-width hairline band, no
+  // plate, no clock, no instruments.
+  const chatMode = (phase === 'in-session' || phase === 'done') && !detachedFromSitting
+
   return (
-    // Tighter at the top than the standard p-8 so the header sits near the
-    // window chrome and the transcript gets the reclaimed height; the gap
-    // does the separating.
-    <div className="h-full min-h-0 flex flex-col px-8 pt-3 pb-6 gap-3 w-full">
+    // In chat mode the header sits tighter to the window chrome and the
+    // transcript gets the reclaimed height (mirrors Learn's own started/
+    // shelf padding split); shelf pages take the standard p-8.
+    <div className={`h-full min-h-0 flex flex-col w-full ${chatMode ? 'px-8 pt-3 pb-6 gap-3' : 'p-8 gap-4'}`}>
+      {!chatMode && (
+        <header className="shrink-0 -mx-8 px-8 pb-2 border-b border-[var(--color-hairline)] flex items-center justify-between gap-4">
+          <h1 className="font-(family-name:--font-serif) text-[length:var(--text-display)] text-[var(--color-text-primary)]">
+            Review
+          </h1>
+          {phase !== 'loading' && (
+            <button
+              onClick={() => setHistoryDrawerOpen(true)}
+              className="focus-ring cmd-item label-data text-[10px] uppercase tracking-[0.16em] shrink-0"
+            >
+              History
+            </button>
+          )}
+        </header>
+      )}
+      {chatMode && (
       <SessionMasthead
         accent="cool"
         eyebrow="REVIEW"
@@ -1209,17 +1248,19 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
         commands={
           <>
             {/* Nav cluster: tracked uppercase command items — History,
-                Export (one item, disclosing .md/.pdf), Home. The clock and
+                Export (one item, disclosing .md/.pdf), Back. The clock and
                 gauges live on the instruments register below, so both
-                environments' mastheads read identically. */}
-            {phase !== 'loading' && (
-              <button
-                onClick={() => setHistoryDrawerOpen(true)}
-                className="focus-ring cmd-item label-data text-[10px] uppercase tracking-[0.16em] shrink-0"
-              >
-                History
-              </button>
-            )}
+                environments' mastheads read identically. (No 'loading'
+                guard needed — this masthead only renders in chat mode,
+                where phase is in-session/done by construction; the shelf
+                header carries its own History command for the other
+                phases.) */}
+            <button
+              onClick={() => setHistoryDrawerOpen(true)}
+              className="focus-ring cmd-item label-data text-[10px] uppercase tracking-[0.16em] shrink-0"
+            >
+              History
+            </button>
             {sessionId && (phase === 'in-session' || phase === 'done') && (
               <ExportCommand exporting={exportingFormat} onExport={exportCurrentSitting} />
             )}
@@ -1256,6 +1297,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
           ) : undefined
         }
       />
+      )}
       {/* Export outcome on its own transient caption line under the command
           bar, never inside it — the row-1 cluster's width is a fixed cost
           that must fit at the app's narrowest, and a saved-path string is
@@ -1350,7 +1392,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
             totalDue={totalDue}
             topicTitles={topicTitles}
             onStart={startFreshFromDetached}
-            onResume={() => setDetachedFromSitting(false)}
+            onResume={returnToSitting}
             hasPriorSession
             blocked={blocked}
             resumeLabel="Return to the sitting"
