@@ -61,10 +61,17 @@ export const MisconceptionPin = memo(function MisconceptionPin({ text, node }: {
           </svg>
           <span className="label-data text-[10px] tracking-[0.14em] text-[var(--color-ink-danger)]">MISCONCEPTION</span>
         </div>
-        <MathRenderer
-          text={text}
-          className="font-(family-name:--font-serif) text-xs leading-relaxed text-[var(--color-text-dim)]"
-        />
+        {text ? (
+          <MathRenderer
+            text={text}
+            className="font-(family-name:--font-serif) text-xs leading-relaxed text-[var(--color-text-dim)]"
+          />
+        ) : (
+          // File-mediated add (see parseMisconceptionAdds) — the wording
+          // travels by file, not in the command, so the honest render points
+          // at where it actually lives.
+          <div className="fig-caption">filed — the full wording lives in the misconception ledger.</div>
+        )}
         {node && <div className="fig-caption pt-0.5">specimen — {humanizeNodeId(node)}</div>}
       </div>
     </div>
