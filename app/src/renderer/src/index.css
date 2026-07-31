@@ -7,6 +7,61 @@
 @import '@fontsource/fraunces/400-italic.css';
 @import '@fontsource/fraunces/600.css';
 
+/* Bundled type system (2026-07-30 mapping) — the commercial faces ship
+   INSIDE the app (Vite emits them from src/renderer/src/assets/fonts/), so
+   every install renders identically with no system font installation.
+   Family names here are self-declared, so they match the token stacks
+   regardless of how a machine's own copies register. Weight ranges map the
+   app's actual usage: 400 body/roman, 500 medium, 600-700 semibold/bold. */
+@font-face {
+  font-family: 'EpocaPro';
+  src: url('./assets/fonts/epocapro-medium.otf') format('opentype');
+  font-weight: 400 500;
+  font-style: normal;
+}
+@font-face {
+  font-family: 'EpocaPro';
+  src: url('./assets/fonts/epocapro-mediumitalic.otf') format('opentype');
+  font-weight: 400 500;
+  font-style: italic;
+}
+@font-face {
+  font-family: 'Neue Haas Grotesk Display Pro';
+  src: url('./assets/fonts/NeueHaasDisplayRoman.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+}
+@font-face {
+  font-family: 'Neue Haas Grotesk Display Pro';
+  src: url('./assets/fonts/NeueHaasDisplayRomanItalic.ttf') format('truetype');
+  font-weight: 400;
+  font-style: italic;
+}
+@font-face {
+  font-family: 'Neue Haas Grotesk Display Pro';
+  src: url('./assets/fonts/NeueHaasDisplayMediu.ttf') format('truetype');
+  font-weight: 500;
+  font-style: normal;
+}
+@font-face {
+  font-family: 'Neue Haas Grotesk Display Pro';
+  src: url('./assets/fonts/NeueHaasDisplayMediumItalic.ttf') format('truetype');
+  font-weight: 500;
+  font-style: italic;
+}
+@font-face {
+  font-family: 'Neue Haas Grotesk Display Pro';
+  src: url('./assets/fonts/NeueHaasDisplayBold.ttf') format('truetype');
+  font-weight: 600 700;
+  font-style: normal;
+}
+@font-face {
+  font-family: 'Neue Haas Grotesk Display Pro';
+  src: url('./assets/fonts/NeueHaasDisplayBoldItalic.ttf') format('truetype');
+  font-weight: 600 700;
+  font-style: italic;
+}
+
 @theme {
   /* "Night Atlas" — Cajal's sepia-ink neuron atlas inverted onto the night.
      The void warms slightly toward sepia; text is warm ink, not cold white. */
