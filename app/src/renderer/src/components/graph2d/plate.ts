@@ -238,10 +238,14 @@ function settleClustered(
   }
 
   // --- 2. Disc geometry: raw radii from member count, sector widths
-  // proportional to radius, then one scale `s` solved so every adjacent
-  // pair's anchor chord clears both discs plus DISC_GAP while the ring plus
-  // the largest disc still fits the frame. All in screen space — hulls
-  // around members can never meet. ---
+  // proportional to radius, an analytic ring start solved on ADJACENT-pair
+  // chords — then a global relaxation over EVERY disc pair (the adjacency
+  // math alone let a very large disc reach across the ring into a
+  // non-adjacent smaller one, reported live 2026-07-31), frame-clamped each
+  // sweep. If the frame genuinely can't hold the discs at this scale, the
+  // whole disc scale shrinks and the layout retries — so the non-overlap
+  // guarantee survives arbitrarily large or lopsided graphs, trading member
+  // breathing room instead. All deterministic, all in screen space. ---
   const margin = 64
   const halfW = width / 2 - margin
   const halfH = height / 2 - margin
@@ -255,32 +259,102 @@ function settleClustered(
     angles.push(acc + w / 2)
     acc += w
   }
-  const rawMax = Math.max(...raw)
-  let s = Infinity
-  if (K === 1) {
-    s = (H * 0.9) / rawMax
-  } else {
-    for (let i = 0; i < K; i++) {
-      const j = (i + 1) % K
-      const dAng = Math.abs(((angles[j] - angles[i] + Math.PI * 3) % (Math.PI * 2)) - Math.PI)
-      const sinHalf = Math.max(0.15, Math.sin(dAng / 2))
-      // R = H - s*rawMax and 2 R sin(dAng/2) >= s(raw_i+raw_j) + DISC_GAP
-      const si = (2 * sinHalf * H - DISC_GAP) / (2 * sinHalf * rawMax + raw[i] + raw[j])
-      s = Math.min(s, si)
+  // Disc radius per region from the ACTUAL member footprint — a packing
+  // bound over the real node radii (high-degree nodes are big; a
+  // sqrt(count)-only radius under-sizes dense regions, seen live on a
+  // 121-node graph). `clearScale` compresses the clearance term when the
+  // frame genuinely can't hold the full-comfort discs — legibility
+  // degrades gracefully, the cross-region guarantee never does.
+  const discNeed = (seed: string, clearScale: number): number => {
+    let area = 0
+    for (const id of regions.get(seed)!) {
+      const n = sim.get(id)
+      if (!n) continue
+      const foot = n.r + (CELL_CLEARANCE * clearScale) / 2
+      area += foot * foot
     }
+    // 0.55 packing efficiency for relaxed (non-hexagonal) circle packing,
+    // plus the in-disc rim inset the member clamp reserves.
+    return Math.sqrt(area / 0.55) + 14
   }
-  // Cap the disc scale so a tiny K doesn't balloon discs past what member
-  // counts need (~46px of footprint per member within the disc area).
-  const need = raw.map((r) => 46 * r)
-  s = Math.max(24, Math.min(s, Math.max(...need.map((n, i) => n / raw[i])) * 1.15))
-  const R = Math.max(0, H - s * rawMax)
-  const anchors = bestOrder.map((seedIdx, i) => ({
-    seed: seeds[seedIdx],
-    x: cx + Math.cos(angles[i]) * (R * (halfW / H >= 1.15 ? 1.12 : 1)) * (halfW >= halfH ? 1 : halfH / H),
-    y: cy + Math.sin(angles[i]) * R,
-    r: s * raw[i],
-    angle: angles[i],
-  }))
+
+  interface Disc {
+    seed: string
+    x: number
+    y: number
+    r: number
+    angle: number
+  }
+  const attemptDiscs = (clearScale: number): { discs: Disc[]; residual: number } => {
+    const radii = bestOrder.map((seedIdx) => discNeed(seeds[seedIdx], clearScale))
+    const rMax = Math.max(...radii)
+    const R = Math.max(0, H - rMax)
+    const discs: Disc[] = bestOrder.map((seedIdx, i) => ({
+      seed: seeds[seedIdx],
+      x: cx + Math.cos(angles[i]) * (halfW >= halfH ? R * Math.min(1.25, halfW / H) : R),
+      y: cy + Math.sin(angles[i]) * (halfH > halfW ? R * Math.min(1.25, halfH / H) : R),
+      r: radii[i],
+      angle: angles[i],
+    }))
+    let residual = 0
+    for (let sweep = 0; sweep < 90; sweep++) {
+      residual = 0
+      for (let i = 0; i < discs.length; i++) {
+        for (let j = i + 1; j < discs.length; j++) {
+          const a = discs[i]
+          const b = discs[j]
+          const minDist = a.r + b.r + DISC_GAP
+          let dx = b.x - a.x
+          let dy = b.y - a.y
+          let d = Math.hypot(dx, dy)
+          if (d >= minDist) continue
+          if (d < 0.01) {
+            const ang = seeded(a.seed + b.seed, 11) * Math.PI * 2
+            dx = Math.cos(ang)
+            dy = Math.sin(ang)
+            d = 1
+          }
+          const push = (minDist - d) / 2
+          dx /= d
+          dy /= d
+          a.x -= dx * push
+          a.y -= dy * push
+          b.x += dx * push
+          b.y += dy * push
+          residual = Math.max(residual, minDist - d)
+        }
+      }
+      for (const disc of discs) {
+        disc.x = Math.min(width - margin - disc.r, Math.max(margin + disc.r, disc.x))
+        disc.y = Math.min(height - margin - disc.r, Math.max(margin + disc.r, disc.y))
+      }
+      if (residual < 0.5) break
+    }
+    // Residual re-measured AFTER the final clamp — the clamp can reintroduce
+    // an overlap the sweep had resolved, and that's exactly the signal that
+    // the frame can't hold the discs at this scale.
+    residual = 0
+    for (let i = 0; i < discs.length; i++) {
+      for (let j = i + 1; j < discs.length; j++) {
+        const a = discs[i]
+        const b = discs[j]
+        const short = a.r + b.r + DISC_GAP - Math.hypot(a.x - b.x, a.y - b.y)
+        residual = Math.max(residual, short)
+      }
+    }
+    return { discs, residual }
+  }
+  // Full-comfort clearance first; compress toward the legibility floor
+  // (~0.35 of CELL_CLEARANCE) only as the frame demands.
+  let clearScale = 1
+  let anchors = attemptDiscs(clearScale).discs
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const { discs, residual } = attemptDiscs(clearScale)
+    anchors = discs
+    if (residual < 0.5 || clearScale <= 0.35) break
+    clearScale = Math.max(0.35, clearScale * 0.85)
+  }
+  const memberClearance = CELL_CLEARANCE * clearScale
 
   const out = new Map<string, PlateNode>()
 
@@ -413,7 +487,7 @@ function settleClustered(
         for (let j = i + 1; j < memberNodes.length; j++) {
           const a = memberNodes[i]
           const b = memberNodes[j]
-          const minDist = a.r + b.r + CELL_CLEARANCE
+          const minDist = a.r + b.r + memberClearance
           let dx = b.x - a.x
           let dy = b.y - a.y
           let d = Math.hypot(dx, dy)
