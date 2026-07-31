@@ -33,9 +33,21 @@ export const PUNCTUALITY_MIN_N = 3
 const COMPONENT_MIN_N: Record<'recall' | 'punctuality' | 'conceptual' | 'calibration', number> = {
   recall: RETENTION_BUCKET_MIN_N,
   punctuality: PUNCTUALITY_MIN_N,
-  conceptual: 1, // any misconception history at all is real signal
+  // One or two rows are anecdotes, not a component (the old value of 1 made
+  // a single fresh misconception an instant F on 10% of the grade) — same
+  // small-n honesty PUNCTUALITY_MIN_N applies.
+  conceptual: 3,
   calibration: RETENTION_BUCKET_MIN_N,
 }
+
+/** An OPEN misconception younger than this (as of the evaluation date) is
+ * *pending re-test*, excluded from the conceptual component's numerator AND
+ * denominator: the component measures resolution follow-through, and a row
+ * that hasn't yet had a re-test opportunity is not evidence of poor
+ * follow-through. Resolved rows always count. Matches
+ * PUNCTUALITY_ZERO_AT_DAYS — two weeks is the app's standing "natural
+ * re-test horizon" constant. */
+export const CONCEPTUAL_GRACE_DAYS = 14
 
 const WEIGHTS = {
   recall: 0.45,
@@ -98,6 +110,13 @@ function daysBetween(a: string, b: string): number {
   return Math.round((db.getTime() - da.getTime()) / 86400000)
 }
 
+// Local 'YYYY-MM-DD' today — engram.py's own date.today() convention, never
+// toISOString (which would shift a day at UTC-negative offsets).
+function localToday(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 function median(values: number[]): number | null {
   if (values.length === 0) return null
   const sorted = [...values].sort((a, b) => a - b)
@@ -150,8 +169,9 @@ export interface ComponentGrade {
   n: number
   /** Raw number in the component's own natural unit (a percent for
    * recall/calibration, days for punctuality, a 0-1 ratio for coverage,
-   * an open-misconception count for conceptual) — the tile shows this
-   * alongside the letter, never the letter alone. */
+   * the TOTAL open-misconception count for conceptual — including
+   * grace-window rows that `n` deliberately excludes) — the tile shows
+   * this alongside the letter, never the letter alone. */
   raw: number | null
   score: number | null // 0-100, this component's own contribution before weighting
   letter: string | null
@@ -176,8 +196,12 @@ export function computeTopicGrade(inputs: {
   days: DayActivity[]
   picks: ConfidencePick[]
   mode: GradeMode
+  /** Evaluation date for the conceptual grace window (local 'YYYY-MM-DD') —
+   * defaults to today; computeHistoricalTopicGrade passes its cutoff so
+   * grace is cutoff-relative and consistent with the resolved_ts mapping. */
+  asOf?: string
 }): TopicGradeResult {
-  const { receipts, topic, topicEntry, misconceptions, days, picks, mode } = inputs
+  const { receipts, topic, topicEntry, misconceptions, days, picks, mode, asOf = localToday() } = inputs
 
   // --- recall accuracy: blended (recalled+partial)/n across every bucket,
   // not any single bucket — the buckets are time-since-encode windows, and a
@@ -244,20 +268,26 @@ export function computeTopicGrade(inputs: {
     }
   })()
 
-  // --- conceptual health: resolved / (open + resolved) — a topic with zero
-  // misconceptions ever logged has nothing to penalize OR reward, so it's
-  // "not enough data" rather than a free A. ---
+  // --- conceptual health: resolved / (aged-open + resolved) — a topic with
+  // zero misconceptions ever logged has nothing to penalize OR reward, so
+  // it's "not enough data" rather than a free A. Open rows inside the grace
+  // window (see CONCEPTUAL_GRACE_DAYS) are pending re-test and count on
+  // NEITHER side; resolved rows always count. `raw` stays the honest TOTAL
+  // open count (grace included) — the tile states what's actually filed —
+  // while `n` is the graced population that drives the min-N gate and the
+  // score. ---
   const topicMisconceptions = misconceptions.filter((m) => m.topic === topic)
-  const openCount = topicMisconceptions.filter((m) => m.status === 'open').length
+  const openRows = topicMisconceptions.filter((m) => m.status === 'open')
   const resolvedCount = topicMisconceptions.filter((m) => m.status === 'resolved').length
-  const conceptualTotal = openCount + resolvedCount
+  const agedOpenCount = openRows.filter((m) => daysBetween(m.ts, asOf) >= CONCEPTUAL_GRACE_DAYS).length
+  const conceptualTotal = agedOpenCount + resolvedCount
   const conceptual: ComponentGrade =
     conceptualTotal < COMPONENT_MIN_N.conceptual
       ? notEnoughData(WEIGHTS.conceptual)
       : {
           available: true,
           n: conceptualTotal,
-          raw: openCount,
+          raw: openRows.length,
           score: (resolvedCount / conceptualTotal) * 100,
           letter: scoreToLetter((resolvedCount / conceptualTotal) * 100),
           weight: WEIGHTS.conceptual,
@@ -393,6 +423,9 @@ export function computeHistoricalTopicGrade(inputs: {
     days: days.filter((d) => d.date <= cutoff),
     picks: picks.filter((p) => p.ts <= cutoffMs),
     mode: 'completed',
+    // Grace is cutoff-relative: a row that was fresh as of this cutoff was
+    // pending re-test THEN, whatever its age is today.
+    asOf: cutoff,
   })
 }
 
