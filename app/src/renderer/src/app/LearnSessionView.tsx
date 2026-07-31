@@ -268,6 +268,10 @@ interface LearnSessionViewProps {
    * open map, never switches topics — which would silently no-op a chip
    * click for any node outside whatever topic the map last had open. */
   onOpenNode?: (topicId: string, nodeId: string) => void
+  /** Course Automation H1 — hands the picked topic up to App, which runs
+   * the problem-practice extension as a BACKGROUND session (quiet status
+   * chip, never a foreground sitting in this view). */
+  onStartPracticeExtend?: (topic: TopicListEntry) => void
 }
 
 export function LearnSessionView({
@@ -278,6 +282,7 @@ export function LearnSessionView({
   onGoReview,
   openNewTopicSignal,
   onOpenNode,
+  onStartPracticeExtend,
 }: LearnSessionViewProps = {}) {
   // Topic-list state
   const [topics, setTopics] = useState<TopicListEntry[] | null>(null)
@@ -1301,36 +1306,6 @@ export function LearnSessionView({
     setSittingStartedAt(Date.now())
   }
 
-  /** Course Automation H1 — the procedure-layer activation ask. A fresh
-   * learn sitting whose kickoff asks (in the learner's own navigational
-   * voice — no teaching or judging directives; the extend mechanics are
-   * the plugin's business) to extend this topic with procedure skills,
-   * drawing on the topic's registered reference files. contextFiles are
-   * already injected by buildExtraInstructions on fresh sessions, so the
-   * kickoff only has to point at them. The plugin's add-topic --extend
-   * preserves every existing node's schedule/receipts/state byte-for-byte,
-   * so a run that mints nothing is harmless. */
-  async function startPracticeExtendForTopic(topic: TopicListEntry) {
-    setActiveTopic(topic)
-    setStarted(true)
-    resetSessionEphemera()
-    setBusy(true)
-    prefetchBanner(topic.topic)
-    fetchTopicGraphCache(topic.topic)
-    window.engram
-      .sessionHistoryFor('learn', topic.topic)
-      .then((h) => setWalkNumber(h.length + 1))
-      .catch(() => setWalkNumber(null))
-    fetchCommitment()
-    // Checked against D4.assessorBlindness and the kickoff-hash collector
-    // (<400 chars, no backticks) — see checkDoctrine.ts's D3.kickoff pin.
-    const message = `Use the /engram:learn skill — I want hands-on problem practice added to the "${topic.title}" topic (topic id: "${topic.topic}"). Please extend this topic with procedure skills for working real problems, using the reference files listed for this topic — my textbook and problem sets. Keep everything I have already learned exactly as it is.`
-    const { sessionId: sid } = await window.engram.startSession(message, 'learn', topic.topic)
-    sessionIdRef.current = sid
-    setSessionId(sid)
-    setSittingStartedAt(Date.now())
-  }
-
   async function startNewTopic(goal: string, systemPromptExtra = '', contextFiles: string[] = []) {
     setNewTopicOpen(false)
     setActiveTopic(null)
@@ -2089,10 +2064,10 @@ export function LearnSessionView({
             refreshTopics()
           }}
           // H1 — persist-then-launch: the modal saves (so the fresh session's
-          // contextFiles injection reads today's files), closes, and this
-          // starts the extend sitting for the SAME topic the modal was open on.
+          // contextFiles injection reads today's files), closes, and App runs
+          // the extension in the background for the SAME topic.
           onAddPractice={() => {
-            if (settingsFor) startPracticeExtendForTopic(settingsFor)
+            if (settingsFor) onStartPracticeExtend?.(settingsFor)
           }}
         />
       )}

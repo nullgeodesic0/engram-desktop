@@ -447,7 +447,10 @@ for (const f of FILES) {
 // --extend, node authoring) are entirely the plugin's; nothing here says
 // how to teach or judge. Verified captured un-truncated by the printed
 // current-set; D4-blindness-regex-clean.
-const PINNED_MESSAGE_HASH = '17a6bfa3c9cebc3b'
+// Same-day follow-up: the extend kickoff moved from LearnSessionView to
+// App.tsx (the extension now runs as a BACKGROUND session with a status
+// chip, never a foreground sitting) — byte-identical text, new file prefix.
+const PINNED_MESSAGE_HASH = '6df91b317fe60cc8'
 if (sha(injectedMessages.sort().join('\n')) !== PINNED_MESSAGE_HASH) {
   fail(
     'D3.kickoff',
