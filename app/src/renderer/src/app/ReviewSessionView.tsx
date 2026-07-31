@@ -57,6 +57,8 @@ import {
   isReviewRateCommand,
   isAssessorAuditSpawnEvent,
   classifyEngramBashFailure,
+  parseMisconceptionAdds,
+  parseMisconceptionResolves,
   isMarkBoundaryToolUse,
   type ToolFailureKind,
 } from '../../../shared/signals/tutorSignals'
@@ -498,8 +500,25 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
         // the rate-specific branch below (same registry, same classifier
         // LearnSessionView and deriveRitualMarks share).
         if (event.name === 'Bash') {
-          const failureKind = classifyEngramBashFailure(String((event.input as { command?: unknown }).command ?? ''))
+          const bashCommand = String((event.input as { command?: unknown }).command ?? '')
+          const failureKind = classifyEngramBashFailure(bashCommand)
           if (failureKind) toolFailureRegistry.current.set(event.id, failureKind)
+          // Live parity with Learn and with this view's own replay: pin
+          // misconception adds (previously replay-only here — reopening a
+          // sitting showed pins the live run never did) and the new
+          // resolved marks, at the transcript's current tail.
+          for (const misconception of parseMisconceptionAdds(bashCommand)) {
+            setMarks((prev) => [
+              ...prev,
+              { id: `mark-${markSeq.current++}`, atIndex: messagesRef.current.length, kind: 'misconception', text: misconception.text, node: misconception.node },
+            ])
+          }
+          for (const resolvedId of parseMisconceptionResolves(bashCommand)) {
+            setMarks((prev) => [
+              ...prev,
+              { id: `mark-${markSeq.current++}`, atIndex: messagesRef.current.length, kind: 'misconception-resolved', misconceptionId: resolvedId },
+            ])
+          }
         }
         if (event.name === 'Bash' && isReviewRateCommand(String((event.input as { command?: unknown }).command ?? ''))) {
           pendingRateToolUseId.current = event.id

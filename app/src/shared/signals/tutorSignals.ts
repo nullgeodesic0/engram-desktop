@@ -86,6 +86,21 @@ export function parseMisconceptionAdds(command: string): Array<{ node: string | 
   return out
 }
 
+/** `misconception resolve --id m_...` — the closing half of the ledger loop
+ * (misconceptions overhaul), mirroring parseMisconceptionAdds' multi-
+ * invocation lesson: a tutor may batch several resolves into one Bash call,
+ * so the global regex captures each id in order. Id-only BY DESIGN: the
+ * command carries nothing else, and replay (a pure transcript walk, no IPC)
+ * could never enrich it — live must not show more than replay can rebuild. */
+export function parseMisconceptionResolves(command: string): string[] {
+  if (!command.includes('misconception resolve')) return []
+  const out: string[] = []
+  const re = /misconception resolve\b[\s\S]*?--id\s+"?(m_[A-Za-z0-9_]+)"?/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(command))) out.push(m[1])
+  return out
+}
+
 /** `artifact set --topic <t> --node <n> --path <p>` (engram.py) — the literal
  * explorable-registration call, run either by the artifact-smith subagent
  * itself or, per SKILL.md's fallback clause, by the tutor directly. Returns
@@ -164,7 +179,7 @@ export function classifyEngramBashFailure(command: string): ToolFailureKind | nu
   if (isReviewRateCommand(command)) return 'review-rate'
   if (isNextNodeCommand(command)) return 'next'
   if (looksLikeArtifactSetCommand(command)) return 'artifact-set'
-  if (command.includes('misconception add')) return 'misconception'
+  if (/misconception (add|resolve)/.test(command)) return 'misconception'
   if (isStashCommand(command)) return 'stash'
   if (command.includes('engram.py')) return 'engram-bash'
   return null

@@ -38,6 +38,7 @@ import {
   isNextNodeCommand,
   pretestRateNode,
   parseMisconceptionAdds,
+  parseMisconceptionResolves,
   looksLikeArtifactSetCommand,
   isArtifactSmithSpawnEvent,
   isSubagentSpawnTool,
@@ -986,8 +987,12 @@ export function LearnSessionView({
           }
         }
         if (event.name === 'Bash') {
-          for (const misconception of parseMisconceptionAdds(String((event.input as { command?: unknown }).command ?? ''))) {
+          const bashCommand = String((event.input as { command?: unknown }).command ?? '')
+          for (const misconception of parseMisconceptionAdds(bashCommand)) {
             pushMark({ kind: 'misconception', text: misconception.text, node: misconception.node })
+          }
+          for (const resolvedId of parseMisconceptionResolves(bashCommand)) {
+            pushMark({ kind: 'misconception-resolved', misconceptionId: resolvedId })
           }
         }
         if (isArtifactSmithSpawnEvent(event.name, event.input)) {
