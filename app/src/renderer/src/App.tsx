@@ -11,6 +11,8 @@ import { TitleBar } from './components/TitleBar'
 import { SkeletonBar, SkeletonGrid } from './components/Skeleton'
 import { HelpSheet } from './components/HelpSheet'
 import { MisconceptionLedger } from './components/MisconceptionLedger'
+import { AskDialog } from './components/AskDialog'
+import type { BridgeAskRequest } from '../../shared/bridgeProtocol'
 import { useCardPhysics } from './components/useCardPhysics'
 import type { Misconception } from '../../shared/types'
 
@@ -145,6 +147,68 @@ export default function App() {
   const [ledgerOpen, setLedgerOpen] = useState(false)
   // Bumped after any manual resolve so Coach's KeepMounted fetches re-run.
   const [misconceptionsEpoch, setMisconceptionsEpoch] = useState(0)
+  // Course Automation H1 — the problem-practice extension runs as a
+  // BACKGROUND session (never a foreground sitting): App spawns it under a
+  // distinct session-index key (practice:<topic> — the topic's own resume
+  // thread is untouched), watches its events here, surfaces any bridge ask
+  // through the modal dialog, and ends the child the moment its turn
+  // completes. Progress lives in a quiet fixed chip, not a chat view.
+  const [practiceJob, setPracticeJob] = useState<{
+    topicId: string
+    title: string
+    status: 'running' | 'done' | 'error'
+    detail: string | null
+  } | null>(null)
+  const [practiceAsk, setPracticeAsk] = useState<BridgeAskRequest | null>(null)
+  const practiceSidRef = useRef<string | null>(null)
+
+  async function startPracticeExtend(topic: { topic: string; title: string }) {
+    if (practiceJob?.status === 'running') return
+    setPracticeJob({ topicId: topic.topic, title: topic.title, status: 'running', detail: null })
+    // Checked against D4.assessorBlindness and the kickoff-hash collector
+    // (<400 chars, no backticks) — see checkDoctrine.ts's D3.kickoff pin.
+    const message = `Use the /engram:learn skill — I want hands-on problem practice added to the "${topic.title}" topic (topic id: "${topic.topic}"). Please extend this topic with procedure skills for working real problems, using the reference files listed for this topic — my textbook and problem sets. Keep everything I have already learned exactly as it is.`
+    try {
+      const { sessionId } = await window.engram.startSession(message, 'learn', `practice:${topic.topic}`)
+      practiceSidRef.current = sessionId
+    } catch (e) {
+      setPracticeJob((prev) =>
+        prev ? { ...prev, status: 'error', detail: e instanceof Error ? e.message : String(e) } : prev,
+      )
+    }
+  }
+
+  useEffect(() => {
+    const offEvent = window.engram.onSessionEvent((sid, event) => {
+      if (sid !== practiceSidRef.current) return
+      if (event.type === 'turn_ended') {
+        // The extension is a one-turn job — end the child rather than leave
+        // it idling for input nobody will send.
+        practiceSidRef.current = null
+        setPracticeAsk(null)
+        setPracticeJob((prev) => (prev ? { ...prev, status: 'done' } : prev))
+        window.engram.abortSession(sid)
+      } else if (event.type === 'error') {
+        setPracticeJob((prev) => (prev ? { ...prev, status: 'error', detail: event.message } : prev))
+      } else if (event.type === 'closed') {
+        practiceSidRef.current = null
+        setPracticeAsk(null)
+        setPracticeJob((prev) =>
+          prev && prev.status === 'running'
+            ? { ...prev, status: 'error', detail: 'the background session ended before finishing' }
+            : prev,
+        )
+      }
+    })
+    const offAsk = window.engram.onBridgeAsk((req) => {
+      if (req.sessionId !== practiceSidRef.current) return
+      setPracticeAsk(req)
+    })
+    return () => {
+      offEvent()
+      offAsk()
+    }
+  }, [])
   const [deepLinkTopic, setDeepLinkTopic] = useState<string | null>(null)
   const [deepLinkNode, setDeepLinkNode] = useState<{ topicId: string; nodeId: string } | null>(null)
   // Tutor-initiated nudge to a specific node — pans the map if we're already
@@ -355,6 +419,7 @@ export default function App() {
           {(visited.learn || view === 'learn') && (
             <KeepMounted active={view === 'learn'}>
               <LearnSessionView
+                onStartPracticeExtend={startPracticeExtend}
                 deepLinkTopicId={deepLinkTopic}
                 onDeepLinkConsumed={() => setDeepLinkTopic(null)}
                 onActivity={(a) => setActivity((prev) => ({ ...prev, learn: a }))}
@@ -458,6 +523,49 @@ export default function App() {
         }}
         reviewSessionLive={activity.review.active}
       />
+      {practiceJob && (
+        <div className="fixed bottom-4 right-4 z-50 tilt-card-soft panel-raised border border-[var(--color-edge)] px-4 py-2.5 flex items-center gap-3 max-w-sm">
+          {practiceJob.status === 'running' && (
+            <>
+              <span className="relative inline-flex h-2 w-2 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--color-ink-warm-dim)]" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--color-ink-warm)]" />
+              </span>
+              <span className="text-xs text-[var(--color-text-primary)] min-w-0">
+                Building problem practice for “{practiceJob.title}” in the background…
+              </span>
+            </>
+          )}
+          {practiceJob.status === 'done' && (
+            <span className="text-xs text-[var(--color-text-primary)] min-w-0">
+              Problem practice added to “{practiceJob.title}” — new skills appear on the map and in reviews.
+            </span>
+          )}
+          {practiceJob.status === 'error' && (
+            <span className="text-xs text-[var(--color-ink-danger)] min-w-0">
+              Problem practice for “{practiceJob.title}” didn’t finish{practiceJob.detail ? ` — ${practiceJob.detail}` : ''}.
+            </span>
+          )}
+          {practiceJob.status !== 'running' && (
+            <button
+              onClick={() => setPracticeJob(null)}
+              aria-label="Dismiss"
+              className="focus-ring shrink-0 text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+      )}
+      {practiceAsk && (
+        <AskDialog
+          request={practiceAsk}
+          onAnswer={async (chosen) => {
+            await window.engram.answerBridgeQuestion(practiceAsk.requestId, { chosen })
+            setPracticeAsk(null)
+          }}
+        />
+      )}
       <HelpSheet open={helpOpen} onClose={() => setHelpOpen(false)} />
       </div>
     </div>
