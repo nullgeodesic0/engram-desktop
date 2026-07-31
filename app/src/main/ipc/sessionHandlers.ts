@@ -11,7 +11,7 @@ import { exportMap } from '../session/exportMap'
 import { backupNow, describeArchive, restoreFromArchive, pickBackupArchivePath, getBackupInfo } from '../session/backup'
 import type { ExportSittingRequest, ExportSittingResult, ExportMapRequest } from '../../shared/types'
 
-type SessionKind = 'learn' | 'review' | 'coach' | 'homework'
+type SessionKind = 'learn' | 'review' | 'coach'
 
 const sessions = new Map<string, SessionManager>()
 

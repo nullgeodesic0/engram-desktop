@@ -131,7 +131,7 @@ function contentBlocks(entry: Record<string, unknown> | null): Record<string, un
   return content.filter((b): b is Record<string, unknown> => !!b && typeof b === 'object')
 }
 
-type SittingKind = 'learn' | 'review' | 'homework' | 'sweep'
+type SittingKind = 'learn' | 'review' | 'sweep'
 
 /**
  * Walks one transcript's parsed lines (as returned by `readTranscript` — same
@@ -281,7 +281,6 @@ export async function nodeProvenance(topic: string, nodeIds: string[]): Promise<
   const learnSittings = await sessionHistoryFor(topic)
   const legacyLearnSittings = await sessionHistoryFor('learn')
   const reviewSittings = await sessionHistoryFor('review')
-  const homeworkSittings = await sessionHistoryFor('homework')
 
   // A resumed session reappears in the index once per resume but shares one
   // transcript file — dedupe by sessionId so its events aren't counted twice
@@ -302,14 +301,6 @@ export async function nodeProvenance(topic: string, nodeIds: string[]): Promise<
     if (seenSessionIds.has(s.sessionId)) continue
     seenSessionIds.add(s.sessionId)
     jobs.push({ sessionId: s.sessionId, sittingKind: 'review' })
-  }
-  // Homework sittings (Course Automation H2) — FR-drill receipts made inside
-  // them attribute to provenance exactly like review ones; the scanners
-  // inside are kind-agnostic, only this enumeration gates.
-  for (const s of homeworkSittings) {
-    if (seenSessionIds.has(s.sessionId)) continue
-    seenSessionIds.add(s.sessionId)
-    jobs.push({ sessionId: s.sessionId, sittingKind: 'homework' })
   }
 
   const allEvents: ScannedEvent[] = []

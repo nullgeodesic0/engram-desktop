@@ -262,7 +262,7 @@ export const ALL_HISTORY_KEY = '*'
  * `SessionIndexEntry` so those modes can keep handing the drawer plain
  * index entries, untouched. */
 export interface AllHistoryEntry extends SessionIndexEntry {
-  kind: 'learn' | 'review' | 'coach' | 'homework'
+  kind: 'learn' | 'review' | 'coach'
   /** The topic this sitting belongs to, when attributable — absent for
    * review sittings (the queue spans every topic, same as `ladderTopic`'s
    * existing 'review' special-case below), for coach sittings (never
@@ -321,7 +321,6 @@ function dedupeBySessionId<T extends SessionIndexEntry>(list: T[]): T[] {
 function historyRowTag(entry: HistoryRow): string {
   if (entry.kind === 'review') return 'Review'
   if (entry.kind === 'coach') return 'Coach'
-  if (entry.kind === 'homework') return 'Homework'
   return entry.topicTitle ? `Learn · ${entry.topicTitle}` : 'Learn'
 }
 
@@ -344,11 +343,10 @@ function historyRowTag(entry: HistoryRow): string {
  * legacy one for the same sessionId. */
 export async function fetchAllHistory(): Promise<AllHistoryEntry[]> {
   const topics = await window.engram.topics()
-  const [perTopicLists, reviewList, coachList, homeworkList, legacyList] = await Promise.all([
+  const [perTopicLists, reviewList, coachList, legacyList] = await Promise.all([
     Promise.all(topics.map((t) => window.engram.sessionHistoryFor('learn', t.topic))),
     window.engram.sessionHistoryFor('review'),
     window.engram.sessionHistoryFor('coach'),
-    window.engram.sessionHistoryFor('homework'),
     window.engram.sessionHistoryFor('learn'),
   ])
 
@@ -367,7 +365,6 @@ export async function fetchAllHistory(): Promise<AllHistoryEntry[]> {
   )
   take(dedupeBySessionId(reviewList), (e) => ({ ...e, kind: 'review' }))
   take(dedupeBySessionId(coachList), (e) => ({ ...e, kind: 'coach' }))
-  take(dedupeBySessionId(homeworkList), (e) => ({ ...e, kind: 'homework' }))
   take(dedupeBySessionId(legacyList), (e) => ({ ...e, kind: 'learn' }))
 
   // Newest first across the combined set — per-key ordering alone isn't
