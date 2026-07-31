@@ -71,19 +71,18 @@ export function TopicSettingsModal({ topicId, topicTitle, onClose, onAddPractice
   }
 
   // The practice flow's whole point is building from the learner's own
-  // materials — so with NO reference files registered, this opens the file
-  // browser first (textbook / problem sets), and cancelling the picker
-  // cancels the launch. Files then persist BEFORE the sitting spawns (the
-  // fresh session's contextFiles injection reads from disk).
+  // materials — so this ALWAYS opens the file browser (pick the textbook /
+  // problem sets this extension should draw from; new picks merge with the
+  // topic's already-registered reference files). Cancelling the picker
+  // cancels the launch — predictable, even when files already exist. Files
+  // persist BEFORE the sitting spawns (the fresh session's contextFiles
+  // injection reads from disk).
   async function addPractice() {
     if (!onAddPractice) return
-    let files = contextFiles
-    if (files.length === 0) {
-      const picked = await window.engram.pickFiles()
-      if (picked.length === 0) return
-      files = picked
-      setContextFiles(picked)
-    }
+    const picked = await window.engram.pickFiles()
+    if (picked.length === 0) return
+    const files = [...contextFiles, ...picked.filter((p) => !contextFiles.includes(p))]
+    setContextFiles(files)
     await persist(files)
     onClose()
     onAddPractice()
@@ -207,11 +206,9 @@ export function TopicSettingsModal({ topicId, topicTitle, onClose, onAddPractice
               above (your textbook and problem sets). Reviews then serve fresh problem instances for those skills —
               everything already learned keeps its schedule exactly as is.
             </p>
-            {contextFiles.length === 0 && (
-              <p className="fig-caption">
-                you’ll be asked to pick your textbook or problem-set files first — the extension reads them.
-              </p>
-            )}
+            <p className="fig-caption">
+              opens a file browser first — pick the textbook or problem-set files this extension should draw from.
+            </p>
             <button
               onClick={addPractice}
               disabled={!loaded || saving}
