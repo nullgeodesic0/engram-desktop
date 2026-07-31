@@ -66,7 +66,7 @@
      browser defaults. Futura ships with macOS, so that bucket always
      activates. */
   --font-display: 'Neue Haas Grotesk Display Pro', 'Neue Haas Grotesk Text Pro', 'Neue Haas Grotesk', 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
-  --font-serif: 'Epoca Pro', 'Fraunces', Georgia, serif;
+  --font-serif: 'EpocaPro', 'Epoca Pro', 'Fraunces', Georgia, serif;
   --font-body: 'Futura', 'Futura PT', 'Inter', ui-sans-serif, system-ui, sans-serif;
   --font-data: 'Futura', 'Futura PT', ui-monospace, 'SF Mono', Menlo, monospace;
 
