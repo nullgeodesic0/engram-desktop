@@ -229,7 +229,11 @@ export interface RetentionBucket {
  * `groupByNode(receipts, topic)` below is deliberately called with the FULL,
  * unranged receipt list; only the per-review tally loop checks `range`. */
 export function computeRetentionBuckets(receipts: RawReceipt[], topic?: string, range?: DateRange | null): Record<string, RetentionBucket> {
-  const nodes = groupByNode(receipts, topic)
+  // Relearn retry rows are recorded append-only but excluded by the engine
+  // from every retention-family population — mirror it exactly, or a single
+  // same-day retry diverges every bucket by one (caught live 2026-07-31 by
+  // check:topic-metrics).
+  const nodes = groupByNode(receipts.filter((r) => !r.relearn), topic)
   const buckets: Record<string, RetentionBucket> = {}
   for (const [name] of RETENTION_BUCKETS) buckets[name] = { recalled: 0, partial: 0, lapsed: 0, n: 0, rate: null }
 
@@ -326,8 +330,10 @@ export function computeMomentum(
   now: Date = new Date(),
 ): TopicMomentum {
   const cutoff = localDateNDaysAgo(MOMENTUM_WINDOW_DAYS, now)
-  const pool = topic ? receipts.filter((r) => r.topic === topic) : receipts
-  const genuine = retrievalReceipts(receipts, topic)
+  // Same relearn exclusion as computeRetentionBuckets above.
+  const nonRelearn = receipts.filter((r) => !r.relearn)
+  const pool = topic ? nonRelearn.filter((r) => r.topic === topic) : nonRelearn
+  const genuine = retrievalReceipts(nonRelearn, topic)
 
   let reviewsWindow = 0
   let recalledWindow = 0
