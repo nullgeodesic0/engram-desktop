@@ -1676,6 +1676,7 @@ export function ReviewSessionView({ onActivity, onGoHome }: ReviewSessionViewPro
                   : null
               }
               disabledReason={composerDisabledReason(tutorActivity.activity)}
+              accent="cool"
             />
           )}
         </div>
