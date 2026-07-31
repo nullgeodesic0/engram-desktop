@@ -32,6 +32,7 @@ import { GradeResultCard } from '../components/GradeResultCard'
 import { SkeletonBar } from '../components/Skeleton'
 import { SessionCeremony } from '../components/ritual/Bookends'
 import { ScheduleDelta } from '../components/ritual/ScheduleDelta'
+import { SummaryOverlay, makePeek } from '../components/ritual/SummaryOverlay'
 import { SessionHistoryDrawer, exportSittingTranscript, buildHistoryTimeline, type GradeBatch } from '../components/SessionHistoryDrawer'
 import { SessionMasthead } from '../components/SessionMasthead'
 import { SectionBanner } from '../components/ui/SectionBanner'
@@ -196,31 +197,8 @@ export function ReviewSessionView({ onActivity, onGoHome }: ReviewSessionViewPro
   const probeLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const ticketLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const summaryLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  /** Shared peek/tuck pair — `armed` guards against continuous motion pushing
-   * the tuck deadline forward forever. */
-  const makePeek = (
-    timer: React.MutableRefObject<ReturnType<typeof setTimeout> | null>,
-    set: (v: boolean) => void,
-  ) => ({
-    peek: () => {
-      if (timer.current) clearTimeout(timer.current)
-      timer.current = null
-      set(true)
-    },
-    tuck: () => {
-      // Clear + rearm: motion defers the deadline, so a card can only tuck
-      // once the pointer has genuinely settled away from it. The previous
-      // "armed deadline stands" variant let the tuck fire while the cursor
-      // was mid-flight toward the card (mousemove sampling has holes at the
-      // edges), folding the target under the very click aimed at it — the
-      // same disease as Learn's masthead back button.
-      if (timer.current) clearTimeout(timer.current)
-      timer.current = setTimeout(() => {
-        timer.current = null
-        set(false)
-      }, 400)
-    },
-  })
+  // Shared peek/tuck pair — clear+rearm 400ms discipline, extracted to
+  // ritual/SummaryOverlay.tsx (its doctrine comment holds the full story).
   const probeCtl = makePeek(probeLeaveTimer, setProbePeek)
   const ticketCtl = makePeek(ticketLeaveTimer, setTicketPeek)
   const summaryCtl = makePeek(summaryLeaveTimer, setSummaryPeek)
@@ -1563,84 +1541,36 @@ export function ReviewSessionView({ onActivity, onGoHome }: ReviewSessionViewPro
               </div>
             </ChatScrollRegion>
 
-            {/* Closing summary — floats OVER the transcript on the BOTTOM
-                edge, mirroring the probe's grid-collapse grammar (same 0fr↔1fr
-                technique, same clear+rearm 400ms tuck / 28px reveal band, same
-                direct onMouseEnter claim) but anchored at the bottom instead
-                of the top: `bottom-0` with no `top` pins the box's bottom
-                edge and lets its height (driven by the grid row) shrink from
-                there, so the content clips from its OWN top down as it tucks
-                — the mirror image of the probe's "collapses upward". This
-                never participates in the flex column above (it's `absolute`,
-                pulled out of flow), so the transcript keeps its full height
-                whether the sitting just finished or not — the previous
-                inline `shrink-0` block below the pane used to steal that
-                height instead. Content is unchanged (same three cards, same
-                props) — only where and how they're revealed changed. */}
-            {phase === 'done' && (() => {
-              const summaryOut = summaryPinned || summaryPeek
-              return (
-                <>
-                  {!summaryOut && (
-                    <div
-                      className="absolute bottom-0 left-0 right-0 z-20 h-2 flex items-center justify-center group cursor-default"
-                      onMouseEnter={summaryCtl.peek}
-                      aria-hidden="true"
-                    >
-                      <span className="h-px w-12 rounded bg-[var(--color-hairline)] group-hover:bg-[var(--color-ink-warm-dim)] transition-colors duration-[var(--dur-fast)]" />
-                    </div>
-                  )}
-                  <div
-                    // Direct hover claims the summary open — authoritative
-                    // over the sampled container-mousemove geometry, same
-                    // discipline as the probe's own onMouseEnter above.
-                    onMouseEnter={summaryCtl.peek}
-                    className={`absolute bottom-0 left-0 right-0 z-20 grid transition-[grid-template-rows] ${
-                      summaryOut
-                        ? 'duration-[var(--dur-base)] ease-[var(--ease-out-soft)]'
-                        : 'duration-[340ms] ease-[cubic-bezier(0.45,0.05,0.25,1)]'
-                    }`}
-                    style={{ gridTemplateRows: summaryOut ? '1fr' : '0fr' }}
-                  >
-                    <div
-                      className={`min-h-0 overflow-hidden transition-[opacity] ${
-                        summaryOut
-                          ? 'duration-[var(--dur-base)] ease-[var(--ease-out-soft)] opacity-100'
-                          : 'duration-[340ms] ease-[cubic-bezier(0.45,0.05,0.25,1)] opacity-0'
-                      }`}
-                    >
-                      <div className="relative flex flex-col gap-4 max-h-[65vh] overflow-y-auto pt-7 pb-2">
-                        <SessionCeremony
-                          results={sessionGrades}
-                          streakDays={streakDays}
-                          commitment={null}
-                          heading="Queue clear"
-                          label="items"
-                        />
-                        {/* Review's queue is mixed-topic, so ScheduleDelta (like IntervalLadder)
-                            matches by node id alone rather than a single topic prop; it renders
-                            its own panel only when at least one row (or the all-lapsed line)
-                            survives, so nothing empty ever shows up here. */}
-                        <ScheduleDelta results={sessionGrades} />
-                        {horizonBuckets && <ReviewHorizon buckets={horizonBuckets} holdingCount={holdingCount} />}
-                        <button
-                          onClick={() => setSummaryPinned((v) => !v)}
-                          aria-label={summaryPinned ? 'Unpin session summary' : 'Pin session summary'}
-                          title={summaryPinned ? 'Unpin — tuck away unless the cursor visits the bottom edge' : 'Pin — keep the summary out'}
-                          className={`focus-ring no-press absolute top-0 right-1 h-5 w-5 flex items-center justify-center transition-colors duration-[var(--dur-fast)] ${
-                            summaryPinned
-                              ? 'text-[var(--color-ink-warm)] bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)]'
-                              : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]'
-                          }`}
-                        >
-                          <PinTackIcon pinned={summaryPinned} size={14} />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </>
-              )
-            })()}
+            {/* Closing summary — the shared bottom-edge overlay (see
+                ritual/SummaryOverlay.tsx for the full reveal grammar: same
+                0fr↔1fr technique as the probe, clear+rearm 400ms tuck /
+                28px reveal band, direct onMouseEnter claim, absolute so the
+                transcript keeps its full height). The three closing cards
+                seat in its one backing plate; peek/pin state stays here. */}
+            {phase === 'done' && (
+              <SummaryOverlay
+                accent="cool"
+                pinned={summaryPinned}
+                peek={summaryPeek}
+                onPeek={summaryCtl.peek}
+                onTogglePin={() => setSummaryPinned((v) => !v)}
+                caption="the sitting’s closing record"
+              >
+                <SessionCeremony
+                  results={sessionGrades}
+                  streakDays={streakDays}
+                  commitment={null}
+                  heading="Queue clear"
+                  label="items"
+                />
+                {/* Review's queue is mixed-topic, so ScheduleDelta (like IntervalLadder)
+                    matches by node id alone rather than a single topic prop; it renders
+                    its own panel only when at least one row (or the all-lapsed line)
+                    survives, so nothing empty ever shows up here. */}
+                <ScheduleDelta results={sessionGrades} />
+                {horizonBuckets && <ReviewHorizon buckets={horizonBuckets} holdingCount={holdingCount} />}
+              </SummaryOverlay>
+            )}
           </div>
 
           {/* Chat Presence Wave D Task 10 — the generic 90s idle cue. Gated on
