@@ -15,8 +15,13 @@
  */
 import { readReceiptsHistory } from '../src/main/engramCli/receiptsHistory'
 import { engramRead } from '../src/main/engramCli/readOnly'
-import { computeTopicGrade, computeCrossTopicGPA, computeTopicGradeTrend, weeklyTrendCutoffs } from '../src/renderer/src/shared/topicGrade'
+import { computeTopicGrade, computeCrossTopicGPA, computeTopicGradeTrend, weeklyTrendCutoffs, CONCEPTUAL_GRACE_DAYS } from '../src/renderer/src/shared/topicGrade'
 import type { TopicListEntry, Misconception } from '../src/shared/types'
+
+// Local-date day-diff, same read as topicGrade.ts's own daysBetween.
+function daysBetweenLocal(a: string, b: string): number {
+  return Math.round((new Date(`${b}T00:00:00`).getTime() - new Date(`${a}T00:00:00`).getTime()) / 86400000)
+}
 
 function isMisconception(row: unknown): row is Misconception {
   if (typeof row !== 'object' || row === null) return false
@@ -83,24 +88,29 @@ async function main(): Promise<void> {
       }
     }
 
-    // (d) resolved_ts semantics: the conceptual component's implied resolved
-    // count at each cutoff must equal a direct re-derivation from the rows —
-    // a resolution only counts from its own `resolved_ts` (falling back to
-    // `ts` for hand-edited rows missing it). This is the one place the
-    // historical open→resolved mapping is pinned against an oracle.
+    // (d) conceptual semantics, re-derived directly from the rows — the one
+    // place the resolved_ts mapping AND the grace window are pinned against
+    // an oracle: a resolution only counts from its own `resolved_ts`
+    // (falling back to `ts` for hand-edited rows missing it), and an open
+    // row younger than CONCEPTUAL_GRACE_DAYS as of the cutoff counts on
+    // neither side. `n` must equal the graced population; the score must be
+    // the resolved share of it.
     for (const point of trend) {
       const c = point.result.components.conceptual
-      if (!c.available || c.raw === null) continue
-      const impliedResolved = c.n - c.raw
-      const oracle = misconceptions.filter(
-        (m) =>
-          m.topic === t.topic &&
-          m.ts <= point.cutoff &&
-          m.status === 'resolved' &&
-          (m.resolved_ts ?? m.ts) <= point.cutoff,
+      if (!c.available) continue
+      const rows = misconceptions.filter((m) => m.topic === t.topic && m.ts <= point.cutoff)
+      const isResolvedAt = (m: Misconception): boolean =>
+        m.status === 'resolved' && (m.resolved_ts ?? m.ts) <= point.cutoff
+      const resolvedOracle = rows.filter(isResolvedAt).length
+      const agedOpenOracle = rows.filter(
+        (m) => !isResolvedAt(m) && daysBetweenLocal(m.ts, point.cutoff) >= CONCEPTUAL_GRACE_DAYS,
       ).length
-      if (impliedResolved !== oracle) {
-        failures.push(`${t.topic} @ ${point.cutoff}: conceptual implied resolved ${impliedResolved} != oracle ${oracle}`)
+      if (c.n !== agedOpenOracle + resolvedOracle) {
+        failures.push(`${t.topic} @ ${point.cutoff}: conceptual n=${c.n} != oracle ${agedOpenOracle + resolvedOracle}`)
+      }
+      const expectedScore = (resolvedOracle / (agedOpenOracle + resolvedOracle)) * 100
+      if (c.score !== null && Math.abs(c.score - expectedScore) > 1e-9) {
+        failures.push(`${t.topic} @ ${point.cutoff}: conceptual score ${c.score} != oracle ${expectedScore}`)
       }
     }
 
