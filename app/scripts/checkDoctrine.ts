@@ -440,7 +440,14 @@ for (const f of FILES) {
 // navigational voice ("I picked one open misconception from my ledger"),
 // deferring to the skill for the rest of the sitting. Verified captured
 // un-truncated by the printed current-set.
-const PINNED_MESSAGE_HASH = '7a9b482dbd1030a7'
+// 2026-07-30 re-pin (Course Automation H1): the procedure-layer extend
+// kickoff — the learner asking, in their own navigational voice, for
+// problem-practice skills added to a topic they picked, drawing on the
+// topic's registered reference files. The extend mechanics (add-topic
+// --extend, node authoring) are entirely the plugin's; nothing here says
+// how to teach or judge. Verified captured un-truncated by the printed
+// current-set; D4-blindness-regex-clean.
+const PINNED_MESSAGE_HASH = '17a6bfa3c9cebc3b'
 if (sha(injectedMessages.sort().join('\n')) !== PINNED_MESSAGE_HASH) {
   fail(
     'D3.kickoff',
