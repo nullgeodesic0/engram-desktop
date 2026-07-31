@@ -1,6 +1,7 @@
 import { useRef } from 'react'
 import { MarkdownPreview } from './MarkdownPreview'
 import { fileName } from './ChatMessageView'
+import { CTRL_QUIET, ctrlFilled, type EnvAccent } from '../shared/controlChrome'
 
 interface MessageComposerProps {
   production: string
@@ -33,11 +34,23 @@ interface MessageComposerProps {
    * mounts at all). Never scolding: it names what's happening, not what the
    * learner should or shouldn't do. */
   disabledReason?: string | null
+  /** Environment chrome identity (shared/controlChrome.ts) — Learn's warm is
+   * the default, Review passes 'cool'. Colors only the FILLED chrome (Submit,
+   * an active toggle); quiet controls stay neutral either way. */
+  accent?: EnvAccent
 }
 
 /** The response box shared by Learn and Review: attachment chips, a textarea that
  * optionally splits into a live Markdown+LaTeX preview pane, and the attach/preview
- * toggle/submit row. Kept as one component so both session views stay in sync. */
+ * toggle/submit row — the whole unit framed by one `--color-edge` border.
+ *
+ * The frame carries NO fill or blur of its own (nested-glass rule: the
+ * textarea's own `.panel` supplies the glass, and stacking a second wash
+ * would muddy it) and NO tilt — a plane that leans under a live caret is
+ * hostile to typing. Controls speak the shared control-chrome idiom:
+ * quiet bordered cards at rest, the environment's filled accent for Submit
+ * and any toggle currently on. Kept as one component so both session views
+ * stay in sync. */
 export function MessageComposer({
   production,
   onProductionChange,
@@ -53,8 +66,10 @@ export function MessageComposer({
   inviteChamber,
   assist,
   disabledReason,
+  accent = 'warm',
 }: MessageComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const filled = ctrlFilled(accent)
 
   function submit() {
     onSubmit()
@@ -70,14 +85,14 @@ export function MessageComposer({
   }
 
   return (
-    <div className="shrink-0 flex flex-col gap-2">
+    <div className="shrink-0 flex flex-col gap-2 border border-[var(--color-edge)] p-3">
       {attachedFiles.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {attachedFiles.map((path) => (
             <span
               key={path}
               title={path}
-              className="label-data text-[10px] px-1.5 py-0.5 rounded bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] text-[var(--color-text-dim)] flex items-center gap-1"
+              className="label-data text-[10px] px-1.5 py-0.5 border border-[var(--color-edge)] bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] text-[var(--color-text-dim)] flex items-center gap-1"
             >
               📎 {fileName(path)}
               <button
@@ -113,7 +128,7 @@ export function MessageComposer({
           placeholder={placeholder}
           aria-label={placeholder}
           rows={chamber ? 12 : markdownPreview ? 8 : 4}
-          className="focus-ring panel px-4 py-3 text-sm bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] text-[var(--color-text-primary)] resize-none w-full"
+          className="focus-ring panel px-4 py-3 text-sm text-[var(--color-text-primary)] resize-none w-full"
         />
         {markdownPreview && (
           <div className="panel px-4 py-3 overflow-y-auto" style={{ maxHeight: '13rem' }}>
@@ -121,33 +136,25 @@ export function MessageComposer({
           </div>
         )}
       </div>
-      <div className="flex justify-between items-center">
-        <div className="flex items-center gap-1">
-          <button
-            onClick={onAttach}
-            title="Attach files"
-            className="focus-ring px-3 py-2 rounded-lg text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] hover:bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)]"
-          >
+      <div className="detail-footer pt-2">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <button onClick={onAttach} title="Attach files" className={CTRL_QUIET}>
             📎 Attach
           </button>
           <button
             onClick={onToggleMarkdownPreview}
             title="Toggle a live rendered preview of your answer (Markdown + LaTeX) alongside the input"
             aria-pressed={markdownPreview}
-            className={`focus-ring px-3 py-2 rounded-lg text-xs hover:bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] ${
-              markdownPreview ? 'text-[var(--color-ink-warm)]' : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]'
-            }`}
+            className={markdownPreview ? filled : CTRL_QUIET}
           >
-            ◧ Markdown Preview
+            ◧ Preview
           </button>
           {onChamberChange && (
             <button
               onClick={() => onChamberChange(!chamber)}
               title="A blurred transcript, so recall comes from you, not the page above"
               aria-pressed={chamber}
-              className={`focus-ring px-3 py-2 rounded-lg text-xs hover:bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] ${
-                chamber ? 'text-[var(--color-ink-warm)]' : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]'
-              } ${inviteChamber && !chamber ? 'chamber-invite' : ''}`}
+              className={`${chamber ? filled : CTRL_QUIET} ${inviteChamber && !chamber ? 'chamber-invite' : ''}`}
             >
               {chamber ? '✕ Leave chamber' : '◐ Begin recall'}
             </button>
@@ -156,18 +163,18 @@ export function MessageComposer({
             <button
               onClick={useAssist}
               title="Prefills an honest blank — you still have to send it yourself"
-              className="focus-ring px-3 py-2 rounded-lg text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] hover:bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)]"
+              className={CTRL_QUIET}
             >
               {assist.label}
             </button>
           )}
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-[10px] label-data text-[var(--color-text-faint)]">⌘⏎</span>
+          <span className="kbd-hint">⌘⏎</span>
           <button
             onClick={submit}
             disabled={!production.trim() || !!disabledReason}
-            className="focus-ring px-4 py-2 rounded-lg text-sm bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] text-[var(--color-ink-warm)] hover:bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] disabled:opacity-40"
+            className={`${filled} disabled:opacity-40`}
           >
             Submit
           </button>
