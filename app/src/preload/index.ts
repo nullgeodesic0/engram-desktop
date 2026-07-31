@@ -48,6 +48,9 @@ const engramApi = {
   artifactList: (): Promise<ArtifactEntry[]> => ipcRenderer.invoke('engram:artifactList'),
   receiptsHistory: (): Promise<ReceiptsHistory> => ipcRenderer.invoke('engram:receiptsHistory'),
   misconceptions: (): Promise<Misconception[]> => ipcRenderer.invoke('engram:misconceptions'),
+  misconceptionResolve: (id: string): Promise<unknown> => ipcRenderer.invoke('engram:misconceptionResolve', id),
+  misconceptionManualResolves: (): Promise<Record<string, { date: string }>> =>
+    ipcRenderer.invoke('engram:misconceptionManualResolves'),
   activeExperiment: (): Promise<ActiveExperiment | null> => ipcRenderer.invoke('engram:activeExperiment'),
   mapAnnotations: (topicId: string): Promise<MapAnnotations> => ipcRenderer.invoke('mapAnnotations:get', topicId),
   nodeProvenance: (topic: string): Promise<Record<string, NodeProvenance>> =>

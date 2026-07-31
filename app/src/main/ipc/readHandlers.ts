@@ -13,6 +13,7 @@ import { readGraderAuditHistory } from '../engramCli/graderAuditHistory'
 import { getMapAnnotations } from '../session/mapAnnotations'
 import { getDisplayTitles } from '../session/topicSettings'
 import { nodeProvenance } from '../session/sessionScan'
+import { recordManualResolve, getManualResolves } from '../session/misconceptionResolves'
 import type {
   TopicGraph,
   NodeProvenance,
@@ -163,4 +164,16 @@ export function registerReadHandlers(): void {
   ipcMain.handle('engram:commit', (_e, cue: string, action: string) =>
     engramDirectMutate('commit', ['--cue', cue, '--action', action]),
   )
+  // The misconception-resolve door (action-gated inside engramDirectMutate —
+  // resolve only, never add). Provenance is recorded app-side AFTER the
+  // engine write succeeds, so a failed resolve never leaves a stray
+  // "manual" label; the engine's own status/resolved_ts stay the single
+  // source of truth for grading.
+  ipcMain.handle('engram:misconceptionResolve', async (_e, id: string) => {
+    if (!/^m_[A-Za-z0-9_]+$/.test(id)) throw new Error(`misconceptionResolve: malformed id "${id}"`)
+    const result = await engramDirectMutate('misconception', ['resolve', '--id', id])
+    await recordManualResolve(id)
+    return result
+  })
+  ipcMain.handle('engram:misconceptionManualResolves', () => getManualResolves())
 }

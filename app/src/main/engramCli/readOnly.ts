@@ -125,14 +125,28 @@ export async function engramArtifactList(): Promise<unknown[]> {
   return entries.map((e) => ({ ...e, artifact: isAbsolute(e.artifact) ? e.artifact : join(home, e.artifact) }))
 }
 
-// The narrow direct-mutation exception (settings only — see plan §5):
-// visuals/focus/model --set/commit, pure key-value writes engram.py's own
-// skills already treat as user-invocable outside a session.
-const DIRECT_MUTATION_COMMANDS = new Set(['visuals', 'focus', 'commit'])
+// The narrow direct-mutation exception — settings-shaped key/value writes
+// (visuals/focus/model --set/commit) the plugin's own skills already treat
+// as user-invocable outside a session, plus ONE ledger flip:
+// `misconception resolve` is engine-proven pure ledger — FSRS, scheduling,
+// and verdicts never read misconceptions.json, so no graph, receipt, stash,
+// or schedule is touched and no memory record the engine didn't mint is
+// fabricated. The flip completes a loop the plugin's own docs already
+// assume happens (03-architecture.md promises an early re-test;
+// engram-artifact-smith assumes "misconception resolved") but that no
+// skill ever instructs — without this door, resolution is unreachable for
+// stale/duplicate rows. Action-gated below: `add` stays session-only.
+const DIRECT_MUTATION_COMMANDS = new Set(['visuals', 'focus', 'commit', 'misconception'])
 
 export async function engramDirectMutate(command: string, args: string[]): Promise<unknown> {
   if (!DIRECT_MUTATION_COMMANDS.has(command) && command !== 'model') {
     throw new Error(`engramDirectMutate: "${command}" is not on the direct-mutation allowlist`)
+  }
+  // 'misconception' is action-gated to resolve ONLY: `add` would fabricate a
+  // ledger entry no sitting observed; resolve is a pure status flip on a row
+  // the engine itself minted.
+  if (command === 'misconception' && args[0] !== 'resolve') {
+    throw new Error('engramDirectMutate: only the resolve action of "misconception" is permitted')
   }
   const { scriptPath } = resolveEngramPlugin()
   const { stdout } = await execFileAsync('python3', [scriptPath, command, ...args])

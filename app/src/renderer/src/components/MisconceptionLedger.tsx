@@ -5,6 +5,7 @@ import { Modal } from './ui/Modal'
 import { SkeletonBar } from './Skeleton'
 import { friendlyErrorText } from '../shared/friendlyError'
 import { MathRenderer } from './MathRenderer'
+import { CTRL_QUIET } from '../shared/controlChrome'
 
 /** `ts` is a local YYYY-MM-DD string (engram.py's own `date.today()`) — parsed
  * without a `Z` suffix so it reads as local midnight, same discipline every
@@ -38,26 +39,111 @@ function groupByTopic(rows: Misconception[]): TopicGroup[] {
   return Array.from(map.values()).sort((a, b) => a.topic.localeCompare(b.topic))
 }
 
-function Row({ row, onGoNode }: { row: Misconception; onGoNode?: (topicId: string, nodeId: string) => void }) {
+/** One ledger row. Open rows carry the quiet manual-resolve affordance (an
+ * inline two-step confirm, never a nested modal); resolved rows state their
+ * resolution date and, where the app's own provenance store matched, a
+ * faint "manual" chip. Provenance is display-only — the grade reads the
+ * engine's status alone, so a manual resolve counts exactly like one
+ * demonstrated in a sitting; the chip just keeps the audit trail honest. */
+function Row({
+  row,
+  onGoNode,
+  onResolve,
+  resolveDisabledReason,
+  manual,
+}: {
+  row: Misconception
+  onGoNode?: (topicId: string, nodeId: string) => void
+  /** Present only on open rows when the ledger's resolve path is wired. */
+  onResolve?: (id: string) => Promise<void>
+  /** Non-null disables the resolve affordance with this title text. */
+  resolveDisabledReason?: string | null
+  /** Manual-resolve provenance for this row, when it exists. */
+  manual?: { date: string }
+}) {
+  const [confirming, setConfirming] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [resolveError, setResolveError] = useState<string | null>(null)
+
+  async function confirmResolve() {
+    if (!onResolve || busy) return
+    setBusy(true)
+    setResolveError(null)
+    try {
+      await onResolve(row.id)
+    } catch (e) {
+      setResolveError(friendlyErrorText(e instanceof Error ? e.message : String(e)).headline)
+      setBusy(false)
+      setConfirming(false)
+    }
+  }
+
   const body = (
     <div className="flex flex-col gap-1 min-w-0">
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-sm text-[var(--color-text-primary)]">{humanizeNodeId(row.node)}</span>
         <span className="label-data text-[10px] text-[var(--color-text-faint)]">{formatTs(row.ts)}</span>
+        {row.status === 'resolved' && (
+          <>
+            <span className="label-data text-[10px] text-[var(--color-ink-warm)]">
+              resolved {formatTs(row.resolved_ts ?? row.ts)}
+            </span>
+            {manual && (
+              <span className="label-data text-[9px] uppercase tracking-[0.14em] px-1 py-0.5 border border-[var(--color-edge)] text-[var(--color-text-faint)]">
+                manual
+              </span>
+            )}
+          </>
+        )}
       </div>
       <MathRenderer text={row.description} className="text-xs text-[var(--color-text-dim)] leading-snug" />
+      {resolveError && <div className="fig-caption text-[var(--color-ink-danger)]">couldn’t resolve: {resolveError}</div>}
     </div>
   )
-  if (!onGoNode) {
-    return <div className="tilt-card panel px-3 py-2.5">{body}</div>
-  }
-  return (
+
+  const bodySeat = onGoNode ? (
     <button
       onClick={() => onGoNode(row.topic, row.node)}
-      className="focus-ring tilt-card panel px-3 py-2.5 text-left w-full hover:border-[var(--color-text-faint)] transition-colors"
+      className="focus-ring text-left flex-1 min-w-0 hover:opacity-90 transition-opacity"
     >
       {body}
     </button>
+  ) : (
+    <div className="flex-1 min-w-0">{body}</div>
+  )
+
+  return (
+    <div className="tilt-card panel px-3 py-2.5 flex items-start justify-between gap-3">
+      {bodySeat}
+      {onResolve && row.status === 'open' && (
+        <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
+          {confirming ? (
+            <>
+              <button
+                onClick={confirmResolve}
+                disabled={busy || resolveDisabledReason != null}
+                className={`${CTRL_QUIET} disabled:opacity-40`}
+                title={resolveDisabledReason ?? 'Counts like any resolution — the grade reads engine status only'}
+              >
+                {busy ? 'Resolving…' : 'Resolve'}
+              </button>
+              <button onClick={() => setConfirming(false)} disabled={busy} className={CTRL_QUIET}>
+                Cancel
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => setConfirming(true)}
+              disabled={resolveDisabledReason != null}
+              className={`${CTRL_QUIET} disabled:opacity-40`}
+              title={resolveDisabledReason ?? 'Mark this entry resolved without a sitting (for stale or duplicate filings)'}
+            >
+              Mark resolved
+            </button>
+          )}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -68,24 +154,36 @@ function Row({ row, onGoNode }: { row: Misconception; onGoNode?: (topicId: strin
  * uses for a lapse applies here: a misconception is a recorded fact, not a
  * failure. Grouped by topic, open items shown plainly, resolved ones tucked
  * behind a disclosure per topic (worth keeping, not worth dwelling on).
- * Each row is a real link to that node's map entry via `onGoNode` — the same
- * deep-link plumbing App.tsx already wires from the command palette, reused
- * here rather than invented twice. */
+ * Each row deep-links to that node's map entry via `onGoNode`.
+ *
+ * Manual resolution rides the app's one action-gated mutation door
+ * (engram:misconceptionResolve — see readOnly.ts's doctrine comment) and is
+ * DISABLED while any session is live: the engine's advisory lock makes the
+ * write mechanically safe, but a mid-sitting resolve races the tutor's
+ * already-delivered view of the open ledger. */
 export function MisconceptionLedger({
   open,
   onClose,
   onGoNode,
+  onResolved,
 }: {
   open: boolean
   onClose: () => void
   onGoNode?: (topicId: string, nodeId: string) => void
+  /** Fired after a manual resolve lands, so hosts can refresh their own
+   * misconception-derived surfaces (Coach's teaser count, grades). */
+  onResolved?: () => void
 }) {
   const [rows, setRows] = useState<Misconception[] | null>(null)
+  const [manualResolves, setManualResolves] = useState<Record<string, { date: string }>>({})
+  const [sessionLive, setSessionLive] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [refreshKey, setRefreshKey] = useState(0)
 
   // Modal unmounts its children whenever `open` is false (see Modal.tsx), so
   // this only actually runs while showing — but keying off `open` explicitly
-  // (rather than mount) means reopening after a failed read tries again.
+  // (rather than mount) means reopening after a failed read tries again, and
+  // `refreshKey` re-runs it in place after a manual resolve.
   useEffect(() => {
     if (!open) return
     setRows(null)
@@ -94,7 +192,15 @@ export function MisconceptionLedger({
       .misconceptions()
       .then(setRows)
       .catch((e: Error) => setError(e.message))
-  }, [open])
+    window.engram
+      .misconceptionManualResolves()
+      .then(setManualResolves)
+      .catch(() => setManualResolves({}))
+    window.engram
+      .anySessionActive()
+      .then(setSessionLive)
+      .catch(() => setSessionLive(false))
+  }, [open, refreshKey])
 
   const groups = rows ? groupByTopic(rows) : []
   const openCount = rows ? rows.filter((r) => r.status === 'open').length : 0
@@ -103,6 +209,20 @@ export function MisconceptionLedger({
     onClose()
     onGoNode?.(topicId, nodeId)
   }
+
+  async function resolve(id: string): Promise<void> {
+    // Re-check at confirm time — the modal may have been sitting open while
+    // a sitting started elsewhere. The engine's lock backstops the rest.
+    if (await window.engram.anySessionActive()) {
+      setSessionLive(true)
+      throw new Error('a sitting is live — finish it first')
+    }
+    await window.engram.misconceptionResolve(id)
+    setRefreshKey((k) => k + 1)
+    onResolved?.()
+  }
+
+  const resolveDisabledReason = sessionLive ? 'a sitting is live — finish it first' : null
 
   return (
     <Modal open={open} onClose={onClose} title="Misconceptions" wide>
@@ -151,7 +271,13 @@ export function MisconceptionLedger({
               {g.open.length > 0 && (
                 <div className="flex flex-col gap-2">
                   {g.open.map((row) => (
-                    <Row key={row.id} row={row} onGoNode={onGoNode ? goto : undefined} />
+                    <Row
+                      key={row.id}
+                      row={row}
+                      onGoNode={onGoNode ? goto : undefined}
+                      onResolve={resolve}
+                      resolveDisabledReason={resolveDisabledReason}
+                    />
                   ))}
                 </div>
               )}
@@ -162,7 +288,7 @@ export function MisconceptionLedger({
                   </summary>
                   <div className="flex flex-col gap-2 mt-2">
                     {g.resolved.map((row) => (
-                      <Row key={row.id} row={row} onGoNode={onGoNode ? goto : undefined} />
+                      <Row key={row.id} row={row} onGoNode={onGoNode ? goto : undefined} manual={manualResolves[row.id]} />
                     ))}
                   </div>
                 </details>
