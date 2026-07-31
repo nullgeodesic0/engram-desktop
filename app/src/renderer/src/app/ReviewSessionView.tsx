@@ -1642,7 +1642,7 @@ These are filed open for this queue's nodes; "misconception resolve --id <ID>" r
                 />
               }
             >
-              <div className="transcript-measure flex flex-col gap-5">
+              <div className="transcript-measure flex flex-col gap-5 pt-4">
                 {/* lapse/milestone excluded here — re-anchored via
                     inlineForMessage/tailOtherMarks below (the carried-over
                     ordering fix); every other kind keeps this boundary

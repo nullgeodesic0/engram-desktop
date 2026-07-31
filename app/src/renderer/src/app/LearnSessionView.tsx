@@ -1910,7 +1910,7 @@ export function LearnSessionView({
                 />
               }
             >
-              <div className="transcript-measure flex flex-col gap-5">
+              <div className="transcript-measure flex flex-col gap-5 pt-4">
                 {activeTopic != null && sessionPhase !== 'intake' && (
                   <SessionOpenPlate walkNumber={walkNumber} date={new Date()} recap={lastWalk} />
                 )}
