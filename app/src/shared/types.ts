@@ -351,6 +351,10 @@ export interface RawReceipt {
    * engram.py's `due_next`, a local 'YYYY-MM-DD' string. See
    * `shared/topicGrade.ts`'s punctuality metric. */
   dueNext: string | null
+  /** engram.py's `node_kind` ('concept' | 'procedure' | 'fact'), stamped
+   * sparsely — null on most historical rows; never assume concept. The
+   * homework grade component filters procedure receipts on it. */
+  nodeKind: string | null
 }
 
 export interface ReceiptsHistory {

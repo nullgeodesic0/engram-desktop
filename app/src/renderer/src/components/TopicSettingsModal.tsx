@@ -5,6 +5,11 @@ interface TopicSettingsModalProps {
   topicId: string
   topicTitle: string
   onClose: () => void
+  /** Course Automation H1 — saves current settings (so contextFiles are on
+   * disk for the fresh session's injection to read), closes, then launches
+   * the procedure-layer extend sitting (see LearnSessionView's
+   * startPracticeExtendForTopic). Optional so other hosts can omit it. */
+  onAddPractice?: () => void
 }
 
 const EXAMPLE = 'Use LaTeX ($...$ for inline, $$...$$ for display) for every equation and mathematical expression.'
@@ -13,7 +18,7 @@ function fileName(path: string): string {
   return path.split('/').pop() ?? path
 }
 
-export function TopicSettingsModal({ topicId, topicTitle, onClose }: TopicSettingsModalProps) {
+export function TopicSettingsModal({ topicId, topicTitle, onClose, onAddPractice }: TopicSettingsModalProps) {
   const [value, setValue] = useState('')
   const [contextFiles, setContextFiles] = useState<string[]>([])
   const [targetDate, setTargetDate] = useState<string | null>(null)
@@ -49,7 +54,7 @@ export function TopicSettingsModal({ topicId, topicTitle, onClose }: TopicSettin
     setContextFiles((prev) => prev.filter((p) => p !== path))
   }
 
-  async function save() {
+  async function persist() {
     setSaving(true)
     await window.engram.setTopicSettings(topicId, {
       systemPromptExtra: value.trim(),
@@ -58,7 +63,20 @@ export function TopicSettingsModal({ topicId, topicTitle, onClose }: TopicSettin
       displayTitle: displayTitle.trim() || null,
     })
     setSaving(false)
+  }
+
+  async function save() {
+    await persist()
     onClose()
+  }
+
+  // Persist FIRST — the fresh session's contextFiles injection reads from
+  // disk, so unsaved additions here must land before the sitting spawns.
+  async function addPractice() {
+    if (!onAddPractice) return
+    await persist()
+    onClose()
+    onAddPractice()
   }
 
   return (
@@ -170,6 +188,29 @@ export function TopicSettingsModal({ topicId, topicTitle, onClose }: TopicSettin
             + Add file…
           </button>
         </div>
+
+        {onAddPractice && (
+          <div className="flex flex-col gap-2">
+            <label className="text-sm text-[var(--color-text-primary)]">Problem practice</label>
+            <p className="text-xs text-[var(--color-text-faint)]">
+              Extends this topic with procedure skills for working real problems, built from the reference files
+              above (your textbook and problem sets). Reviews then serve fresh problem instances for those skills —
+              everything already learned keeps its schedule exactly as is.
+            </p>
+            {contextFiles.length === 0 && (
+              <p className="fig-caption">
+                add your textbook or problem sets as reference files above first — the extension reads them.
+              </p>
+            )}
+            <button
+              onClick={addPractice}
+              disabled={!loaded || saving}
+              className="focus-ring self-start text-xs text-[var(--color-ink-warm)] hover:underline disabled:opacity-40"
+            >
+              + Add problem practice…
+            </button>
+          </div>
+        )}
 
         <div className="flex flex-col gap-2">
           <label className="text-sm text-[var(--color-text-primary)]">Target date</label>
