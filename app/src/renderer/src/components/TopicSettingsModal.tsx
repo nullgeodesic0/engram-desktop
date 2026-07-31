@@ -54,11 +54,11 @@ export function TopicSettingsModal({ topicId, topicTitle, onClose, onAddPractice
     setContextFiles((prev) => prev.filter((p) => p !== path))
   }
 
-  async function persist() {
+  async function persist(files: string[] = contextFiles) {
     setSaving(true)
     await window.engram.setTopicSettings(topicId, {
       systemPromptExtra: value.trim(),
-      contextFiles,
+      contextFiles: files,
       targetDate,
       displayTitle: displayTitle.trim() || null,
     })
@@ -70,11 +70,21 @@ export function TopicSettingsModal({ topicId, topicTitle, onClose, onAddPractice
     onClose()
   }
 
-  // Persist FIRST — the fresh session's contextFiles injection reads from
-  // disk, so unsaved additions here must land before the sitting spawns.
+  // The practice flow's whole point is building from the learner's own
+  // materials — so with NO reference files registered, this opens the file
+  // browser first (textbook / problem sets), and cancelling the picker
+  // cancels the launch. Files then persist BEFORE the sitting spawns (the
+  // fresh session's contextFiles injection reads from disk).
   async function addPractice() {
     if (!onAddPractice) return
-    await persist()
+    let files = contextFiles
+    if (files.length === 0) {
+      const picked = await window.engram.pickFiles()
+      if (picked.length === 0) return
+      files = picked
+      setContextFiles(picked)
+    }
+    await persist(files)
     onClose()
     onAddPractice()
   }
@@ -199,7 +209,7 @@ export function TopicSettingsModal({ topicId, topicTitle, onClose, onAddPractice
             </p>
             {contextFiles.length === 0 && (
               <p className="fig-caption">
-                add your textbook or problem sets as reference files above first — the extension reads them.
+                you’ll be asked to pick your textbook or problem-set files first — the extension reads them.
               </p>
             )}
             <button
