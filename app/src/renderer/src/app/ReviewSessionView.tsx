@@ -33,6 +33,7 @@ import { SkeletonBar } from '../components/Skeleton'
 import { SessionCeremony } from '../components/ritual/Bookends'
 import { ScheduleDelta } from '../components/ritual/ScheduleDelta'
 import { SummaryOverlay, makePeek } from '../components/ritual/SummaryOverlay'
+import { MathRenderer } from '../components/MathRenderer'
 import { SessionHistoryDrawer, exportSittingTranscript, buildHistoryTimeline, type GradeBatch } from '../components/SessionHistoryDrawer'
 import { SessionMasthead } from '../components/SessionMasthead'
 import { SectionBanner } from '../components/ui/SectionBanner'
@@ -1600,7 +1601,11 @@ These are filed open for this queue's nodes; "misconception resolve --id <ID>" r
                             </div>
                             <div className="detail-subtitle text-xs mt-0.5 truncate">{current.topic}</div>
                           </div>
-                          <p className="text-sm text-[var(--color-text-primary)]">{current.probe}</p>
+                          {/* Through MathRenderer, same as the transcript's own
+                              ProbeCard — probe text is routinely LaTeX-laden
+                              ($\vec L$, $m_i$, …) and a plain <p> shows raw
+                              dollar-sign source. */}
+                          <MathRenderer text={current.probe} className="text-sm text-[var(--color-text-primary)] leading-relaxed" />
                         </div>
                         <div className="detail-footer px-5 py-1.5">
                           <span className="label-data text-[10px] text-[var(--color-text-faint)] uppercase tracking-wider">
