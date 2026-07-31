@@ -63,23 +63,27 @@ export function SessionMasthead({
   const a = ACCENT[accent]
   const plate = (
     <div className="tilt-card panel flex flex-col">
+      {/* Deliberately compact (user decree: the masthead was eating real
+          estate) — tight band padding, text-lg title, slim instrument row.
+          The plate should read as chrome above the transcript, never as a
+          content region of its own. */}
       <div
-        className="detail-title-band px-6 py-3 flex items-center justify-between gap-6"
+        className="detail-title-band px-6 py-2 flex items-center justify-between gap-6"
         style={{ boxShadow: `inset 0 2px 0 ${a.dim}` }}
       >
-        <div className="flex flex-col gap-0.5 min-w-0">
+        <div className="flex flex-col min-w-0">
           <span className="label-data text-[9px] uppercase tracking-[0.28em]" style={{ color: a.ink }}>
             {eyebrow}
           </span>
-          <h1 className="font-(family-name:--font-serif) text-xl leading-tight text-[var(--color-text-primary)] truncate">
+          <h1 className="font-(family-name:--font-serif) text-lg leading-tight text-[var(--color-text-primary)] truncate">
             {title}
           </h1>
           {identity}
         </div>
         {commands && <div className="flex items-center gap-4 shrink-0">{commands}</div>}
       </div>
-      {instruments && <div className="px-6 py-2 flex items-center gap-4 min-w-0 overflow-hidden">{instruments}</div>}
-      {extra && <div className="px-6 pb-3 pt-1 flex flex-col gap-2">{extra}</div>}
+      {instruments && <div className="px-6 py-1.5 flex items-center gap-4 min-w-0 overflow-hidden">{instruments}</div>}
+      {extra && <div className="px-6 pb-2 pt-1 flex flex-col gap-2">{extra}</div>}
     </div>
   )
 
