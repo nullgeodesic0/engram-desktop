@@ -103,9 +103,10 @@ export function MainMenuView({
     <div className="tilt-card-soft panel px-6 py-6 flex flex-col gap-4">
       {grouped.map(({ group, items }, gi) => (
         <div key={group} className={`flex flex-col gap-1 ${gi > 0 ? 'pt-2' : ''}`}>
-          {/* The TicketCard band's own register — warm tracked-uppercase with
-              a hairline rule running out to the plate's edge — instead of a
-              bare faint label that disappeared into the rows below it. The
+          {/* The TicketCard band's own register — env-accent tracked-
+              uppercase (warm here; the ticket itself flips cool in Review)
+              with a hairline rule running out to the plate's edge — instead
+              of a bare faint label that disappeared into the rows below it. The
               rule replaces the old border-t group divider (one line, doing
               both jobs, instead of two stacked ones). */}
           <div className="flex items-center gap-2.5 mb-1">

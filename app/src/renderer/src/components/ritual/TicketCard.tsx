@@ -1,6 +1,7 @@
 import { memo } from 'react'
 import type { ParsedTicket } from '../../shared/ticketParser'
 import { StatFraction } from '../ui/StatFraction'
+import { ACCENT, type EnvAccent } from '../../shared/controlChrome'
 
 /** Matches an "n/m"-shaped field value (optionally with trailing prose, e.g.
  * "8/13 unlocked") so every fraction the ticket carries renders through the
@@ -117,7 +118,11 @@ function FieldValue({ value }: { value: string }) {
   }
 
   return (
-    <span className="label-data text-xs text-[var(--color-text-dim)] inline-flex items-baseline gap-1">
+    // flex-wrap + right alignment: a long identifier value (a full node id)
+    // wraps at the plate's shared right edge instead of squeezing the key
+    // column (which no longer shrinks) or overflowing the row. Presentation
+    // only — classification above stays purely shape-based.
+    <span className="label-data text-xs text-[var(--color-text-dim)] inline-flex items-baseline flex-wrap justify-end gap-1 text-right">
       <span>{main}</span>
       {parenTail && <span className="text-[var(--color-text-faint)]">{parenTail}</span>}
     </span>
@@ -136,7 +141,15 @@ function FieldValue({ value }: { value: string }) {
  * is retired: it was kept through the Guardian Atlas restyle as this object's
  * engraved-artifact identity, until the user chose the sharp band/row anatomy
  * for the session cards — the ticket now speaks the same grammar as the rest
- * of the app's detail surfaces. */
+ * of the app's detail surfaces.
+ *
+ * The band's chrome — 2px inset top rule + eyebrow ink + walk chip — derives
+ * from the ticket's own parsed kind (learn → warm, review → cool, unknown →
+ * warm) per the environment-identity decision, using the masthead's exact
+ * inset-rule formula and the GradeChip/ProbeCard chip fill, so ticket,
+ * masthead, and chips read as one plate family. The pinned `.dogear` stays
+ * the app-global current-item mark — it is NOT environment chrome and never
+ * routes through the accent. */
 export const TicketCard = memo(function TicketCard({
   ticket,
   walkNumber = null,
@@ -151,6 +164,17 @@ export const TicketCard = memo(function TicketCard({
   const topic = ticket.fields.find((f) => f.key.toLowerCase() === 'topic')
   const rest = ticket.fields.filter((f) => f !== topic)
   const padX = compact ? 'px-3' : 'px-4'
+  // Environment chrome identity (shared/controlChrome.ts), derived from the
+  // ticket's own parsed kind — no new prop, so a call site can never
+  // contradict the ticket's stated environment. ParsedTicket.kind is a plain
+  // `string`, so the ternary is defensive: anything non-'review' ('learn' or
+  // an unrecognized future kind) resolves warm — today's baseline chrome —
+  // never `ACCENT[ticket.kind]` directly. Semantic inks never route through
+  // this, and the pinned `.dogear` keeps its own app-global warm/accent-cta
+  // ink (the "you are here" mark, not environment chrome) — do not "fix" it
+  // into the accent.
+  const accent: EnvAccent = ticket.kind === 'review' ? 'cool' : 'warm'
+  const a = ACCENT[accent]
   // Every ticket shape gets a real headline, not just the ones with a
   // `topic` field: Review tickets aggregate across multiple topics (no
   // single `topic` value exists to promote), which previously left this
@@ -177,13 +201,17 @@ export const TicketCard = memo(function TicketCard({
     <div
       className={`tilt-card-soft panel-raised relative ${pinned ? 'dogear' : ''} ${compact ? '' : 'max-w-sm'}`}
     >
-      <div className={`detail-title-band flex items-center justify-between gap-3 ${padX} ${compact ? 'py-1.5' : 'py-2'}`}>
-        <span className="label-data text-[10px] tracking-[0.22em] uppercase text-[var(--color-ink-warm)]">
+      <div
+        className={`detail-title-band flex items-center justify-between gap-3 ${padX} ${compact ? 'py-1.5' : 'py-2'}`}
+        style={{ boxShadow: `inset 0 2px 0 ${a.dim}` }}
+      >
+        <span className="label-data text-[10px] tracking-[0.22em] uppercase" style={{ color: a.ink }}>
           engram · {ticket.kind}{ticket.mode != null ? ` · ${ticket.mode}` : ''}
         </span>
         {walkNumber != null && (
           <span
-            className="label-data text-[9px] tracking-[0.14em] uppercase text-[var(--color-ink-warm-dim)] border border-[var(--color-ink-warm-dim)] px-1 py-0.5 shrink-0"
+            className="label-data text-[9px] tracking-[0.14em] uppercase px-1.5 py-0.5 border shrink-0"
+            style={{ color: a.ink, borderColor: a.dim, background: `color-mix(in srgb, ${a.ink} 16%, transparent)` }}
             aria-label={`Walk ${walkNumber}`}
           >
             walk {walkNumber}
@@ -198,7 +226,7 @@ export const TicketCard = memo(function TicketCard({
           <div className={`${compact ? 'mt-1.5' : 'mt-2'} divide-y divide-[var(--color-hairline)] border-t border-[var(--color-hairline)]`}>
             {rest.map((f) => (
               <div key={f.key} className={`flex items-baseline justify-between gap-3 ${compact ? 'py-1' : 'py-1.5'}`}>
-                <span className="label-data text-[10px] text-[var(--color-text-faint)] uppercase tracking-wider">{f.key}</span>
+                <span className="label-data text-[10px] text-[var(--color-text-faint)] uppercase tracking-wider shrink-0">{f.key}</span>
                 <FieldValue value={f.value} />
               </div>
             ))}
