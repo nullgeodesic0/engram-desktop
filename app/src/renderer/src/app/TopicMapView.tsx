@@ -20,20 +20,16 @@ import { ExplorableViewer } from '../components/ExplorableViewer'
 import { friendlyErrorText } from '../shared/friendlyError'
 import { recordView } from '../shared/recentlyViewed'
 import { stateLabel, formatMonthDay } from '../shared/nodeDisplay'
+import { CTRL_QUIET, ctrlFilled } from '../shared/controlChrome'
 
 /** `date` is a local YYYY-MM-DD string (see ProvenanceEvent) — parsed without
  * a `Z` suffix so `Date` reads it in local time instead of shifting it a day
  * at UTC-negative offsets. */
-/** Map-chrome control cards — every toolbar button/toggle on this page is a
- * small bordered tilt card (`tilt-card-rail`: small chrome tilts MORE, by
- * standing decree), replacing the old bare `cmd-item` text-links.
- * Transparent at rest; the FILLED variants mark importance — an active
- * lens/toggle or the page's primary actions (warm), the explorable opener
- * (violet, that signal's own ink). */
-const CTRL =
-  'focus-ring tilt-card-rail label-data text-[10px] uppercase tracking-[0.16em] px-2.5 py-1 border transition-colors duration-[var(--dur-fast)]'
-const CTRL_QUIET = `${CTRL} border-[var(--color-edge)] text-[var(--color-text-dim)] hover:text-[var(--color-text-primary)]`
-const CTRL_FILLED = `${CTRL} border-[var(--color-ink-warm-dim)] bg-[color-mix(in_srgb,var(--color-ink-warm)_16%,transparent)] text-[var(--color-ink-warm)]`
+// Map-chrome control cards — now the shared recipes in shared/controlChrome
+// (extracted verbatim from this file when the chat environments adopted the
+// same idiom). This page's filled controls are warm: the map is not a
+// Learn/Review environment, warm is simply its primary-action ink.
+const CTRL_FILLED = ctrlFilled('warm')
 
 function formatProvenanceDate(date: string): string {
   return new Date(`${date}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
