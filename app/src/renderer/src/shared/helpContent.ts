@@ -106,6 +106,12 @@ export interface GlossaryTerm {
  * gloss. See the P4/P5 task report for the term-by-term grounding table. */
 export const GLOSSARY: GlossaryTerm[] = [
   {
+    term: 'Misconception',
+    definition:
+      'A wrong model the tutor caught and filed during a sitting — a recorded fact, not a failure. It resolves either by demonstrating the correction in a later sitting (the tutor records it) or manually in the ledger for stale/duplicate filings (marked "manual"); both count equally in the conceptual grade.',
+    seenIn: 'Coach → Misconceptions, the Grades drilldown\u2019s Conceptual Health tile, and the pinned cards in a sitting\u2019s transcript.',
+  },
+  {
     term: 'Threshold',
     definition:
       "One of a topic's 1–3 portal concepts — the ideas that reorganize everything after them once you actually have them. By default they're the ones that get an interactive explorable, though the visuals setting (Settings) can widen that to every node or turn it off entirely — a lapse on a threshold node is scheduled exactly like a lapse anywhere else.",

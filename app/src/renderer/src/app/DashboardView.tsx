@@ -85,6 +85,9 @@ interface DashboardViewProps {
   onRetestMisconception?: (row: import('../../../shared/types').Misconception) => void
   /** True while a review sitting is live — gates the ledger's Re-test. */
   reviewSessionLive?: boolean
+  /** Fired after a manual resolve in this view's ledger — App bumps the
+   * epoch so every misconception surface refreshes. */
+  onMisconceptionResolved?: () => void
   /** "See all in Artifacts" from a topic drilldown's artifact tiles — routes
    * to the full gallery tab. Threaded down to TopicDrilldownView, never used
    * directly here. */
@@ -100,9 +103,13 @@ interface DashboardViewProps {
    * LearnSessionView's `openNewTopicSignal`: acts only on a change from the
    * previous value, never on mount. */
   coachHomeSignal?: number
+  /** Bumped by App after a manual ledger resolve — this KeepMounted view's
+   * mount-time fetches (stats/history/topics) re-run so the Misconceptions
+   * teaser count and topic stats reflect the flip without a remount. */
+  misconceptionsEpoch?: number
 }
 
-export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts, coachHomeSignal, onRetestMisconception, reviewSessionLive }: DashboardViewProps = {}) {
+export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts, coachHomeSignal, onRetestMisconception, reviewSessionLive, misconceptionsEpoch, onMisconceptionResolved }: DashboardViewProps = {}) {
   const [stats, setStats] = useState<EngramStats | null>(null)
   const [history, setHistory] = useState<ReceiptsHistory | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -242,6 +249,21 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts, coachHomeSi
   // enough to scope the whole join: a pick whose own local day isn't a key
   // in `daysInRange` simply finds no match and is dropped, correctly.
   const cal = useMemo(() => (history ? computeCalibration(daysInRange, allPicks()) : null), [history, daysInRange])
+
+  // Misconceptions epoch — same base-ref idiom as coachHomeSignal above
+  // (act on change from last-seen, never on mount). Appended at the END of
+  // the hook list per the KeepMounted append rule.
+  const misconceptionsEpochRef = useRef(0)
+  useEffect(() => {
+    if (misconceptionsEpoch === undefined || misconceptionsEpoch === misconceptionsEpochRef.current) {
+      misconceptionsEpochRef.current = misconceptionsEpoch ?? misconceptionsEpochRef.current
+      return
+    }
+    misconceptionsEpochRef.current = misconceptionsEpoch
+    window.engram.stats().then(setStats).catch(() => {})
+    window.engram.receiptsHistory().then(setHistory).catch(() => {})
+    window.engram.topics().then(setTopicsList).catch(() => {})
+  }, [misconceptionsEpoch])
 
   if (error) {
     const fe = friendlyErrorText(error)
@@ -585,6 +607,7 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts, coachHomeSi
         onGoNode={onGoNode}
         onRetest={onRetestMisconception}
         reviewSessionLive={reviewSessionLive}
+        onResolved={onMisconceptionResolved}
       />
     </div>
   )
