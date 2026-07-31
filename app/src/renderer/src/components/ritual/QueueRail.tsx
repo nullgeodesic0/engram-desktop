@@ -15,7 +15,7 @@ const GRADE_LABEL: Record<GradeResult['grade'], string> = {
 
 /** One mark per item in the sitting's queue, absorbing the old "Item N of M"
  * readout it sits in place of. Completed marks are filled and grade-toned
- * (the same GRADE_STYLE palette GradeResultCard uses), the current item's
+ * (the same GRADE_INK palette GradeChip uses), the current item's
  * mark sits hot and larger, and every mark still ahead is a bare hollow
  * hairline dot.
  *

@@ -4,13 +4,13 @@ import type { DerivedRitualMark } from '../../../shared/ritualFromTranscript'
 import { humanizeNodeId } from '../../../shared/humanizeId'
 import type { RitualMark } from '../components/ritual/Marks'
 import { BEAT_STYLE } from '../components/BeatCard'
-import { GRADE_STYLE } from '../components/GradeResultCard'
+import { GRADE_INK } from '../components/ritual/GradeChip'
 
 /** The transcript minimap's own small glyph vocabulary — Chat Instruments
  * Wave B. Deliberately NOT a new visual language: every glyph/tone pair here
  * is read straight off the card that same moment already renders inline —
- * `BEAT_STYLE`'s icon+accent per beat (BeatCard.tsx), `GRADE_STYLE`'s color
- * per grade (GradeResultCard.tsx), ProbeCard's own cool/violet(-threshold)
+ * `BEAT_STYLE`'s icon+accent per beat (BeatCard.tsx), `GRADE_INK`'s ink
+ * per grade (ritual/GradeChip.tsx), ProbeCard's own cool/violet(-threshold)
  * accent and `†` marker, NodeCrossingDivider's warm ink. Where a source card
  * has no glyph of its own (crossing, misconception, milestone, ask), the
  * closest plain character to what that card already says is used once, never
@@ -105,7 +105,7 @@ export function deriveInstrumentMoments(input: {
         atIndex: batch.atIndex,
         kind: 'grade',
         glyph: '●',
-        tone: GRADE_STYLE[r.grade].color,
+        tone: GRADE_INK[r.grade].ink,
         tooltip: gradeTooltip(r),
       })
     }

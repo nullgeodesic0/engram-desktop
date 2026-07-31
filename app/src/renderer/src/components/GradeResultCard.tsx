@@ -4,18 +4,7 @@ import { humanizeNodeId } from '../../../shared/humanizeId'
 import { InkNode } from './ui/InkNode'
 import { IntervalLadder } from './IntervalLadder'
 import { warmTone } from '../shared/soundscape'
-
-/** Exported for Verdict Anatomy's `RatingEchoRow` (components/ritual/
- * VerdictRows.tsx) — the single source of the grade-badge color/label
- * treatment, so a verdict's echoed `Rating **good**` line reuses the exact
- * same visual language as the real GradeResultCard rendered elsewhere in
- * the same region, rather than inventing a second palette for the same
- * concept. */
-export const GRADE_STYLE: Record<GradeResult['grade'], { label: string; color: string; bg: string }> = {
-  recalled: { label: 'Recalled', color: 'var(--color-ink-warm)', bg: 'var(--color-ink-warm-dim)' },
-  partial: { label: 'Partial', color: 'var(--color-ink-cool)', bg: 'var(--color-ink-cool-dim)' },
-  lapsed: { label: 'Lapsed', color: 'var(--color-ink-danger)', bg: 'var(--color-ink-danger-dim)' },
-}
+import { GradeChip, GRADE_INK } from './ritual/GradeChip'
 
 function nextReviewText(intervalDays: number | null): string {
   if (intervalDays === null) return ''
@@ -142,7 +131,7 @@ export function GradeResultCard({
   highlighted?: boolean
   onHoverChange?: (hovering: boolean) => void
 }) {
-  const style = GRADE_STYLE[result.grade]
+  const ink = GRADE_INK[result.grade]
   const before = result.sBefore ?? 0
   const after = result.sAfter ?? before
   // Scaled against whichever of the two is larger so the bar always fits —
@@ -210,24 +199,19 @@ export function GradeResultCard({
         <span className="text-sm text-[var(--color-text-primary)]">{humanizeNodeId(result.node)}</span>
         <span className="relative shrink-0">
           {showBurst && <InkBurst />}
-          <span
-            className={`label-data text-[10px] px-2 py-0.5 inline-block ${result.grade === 'partial' ? 'badge-pulse' : ''}`}
-            style={{ color: style.color, background: style.bg }}
-          >
-            {style.label}
-          </span>
+          <GradeChip grade={result.grade} className={result.grade === 'partial' ? 'badge-pulse' : ''} />
         </span>
       </div>
       {result.sBefore !== null && (
         <div className="flex items-center gap-2">
-          <div className="relative flex-1 h-1.5 border border-[var(--color-hairline)] bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] overflow-hidden">
+          <div className="relative flex-1 h-1.5 border border-[var(--color-edge)] bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] overflow-hidden">
             <div
               className="absolute inset-y-0 left-0 bg-[var(--color-ink-cool-dim)] transition-all duration-500"
               style={{ width: `${beforePct}%` }}
             />
             <div
               className="absolute inset-y-0 left-0 transition-all duration-700"
-              style={{ width: `${afterPct}%`, background: style.color }}
+              style={{ width: `${afterPct}%`, background: ink.ink }}
             />
           </div>
           <span className="label-data text-[10px] text-[var(--color-text-faint)] shrink-0">
@@ -245,12 +229,9 @@ export function GradeResultCard({
           statement per card, not three (the stability bar above keeps its own
           d-values; the chip carries interval + s movement). */}
       {chipText ? (
-        <span
-          className="label-data text-[10px] self-start px-2 py-0.5 inline-block"
-          style={{ color: style.color, background: style.bg }}
-        >
+        <GradeChip grade={result.grade} className="self-start">
           {chipText}
-        </span>
+        </GradeChip>
       ) : (
         result.intervalDays !== null && (
           <span className="text-xs text-[var(--color-text-dim)]">{nextReviewText(result.intervalDays)}</span>

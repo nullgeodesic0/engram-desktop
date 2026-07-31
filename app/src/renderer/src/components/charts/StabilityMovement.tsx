@@ -3,7 +3,7 @@ import { humanizeNodeId } from '../../../../shared/humanizeId'
 import { useChartHover } from './useChartHover'
 import { ChartTooltip } from './ChartTooltip'
 
-// Same grade→ink mapping as GradeResultCard's GRADE_STYLE (color only — this
+// Same grade→ink mapping as ritual/GradeChip's GRADE_INK (ink only — this
 // figure has no badge/background to carry).
 const GRADE_COLOR: Record<GradeResult['grade'], string> = {
   recalled: 'var(--color-ink-warm)',
