@@ -56,6 +56,7 @@ import { emitPulse, setAmbientLevel } from '../../../shared/neuralFieldBus'
 import { recordConfidence } from '../shared/calibrationStore'
 import { SessionHistoryDrawer, exportSittingTranscript } from '../components/SessionHistoryDrawer'
 import { SessionMasthead } from '../components/SessionMasthead'
+import { SummaryOverlay, makePeek } from '../components/ritual/SummaryOverlay'
 import { parseGradeResults, type GradeResult } from '../../../shared/gradeResult'
 import { MarkView, type RitualMark } from '../components/ritual/Marks'
 import { ActionChips, type SuggestedAction } from '../components/ritual/ActionChips'
@@ -421,6 +422,16 @@ export function LearnSessionView({
           scheduleMastheadCollapse()
         }
       }
+    }
+    // Closing summary: bottom edge reveals once any grades exist — the
+    // mirror of Review's own bottom-edge branch (its height holds it open).
+    // Pinned ignores the cursor. State/controller are declared at the END of
+    // the hook list (KeepMounted append rule); this handler only runs on
+    // real pointer events, long after every declaration has evaluated.
+    if (sessionGrades.length > 0 && !summaryPinned) {
+      const yFromBottom = rect.bottom - e.clientY
+      if (yFromBottom <= (summaryPeek ? 360 : 28)) summaryCtl.peek()
+      else summaryCtl.tuck()
     }
     // Ticket: left edge reveals; while out, the whole card width holds it
     // open (hysteresis); past that it tucks. A pinned ticket ignores all of it.
@@ -1511,6 +1522,21 @@ export function LearnSessionView({
   // derived list the way Review's `deriveReviewCrossings` works.
   const learnProbes = useMemo(() => allProbeHeaders(messages), [messages])
   const minimapMoments = useMemo(() => deriveInstrumentMoments({ marks, probes: learnProbes }), [marks, learnProbes])
+
+  // The closing-summary overlay's peek/pin state (ritual/SummaryOverlay) —
+  // these hooks are APPENDED at the end of the existing hook list by
+  // KeepMounted decree: this view mounts once and never remounts, so new
+  // hooks may only ever be added after every existing one, never between.
+  const [summaryPeek, setSummaryPeek] = useState(false)
+  const [summaryPinned, setSummaryPinned] = useState(false)
+  const summaryLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(
+    () => () => {
+      if (summaryLeaveTimer.current) clearTimeout(summaryLeaveTimer.current)
+    },
+    [],
+  )
+  const summaryCtl = makePeek(summaryLeaveTimer, setSummaryPeek)
   const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null)
   // Minimap Precision fix (second report on the same bug) — jumps straight to
   // the checkpoint's OWN `CheckpointAnchor`, never the host message; see
@@ -1813,18 +1839,6 @@ export function LearnSessionView({
 
       {started && (
         <div ref={setSessionPaneRef} className="flex-1 min-h-0 flex flex-col gap-4">
-          {sessionGrades.length > 0 && (
-            <div className="shrink-0">
-              <SessionCeremony
-                results={sessionGrades}
-                streakDays={streakDays}
-                commitment={commitment}
-                heading="The walk, recorded"
-                label="graded"
-              />
-            </div>
-          )}
-
           <div className="shrink-0">
             <JobsRail jobs={jobs} onOpenArtifact={(p) => window.engram.openArtifact(p)} />
           </div>
@@ -1943,6 +1957,29 @@ export function LearnSessionView({
                 )}
               </div>
             </ChatScrollRegion>
+            {/* The walk's running ceremony — no longer an inline shrink-0
+                block stealing transcript height: the shared bottom-edge
+                overlay (ritual/SummaryOverlay, same grammar as Review's
+                closing summary) holds it, revealed by the container's
+                bottom strip or the nub, pinned to stay out. */}
+            {sessionGrades.length > 0 && (
+              <SummaryOverlay
+                accent="warm"
+                pinned={summaryPinned}
+                peek={summaryPeek}
+                onPeek={summaryCtl.peek}
+                onTogglePin={() => setSummaryPinned((v) => !v)}
+                caption="the walk’s record so far"
+              >
+                <SessionCeremony
+                  results={sessionGrades}
+                  streakDays={streakDays}
+                  commitment={commitment}
+                  heading="The walk, recorded"
+                  label="graded"
+                />
+              </SummaryOverlay>
+            )}
           </div>
 
           {closedUnexpectedly && (
