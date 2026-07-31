@@ -5,11 +5,6 @@ interface TopicSettingsModalProps {
   topicId: string
   topicTitle: string
   onClose: () => void
-  /** Course Automation H1 — saves current settings (so contextFiles are on
-   * disk for the fresh session's injection to read), closes, then launches
-   * the procedure-layer extend sitting (see LearnSessionView's
-   * startPracticeExtendForTopic). Optional so other hosts can omit it. */
-  onAddPractice?: () => void
 }
 
 const EXAMPLE = 'Use LaTeX ($...$ for inline, $$...$$ for display) for every equation and mathematical expression.'
@@ -18,7 +13,7 @@ function fileName(path: string): string {
   return path.split('/').pop() ?? path
 }
 
-export function TopicSettingsModal({ topicId, topicTitle, onClose, onAddPractice }: TopicSettingsModalProps) {
+export function TopicSettingsModal({ topicId, topicTitle, onClose }: TopicSettingsModalProps) {
   const [value, setValue] = useState('')
   const [contextFiles, setContextFiles] = useState<string[]>([])
   const [targetDate, setTargetDate] = useState<string | null>(null)
@@ -54,38 +49,16 @@ export function TopicSettingsModal({ topicId, topicTitle, onClose, onAddPractice
     setContextFiles((prev) => prev.filter((p) => p !== path))
   }
 
-  async function persist(files: string[] = contextFiles) {
+  async function save() {
     setSaving(true)
     await window.engram.setTopicSettings(topicId, {
       systemPromptExtra: value.trim(),
-      contextFiles: files,
+      contextFiles,
       targetDate,
       displayTitle: displayTitle.trim() || null,
     })
     setSaving(false)
-  }
-
-  async function save() {
-    await persist()
     onClose()
-  }
-
-  // The practice flow's whole point is building from the learner's own
-  // materials — so this ALWAYS opens the file browser (pick the textbook /
-  // problem sets this extension should draw from; new picks merge with the
-  // topic's already-registered reference files). Cancelling the picker
-  // cancels the launch — predictable, even when files already exist. Files
-  // persist BEFORE the sitting spawns (the fresh session's contextFiles
-  // injection reads from disk).
-  async function addPractice() {
-    if (!onAddPractice) return
-    const picked = await window.engram.pickFiles()
-    if (picked.length === 0) return
-    const files = [...contextFiles, ...picked.filter((p) => !contextFiles.includes(p))]
-    setContextFiles(files)
-    await persist(files)
-    onClose()
-    onAddPractice()
   }
 
   return (
@@ -197,27 +170,6 @@ export function TopicSettingsModal({ topicId, topicTitle, onClose, onAddPractice
             + Add file…
           </button>
         </div>
-
-        {onAddPractice && (
-          <div className="flex flex-col gap-2">
-            <label className="text-sm text-[var(--color-text-primary)]">Problem practice</label>
-            <p className="text-xs text-[var(--color-text-faint)]">
-              Extends this topic with procedure skills for working real problems, built from the reference files
-              above (your textbook and problem sets). Reviews then serve fresh problem instances for those skills —
-              everything already learned keeps its schedule exactly as is.
-            </p>
-            <p className="fig-caption">
-              opens a file browser first — pick the textbook or problem-set files this extension should draw from.
-            </p>
-            <button
-              onClick={addPractice}
-              disabled={!loaded || saving}
-              className="focus-ring self-start text-xs text-[var(--color-ink-warm)] hover:underline disabled:opacity-40"
-            >
-              + Add problem practice…
-            </button>
-          </div>
-        )}
 
         <div className="flex flex-col gap-2">
           <label className="text-sm text-[var(--color-text-primary)]">Target date</label>

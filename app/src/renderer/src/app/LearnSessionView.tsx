@@ -268,10 +268,6 @@ interface LearnSessionViewProps {
    * open map, never switches topics — which would silently no-op a chip
    * click for any node outside whatever topic the map last had open. */
   onOpenNode?: (topicId: string, nodeId: string) => void
-  /** Course Automation H1 — hands the picked topic up to App, which runs
-   * the problem-practice extension as a BACKGROUND session (quiet status
-   * chip, never a foreground sitting in this view). */
-  onStartPracticeExtend?: (topic: TopicListEntry) => void
 }
 
 export function LearnSessionView({
@@ -282,7 +278,6 @@ export function LearnSessionView({
   onGoReview,
   openNewTopicSignal,
   onOpenNode,
-  onStartPracticeExtend,
 }: LearnSessionViewProps = {}) {
   // Topic-list state
   const [topics, setTopics] = useState<TopicListEntry[] | null>(null)
@@ -2062,12 +2057,6 @@ export function LearnSessionView({
             // app restarts. getTopicsCached applies the rename overlay per
             // call, so one refetch is all it takes.
             refreshTopics()
-          }}
-          // H1 — persist-then-launch: the modal saves (so the fresh session's
-          // contextFiles injection reads today's files), closes, and App runs
-          // the extension in the background for the SAME topic.
-          onAddPractice={() => {
-            if (settingsFor) onStartPracticeExtend?.(settingsFor)
           }}
         />
       )}

@@ -15,7 +15,6 @@ interface ReceiptLine {
   capstone?: boolean
   interval_days?: number
   due_next?: string
-  node_kind?: string
 }
 
 export interface ReceiptItem {
@@ -74,12 +73,6 @@ export interface RawReceipt {
    * engine's own literal scheduled date, not a reconstruction from
    * `intervalDays` + an assumed anchor date. */
   dueNext: string | null
-  /** engram.py's `node_kind` — the knowledge kind of the node this receipt
-   * graded ('concept' | 'procedure' | 'fact'), stamped sparsely by the
-   * engine (absent on most historical rows). The homework grade component
-   * filters procedure receipts on it; null means unknown/legacy, never
-   * assume concept. */
-  nodeKind: string | null
 }
 
 export interface ReceiptsHistory {
@@ -171,7 +164,6 @@ export async function readReceiptsHistory(): Promise<ReceiptsHistory> {
           capstone: entry.capstone === true,
           intervalDays: typeof entry.interval_days === 'number' ? entry.interval_days : null,
           dueNext: typeof entry.due_next === 'string' ? entry.due_next : null,
-          nodeKind: typeof entry.node_kind === 'string' ? entry.node_kind : null,
         })
 
         const entryDate = new Date(`${entry.ts}T00:00:00Z`)

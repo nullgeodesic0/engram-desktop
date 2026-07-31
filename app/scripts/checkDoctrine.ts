@@ -440,17 +440,7 @@ for (const f of FILES) {
 // navigational voice ("I picked one open misconception from my ledger"),
 // deferring to the skill for the rest of the sitting. Verified captured
 // un-truncated by the printed current-set.
-// 2026-07-30 re-pin (Course Automation H1): the procedure-layer extend
-// kickoff — the learner asking, in their own navigational voice, for
-// problem-practice skills added to a topic they picked, drawing on the
-// topic's registered reference files. The extend mechanics (add-topic
-// --extend, node authoring) are entirely the plugin's; nothing here says
-// how to teach or judge. Verified captured un-truncated by the printed
-// current-set; D4-blindness-regex-clean.
-// Same-day follow-up: the extend kickoff moved from LearnSessionView to
-// App.tsx (the extension now runs as a BACKGROUND session with a status
-// chip, never a foreground sitting) — byte-identical text, new file prefix.
-const PINNED_MESSAGE_HASH = '6df91b317fe60cc8'
+const PINNED_MESSAGE_HASH = '7a9b482dbd1030a7'
 if (sha(injectedMessages.sort().join('\n')) !== PINNED_MESSAGE_HASH) {
   fail(
     'D3.kickoff',
