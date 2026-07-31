@@ -57,10 +57,18 @@
   --color-text-dim: #8b8878;
   --color-text-faint: #545248;
 
-  --font-display: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
-  --font-serif: 'Fraunces', Georgia, serif;
-  --font-body: 'Inter', ui-sans-serif, system-ui, sans-serif;
-  --font-data: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+  /* Type system (user's explicit mapping, 2026-07-30): Neue Haas Grotesk =
+     important text/titles/important numbers/grades; Futura = general text,
+     names, labels; Epoca Pro Medium Italic = italics, flavor text,
+     descriptions. The previously-bundled faces (Space Grotesk / Inter /
+     Fraunces) stay in each stack as fallbacks so a machine without the
+     commercial fonts installed degrades to the app's old look, never to
+     browser defaults. Futura ships with macOS, so that bucket always
+     activates. */
+  --font-display: 'Neue Haas Grotesk Display Pro', 'Neue Haas Grotesk Text Pro', 'Neue Haas Grotesk', 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+  --font-serif: 'Epoca Pro', 'Fraunces', Georgia, serif;
+  --font-body: 'Futura', 'Futura PT', 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-data: 'Futura', 'Futura PT', ui-monospace, 'SF Mono', Menlo, monospace;
 
   /* Type scale — the app's five text roles. Use these instead of ad-hoc sizes
      for headings/captions; body copy may still use Tailwind text-sm etc. */
@@ -872,6 +880,9 @@
   .fig-caption {
     font-family: var(--font-serif);
     font-style: italic;
+    /* Epoca Pro MEDIUM Italic, per the type mapping — the fallback serif
+       renders its nearest weight. */
+    font-weight: 500;
     font-size: var(--text-caption);
     color: var(--color-text-dim);
     letter-spacing: 0.01em;
@@ -893,7 +904,10 @@
      for real, the user flagged the change — the clean geometric number IS the
      design they approved. Codified here on purpose; do not "fix" it to serif. */
   .figure-display {
-    font-family: var(--font-body);
+    /* Was pinned to the body face by an earlier decree; superseded by the
+       explicit 2026-07-30 type mapping — important numbers and grades set
+       in Neue Haas Grotesk (the display face). */
+    font-family: var(--font-display);
     font-size: 3.5rem;
     line-height: 1;
   }
@@ -921,7 +935,8 @@
     color: var(--color-text-dim);
   }
   .banner-count {
-    font-family: var(--font-data);
+    /* A number readout, not a label — display face per the type mapping. */
+    font-family: var(--font-display);
     font-size: 10px;
     letter-spacing: 0.15em;
     color: var(--color-text-faint);
@@ -1088,7 +1103,9 @@
     display: inline-flex;
     align-items: baseline;
     gap: 0.15em;
-    font-family: var(--font-data);
+    /* Important numbers → the display face, per the type mapping. */
+    font-family: var(--font-display);
+    font-variant-numeric: tabular-nums;
   }
   .stat-fraction .frac-n {
     color: var(--color-text-primary);
@@ -1108,7 +1125,8 @@
   .field-count-n {
     color: var(--color-text-primary);
     font-weight: 600;
-    font-family: var(--font-data);
+    /* Important numbers → the display face, per the type mapping. */
+    font-family: var(--font-display);
   }
 
   /* Multi-clause aggregate field value (e.g. ticket rows like
@@ -1121,7 +1139,8 @@
   .field-clause-n {
     color: var(--color-text-primary);
     font-weight: 500;
-    font-family: var(--font-data);
+    /* Important numbers → the display face, per the type mapping. */
+    font-family: var(--font-display);
     font-variant-numeric: tabular-nums;
   }
 
@@ -1135,6 +1154,8 @@
   .detail-subtitle {
     font-family: var(--font-serif);
     font-style: italic;
+    /* Epoca Pro MEDIUM Italic, per the type mapping. */
+    font-weight: 500;
     color: var(--color-text-dim);
   }
   .detail-footer {
