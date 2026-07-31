@@ -120,7 +120,16 @@ const PINNED_READ_ONLY_COMMANDS = [
   'grader-health', 'topic-status', 'doctor', 'path', 'model',
 ]
 const PINNED_READ_ONLY_SUBCOMMANDS = ['misconception', 'list', 'experiment', 'status', 'list']
-const PINNED_DIRECT_MUTATION = ['visuals', 'focus', 'commit']
+// 2026-07-30 re-pin (3 → 4): `misconception` joins the mutation door,
+// action-gated to `resolve` only (see D1.mutationGate below). Rationale:
+// `misconception resolve` is engine-proven pure ledger — FSRS, scheduling,
+// and verdicts never read misconceptions.json, so no graph, receipt, stash,
+// or schedule is touched and no memory record the engine didn't mint is
+// fabricated; the flip completes a loop the plugin's own docs already
+// assume (03-architecture.md's "schedule early re-test", artifact-smith's
+// "misconception resolved") but that no skill ever instructs. `add` stays
+// session-only — a fabricated observation.
+const PINNED_DIRECT_MUTATION = ['visuals', 'focus', 'commit', 'misconception']
 // Subcommands invoked by readOnly.ts's own bespoke helpers, which bypass
 // engramRead's allowlist because their output isn't JSON (or needs post-
 // processing). All read-only; every one of them is named here on purpose.
@@ -154,6 +163,17 @@ if (!eq(dm, PINNED_DIRECT_MUTATION)) {
     'D1.mutation',
     `DIRECT_MUTATION_COMMANDS changed.\n      pinned: ${PINNED_DIRECT_MUTATION.join(', ')} (+ the 'model' special case)\n      found:  ${dm.join(', ')}`,
     'The one sanctioned exception to “no direct writes” is settings-shaped key/value writes the plugin’s own skills already treat as user-invocable outside a session. Anything that touches a graph, a receipt, the stash, or a schedule must go through a live driven session instead — a receipt the engine did not mint is a fabricated memory record.',
+  )
+}
+
+// The misconception mutation door must stay action-gated to resolve —
+// the command-level allowlist alone would let `misconception add` (a
+// fabricated observation no sitting produced) through the same door.
+if (!readOnlyTs.includes("args[0] !== 'resolve'")) {
+  fail(
+    'D1.mutationGate',
+    `readOnly.ts lost the misconception action gate (args[0] !== 'resolve').`,
+    'The direct-mutation allowlist admits the misconception COMMAND for the sake of its resolve action alone: resolve is a pure status flip on a row the engine itself minted, while add would fabricate a ledger entry no sitting observed. The in-function gate is what narrows the command to the action.',
   )
 }
 
@@ -230,6 +250,8 @@ const PINNED_WRITERS: Record<string, string> = {
   'main/session/exportMap.ts': 'user-chosen export path (dialog) + os tmpdir — the map-as-PDF sibling of exportSitting.ts, reusing its renderPrintHtmlToPdf pipeline',
   'main/session/backup.ts': 'THE blessed exception: backup archives, and restore into the learning home (see D2.backupGate)',
   'main/session/crashLog.ts': 'app userData — local crash-log.jsonl, capped at 200 entries',
+  'main/session/misconceptionResolves.ts':
+    'app userData — manual misconception-resolve provenance (display-only; the engine status is the grade)',
 }
 
 /** The only module allowed to name the learning home on a write. */
