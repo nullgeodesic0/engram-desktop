@@ -2,7 +2,7 @@ import { memo } from 'react'
 import type { RatingSegment, ScheduleSegment, ConfidenceSegment } from '../../../../shared/verdictSegments'
 import { GRADE_OF_RATING } from '../../../../shared/gradeResult'
 import { MathRenderer } from '../MathRenderer'
-import { GRADE_STYLE } from '../GradeResultCard'
+import { GradeChip } from './GradeChip'
 
 /** Verdict Anatomy's quiet rows — margin notes, not containers. Where
  * `CanonicalPlate` gets a full plate because the reveal is the fixed,
@@ -10,6 +10,12 @@ import { GRADE_STYLE } from '../GradeResultCard'
  * GradeResultCard rendered in the same region, or nothing at all yet) —
  * these just give the tutor's own already-graded language a settled,
  * de-emphasized place instead of reading as one more paragraph of prose. */
+
+/** The margin-note seat every row shares — a hairline left rule + indent
+ * (designed-but-quiet, hairline not edge: these are interior notes, still
+ * subordinate to CanonicalPlate's full bordered plate) so the whole verdict
+ * family hangs off one common text edge instead of four loose paddings. */
+const NOTE_SEAT = 'border-l border-[var(--color-hairline)] pl-3'
 
 /** The region's first `prose` segment gets this eyebrow immediately above
  * it (never wrapping it — PlainDialogueBlock renders completely untouched
@@ -19,7 +25,7 @@ import { GRADE_STYLE } from '../GradeResultCard'
  * not a family of them. */
 export const VerdictEyebrowRail = memo(function VerdictEyebrowRail() {
   return (
-    <div className="flex items-center gap-3 pl-1">
+    <div className={`flex items-center gap-3 ${NOTE_SEAT}`}>
       <span className="label-data text-[10px] tracking-[0.14em] text-[var(--color-ink-warm)] shrink-0">VERDICT</span>
       <span className="h-px w-6 shrink-0 bg-[var(--color-hairline)]" aria-hidden="true" />
     </div>
@@ -37,21 +43,17 @@ const RATING_PREFIX_RE = /^Rating \*\*(again|hard|good|easy)\*\*/
 /** The tutor's own `Rating **good**` declaration, echoed as a full line —
  * every word of `segment.raw` still renders, via MathRenderer, so nothing
  * is lost — but the rating word itself swaps out MathRenderer's plain
- * `**bold**` for the same color-coded pill GradeResultCard's own badge
- * uses (`GRADE_STYLE`, resolved from `rating` via the engine's own
+ * `**bold**` for the same color-coded chip GradeResultCard's own badge
+ * uses (`GradeChip`, resolved from `rating` via the engine's own
  * `GRADE_OF_RATING` table), so the echo visually rhymes with the real grade
  * card sitting in the same region rather than reading as one more line of
  * plain prose. */
 export const RatingEchoRow = memo(function RatingEchoRow({ segment }: { segment: RatingSegment }) {
   const trimmed = segment.raw.trim()
-  const style = GRADE_STYLE[GRADE_OF_RATING[segment.rating]]
   const badge = (
-    <span
-      className="label-data text-[10px] px-2 py-0.5 inline-block shrink-0"
-      style={{ color: style.color, background: style.bg }}
-    >
+    <GradeChip grade={GRADE_OF_RATING[segment.rating]} className="shrink-0">
       {segment.rating}
-    </span>
+    </GradeChip>
   )
   const match = RATING_PREFIX_RE.exec(trimmed)
   // Should always match (see the comment on RATING_PREFIX_RE above) — the
@@ -59,7 +61,7 @@ export const RatingEchoRow = memo(function RatingEchoRow({ segment }: { segment:
   // badge swap, rather than silently dropping the line.
   const after = match ? trimmed.slice(match[0].length) : trimmed
   return (
-    <div className="flex items-center gap-2 flex-wrap pl-1">
+    <div className={`flex items-center gap-2 flex-wrap ${NOTE_SEAT}`}>
       <span className="label-data text-[10px] tracking-[0.1em] text-[var(--color-text-faint)] shrink-0">Rating</span>
       {badge}
       {after.trim() && (
@@ -93,8 +95,12 @@ function ClockGlyph() {
  * a small faint caption rather than a full prose paragraph. */
 export const ScheduleEchoRow = memo(function ScheduleEchoRow({ segment }: { segment: ScheduleSegment }) {
   return (
-    <div className="flex items-start gap-2 pl-1">
-      <ClockGlyph />
+    <div className={`flex items-start gap-2 ${NOTE_SEAT}`}>
+      {/* Fixed-width glyph seat so this row's text starts on the same edge
+          as the label-led rows above/below it. */}
+      <span className="w-4 flex justify-center shrink-0" aria-hidden="true">
+        <ClockGlyph />
+      </span>
       <MathRenderer
         text={segment.raw.trim()}
         className="label-data text-[10px] text-[var(--color-text-faint)] leading-relaxed"
@@ -114,7 +120,7 @@ export const ScheduleEchoRow = memo(function ScheduleEchoRow({ segment }: { segm
  * would otherwise have carried alone. */
 export const ConfidenceEchoRow = memo(function ConfidenceEchoRow({ segment }: { segment: ConfidenceSegment }) {
   return (
-    <div className="flex flex-col gap-1 pl-1">
+    <div className={`flex flex-col gap-1 ${NOTE_SEAT}`}>
       <span className="label-data text-[10px] tracking-[0.14em] text-[var(--color-ink-cool)] shrink-0">CONFIDENCE</span>
       <MathRenderer text={segment.raw.trim()} className="voice-serif text-sm text-[var(--color-text-dim)]" />
     </div>
