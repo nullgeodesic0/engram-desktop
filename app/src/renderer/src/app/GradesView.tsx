@@ -155,22 +155,24 @@ const KIND_LABEL: Record<AssignmentRow['kind'], string> = {
  * numbers, not a second weighted score of its own.
  *
  * When the event's own sitting could be resolved from the topic's
- * provenance index (`sessionId` non-null), the whole row becomes a LINK to
- * that conversation — a small tilt card whose kind label carries the app's
- * cool link ink and an ↗, opening the sitting in the session drawer. An
- * event whose transcript couldn't be located renders as the plain static
- * row rather than a dead link. */
+ * provenance index (`sitting` non-null), the whole row becomes a LINK to
+ * that conversation — its kind label carries the app's cool link ink and an
+ * ↗, opening the sitting in the session drawer AND scrolling to the event's
+ * own transcript anchor, so the link lands on the part of the conversation
+ * about this node rather than the top of the sitting. An event whose
+ * transcript couldn't be located renders as the plain static row rather
+ * than a dead link. */
 function AssignmentRowView({
   row,
-  sessionId,
+  sitting,
   onGoSitting,
 }: {
   row: AssignmentRow
-  sessionId: string | null
-  onGoSitting?: (sessionId: string) => void
+  sitting: { sessionId: string; anchor: number } | null
+  onGoSitting?: (sessionId: string, anchor?: number) => void
 }) {
   const tone = row.outcome === 'unstarted' ? 'text-[var(--color-text-faint)]' : letterColorClass(row.letter)
-  const linked = sessionId !== null && onGoSitting !== undefined
+  const linked = sitting !== null && onGoSitting !== undefined
   const right = (
     <div className="flex items-center gap-3 shrink-0">
       {row.date && <span className="label-data text-[10px] text-[var(--color-text-faint)]">{formatAssignmentDate(row.date)}</span>}
@@ -182,9 +184,13 @@ function AssignmentRowView({
   if (linked) {
     return (
       <button
-        onClick={() => onGoSitting(sessionId)}
+        onClick={() => onGoSitting(sitting.sessionId, sitting.anchor)}
         title="Open this sitting's conversation"
-        className="focus-ring tilt-card-rail w-full flex items-center justify-between gap-3 py-1.5 px-2 -mx-2 text-left hover:bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] transition-colors duration-[var(--dur-fast)]"
+        // No per-row tilt: a stack of many small event rows each leaning on
+        // its own axis reads as jitter, not physics — the enclosing group
+        // card already carries the tilt for the whole family. Shape/style
+        // (link ink, hover wash, alignment) unchanged.
+        className="focus-ring w-full flex items-center justify-between gap-3 py-1.5 px-2 -mx-2 text-left hover:bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] transition-colors duration-[var(--dur-fast)]"
       >
         <span className="label-data text-[10px] uppercase tracking-wide text-[var(--color-ink-cool)] shrink-0">
           {KIND_LABEL[row.kind]} ↗
@@ -224,8 +230,8 @@ function AssignmentGroupView({
   onToggle: () => void
   /** Row → the sessionId of the sitting that produced it, or null when the
    * topic's provenance index has no matching transcript event. */
-  resolveSession: (row: AssignmentRow) => string | null
-  onGoSitting?: (sessionId: string) => void
+  resolveSession: (row: AssignmentRow) => { sessionId: string; anchor: number } | null
+  onGoSitting?: (sessionId: string, anchor?: number) => void
 }) {
   const graded = rows.filter((r) => r.outcome !== 'unstarted')
   const recalled = graded.filter((r) => r.outcome === 'recalled').length
@@ -279,7 +285,7 @@ function AssignmentGroupView({
       {expanded && (
         <div className="border-t border-[var(--color-hairline)] px-3 pl-[30px] flex flex-col divide-y divide-[var(--color-hairline)]">
           {rows.map((row) => (
-            <AssignmentRowView key={row.key} row={row} sessionId={resolveSession(row)} onGoSitting={onGoSitting} />
+            <AssignmentRowView key={row.key} row={row} sitting={resolveSession(row)} onGoSitting={onGoSitting} />
           ))}
         </div>
       )}
@@ -351,7 +357,7 @@ const COMPONENT_ORDER: GradeComponentKey[] = ['recall', 'punctuality', 'coverage
  * on both the roster and the drilldown — not two independent controls —
  * since it's the same underlying question ("count unfinished work against
  * me or not") regardless of which screen is showing it. */
-export function GradesView({ onGoSitting }: { onGoSitting?: (sessionId: string) => void } = {}) {
+export function GradesView({ onGoSitting }: { onGoSitting?: (sessionId: string, anchor?: number) => void } = {}) {
   const [topics, setTopics] = useState<TopicListEntry[] | null>(null)
   const [receipts, setReceipts] = useState<RawReceipt[] | null>(null)
   const [misconceptions, setMisconceptions] = useState<Misconception[] | null>(null)
@@ -456,7 +462,7 @@ export function GradesView({ onGoSitting }: { onGoSitting?: (sessionId: string) 
     // its review events); same-date fallback covers kind-ambiguous days.
     // Null (unlinked row) whenever no transcript event matches — an honest
     // plain row beats a dead link.
-    const resolveSession = (row: AssignmentRow): string | null => {
+    const resolveSession = (row: AssignmentRow): { sessionId: string; anchor: number } | null => {
       if (!row.date || !provenance) return null
       const p = provenance[row.node]
       if (!p) return null
@@ -464,7 +470,10 @@ export function GradesView({ onGoSitting }: { onGoSitting?: (sessionId: string) 
       const kindMatch = events.find(
         (e) => e.date === row.date && (row.kind === 'encode' ? e.kind !== 'review' : e.kind === 'review'),
       )
-      return (kindMatch ?? events.find((e) => e.date === row.date))?.sessionId ?? null
+      const hit = kindMatch ?? events.find((e) => e.date === row.date)
+      // The event's `anchor` (its transcript-line index) rides along so the
+      // drawer can land on the node's own moment, not the sitting's top.
+      return hit ? { sessionId: hit.sessionId, anchor: hit.anchor } : null
     }
     return (
       <div className="h-full overflow-y-auto p-8 flex flex-col gap-4 w-full">
