@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { PinTackIcon } from '../components/ui/PinTackIcon'
-import type { DueItem, ExportSittingFormat } from '../../../shared/types'
+import type { DueItem, ExportSittingFormat, Misconception } from '../../../shared/types'
 import type { SessionEvent } from '../../../shared/sessionEvents'
 import { RateLimitBanner } from '../components/RateLimitBanner'
 import { isBlockingRateLimitStatus } from '../../../shared/rateLimit'
@@ -119,11 +119,16 @@ interface ReviewSessionViewProps {
   /** Reports live-session state up to App.tsx so the sidebar nav can show an
    * ink-dot ("a session is alive in there") while this view isn't the active tab. */
   onActivity?: (a: { active: boolean; busy: boolean }) => void
-  /** Masthead "← Home" — leaves this view for the main page (the session, if
-   * one is live, keeps running; this view stays mounted via KeepMounted). */
+  /** Ledger "Re-test" deep-link (consume-and-clear, the same idiom as App's
+   * other deepLink props — NOT the signal-counter idiom, which deliberately
+   * ignores mount-time values and this view may be mounting for the first
+   * time when the request fires): a targeted fresh sitting over this one
+   * misconception. App gates the button while a review session is live. */
+  retestRequest?: Misconception | null
+  onRetestConsumed?: () => void
 }
 
-export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
+export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed }: ReviewSessionViewProps = {}) {
   const [phase, setPhase] = useState<Phase>('loading')
   const [queue, setQueue] = useState<DueItem[]>([])
   const [sessionId, setSessionId] = useState<string | null>(null)
@@ -657,7 +662,7 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
     }
   }
 
-  async function startSession(resume: boolean) {
+  async function startSession(resume: boolean, retest?: Misconception) {
     // Chat Presence Wave D — live-only, no replay obligation: a resumed
     // session's activity starts fresh at `idle` here, same as a brand-new
     // one, regardless of how much history the transcript hydration below
@@ -777,7 +782,16 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
     // blocks on a ledger read. The template stays under the kickoff hash
     // collector's 400-char/no-backtick net and clear of the blindness regex.
     let kickoff = '/engram:review'
-    if (!resume) {
+    if (!resume && retest) {
+      // The ledger's targeted re-test: name the one row and the engine's
+      // resolve verb, then defer to the skill for the rest of the sitting.
+      // Same collector constraints as the digest below.
+      kickoff = `/engram:review
+
+Re-test request — I picked one open misconception from my ledger in the app and want this sitting to cover it:
+[${retest.id}] topic "${retest.topic}", node "${retest.node}": ${retest.description}
+It is filed open; "misconception resolve --id ${retest.id}" records a demonstrated correction. Please also run the normal review flow for whatever is due.`
+    } else if (!resume) {
       try {
         const [dueAll, ledger] = await Promise.all([window.engram.due(), window.engram.misconceptions()])
         const queueTopics = new Set(dueAll.map((d) => d.topic))
@@ -1203,6 +1217,18 @@ These are filed open for this queue's nodes; "misconception resolve --id <ID>" r
     }
     setDetachedFromSitting(false)
   }
+  // Ledger "Re-test" arrival: start the targeted sitting once the view is in
+  // an actionable phase. Deferred (not consumed) while still loading;
+  // consumed WITHOUT starting if a session turns out to be live (App gates
+  // the button, this is belt-and-suspenders). Appended hook (KeepMounted
+  // append rule).
+  useEffect(() => {
+    if (!retestRequest || phase === 'loading') return
+    onRetestConsumed?.()
+    if (phase === 'in-session') return
+    startSession(false, retestRequest)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [retestRequest, phase])
   // Minimap Precision fix (second report on the same bug) — jumps straight to
   // the checkpoint's OWN `CheckpointAnchor`, never the host message; see
   // shared/jumpToCheckpoint.ts's doctrine comment for the full root-cause

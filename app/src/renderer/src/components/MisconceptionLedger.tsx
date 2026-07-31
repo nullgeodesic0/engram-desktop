@@ -5,7 +5,7 @@ import { Modal } from './ui/Modal'
 import { SkeletonBar } from './Skeleton'
 import { friendlyErrorText } from '../shared/friendlyError'
 import { MathRenderer } from './MathRenderer'
-import { CTRL_QUIET } from '../shared/controlChrome'
+import { CTRL_QUIET, ctrlFilled } from '../shared/controlChrome'
 
 /** `ts` is a local YYYY-MM-DD string (engram.py's own `date.today()`) — parsed
  * without a `Z` suffix so it reads as local midnight, same discipline every
@@ -49,15 +49,25 @@ function Row({
   row,
   onGoNode,
   onResolve,
+  onRetest,
   resolveDisabledReason,
+  retestDisabledReason,
   manual,
 }: {
   row: Misconception
   onGoNode?: (topicId: string, nodeId: string) => void
   /** Present only on open rows when the ledger's resolve path is wired. */
   onResolve?: (id: string) => Promise<void>
-  /** Non-null disables the resolve affordance with this title text. */
+  /** The earned path — launches a targeted review sitting on this row.
+   * Visually primary (filled cool, Review's environment accent) beside the
+   * quieter manual resolve. */
+  onRetest?: (row: Misconception) => void
+  /** Non-null disables the manual-resolve affordance with this title text
+   * (any live session — the tutor's delivered ledger view must not race). */
   resolveDisabledReason?: string | null
+  /** Non-null disables Re-test only (a live REVIEW sitting — review sittings
+   * may otherwise start freely, e.g. alongside a live Learn session). */
+  retestDisabledReason?: string | null
   /** Manual-resolve provenance for this row, when it exists. */
   manual?: { date: string }
 }) {
@@ -115,9 +125,19 @@ function Row({
   return (
     <div className="tilt-card panel px-3 py-2.5 flex items-start justify-between gap-3">
       {bodySeat}
-      {onResolve && row.status === 'open' && (
+      {(onResolve || onRetest) && row.status === 'open' && (
         <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
-          {confirming ? (
+          {onRetest && !confirming && (
+            <button
+              onClick={() => onRetest(row)}
+              disabled={retestDisabledReason != null}
+              className={`${ctrlFilled('cool')} disabled:opacity-40`}
+              title={retestDisabledReason ?? 'Launch a review sitting targeted at this misconception'}
+            >
+              Re-test
+            </button>
+          )}
+          {onResolve && confirming ? (
             <>
               <button
                 onClick={confirmResolve}
@@ -131,7 +151,7 @@ function Row({
                 Cancel
               </button>
             </>
-          ) : (
+          ) : onResolve ? (
             <button
               onClick={() => setConfirming(true)}
               disabled={resolveDisabledReason != null}
@@ -140,7 +160,7 @@ function Row({
             >
               Mark resolved
             </button>
-          )}
+          ) : null}
         </div>
       )}
     </div>
@@ -166,6 +186,8 @@ export function MisconceptionLedger({
   onClose,
   onGoNode,
   onResolved,
+  onRetest,
+  reviewSessionLive,
 }: {
   open: boolean
   onClose: () => void
@@ -173,6 +195,12 @@ export function MisconceptionLedger({
   /** Fired after a manual resolve lands, so hosts can refresh their own
    * misconception-derived surfaces (Coach's teaser count, grades). */
   onResolved?: () => void
+  /** The earned path — closes the ledger and launches a review sitting
+   * targeted at the row (App's retest deep-link). */
+  onRetest?: (row: Misconception) => void
+  /** True while a review sitting is live (App's activity state) — gates
+   * Re-test only; manual resolve gates on ANY live session separately. */
+  reviewSessionLive?: boolean
 }) {
   const [rows, setRows] = useState<Misconception[] | null>(null)
   const [manualResolves, setManualResolves] = useState<Record<string, { date: string }>>({})
@@ -223,6 +251,7 @@ export function MisconceptionLedger({
   }
 
   const resolveDisabledReason = sessionLive ? 'a sitting is live — finish it first' : null
+  const retestDisabledReason = reviewSessionLive ? 'a review sitting is already live' : null
 
   return (
     <Modal open={open} onClose={onClose} title="Misconceptions" wide>
@@ -276,7 +305,16 @@ export function MisconceptionLedger({
                       row={row}
                       onGoNode={onGoNode ? goto : undefined}
                       onResolve={resolve}
+                      onRetest={
+                        onRetest
+                          ? (r) => {
+                              onClose()
+                              onRetest(r)
+                            }
+                          : undefined
+                      }
                       resolveDisabledReason={resolveDisabledReason}
+                      retestDisabledReason={retestDisabledReason}
                     />
                   ))}
                 </div>

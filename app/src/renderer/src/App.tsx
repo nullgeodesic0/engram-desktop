@@ -11,6 +11,7 @@ import { TitleBar } from './components/TitleBar'
 import { SkeletonBar, SkeletonGrid } from './components/Skeleton'
 import { HelpSheet } from './components/HelpSheet'
 import { useCardPhysics } from './components/useCardPhysics'
+import type { Misconception } from '../../shared/types'
 
 // Code-split: both views unmount on tab switch already (they're not inside
 // KeepMounted — see the comment on `main` below), so there's no "resolve once,
@@ -133,6 +134,10 @@ export default function App() {
   // own default "most recent" behavior instead of re-landing on a stale sitting.
   const [historyDeepLinkSession, setHistoryDeepLinkSession] = useState<string | null>(null)
   const [historyDeepLinkAnchor, setHistoryDeepLinkAnchor] = useState<number | null>(null)
+  // Ledger "Re-test" — consume-and-clear deep-link into ReviewSessionView
+  // (the deepLink idiom, not the signal-counter one: Review may be mounting
+  // for the first time when this fires and must still see it).
+  const [retestRequest, setRetestRequest] = useState<Misconception | null>(null)
   const [deepLinkTopic, setDeepLinkTopic] = useState<string | null>(null)
   const [deepLinkNode, setDeepLinkNode] = useState<{ topicId: string; nodeId: string } | null>(null)
   // Tutor-initiated nudge to a specific node — pans the map if we're already
@@ -357,6 +362,8 @@ export default function App() {
             <KeepMounted active={view === 'review'}>
               <ReviewSessionView
                 onActivity={(a) => setActivity((prev) => ({ ...prev, review: a }))}
+                retestRequest={retestRequest}
+                onRetestConsumed={() => setRetestRequest(null)}
               />
             </KeepMounted>
           )}
@@ -381,6 +388,11 @@ export default function App() {
                 onGoNode={goToNode}
                 onGoArtifacts={() => setView('artifacts')}
                 coachHomeSignal={coachHomeSignal}
+                onRetestMisconception={(row) => {
+                  setRetestRequest(row)
+                  goToView('review')
+                }}
+                reviewSessionLive={activity.review.active}
               />
             </KeepMounted>
           )}
