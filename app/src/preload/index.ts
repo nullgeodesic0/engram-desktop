@@ -87,17 +87,17 @@ const engramApi = {
 
   startSession: (
     initialMessage: string,
-    kind: 'learn' | 'review' | 'coach',
+    kind: 'learn' | 'review' | 'coach' | 'homework',
     topicId?: string,
   ): Promise<{ sessionId: string }> => ipcRenderer.invoke('session:start', initialMessage, kind, topicId),
   resumeSession: (
     initialMessage: string,
-    kind: 'learn' | 'review' | 'coach',
+    kind: 'learn' | 'review' | 'coach' | 'homework',
     topicId?: string,
   ): Promise<{ sessionId: string }> => ipcRenderer.invoke('session:resume', initialMessage, kind, topicId),
-  lastSessionFor: (kind: 'learn' | 'review' | 'coach', topicId?: string): Promise<string | null> =>
+  lastSessionFor: (kind: 'learn' | 'review' | 'coach' | 'homework', topicId?: string): Promise<string | null> =>
     ipcRenderer.invoke('session:lastFor', kind, topicId),
-  sessionHistoryFor: (kind: 'learn' | 'review' | 'coach', topicId?: string): Promise<SessionIndexEntry[]> =>
+  sessionHistoryFor: (kind: 'learn' | 'review' | 'coach' | 'homework', topicId?: string): Promise<SessionIndexEntry[]> =>
     ipcRenderer.invoke('session:historyFor', kind, topicId),
   getTranscript: (sessionId: string): Promise<unknown[]> => ipcRenderer.invoke('session:transcript', sessionId),
   exportSitting: (req: ExportSittingRequest): Promise<ExportSittingResult> => ipcRenderer.invoke('session:export', req),
