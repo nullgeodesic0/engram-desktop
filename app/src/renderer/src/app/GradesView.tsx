@@ -81,14 +81,22 @@ function SubgradeTile({
   gradeKey,
   component,
   sparkline,
+  onOpen,
 }: {
   gradeKey: GradeComponentKey
   component: ComponentGrade
   sparkline?: WeekRetention[]
+  /** Renders the tile as a click target (the Conceptual Health tile opens
+   * the misconception ledger) — same anatomy, button semantics. */
+  onOpen?: () => void
 }) {
   const meta = COMPONENT_META[gradeKey]
+  const Tag = onOpen ? 'button' : 'div'
   return (
-    <div className="tilt-card panel px-4 py-3 flex flex-col gap-1 min-w-0">
+    <Tag
+      onClick={onOpen}
+      className={`tilt-card panel px-4 py-3 flex flex-col gap-1 min-w-0 ${onOpen ? 'focus-ring text-left w-full hover:border-[var(--color-text-faint)] transition-colors' : ''}`}
+    >
       <div className="flex items-baseline justify-between gap-2">
         <div className="text-xs text-[var(--color-text-dim)] uppercase tracking-wide">{meta.label}</div>
         <div className="label-data text-[10px] text-[var(--color-text-faint)] shrink-0">{Math.round(component.weight * 100)}% of grade</div>
@@ -103,7 +111,7 @@ function SubgradeTile({
         </div>
       )}
       <div className="fig-caption mt-1">{meta.description}</div>
-    </div>
+    </Tag>
   )
 }
 
@@ -357,7 +365,7 @@ const COMPONENT_ORDER: GradeComponentKey[] = ['recall', 'punctuality', 'coverage
  * on both the roster and the drilldown — not two independent controls —
  * since it's the same underlying question ("count unfinished work against
  * me or not") regardless of which screen is showing it. */
-export function GradesView({ onGoSitting }: { onGoSitting?: (sessionId: string, anchor?: number) => void } = {}) {
+export function GradesView({ onGoSitting, onOpenLedger }: { onGoSitting?: (sessionId: string, anchor?: number) => void; onOpenLedger?: () => void } = {}) {
   const [topics, setTopics] = useState<TopicListEntry[] | null>(null)
   const [receipts, setReceipts] = useState<RawReceipt[] | null>(null)
   const [misconceptions, setMisconceptions] = useState<Misconception[] | null>(null)
@@ -520,6 +528,9 @@ export function GradesView({ onGoSitting }: { onGoSitting?: (sessionId: string, 
               gradeKey={key}
               component={openGrade.components[key]}
               sparkline={key === 'recall' ? recallSparkline : undefined}
+              // The Conceptual Health tile is the one whose evidence lives in
+              // another surface — clicking it opens the ledger itself.
+              onOpen={key === 'conceptual' ? onOpenLedger : undefined}
             />
           ))}
         </div>

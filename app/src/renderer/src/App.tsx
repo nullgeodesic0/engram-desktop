@@ -10,6 +10,7 @@ import { SessionHistoryDrawer, ALL_HISTORY_KEY } from './components/SessionHisto
 import { TitleBar } from './components/TitleBar'
 import { SkeletonBar, SkeletonGrid } from './components/Skeleton'
 import { HelpSheet } from './components/HelpSheet'
+import { MisconceptionLedger } from './components/MisconceptionLedger'
 import { useCardPhysics } from './components/useCardPhysics'
 import type { Misconception } from '../../shared/types'
 
@@ -138,6 +139,12 @@ export default function App() {
   // (the deepLink idiom, not the signal-counter one: Review may be mounting
   // for the first time when this fires and must still see it).
   const [retestRequest, setRetestRequest] = useState<Misconception | null>(null)
+  // App-level ledger instance — Grades' conceptual tile and the palette open
+  // it from outside Coach; both instances are closed by default and fetch
+  // only when opened, so the double-mount is free. Coach keeps its own.
+  const [ledgerOpen, setLedgerOpen] = useState(false)
+  // Bumped after any manual resolve so Coach's KeepMounted fetches re-run.
+  const [misconceptionsEpoch, setMisconceptionsEpoch] = useState(0)
   const [deepLinkTopic, setDeepLinkTopic] = useState<string | null>(null)
   const [deepLinkNode, setDeepLinkNode] = useState<{ topicId: string; nodeId: string } | null>(null)
   // Tutor-initiated nudge to a specific node — pans the map if we're already
@@ -326,7 +333,7 @@ export default function App() {
         <div className="flex-1 min-h-0 relative">
           {view === 'grades' && (
             <div key="grades" className="view-transition h-full">
-              <GradesView onGoSitting={goToSitting} />
+              <GradesView onGoSitting={goToSitting} onOpenLedger={() => setLedgerOpen(true)} />
             </div>
           )}
           {view === 'home' && (
@@ -393,6 +400,8 @@ export default function App() {
                   goToView('review')
                 }}
                 reviewSessionLive={activity.review.active}
+                misconceptionsEpoch={misconceptionsEpoch}
+                onMisconceptionResolved={() => setMisconceptionsEpoch((n) => n + 1)}
               />
             </KeepMounted>
           )}
@@ -420,6 +429,9 @@ export default function App() {
         navCommands={[
           ...NAV.map((n) => ({ id: `nav:${n.id}`, label: n.label, hint: `⌘${n.hint}`, action: () => goToView(n.id) })),
           { id: 'nav:history', label: 'Session History', hint: '⇧⌘H', action: () => setAllHistoryOpen(true) },
+          // Static command, not a searchIndex entry — the index's kinds are
+          // topic/node/receipt/artifact data; app surfaces live here.
+          { id: 'nav:misconceptions', label: 'Misconception Ledger', action: () => setLedgerOpen(true) },
         ]}
       />
       <SessionHistoryDrawer
@@ -433,6 +445,18 @@ export default function App() {
         }}
         initialSessionId={historyDeepLinkSession ?? undefined}
         anchorIndex={historyDeepLinkAnchor ?? undefined}
+      />
+      <MisconceptionLedger
+        open={ledgerOpen}
+        onClose={() => setLedgerOpen(false)}
+        onGoNode={goToNode}
+        onResolved={() => setMisconceptionsEpoch((n) => n + 1)}
+        onRetest={(row) => {
+          setLedgerOpen(false)
+          setRetestRequest(row)
+          goToView('review')
+        }}
+        reviewSessionLive={activity.review.active}
       />
       <HelpSheet open={helpOpen} onClose={() => setHelpOpen(false)} />
       </div>
