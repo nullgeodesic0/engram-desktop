@@ -5,9 +5,9 @@ import type { ReactNode } from 'react'
  * voice; see HomeView.tsx's `<h1>`). Optional dim body-size subtitle,
  * optional right-aligned cluster (stat chips, session controls, a search
  * box) for the views whose header carries more than a title. Applied to the
- * six "simple" view headers (TopicMap, Dashboard, Settings, ArtifactGallery,
- * Review, Home already matched); Learn's collapsing masthead keeps its own
- * grid machinery and just borrows the same type treatment in place. */
+ * "simple" view headers (TopicMap, Dashboard, Settings, ArtifactGallery,
+ * Home already matched); the two chat environments use SessionMasthead's
+ * shared plate anatomy instead. */
 export function PageHeader({
   title,
   subtitle,

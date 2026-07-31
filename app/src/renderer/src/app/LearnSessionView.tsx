@@ -55,6 +55,7 @@ import { humanizeNodeId } from '../../../shared/humanizeId'
 import { emitPulse, setAmbientLevel } from '../../../shared/neuralFieldBus'
 import { recordConfidence } from '../shared/calibrationStore'
 import { SessionHistoryDrawer, exportSittingTranscript } from '../components/SessionHistoryDrawer'
+import { SessionMasthead } from '../components/SessionMasthead'
 import { parseGradeResults, type GradeResult } from '../../../shared/gradeResult'
 import { MarkView, type RitualMark } from '../components/ritual/Marks'
 import { ActionChips, type SuggestedAction } from '../components/ritual/ActionChips'
@@ -1549,208 +1550,170 @@ export function LearnSessionView({
                 onMouseEnter={peekMasthead}
                 aria-hidden="true"
               >
-                <span className="h-px w-12 rounded bg-[var(--color-hairline)] group-hover:bg-[var(--color-ink-warm-dim)] transition-colors duration-[var(--dur-fast)]" />
+                <span className="h-px w-12 rounded bg-[var(--color-edge)] group-hover:bg-[var(--color-ink-warm-dim)] transition-colors duration-[var(--dur-fast)]" />
               </div>
             )}
-            {/* Grid 0fr↔1fr animates to the header's TRUE height — unlike a
-                max-height cap, the motion spans the whole duration in both
-                directions with no dead zone. Directional timing: the reveal is
-                quick (--dur-base, ease-out) so the header feels on-call; the
-                hide is longer and eased through both ends so it reads as a
-                settle, not a snap. */}
-            <header
-              ref={mastheadRef}
-              // Direct hover is AUTHORITATIVE: entering the header (including
-              // mid-fold, while its content is still visibly painted) claims
-              // it open immediately, independent of the container-mousemove
-              // sampling below — the sampled-position proxy alone had holes
-              // at exactly the top edge where these controls live.
-              onMouseEnter={started && messages.length > 0 ? peekMasthead : undefined}
-              onFocusCapture={peekMasthead}
-              className={`shrink-0 grid transition-[grid-template-rows] ${
-                mastheadCollapsed
-                  ? 'duration-[340ms] ease-[cubic-bezier(0.45,0.05,0.25,1)]'
-                  : 'duration-[var(--dur-base)] ease-[var(--ease-out-soft)]'
-              }`}
-              style={{ gridTemplateRows: mastheadCollapsed ? '0fr' : '1fr' }}
-            >
-              <div
-                // Command-bar band: a full-width hairline runs beneath the
-                // masthead (-mx-6 bleeds it to the view edges; the parent grid
-                // has no overflow clip, so the bleed survives the 0fr row).
-                className={`min-h-0 overflow-hidden flex flex-col gap-2 border-b transition-[opacity,transform] ${
-                  started ? '-mx-6 px-6' : '-mx-8 px-8'
-                } ${
-                  mastheadCollapsed
-                    ? 'duration-[340ms] ease-[cubic-bezier(0.45,0.05,0.25,1)] opacity-0 -translate-y-1 pb-0 border-transparent'
-                    : 'duration-[var(--dur-base)] ease-[var(--ease-out-soft)] opacity-100 translate-y-0 pb-2 border-[var(--color-hairline)]'
-                }`}
-              >
-        {/* Row 1 — the command bar. Identity block (title over a mono
-            sub-line) on the left, tracked nav items + the glyph cluster on
-            the right. One line by construction: the identity block is the
-            only flexible child (min-w-0, title truncates), every control is
-            shrink-0 — the title yields, the controls never do, and nothing
-            here can wrap or scroll. */}
-        <div className="flex items-center justify-between gap-6">
-          {/* In a session, the topic IS the page — one serif title, no static
-              "Learn" h1, no repeated title on the opening plate below. */}
-          {started ? (
-            <div className="flex flex-col gap-0.5 min-w-0">
-              <h1 className="font-(family-name:--font-serif) text-xl leading-tight text-[var(--color-text-primary)] truncate">
-                {activeTopic ? activeTopic.title : 'New topic'}
-              </h1>
-              {/* The identity sub-line: current node · position · walk, in
-                  one compact mono lockup under the title. The why-chain
-                  disclosure rides here, attached to the node it explains. */}
-              {(currentNodeId || nodePosition || walkNumber != null) && (
-                <div
-                  key={currentNodeId ?? 'none'}
-                  className="label-data text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-faint)] flex items-center gap-1.5 min-w-0"
-                >
-                  {currentNodeId && (
-                    <span className="text-[var(--color-ink-warm)] truncate">{humanizeNodeId(currentNodeId)}</span>
-                  )}
-                  {nodePosition && (
-                    <>
-                      {currentNodeId && <span aria-hidden="true">·</span>}
-                      <span className="shrink-0">node {nodePosition}</span>
-                    </>
-                  )}
-                  {walkNumber != null && (
-                    <>
-                      {(currentNodeId || nodePosition) && <span aria-hidden="true">·</span>}
-                      <span className="shrink-0">walk {walkNumber}</span>
-                    </>
-                  )}
-                  {currentNodeId && whyChain.length > 0 && (
-                    <button
-                      onClick={() => setWhyChainOpen((v) => !v)}
-                      className="focus-ring cmd-item shrink-0 lowercase tracking-[0.14em]"
+            {started ? (
+              <SessionMasthead
+                accent="warm"
+                eyebrow="LEARN"
+                collapsed={mastheadCollapsed}
+                headerRef={mastheadRef}
+                onPeek={messages.length > 0 ? peekMasthead : undefined}
+                onFocusPeek={peekMasthead}
+                // In a session, the topic IS the page — one serif title, no
+                // static "Learn" h1, no repeated title on the opening plate.
+                title={activeTopic ? activeTopic.title : 'New topic'}
+                // The identity sub-line: current node · position · walk, in
+                // one compact mono lockup under the title. The why-chain
+                // disclosure rides here, attached to the node it explains.
+                identity={
+                  currentNodeId || nodePosition || walkNumber != null ? (
+                    <div
+                      key={currentNodeId ?? 'none'}
+                      className="label-data text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-faint)] flex items-center gap-1.5 min-w-0"
                     >
-                      why?
+                      {currentNodeId && (
+                        <span className="text-[var(--color-ink-warm)] truncate">{humanizeNodeId(currentNodeId)}</span>
+                      )}
+                      {nodePosition && (
+                        <>
+                          {currentNodeId && <span aria-hidden="true">·</span>}
+                          <span className="shrink-0">node {nodePosition}</span>
+                        </>
+                      )}
+                      {walkNumber != null && (
+                        <>
+                          {(currentNodeId || nodePosition) && <span aria-hidden="true">·</span>}
+                          <span className="shrink-0">walk {walkNumber}</span>
+                        </>
+                      )}
+                      {currentNodeId && whyChain.length > 0 && (
+                        <button
+                          onClick={() => setWhyChainOpen((v) => !v)}
+                          className="focus-ring cmd-item shrink-0 lowercase tracking-[0.14em]"
+                        >
+                          why?
+                        </button>
+                      )}
+                    </div>
+                  ) : undefined
+                }
+                commands={
+                  <>
+                    {activeTopic && (
+                      <button
+                        onClick={() => setHistoryDrawerOpen(true)}
+                        className="focus-ring cmd-item label-data text-[10px] uppercase tracking-[0.16em] shrink-0"
+                      >
+                        History
+                      </button>
+                    )}
+                    {activeTopic && sessionId && (
+                      <ExportCommand exporting={exportingFormat} onExport={exportCurrentSitting} />
+                    )}
+                    <button
+                      onClick={backToTopics}
+                      title="Leave this session view (the session keeps running)"
+                      className="focus-ring cmd-item label-data text-[10px] uppercase tracking-[0.16em] shrink-0"
+                    >
+                      All topics
                     </button>
-                  )}
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="flex flex-col gap-2">
-              <h1 className="font-(family-name:--font-serif) text-[length:var(--text-display)] text-[var(--color-text-primary)]">Learn</h1>
-              {/* The shelf's briefing figure (ui/PlateFigure — the ready-room
-                  grammar): territory count as the headline, the atlas-wide due
-                  total as its note. Same numbers the old faint one-line
-                  subtitle carried, read off the same already-fetched `topics`
-                  list (each entry's own `.due`), not a second fetch. Hidden
-                  until topics have loaded so it never flashes "0 territories"
-                  before the real count lands. */}
-              {topics !== null && topics.length > 0 && (() => {
-                const atlasDue = topics.reduce((sum, t) => sum + t.due, 0)
-                return (
-                  <PlateFigure
-                    value={topics.length}
-                    tone="primary"
-                    title={topics.length === 1 ? 'territory in the atlas' : 'territories in the atlas'}
-                    note={
-                      atlasDue > 0 ? (
-                        <span className="text-[var(--color-ink-warm)]">{atlasDue} due across the atlas</span>
-                      ) : (
-                        'nothing due across the atlas'
-                      )
-                    }
-                  />
-                )
-              })()}
-            </div>
-          )}
-          {/* Right nav cluster: tracked uppercase command items, then the
-              hairline-separated glyph cluster (pin / clock / gauge). All
-              shrink-0 — this cluster's width is the row's fixed cost. */}
-          <div className="flex items-center gap-4 shrink-0">
-            {started && activeTopic && (
-              <button
-                onClick={() => setHistoryDrawerOpen(true)}
-                className="focus-ring cmd-item label-data text-[10px] uppercase tracking-[0.16em] shrink-0"
-              >
-                History
-              </button>
+                    {messages.length > 0 && (
+                      <span className="h-4 w-px bg-[var(--color-hairline)] shrink-0" aria-hidden="true" />
+                    )}
+                    {messages.length > 0 && (
+                      <button
+                        onClick={() => setMastheadPinned((v) => !v)}
+                        aria-label={mastheadPinned ? 'Unpin header' : 'Pin header'}
+                        title={mastheadPinned ? 'Unpin — tuck away unless the cursor visits the top' : 'Pin — keep the header out'}
+                        className={`focus-ring no-press h-5 w-5 shrink-0 flex items-center justify-center transition-colors duration-[var(--dur-fast)] ${
+                          mastheadPinned
+                            ? 'text-[var(--color-ink-warm)] bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)]'
+                            : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]'
+                        }`}
+                      >
+                        <PinTackIcon pinned={mastheadPinned} size={14} />
+                      </button>
+                    )}
+                  </>
+                }
+                instruments={
+                  <>
+                    <BeatStepper current={currentBeat} trail={beatTrail} />
+                    {momentumOn && <FlowChain chain={trailingRecalled(sessionGrades)} />}
+                    {momentumOn && sessionGrades.length > 0 && <InkWell results={sessionGrades} />}
+                    {exportStatus && (
+                      <span
+                        className={`text-xs truncate max-w-[12rem] ${exportStatus.failed ? 'text-[var(--color-ink-danger)]' : 'text-[var(--color-text-faint)]'}`}
+                        title={exportStatus.text}
+                      >
+                        {exportStatus.text}
+                      </span>
+                    )}
+                    {/* Right instrument cluster — the sitting clock and
+                        context gauge live on the instruments register now
+                        (both environments read identically); the progress
+                        note keeps its truncating right-aligned seat beside
+                        them. Clock is live-only (see SittingClock's own
+                        doctrine comment) — never in a replay. */}
+                    <div className="ml-auto flex items-center gap-4 shrink-0 min-w-0">
+                      {progressNote && (
+                        <MathRenderer text={progressNote} inlineOnly className="fig-caption truncate min-w-0" />
+                      )}
+                      {sittingStartedAt !== null && <SittingClock startedAt={sittingStartedAt} running label="this sitting" />}
+                      {contextUsage && (
+                        <ContextGauge usedTokens={contextUsage.usedTokens} contextWindow={contextUsage.contextWindow} />
+                      )}
+                    </div>
+                  </>
+                }
+                extra={
+                  whyChainOpen && whyChain.length > 0 ? (
+                    <div className="panel px-4 py-3 flex flex-col gap-2">
+                      <div className="fig-caption">Fig. — why this is true</div>
+                      {whyChain.map((step, i) => (
+                        <div key={i} className="flex items-start gap-2">
+                          <InkNode id={`why-${i}`} variant="outlined" color="var(--color-ink-cool)" size={10} />
+                          <span className="text-xs font-(family-name:--font-serif) text-[var(--color-text-dim)]">{step}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : undefined
+                }
+              />
+            ) : (
+              /* The shelf header — not a session masthead: the static Learn
+                 h1 with its briefing figure, under the same full-width
+                 hairline command-bar band as before the plate extraction. */
+              <header className="shrink-0 -mx-8 px-8 pb-2 border-b border-[var(--color-hairline)] flex flex-col gap-2">
+                <h1 className="font-(family-name:--font-serif) text-[length:var(--text-display)] text-[var(--color-text-primary)]">Learn</h1>
+                {/* The shelf's briefing figure (ui/PlateFigure — the ready-room
+                    grammar): territory count as the headline, the atlas-wide due
+                    total as its note. Same numbers the old faint one-line
+                    subtitle carried, read off the same already-fetched `topics`
+                    list (each entry's own `.due`), not a second fetch. Hidden
+                    until topics have loaded so it never flashes "0 territories"
+                    before the real count lands. */}
+                {topics !== null && topics.length > 0 && (() => {
+                  const atlasDue = topics.reduce((sum, t) => sum + t.due, 0)
+                  return (
+                    <PlateFigure
+                      value={topics.length}
+                      tone="primary"
+                      title={topics.length === 1 ? 'territory in the atlas' : 'territories in the atlas'}
+                      note={
+                        atlasDue > 0 ? (
+                          <span className="text-[var(--color-ink-warm)]">{atlasDue} due across the atlas</span>
+                        ) : (
+                          'nothing due across the atlas'
+                        )
+                      }
+                    />
+                  )
+                })()}
+              </header>
             )}
-            {started && activeTopic && sessionId && (
-              <ExportCommand exporting={exportingFormat} onExport={exportCurrentSitting} />
-            )}
-            {started && (
-              <button
-                onClick={backToTopics}
-                title="Leave this session view (the session keeps running)"
-                className="focus-ring cmd-item label-data text-[10px] uppercase tracking-[0.16em] shrink-0"
-              >
-                All topics
-              </button>
-            )}
-            {started && messages.length > 0 && (
-              <span className="h-4 w-px bg-[var(--color-hairline)] shrink-0" aria-hidden="true" />
-            )}
-            {started && messages.length > 0 && (
-              <button
-                onClick={() => setMastheadPinned((v) => !v)}
-                aria-label={mastheadPinned ? 'Unpin header' : 'Pin header'}
-                title={mastheadPinned ? 'Unpin — tuck away unless the cursor visits the top' : 'Pin — keep the header out'}
-                className={`focus-ring no-press h-5 w-5 shrink-0 flex items-center justify-center transition-colors duration-[var(--dur-fast)] ${
-                  mastheadPinned
-                    ? 'text-[var(--color-ink-warm)] bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)]'
-                    : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]'
-                }`}
-              >
-                <PinTackIcon pinned={mastheadPinned} size={14} />
-              </button>
-            )}
-            {/* Addition D (chat refine round) — live only (see SittingClock's
-                own doctrine comment); never rendered in SessionHistoryDrawer's
-                replay, which has no live sitting to time. */}
-            {started && sittingStartedAt !== null && <SittingClock startedAt={sittingStartedAt} running label="this sitting" />}
-            {started && contextUsage && (
-              <ContextGauge usedTokens={contextUsage.usedTokens} contextWindow={contextUsage.contextWindow} />
-            )}
-          </div>
-        </div>
-        {/* Row 2 — the instrument strip: the session's live instruments
-            (beat trail, flow chain, ink well, progress note) on their own
-            quieter line under a full-width hairline. This is the structural
-            de-crowding: row 1 is identity + commands, row 2 is instruments.
-            min-w-0/overflow-hidden throughout — compresses, never scrolls. */}
-        {started && (
-          <div
-            className="flex items-center gap-4 min-w-0 overflow-hidden border-t border-[var(--color-hairline)] pt-2 -mx-6 px-6"
-          >
-            <BeatStepper current={currentBeat} trail={beatTrail} />
-            {momentumOn && <FlowChain chain={trailingRecalled(sessionGrades)} />}
-            {momentumOn && sessionGrades.length > 0 && <InkWell results={sessionGrades} />}
-            {exportStatus && (
-              <span
-                className={`text-xs truncate max-w-[12rem] ${exportStatus.failed ? 'text-[var(--color-ink-danger)]' : 'text-[var(--color-text-faint)]'}`}
-                title={exportStatus.text}
-              >
-                {exportStatus.text}
-              </span>
-            )}
-            {progressNote && (
-              <MathRenderer text={progressNote} inlineOnly className="ml-auto fig-caption truncate min-w-0" />
-            )}
-          </div>
-        )}
-        {started && whyChainOpen && whyChain.length > 0 && (
-          <div className="panel px-4 py-3 flex flex-col gap-2">
-            <div className="fig-caption">Fig. — why this is true</div>
-            {whyChain.map((step, i) => (
-              <div key={i} className="flex items-start gap-2">
-                <InkNode id={`why-${i}`} variant="outlined" color="var(--color-ink-cool)" size={10} />
-                <span className="text-xs font-(family-name:--font-serif) text-[var(--color-text-dim)]">{step}</span>
-              </div>
-            ))}
-          </div>
-        )}
-              </div>
-            </header>
           </>
         )
       })()}

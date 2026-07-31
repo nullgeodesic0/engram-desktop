@@ -33,7 +33,7 @@ import { SkeletonBar } from '../components/Skeleton'
 import { SessionCeremony } from '../components/ritual/Bookends'
 import { ScheduleDelta } from '../components/ritual/ScheduleDelta'
 import { SessionHistoryDrawer, exportSittingTranscript, buildHistoryTimeline, type GradeBatch } from '../components/SessionHistoryDrawer'
-import { PageHeader } from '../components/ui/PageHeader'
+import { SessionMasthead } from '../components/SessionMasthead'
 import { SectionBanner } from '../components/ui/SectionBanner'
 import { StatFraction } from '../components/ui/StatFraction'
 import { ErrorPanel } from '../components/ErrorPanel'
@@ -1142,19 +1142,19 @@ export function ReviewSessionView({ onActivity, onGoHome }: ReviewSessionViewPro
     // window chrome and the transcript gets the reclaimed height; the gap
     // does the separating.
     <div className="h-full min-h-0 flex flex-col px-8 pt-3 pb-6 gap-3 w-full">
-      <PageHeader
-        // Command-bar band: the hairline underline runs the full view width
-        // (-mx-8 bleeds it past the container padding).
-        className="shrink-0 -mx-8 px-8 pb-3 border-b border-[var(--color-hairline)]"
+      <SessionMasthead
+        accent="cool"
+        eyebrow="REVIEW"
         title="Review"
-        // Identity sub-line, one compact mono lockup under the title: in a
-        // sitting (and at its close) it's the session's own position —
+        // Identity sub-line, one compact mono lockup under the title (its
+        // OWN label-data line now, never nested inside prose-size text): in
+        // a sitting (and at its close) it's the session's own position —
         // "N of M · K topics", off the same sessionGrades/sessionTotal pair
         // the queue rail's invariant guarantees; otherwise the due count.
         // The ready plate below says the due count once, big — the header
         // repeating it there would be the exact "three due counts"
         // redundancy an earlier wave fixed, so `ready` shows nothing.
-        subtitle={(() => {
+        identity={(() => {
           if (phase === 'in-session' || phase === 'done') {
             // Topics still represented in the live queue — honest and cheap
             // (GradeResult carries no topic, so already-cleared topics drop
@@ -1174,11 +1174,12 @@ export function ReviewSessionView({ onActivity, onGoHome }: ReviewSessionViewPro
             </span>
           )
         })()}
-        right={
+        commands={
           <>
             {/* Nav cluster: tracked uppercase command items — History,
-                Export (one item, disclosing .md/.pdf), Home — then the
-                hairline-separated glyph/instrument cluster. */}
+                Export (one item, disclosing .md/.pdf), Home. The clock and
+                gauges live on the instruments register below, so both
+                environments' mastheads read identically. */}
             {phase !== 'loading' && (
               <button
                 onClick={() => setHistoryDrawerOpen(true)}
@@ -1199,23 +1200,28 @@ export function ReviewSessionView({ onActivity, onGoHome }: ReviewSessionViewPro
                 Home
               </button>
             )}
-            {(phase === 'in-session' || phase === 'done') && (
-              <span className="h-4 w-px bg-[var(--color-hairline)] shrink-0" aria-hidden="true" />
-            )}
-            {/* Addition D (chat refine round) — live only; freezes (stops
-                ticking, stays on screen) once the sitting reaches 'done'
-                rather than disappearing — see SittingClock's own doctrine
-                comment for why a resumed sitting is labeled "this sitting",
-                never a recovered original start time. */}
-            {(phase === 'in-session' || phase === 'done') && sittingStartedAt !== null && (
-              <SittingClock startedAt={sittingStartedAt} running={phase === 'in-session'} label="this sitting" />
-            )}
-            {phase === 'in-session' && momentumOn && <FlowChain chain={trailingRecalled(sessionGrades)} />}
-            {phase === 'in-session' && momentumOn && sessionGrades.length > 0 && <InkWell results={sessionGrades} />}
-            {(phase === 'in-session' || phase === 'done') && contextUsage && (
-              <ContextGauge usedTokens={contextUsage.usedTokens} contextWindow={contextUsage.contextWindow} />
-            )}
           </>
+        }
+        instruments={
+          phase === 'in-session' || phase === 'done' ? (
+            <>
+              {phase === 'in-session' && momentumOn && <FlowChain chain={trailingRecalled(sessionGrades)} />}
+              {phase === 'in-session' && momentumOn && sessionGrades.length > 0 && <InkWell results={sessionGrades} />}
+              {/* Addition D (chat refine round) — live only; freezes (stops
+                  ticking, stays on screen) once the sitting reaches 'done'
+                  rather than disappearing — see SittingClock's own doctrine
+                  comment for why a resumed sitting is labeled "this sitting",
+                  never a recovered original start time. */}
+              <div className="ml-auto flex items-center gap-4 shrink-0 min-w-0">
+                {sittingStartedAt !== null && (
+                  <SittingClock startedAt={sittingStartedAt} running={phase === 'in-session'} label="this sitting" />
+                )}
+                {contextUsage && (
+                  <ContextGauge usedTokens={contextUsage.usedTokens} contextWindow={contextUsage.contextWindow} />
+                )}
+              </div>
+            </>
+          ) : undefined
         }
       />
       {/* Export outcome on its own transient caption line under the command
