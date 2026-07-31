@@ -15,7 +15,7 @@ import { GRADE_INK } from '../components/ritual/GradeChip'
  * has no glyph of its own (crossing, misconception, milestone, ask), the
  * closest plain character to what that card already says is used once, never
  * a second competing symbol per kind. */
-export type InstrumentMomentKind = 'probe' | 'grade' | 'crossing' | 'beat' | 'misconception' | 'milestone' | 'ask'
+export type InstrumentMomentKind = 'probe' | 'grade' | 'crossing' | 'beat' | 'misconception' | 'misconception-resolved' | 'milestone' | 'ask'
 
 export interface InstrumentMoment {
   id: string
@@ -150,6 +150,15 @@ export function deriveInstrumentMoments(input: {
         glyph: '!',
         tone: 'var(--color-ink-danger)',
         tooltip: m.node ? `misconception · ${humanizeNodeId(m.node)}` : 'misconception',
+      })
+    } else if (m.kind === 'misconception-resolved') {
+      out.push({
+        id: m.id,
+        atIndex: m.atIndex,
+        kind: 'misconception-resolved',
+        glyph: '\u2713',
+        tone: 'var(--color-ink-warm)',
+        tooltip: 'misconception resolved',
       })
     } else if (m.kind === 'milestone') {
       out.push({

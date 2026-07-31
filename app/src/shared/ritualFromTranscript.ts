@@ -37,6 +37,7 @@ import {
   isReviewRateCommand,
   isReceiptCommand,
   parseMisconceptionAdds,
+  parseMisconceptionResolves,
   looksLikeArtifactSetCommand,
   isArtifactSmithSpawnEvent,
   isAssessorAuditSpawnEvent,
@@ -460,6 +461,7 @@ export type DerivedRitualMark =
   | { id: string; atIndex: number; kind: 'phase'; phase: string }
   | { id: string; atIndex: number; kind: 'diagnostic'; items: DiagnosticItem[] }
   | { id: string; atIndex: number; kind: 'misconception'; text: string; node?: string }
+  | { id: string; atIndex: number; kind: 'misconception-resolved'; misconceptionId: string }
   | { id: string; atIndex: number; kind: 'explorable'; title: string; path?: string; node?: string }
   | { id: string; atIndex: number; kind: 'verify-seal' }
   | { id: string; atIndex: number; kind: 'lapse'; node: string; returnDate: string | null }
@@ -748,6 +750,9 @@ export function deriveRitualMarks(entries: unknown[]): DerivedRitualMark[] {
       }
       for (const misconception of parseMisconceptionAdds(command)) {
         marks.push({ id: `dmark-${seq++}`, atIndex: messageCount, kind: 'misconception', text: misconception.text, node: misconception.node })
+      }
+      for (const resolvedId of parseMisconceptionResolves(command)) {
+        marks.push({ id: `dmark-${seq++}`, atIndex: messageCount, kind: 'misconception-resolved', misconceptionId: resolvedId })
       }
       const artifactSet = looksLikeArtifactSetCommand(command)
       if (artifactSet?.path) {

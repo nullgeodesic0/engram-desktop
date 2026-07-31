@@ -11,7 +11,7 @@ const FAILURE_HEADLINE: Record<ToolFailureKind, string> = {
   stash: 'The production wasn’t filed.',
   next: 'Picking the next node didn’t land.',
   'artifact-set': 'The explorable didn’t register.',
-  misconception: 'Logging that misconception didn’t land.',
+  misconception: 'That misconception ledger call didn’t land.',
   'review-rate': 'The grade didn’t land.',
   'engram-bash': 'An engram call didn’t land.',
 }
