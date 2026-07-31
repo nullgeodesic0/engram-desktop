@@ -427,7 +427,15 @@ for (const f of FILES) {
     injectedMessages.push(`${f}: ${m[1].replace(/\$\{[^}]*\}/g, '${}').replace(/\s+/g, ' ').trim()}`)
   }
 }
-const PINNED_MESSAGE_HASH = '914f29fd061a363d'
+// 2026-07-30 re-pin: Review's fresh-sitting kickoff may now carry the
+// open-misconception digest for this queue's topics — engine-state
+// disclosure naming the engine's own resolve verb (loop-completion the
+// plugin's docs assume: 03-architecture.md's "schedule early re-test",
+// artifact-smith's "misconception resolved"), phrased in the learner's
+// navigational voice. It says nothing about how to teach, what to skip, or
+// how to assess; verified captured un-truncated by this check's printed
+// current-set (the 400-char/no-backtick collector net).
+const PINNED_MESSAGE_HASH = 'dfe380afdd98492f'
 if (sha(injectedMessages.sort().join('\n')) !== PINNED_MESSAGE_HASH) {
   fail(
     'D3.kickoff',

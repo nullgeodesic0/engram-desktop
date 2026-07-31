@@ -768,9 +768,41 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
         })
     }
 
+    // Earned-resolution disclosure: a fresh sitting's kickoff lists the open
+    // misconceptions filed against topics in this due queue, so the tutor can
+    // record demonstrated corrections with the engine's own resolve verb —
+    // loop-completion the plugin's docs already assume, not new pedagogy
+    // (see checkDoctrine's D3.kickoff pin). Composed best-effort: zero rows
+    // or any read failure sends today's plain kickoff — a sitting never
+    // blocks on a ledger read. The template stays under the kickoff hash
+    // collector's 400-char/no-backtick net and clear of the blindness regex.
+    let kickoff = '/engram:review'
+    if (!resume) {
+      try {
+        const [dueAll, ledger] = await Promise.all([window.engram.due(), window.engram.misconceptions()])
+        const queueTopics = new Set(dueAll.map((d) => d.topic))
+        const openRows = ledger
+          .filter((m) => m.status === 'open' && queueTopics.has(m.topic))
+          .sort((a, b) => (a.ts < b.ts ? 1 : -1))
+          .slice(0, 12)
+        if (openRows.length > 0) {
+          const digestLines = openRows
+            .map((m) => `- [${m.id}] ${m.topic} / ${m.node}: ${m.description.slice(0, 160)}`)
+            .join('\n')
+          kickoff = `/engram:review
+
+Open misconceptions currently filed in the engine's ledger for topics in this due queue:
+${digestLines}
+These are filed open for this queue's nodes; "misconception resolve --id <ID>" records a demonstrated correction. I'd like the chance to show these are fixed where they naturally come up.`
+        }
+      } catch {
+        // Ledger/due read failed — plain kickoff, never block the sitting.
+      }
+    }
+
     const { sessionId: sid } = resume
       ? await window.engram.resumeSession('/engram:review', 'review')
-      : await window.engram.startSession('/engram:review', 'review')
+      : await window.engram.startSession(kickoff, 'review')
     sessionIdRef.current = sid
     setSessionId(sid)
     setSittingStartedAt(Date.now())
