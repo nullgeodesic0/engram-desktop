@@ -156,9 +156,7 @@ export interface EngramStats {
 
 /** One row from engram.py's misconceptions.json, as returned by
  * `misconception list` — window.engram.misconceptions() surfaces the whole
- * ledger (open + resolved). Note the file can also carry a `resolved_ts`
- * field on resolved rows; not modeled here since nothing in this app reads
- * it yet. */
+ * ledger (open + resolved). */
 export interface Misconception {
   id: string
   ts: string
@@ -166,6 +164,12 @@ export interface Misconception {
   node: string
   description: string
   status: 'open' | 'resolved'
+  /** Local YYYY-MM-DD the engine stamped when `misconception resolve` ran —
+   * absent on open rows. The engine always writes it on resolve, so a
+   * resolved row WITHOUT one can only come from hand-editing the file;
+   * consumers treat that case as resolved-at-`ts` (the conservative read —
+   * see computeHistoricalTopicGrade). */
+  resolved_ts?: string
 }
 
 /** The engine's one-active-experiment-at-a-time record, as `engram.py`

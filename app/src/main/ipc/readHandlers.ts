@@ -35,7 +35,10 @@ function isMisconception(row: unknown): row is Misconception {
     typeof r.topic === 'string' &&
     typeof r.node === 'string' &&
     typeof r.description === 'string' &&
-    (r.status === 'open' || r.status === 'resolved')
+    (r.status === 'open' || r.status === 'resolved') &&
+    // resolved_ts: optional (open rows never carry it); a non-string value
+    // is hand-edit damage and drops the row, same discipline as above.
+    (r.resolved_ts === undefined || typeof r.resolved_ts === 'string')
   )
 }
 

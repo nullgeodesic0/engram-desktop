@@ -376,7 +376,20 @@ export function computeHistoricalTopicGrade(inputs: {
     receipts: receipts.filter((r) => r.ts <= cutoff),
     topic,
     topicEntry: undefined, // coverage is never available historically — see doctrine comment above
-    misconceptions: misconceptions.filter((m) => m.ts <= cutoff),
+    // A resolution only counts from its own date: a row resolved AFTER the
+    // cutoff was still open as of the cutoff, so it maps back to 'open' here
+    // rather than letting today's resolutions rewrite every past week's
+    // conceptual health. A resolved row missing `resolved_ts` can only come
+    // from hand-editing (the engine always stamps it) — treated as resolved
+    // at `ts`, which reproduces pre-fix behavior for exactly those rows and
+    // never inflates a past open count.
+    misconceptions: misconceptions
+      .filter((m) => m.ts <= cutoff)
+      .map((m) =>
+        m.status === 'resolved' && (m.resolved_ts ?? m.ts) > cutoff
+          ? { ...m, status: 'open' as const, resolved_ts: undefined }
+          : m,
+      ),
     days: days.filter((d) => d.date <= cutoff),
     picks: picks.filter((p) => p.ts <= cutoffMs),
     mode: 'completed',

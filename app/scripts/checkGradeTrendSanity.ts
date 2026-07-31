@@ -83,6 +83,27 @@ async function main(): Promise<void> {
       }
     }
 
+    // (d) resolved_ts semantics: the conceptual component's implied resolved
+    // count at each cutoff must equal a direct re-derivation from the rows —
+    // a resolution only counts from its own `resolved_ts` (falling back to
+    // `ts` for hand-edited rows missing it). This is the one place the
+    // historical open→resolved mapping is pinned against an oracle.
+    for (const point of trend) {
+      const c = point.result.components.conceptual
+      if (!c.available || c.raw === null) continue
+      const impliedResolved = c.n - c.raw
+      const oracle = misconceptions.filter(
+        (m) =>
+          m.topic === t.topic &&
+          m.ts <= point.cutoff &&
+          m.status === 'resolved' &&
+          (m.resolved_ts ?? m.ts) <= point.cutoff,
+      ).length
+      if (impliedResolved !== oracle) {
+        failures.push(`${t.topic} @ ${point.cutoff}: conceptual implied resolved ${impliedResolved} != oracle ${oracle}`)
+      }
+    }
+
     summary.push(`${t.topic}: ${trend.length} cutoffs, latest overall=${trend[trend.length - 1]?.result.overall.score ?? '—'}`)
   }
 
