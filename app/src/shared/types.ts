@@ -351,6 +351,9 @@ export interface RawReceipt {
    * engram.py's `due_next`, a local 'YYYY-MM-DD' string. See
    * `shared/topicGrade.ts`'s punctuality metric. */
   dueNext: string | null
+  /** engram.py's relearn-retry marker — excluded by the engine from every
+   * retention-family population; ports must filter it the same way. */
+  relearn: boolean
 }
 
 export interface ReceiptsHistory {

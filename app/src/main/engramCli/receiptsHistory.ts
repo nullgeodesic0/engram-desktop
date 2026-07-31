@@ -15,6 +15,7 @@ interface ReceiptLine {
   capstone?: boolean
   interval_days?: number
   due_next?: string
+  relearn?: boolean
 }
 
 export interface ReceiptItem {
@@ -73,6 +74,12 @@ export interface RawReceipt {
    * engine's own literal scheduled date, not a reconstruction from
    * `intervalDays` + an assumed anchor date. */
   dueNext: string | null
+  /** engram.py's `relearn: true` retry rows (`rate --relearn --attempt N`) —
+   * recorded append-only but EXCLUDED by the engine from state transitions
+   * and every retention-family population. Ports that mirror engine stats
+   * (retention buckets, momentum) must filter these out; day/week activity
+   * keeps them (a retry is real work done that day). */
+  relearn: boolean
 }
 
 export interface ReceiptsHistory {
@@ -164,6 +171,7 @@ export async function readReceiptsHistory(): Promise<ReceiptsHistory> {
           capstone: entry.capstone === true,
           intervalDays: typeof entry.interval_days === 'number' ? entry.interval_days : null,
           dueNext: typeof entry.due_next === 'string' ? entry.due_next : null,
+          relearn: entry.relearn === true,
         })
 
         const entryDate = new Date(`${entry.ts}T00:00:00Z`)
