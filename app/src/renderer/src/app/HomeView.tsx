@@ -145,8 +145,9 @@ function TopicGroup({
     <div className={`flex flex-col gap-1 ${first ? '' : 'pt-2'}`}>
       {/* Same register header as the Sections plate's group bands — warm
           tracked-uppercase with a hairline rule running to the plate's edge
-          (the TicketCard band's own language), the rule doing the group-
-          divider job the old border-t did. */}
+          (the TicketCard band's own language — env-accented there, warm on
+          this page), the rule doing the group-divider job the old border-t
+          did. */}
       <div className="flex items-center gap-2.5 mb-1">
         <span className="text-[10px] label-data uppercase tracking-[0.28em] text-[var(--color-ink-warm)] shrink-0">{heading}</span>
         {caption && <span className="fig-caption shrink-0">{caption}</span>}
