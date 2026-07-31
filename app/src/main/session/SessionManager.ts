@@ -55,8 +55,7 @@ export class SessionManager extends EventEmitter {
 
   /** `extraInstructions` — per-topic system-prompt addition, see topicSettings.ts. Ignored on resume (the prior turn's system prompt already governs the conversation; --resume doesn't accept a new one). */
   async start(initialMessage: string, extraInstructions?: string): Promise<void> {
-    const { scriptPath } = resolveEngramPlugin() // fail fast if the plugin isn't resolvable
-    void scriptPath
+    const { root: engramRoot } = resolveEngramPlugin() // fail fast if the plugin isn't resolvable
     const port = await bridgeServer.start()
     this.permissions = await prepareSessionPermissions(port, this.sessionId, extraInstructions)
 
@@ -86,6 +85,18 @@ export class SessionManager extends EventEmitter {
     this.child = spawn(claudeBin, args, {
       cwd: homedir(),
       stdio: ['pipe', 'pipe', 'pipe'],
+      // ENGRAM_ROOT: the skills' own engine-locator bootstrap probes
+      // $OPENCODE_PLUGIN_ROOT → $CLAUDE_PLUGIN_ROOT → $CODEX_PLUGIN_ROOT →
+      // $ENGRAM_ROOT → … for a dir containing scripts/engram.py. None of the
+      // plugin-root vars exist in this headless spawn, so without this the
+      // locator exits 2 on the FIRST engram call of nearly every sitting
+      // (real-transcript evidence: "engram: engine not found — set
+      // ENGRAM_ROOT to your engram checkout"), the tool-failure card fires,
+      // and the tutor burns a turn re-finding the engine by hand. The
+      // resolver's root is guaranteed to contain scripts/engram.py (that
+      // filter is how it picks a version), which is exactly the locator's
+      // own test — the sanctioned dev-clone hook, not a plugin modification.
+      env: { ...process.env, ENGRAM_ROOT: engramRoot },
     })
 
     this.child.stdout.on('data', (chunk: Buffer) => this.handleStdout(chunk.toString('utf-8')))
