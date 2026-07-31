@@ -30,6 +30,7 @@ import {
 } from '../../../shared/gradeResult'
 import { GradeResultCard } from '../components/GradeResultCard'
 import { SkeletonBar } from '../components/Skeleton'
+import { Button } from '../components/ui/Button'
 import { SessionCeremony } from '../components/ritual/Bookends'
 import { ScheduleDelta } from '../components/ritual/ScheduleDelta'
 import { SummaryOverlay, makePeek } from '../components/ritual/SummaryOverlay'
@@ -121,10 +122,9 @@ interface ReviewSessionViewProps {
   onActivity?: (a: { active: boolean; busy: boolean }) => void
   /** Masthead "← Home" — leaves this view for the main page (the session, if
    * one is live, keeps running; this view stays mounted via KeepMounted). */
-  onGoHome?: () => void
 }
 
-export function ReviewSessionView({ onActivity, onGoHome }: ReviewSessionViewProps = {}) {
+export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
   const [phase, setPhase] = useState<Phase>('loading')
   const [queue, setQueue] = useState<DueItem[]>([])
   const [sessionId, setSessionId] = useState<string | null>(null)
@@ -1101,6 +1101,24 @@ export function ReviewSessionView({ onActivity, onGoHome }: ReviewSessionViewPro
     [marks, reviewProbes, resolvedGradeBatches, crossings, messages.length],
   )
   const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null)
+  // "Back" (the masthead command, replacing the old app-Home item — the
+  // title bar still owns app-level navigation): mid-sitting it DETACHES —
+  // the main review page renders while the sitting keeps running underneath
+  // (KeepMounted spirit, inside one view); after `done` it's a real return
+  // (re-pull the queue so the page states today's truth). Appended at the
+  // END of the hook list per the KeepMounted append rule.
+  const [detachedFromSitting, setDetachedFromSitting] = useState(false)
+  function backToReviewPage() {
+    if (phase === 'done') {
+      setDetachedFromSitting(false)
+      setSummaryPinned(false)
+      setSummaryPeek(false)
+      refreshHorizon()
+      refreshQueue().then((items) => setPhase(items.length > 0 ? 'ready' : 'empty'))
+    } else {
+      setDetachedFromSitting(true)
+    }
+  }
   // Minimap Precision fix (second report on the same bug) — jumps straight to
   // the checkpoint's OWN `CheckpointAnchor`, never the host message; see
   // shared/jumpToCheckpoint.ts's doctrine comment for the full root-cause
@@ -1169,13 +1187,13 @@ export function ReviewSessionView({ onActivity, onGoHome }: ReviewSessionViewPro
             {sessionId && (phase === 'in-session' || phase === 'done') && (
               <ExportCommand exporting={exportingFormat} onExport={exportCurrentSitting} />
             )}
-            {onGoHome && (
+            {(phase === 'in-session' || phase === 'done') && !detachedFromSitting && (
               <button
-                onClick={onGoHome}
-                title="Back to the main page (a live sitting keeps running)"
+                onClick={backToReviewPage}
+                title="Back to the review page (a live sitting keeps running)"
                 className="focus-ring cmd-item label-data text-[10px] uppercase tracking-[0.16em] shrink-0"
               >
-                Home
+                Back
               </button>
             )}
           </>
@@ -1277,7 +1295,31 @@ export function ReviewSessionView({ onActivity, onGoHome }: ReviewSessionViewPro
         </>
       )}
 
-      {(phase === 'in-session' || phase === 'done') && (
+      {/* The detached main page — "Back" was pressed mid-sitting: the review
+          page renders while the sitting keeps running underneath (its events
+          still land in state; nothing is killed). Deliberately NOT the
+          ReadyRoomPlate: that plate's CTAs spawn processes, and there is
+          already a live one — this plate's single action is returning to it. */}
+      {(phase === 'in-session' || phase === 'done') && detachedFromSitting && (
+        <>
+          <SectionBanner label="REVIEWS" count={<StatFraction n={sessionGrades.length} d={sessionTotal} />} />
+          <div className="tilt-card-soft panel px-6 py-6 flex flex-col gap-3 items-start">
+            <span className="text-sm text-[var(--color-text-primary)]">
+              {phase === 'done'
+                ? 'The sitting is complete — its summary is waiting at the bottom edge.'
+                : 'A sitting is in progress.'}
+            </span>
+            <span className="label-data text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-faint)]">
+              {sessionGrades.length} of {sessionTotal} graded
+              {queue.length > 0 && ` · ${queue.length} still queued`}
+            </span>
+            <Button onClick={() => setDetachedFromSitting(false)}>Return to the sitting</Button>
+          </div>
+          {horizonBuckets && <ReviewHorizon buckets={horizonBuckets} holdingCount={holdingCount} />}
+        </>
+      )}
+
+      {(phase === 'in-session' || phase === 'done') && !detachedFromSitting && (
         <div ref={equationCopyRef} className="flex-1 min-h-0 flex flex-col gap-4">
           {/* The only scrolling region — header and input stay anchored. */}
           {/* Must be a flex column: ChatScrollRegion sizes itself with
@@ -1592,7 +1634,7 @@ export function ReviewSessionView({ onActivity, onGoHome }: ReviewSessionViewPro
           {/* Chat Presence Wave E, Task 11 — stays mounted (disabled via
               disabledReason) alongside an open inline AskCard, instead of
               vanishing the way it did under the old modal. */}
-          {current && (!busy || tutorActivity.activity.kind === 'awaiting-ask') && phase !== 'done' && (
+          {current && (!busy || tutorActivity.activity.kind === 'awaiting-ask') && phase !== 'done' && !detachedFromSitting && (
             <MessageComposer
               production={production}
               onProductionChange={setProduction}

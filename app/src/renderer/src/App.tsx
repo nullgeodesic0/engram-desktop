@@ -132,6 +132,7 @@ export default function App() {
   // a later plain open (Session menu, ⇧⌘H) always falls back to the drawer's
   // own default "most recent" behavior instead of re-landing on a stale sitting.
   const [historyDeepLinkSession, setHistoryDeepLinkSession] = useState<string | null>(null)
+  const [historyDeepLinkAnchor, setHistoryDeepLinkAnchor] = useState<number | null>(null)
   const [deepLinkTopic, setDeepLinkTopic] = useState<string | null>(null)
   const [deepLinkNode, setDeepLinkNode] = useState<{ topicId: string; nodeId: string } | null>(null)
   // Tutor-initiated nudge to a specific node — pans the map if we're already
@@ -286,8 +287,13 @@ export default function App() {
     setView('topics')
   }
 
-  function goToSitting(sessionId: string) {
+  function goToSitting(sessionId: string, anchor?: number) {
     setHistoryDeepLinkSession(sessionId)
+    // Optional transcript-line anchor (ProvenanceEvent.anchor) — the drawer
+    // scrolls to and warm-highlights that moment instead of the sitting's
+    // top. Callers without one (node drilldowns, map links) land at the top
+    // exactly as before.
+    setHistoryDeepLinkAnchor(anchor ?? null)
     setAllHistoryOpen(true)
   }
 
@@ -351,7 +357,6 @@ export default function App() {
             <KeepMounted active={view === 'review'}>
               <ReviewSessionView
                 onActivity={(a) => setActivity((prev) => ({ ...prev, review: a }))}
-                onGoHome={() => goToView('home')}
               />
             </KeepMounted>
           )}
@@ -412,8 +417,10 @@ export default function App() {
         onClose={() => {
           setAllHistoryOpen(false)
           setHistoryDeepLinkSession(null)
+          setHistoryDeepLinkAnchor(null)
         }}
         initialSessionId={historyDeepLinkSession ?? undefined}
+        anchorIndex={historyDeepLinkAnchor ?? undefined}
       />
       <HelpSheet open={helpOpen} onClose={() => setHelpOpen(false)} />
       </div>
