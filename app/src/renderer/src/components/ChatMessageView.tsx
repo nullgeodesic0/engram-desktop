@@ -10,6 +10,7 @@ import { ProbeCard } from './ritual/ProbeCard'
 import { CheckpointAnchor } from './CheckpointAnchor'
 import { CanonicalPlate } from './ritual/CanonicalPlate'
 import { VerdictEyebrowRail, RatingEchoRow, ScheduleEchoRow, ConfidenceEchoRow } from './ritual/VerdictRows'
+import type { EnvAccent } from '../shared/controlChrome'
 
 export function fileName(path: string): string {
   return path.split('/').pop() ?? path
@@ -146,6 +147,10 @@ interface ChatMessageViewProps {
    * learner's own typed text. */
   nodeIds?: Set<string>
   nodeChipTopic?: string
+  /** Environment chrome identity for this message's ProbeCard (see
+   * shared/controlChrome.ts) — Learn passes 'warm', Review's cool is the
+   * default. Threshold violet still wins inside the card regardless. */
+  probeAccent?: EnvAccent
 }
 
 /** One turn, rendered like a normal chat exchange — a right-aligned bubble for
@@ -170,6 +175,7 @@ export const ChatMessageView = memo(function ChatMessageView({
   onProbeHoverChange,
   nodeIds,
   nodeChipTopic,
+  probeAccent,
 }: ChatMessageViewProps) {
   const segments = useMemo(
     () => (message.role === 'user' || verdictSegments !== undefined ? [] : parseBeatSegments(message.text)),
@@ -289,7 +295,7 @@ export const ChatMessageView = memo(function ChatMessageView({
                   verdict prose), so the message's own root is the wrong jump
                   target — see CheckpointAnchor.tsx's doctrine comment. */}
               <CheckpointAnchor id={`probe-${dataIndex}`}>
-                <ProbeCard header={probe.header} highlighted={probeHighlighted} onHoverChange={onProbeHoverChange} />
+                <ProbeCard header={probe.header} highlighted={probeHighlighted} onHoverChange={onProbeHoverChange} accent={probeAccent} />
               </CheckpointAnchor>
             </Fragment>
           )}
@@ -329,7 +335,7 @@ export const ChatMessageView = memo(function ChatMessageView({
                 {beforeProbeHeader}
                 {/* Minimap Precision fix — see the twin comment above. */}
                 <CheckpointAnchor id={`probe-${dataIndex}`}>
-                  <ProbeCard header={probe.header} highlighted={probeHighlighted} onHoverChange={onProbeHoverChange} />
+                  <ProbeCard header={probe.header} highlighted={probeHighlighted} onHoverChange={onProbeHoverChange} accent={probeAccent} />
                 </CheckpointAnchor>
               </Fragment>
             )
