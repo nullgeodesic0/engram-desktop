@@ -49,6 +49,7 @@ export const ReadyRoomPlate = memo(function ReadyRoomPlate({
   onResume,
   hasPriorSession,
   blocked,
+  resumeLabel = 'Resume last session',
 }: {
   /** The already-fetched, capped queue (`window.engram.due(12)`) — what this
    * sitting will actually cover, most-overdue-first is not guaranteed by the
@@ -66,6 +67,10 @@ export const ReadyRoomPlate = memo(function ReadyRoomPlate({
   onResume: () => void
   hasPriorSession: boolean
   blocked: boolean
+  /** Override for the ghost CTA's text — the detached-sitting page reads
+   * "Return to the sitting" (its onResume just re-enters the live view, no
+   * respawn) while the default stays the plain resume wording. */
+  resumeLabel?: string
 }) {
   const topicGroups = new Map<string, DueItem[]>()
   let oldestDays = 0
@@ -140,7 +145,7 @@ export const ReadyRoomPlate = memo(function ReadyRoomPlate({
         </Button>
         {hasPriorSession && (
           <Button variant="ghost" onClick={onResume} disabled={blocked}>
-            Resume last session
+            {resumeLabel}
           </Button>
         )}
       </div>

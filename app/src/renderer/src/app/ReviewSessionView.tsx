@@ -30,7 +30,6 @@ import {
 } from '../../../shared/gradeResult'
 import { GradeResultCard } from '../components/GradeResultCard'
 import { SkeletonBar } from '../components/Skeleton'
-import { Button } from '../components/ui/Button'
 import { SessionCeremony } from '../components/ritual/Bookends'
 import { ScheduleDelta } from '../components/ritual/ScheduleDelta'
 import { SummaryOverlay, makePeek } from '../components/ritual/SummaryOverlay'
@@ -667,6 +666,12 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
     // A fresh spawn's first text delta always starts its own bubble — never
     // inherit a stale split flag from a previous sitting's last tool call.
     assistantBoundaryRef.current = false
+    // Nor a stale abort flag: when a fresh start follows stopSession (the
+    // detached page's "Start review session"), the OLD sitting's close event
+    // is dropped by the sessionIdRef guard and never clears it — left true,
+    // the NEW sitting's first genuine crash would be misread as a
+    // deliberate stop.
+    abortedRef.current = false
     setPhase('in-session')
     // A resume keeps its already-earned grades (below), so the total has to
     // stay session-absolute or the queue rail mixes a fragment denominator
@@ -1116,9 +1121,40 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
       refreshHorizon()
       refreshQueue().then((items) => setPhase(items.length > 0 ? 'ready' : 'empty'))
     } else {
+      // Refresh ONLY the uncapped total for the plate's headline — never
+      // `queue` mid-sitting (the rail's invariant, sessionTotal -
+      // queue.length === sessionGrades.length, depends on the queue staying
+      // the sitting's own remainder).
+      window.engram.due().then((all) => setTotalDue(all.length))
       setDetachedFromSitting(true)
     }
   }
+  /** The detached page's "Start review session": retire the live sitting
+   * first (its late close event is dropped by the sessionIdRef guard the
+   * moment the new sitting's id lands; startSession clears the abort flag),
+   * then start fresh over the remaining queue. */
+  function startFreshFromDetached() {
+    stopSession()
+    setDetachedFromSitting(false)
+    setSummaryPinned(false)
+    setSummaryPeek(false)
+    startSession(false)
+  }
+  // A sitting that finishes (or dies) while detached: land on the real,
+  // refreshed review page rather than a stale detached plate — the summary
+  // stays reachable through session history. Appended hook (KeepMounted
+  // append rule).
+  useEffect(() => {
+    if (!detachedFromSitting || (phase !== 'done' && phase !== 'closed-unexpectedly')) return
+    setDetachedFromSitting(false)
+    if (phase === 'done') {
+      setSummaryPinned(false)
+      setSummaryPeek(false)
+      refreshHorizon()
+      refreshQueue().then((items) => setPhase(items.length > 0 ? 'ready' : 'empty'))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detachedFromSitting, phase])
   // Minimap Precision fix (second report on the same bug) — jumps straight to
   // the checkpoint's OWN `CheckpointAnchor`, never the host message; see
   // shared/jumpToCheckpoint.ts's doctrine comment for the full root-cause
@@ -1295,26 +1331,30 @@ export function ReviewSessionView({ onActivity }: ReviewSessionViewProps = {}) {
         </>
       )}
 
-      {/* The detached main page — "Back" was pressed mid-sitting: the review
-          page renders while the sitting keeps running underneath (its events
-          still land in state; nothing is killed). Deliberately NOT the
-          ReadyRoomPlate: that plate's CTAs spawn processes, and there is
-          already a live one — this plate's single action is returning to it. */}
-      {(phase === 'in-session' || phase === 'done') && detachedFromSitting && (
+      {/* The detached main page — "Back" was pressed mid-sitting: the REAL
+          ready-room renders (the same plate the ready phase shows, over the
+          remaining queue) while the sitting keeps running underneath. Both
+          of the page's normal choices work here: "Start review session"
+          retires the live sitting first (see startFreshFromDetached), and
+          the ghost CTA re-enters the live sitting — no respawn. A sitting
+          that finishes while detached is landed on the refreshed page by
+          the effect above. */}
+      {phase === 'in-session' && detachedFromSitting && (
         <>
-          <SectionBanner label="REVIEWS" count={<StatFraction n={sessionGrades.length} d={sessionTotal} />} />
-          <div className="tilt-card-soft panel px-6 py-6 flex flex-col gap-3 items-start">
-            <span className="text-sm text-[var(--color-text-primary)]">
-              {phase === 'done'
-                ? 'The sitting is complete — its summary is waiting at the bottom edge.'
-                : 'A sitting is in progress.'}
-            </span>
-            <span className="label-data text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-faint)]">
-              {sessionGrades.length} of {sessionTotal} graded
-              {queue.length > 0 && ` · ${queue.length} still queued`}
-            </span>
-            <Button onClick={() => setDetachedFromSitting(false)}>Return to the sitting</Button>
+          <SectionBanner label="REVIEWS" count={<StatFraction n={queue.length} d={totalDue} />} />
+          <div className="fig-caption -mt-2">
+            a sitting is in progress — {sessionGrades.length} of {sessionTotal} graded
           </div>
+          <ReadyRoomPlate
+            dueItems={queue}
+            totalDue={totalDue}
+            topicTitles={topicTitles}
+            onStart={startFreshFromDetached}
+            onResume={() => setDetachedFromSitting(false)}
+            hasPriorSession
+            blocked={blocked}
+            resumeLabel="Return to the sitting"
+          />
           {horizonBuckets && <ReviewHorizon buckets={horizonBuckets} holdingCount={holdingCount} />}
         </>
       )}
