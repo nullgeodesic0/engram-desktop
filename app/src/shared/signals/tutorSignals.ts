@@ -78,9 +78,20 @@ export function parseMisconceptionAdds(command: string): Array<{ node: string | 
   const re = /misconception add\b([\s\S]*?)--description\s+"([\s\S]*?)"(?=\r?\n|$)/g
   let m: RegExpExecArray | null
   while ((m = re.exec(command))) {
-    const text = m[2].trim().slice(0, 500)
-    if (!text) continue
+    const raw = m[2].trim()
     const nodeMatch = m[1].match(/--node\s+"?([a-z0-9]+(?:-[a-z0-9]+)*)"?/)
+    // File-mediated description — the skill's injection-safe pattern
+    // (--description "$(cat "$D/….txt")"): the wording genuinely is NOT in
+    // the command text, and the lazy capture would otherwise swallow shell
+    // fragments through the trailing quotes ("(cat …)" > /dev/null && …,
+    // seen rendered live 2026-07-31). Push an EMPTY text: the pin renders
+    // its filed-to-the-ledger fallback instead of garbled shell.
+    if (raw.includes('$(')) {
+      out.push({ node: nodeMatch ? nodeMatch[1] : undefined, text: '' })
+      continue
+    }
+    const text = raw.slice(0, 500)
+    if (!text) continue
     out.push({ node: nodeMatch ? nodeMatch[1] : undefined, text })
   }
   return out
