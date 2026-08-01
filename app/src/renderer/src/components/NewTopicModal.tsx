@@ -27,6 +27,18 @@ interface NewTopicModalProps {
    * path, ...) — see shared/types.ts's NewTopicPrefill. Only meaningful
    * (and only rendered) when `externalOrigin` is true. */
   droppedContextFileCount?: number
+  /** True while ANOTHER deep link arrived and was deliberately ignored
+   * because this modal was already open (see LearnSessionView's
+   * decideModalPrefillOnOpenSignal — the choice is to protect whatever the
+   * learner may already be typing here over applying the newer link).
+   * Read live from props every render (unlike goal/instructions/files,
+   * which only ever seed once at mount) since it must update the ALREADY-
+   * OPEN instance without a remount — that's the whole point of ignoring
+   * the new prefill rather than applying it. Rendered regardless of
+   * `externalOrigin`: the currently-shown content may be a manually-typed
+   * blank form that a link arrived on top of, which is exactly the case
+   * the learner most needs telling about. */
+  newerLinkIgnored?: boolean
 }
 
 export function NewTopicModal({
@@ -37,6 +49,7 @@ export function NewTopicModal({
   initialFiles,
   externalOrigin,
   droppedContextFileCount,
+  newerLinkIgnored,
 }: NewTopicModalProps) {
   // Lazy initializers only — this component remounts fresh every time it
   // opens (see LearnSessionView's `{newTopicOpen && <NewTopicModal ... />}`),
@@ -64,7 +77,7 @@ export function NewTopicModal({
       open
       onClose={() => {}}
       title="Start a new topic"
-      panelClassName={externalOrigin ? 'border-[var(--color-ink-warm-dim)]' : undefined}
+      panelClassName={externalOrigin || newerLinkIgnored ? 'border-[var(--color-ink-warm-dim)]' : undefined}
       footer={
         <>
           <div className="flex gap-2">
@@ -88,18 +101,37 @@ export function NewTopicModal({
             content was NOT typed by the learner in this window — it rode in
             on an engram:// link from another app. The learner must know
             that before reading anything below, since the fields read
-            identically to a manually-typed form otherwise. */}
-        {externalOrigin && (
-          <div className="panel px-3 py-2.5 flex items-start gap-2 border-[var(--color-ink-warm-dim)] bg-[color-mix(in_srgb,var(--color-ink-warm)_8%,transparent)]">
-            <span aria-hidden className="text-[var(--color-ink-warm)] text-sm leading-none mt-0.5">
-              ⚠
-            </span>
-            <div className="text-xs text-[var(--color-ink-warm)] leading-relaxed">
-              <span className="font-medium">From an external link, not typed by you here.</span> Another
-              app (Observatory) sent this goal and instructions text. Read all of it — including
-              anything below the fold in the boxes below — before starting; nothing here runs
-              until you click Start.
-            </div>
+            identically to a manually-typed form otherwise. Also carries the
+            "a newer link arrived and was dropped" notice (NEW-2) when
+            relevant — same visual treatment, same banner, so either or both
+            can show without a second competing warning box. */}
+        {(externalOrigin || newerLinkIgnored) && (
+          <div className="panel px-3 py-2.5 flex flex-col gap-2 border-[var(--color-ink-warm-dim)] bg-[color-mix(in_srgb,var(--color-ink-warm)_8%,transparent)]">
+            {externalOrigin && (
+              <div className="flex items-start gap-2">
+                <span aria-hidden className="text-[var(--color-ink-warm)] text-sm leading-none mt-0.5">
+                  ⚠
+                </span>
+                <div className="text-xs text-[var(--color-ink-warm)] leading-relaxed">
+                  <span className="font-medium">From an external link, not typed by you here.</span> Another
+                  app (Observatory) sent this goal and instructions text. Read all of it — including
+                  anything below the fold in the boxes below — before starting; nothing here runs
+                  until you click Start.
+                </div>
+              </div>
+            )}
+            {newerLinkIgnored && (
+              <div className="flex items-start gap-2">
+                <span aria-hidden className="text-[var(--color-ink-warm)] text-sm leading-none mt-0.5">
+                  ⚠
+                </span>
+                <div className="text-xs text-[var(--color-ink-warm)] leading-relaxed">
+                  <span className="font-medium">A newer link just arrived and was NOT applied</span> — this
+                  form stayed as you see it so nothing you’d already reviewed or typed gets overwritten.
+                  Close this and re-open the link from Observatory if you want it instead.
+                </div>
+              </div>
+            )}
           </div>
         )}
 

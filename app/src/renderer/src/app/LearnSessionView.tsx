@@ -26,6 +26,7 @@ import { useNodeChipClick } from '../components/useNodeChipClick'
 import { TranscriptMinimap } from '../components/TranscriptMinimap'
 import { deriveInstrumentMoments, type InstrumentMoment } from '../shared/instrumentMoments'
 import { jumpToCheckpoint } from '../shared/jumpToCheckpoint'
+import { decideModalPrefillOnOpenSignal } from '../shared/newTopicPrefillFlow'
 import { allProbeHeaders } from '../../../shared/reviewCrossing'
 import { endsWithBareProbeHeader, mergeAssistantText } from '../../../shared/probeHeader'
 import { useTutorActivity, composerDisabledReason } from '../shared/tutorActivity'
@@ -270,7 +271,12 @@ interface LearnSessionViewProps {
    * main/deepLink.ts). Read into the modal-open state the moment the signal
    * fires, then reported back via onNewTopicPrefillConsumed so App.tsx can
    * clear it — a later plain ⌘N, or the shelf's own "New Topic" affordances,
-   * must never reopen the modal with a stale prefill. Prefill only: the
+   * must never reopen the modal with a stale prefill (see
+   * shared/newTopicPrefillFlow.ts's decideModalPrefillOnOpenSignal for the
+   * exact, unit-tested rule this promise is built on — a real regression
+   * here, a stale prefill resurfacing after Start was clicked without going
+   * through modalPrefill's other clear sites, was caught by a coordinator
+   * review and is what that module's tests guard). Prefill only: the
    * learner still reviews and hits Start themselves. */
   newTopicPrefill?: NewTopicPrefill | null
   onNewTopicPrefillConsumed?: () => void
@@ -326,8 +332,16 @@ export function LearnSessionView({
   // (not queued for after the modal closes) — there's no reliable in-modal
   // signal of "still pristine vs. already edited" without lifting
   // NewTopicModal's internal state up, and the deep link's URL isn't
-  // retained anywhere to safely retry from later.
+  // retained anywhere to safely retry from later. See
+  // shared/newTopicPrefillFlow.ts's decideModalPrefillOnOpenSignal for the
+  // exact (tested) decision table this and modalPrefill above follow.
   const [prefillEpoch, setPrefillEpoch] = useState(0)
+  // True while a deep link arrived and was ignored (see above) because the
+  // modal was already open — surfaced as a banner note so the learner isn't
+  // left wondering why the window came forward with no visible change.
+  // Reset to false by every genuine open (fresh seed or fresh blank) and by
+  // the modal's own close, so it never lingers into an unrelated later open.
+  const [newerLinkIgnored, setNewerLinkIgnored] = useState(false)
   // Only consulted for the empty-shelf guided card below — same gate HomeView
   // uses (EnvironmentGate already blocks the app on a broken environment, but
   // its "Continue anyway" escape hatch can still land you here with topics
@@ -882,13 +896,37 @@ export function LearnSessionView({
       //
       // `newTopicOpen` (read directly, not via a ref — its value here is
       // this render's committed state, from BEFORE the setNewTopicOpen(true)
-      // below takes effect) gates whether a real prefill actually gets
-      // applied: if the modal is already open, the learner may already be
-      // mid-typing into it, and seeding+remounting would silently destroy
-      // that — see prefillEpoch's own doc comment for the full trade-off.
-      if (newTopicPrefill && !newTopicOpen) {
-        setModalPrefill(newTopicPrefill)
-        setPrefillEpoch((n) => n + 1)
+      // below takes effect) plus `newTopicPrefill` fully determine what
+      // happens to `modalPrefill` — see shared/newTopicPrefillFlow.ts's
+      // decideModalPrefillOnOpenSignal (unit tested there) for the decision
+      // table. In particular: 'clear' (not just "leave modalPrefill alone")
+      // on ANY reopen of a closed modal with no new prefill is what fixes a
+      // real regression a coordinator review caught — clicking Start closes
+      // the modal (LearnSessionView's startNewTopic) without clearing
+      // modalPrefill, so a later plain ⌘N would otherwise silently reseed
+      // the form with an earlier deep link's (possibly attacker-controlled)
+      // text on a modal the learner believed they'd opened fresh.
+      const decision = decideModalPrefillOnOpenSignal(newTopicOpen, newTopicPrefill)
+      switch (decision.action) {
+        case 'seed':
+          setModalPrefill(decision.prefill)
+          setPrefillEpoch((n) => n + 1)
+          setNewerLinkIgnored(false)
+          break
+        case 'clear':
+          setModalPrefill(null)
+          setNewerLinkIgnored(false)
+          break
+        case 'keepAndNoteDropped':
+          // Modal already open with a prefill (or blank form) the learner
+          // may be mid-typing into — leave modalPrefill untouched, but say
+          // so, rather than silently focusing the window with no visible
+          // change (see NewTopicModal's own notice for the learner-facing
+          // wording).
+          setNewerLinkIgnored(true)
+          break
+        case 'keep':
+          break
       }
       setNewTopicOpen(true)
       // Consumed (reported back to App.tsx) whenever a prefill arrived,
@@ -1871,6 +1909,7 @@ export function LearnSessionView({
                   variant="primary"
                   onClick={() => {
                     setModalPrefill(null)
+                    setNewerLinkIgnored(false)
                     setNewTopicOpen(true)
                   }}
                   disabled={rateLimitBlocking}
@@ -1912,6 +1951,7 @@ export function LearnSessionView({
                 <AddTerritoryCard
                   onClick={() => {
                     setModalPrefill(null)
+                    setNewerLinkIgnored(false)
                     setNewTopicOpen(true)
                   }}
                   blocked={rateLimitBlocking}
@@ -2146,6 +2186,7 @@ export function LearnSessionView({
           onClose={() => {
             setNewTopicOpen(false)
             setModalPrefill(null)
+            setNewerLinkIgnored(false)
           }}
           onStart={startNewTopic}
           initialGoal={modalPrefill?.goal}
@@ -2153,6 +2194,7 @@ export function LearnSessionView({
           initialFiles={modalPrefill?.contextFiles}
           externalOrigin={modalPrefill !== null}
           droppedContextFileCount={modalPrefill?.droppedContextFileCount}
+          newerLinkIgnored={newerLinkIgnored}
         />
       )}
     </div>
