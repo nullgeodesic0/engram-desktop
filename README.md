@@ -29,19 +29,17 @@ This app is what the loop looks like when it isn't happening in a terminal:
 
 ## Screenshots
 
-| Home — streak, due queue, continue learning | A `/learn` walk — beat stepper, session ticket, KaTeX |
+| Home — the atlas hub, grouped by purpose | A `/learn` walk — beats, probe cards, KaTeX |
 |---|---|
 | ![Home](docs/media/home.png) | ![Learn session](docs/media/learn-session.png) |
 
-| Topic library | `/review` — free recall before any reveal |
+| Topic library — territories and due counts | `/review` — free recall, blind receipts, stability movement |
 |---|---|
 | ![Learn](docs/media/learn-list.png) | ![Review](docs/media/review.png) |
 
-<!-- Additional capture slots — drop PNGs at these paths and uncomment:
-| Grades — letter grades, GPA, trend | Command strip + misconception ledger |
+| Grades — subgrades, trend, assignments | Misconception ledger — re-test and resolve |
 |---|---|
 | ![Grades](docs/media/grades.png) | ![Ledger](docs/media/misconception-ledger.png) |
--->
 
 ## The loop, in this app
 
