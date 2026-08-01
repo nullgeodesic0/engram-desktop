@@ -54,40 +54,60 @@ const ALLOWED_CONTEXT_EXTENSIONS = new Set(['.pdf', '.md', '.txt'])
 // CRLF collapses to LF as a side effect of stripping it).
 const HOSTILE_CONTROL_CHARS_RE = /[\x00-\x08\x0B-\x1F\x7F]/g
 
-// Zero-width and bidi-override characters — a separate injection vector
-// from visible whitespace: these can hide characters entirely (a zero-width
-// space/joiner splices invisibly into a word) or scramble the VISUAL order
-// of surrounding text (the bidi embedding/override controls) without
-// changing what bytes are actually there. Written as explicit \u escapes
-// (never literal invisible characters in source) so this is auditable by
-// reading the code, not just by trusting what a diff viewer renders:
-// U+200B–200F (zero-width space/joiners/direction marks), U+202A–202E
-// (bidi embed/override/pop), U+2060 (word joiner), U+FEFF (zero-width
-// no-break space / BOM).
-const ZERO_WIDTH_AND_BIDI_RE = /[\u200B-\u200F\u202A-\u202E\u2060\uFEFF]/g
+// Zero-width, bidi, and soft-hyphen characters — a separate injection
+// vector from visible whitespace: these can hide characters entirely (a
+// zero-width space/joiner splices invisibly into a word; a soft hyphen is
+// normally invisible outside a line break), or scramble the VISUAL order
+// of surrounding text (the bidi embedding/override/isolate controls)
+// without changing what bytes are actually there. Written as explicit \u
+// escapes (never literal invisible characters in source — a real mistake
+// caught and fixed earlier in this same file's history; see git log) so
+// this is auditable by reading the code, not just by trusting what a diff
+// viewer renders: U+00AD (soft hyphen), U+200B–200F (zero-width
+// space/joiners/direction marks), U+202A–202E (bidi embed/override/
+// pop, legacy), U+2060 (word joiner), U+2066–2069 (bidi isolates
+// LRI/RLI/FSI/PDI, the modern Unicode-recommended replacement for
+// U+202A–202E with the same visual-reordering effect), U+FEFF
+// (zero-width no-break space / BOM).
+const ZERO_WIDTH_AND_BIDI_RE = /[\u00AD\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/g
 
-// 8+ consecutive ASCII spaces collapsed to one. A `<textarea>` renders with
-// `white-space: pre-wrap` by default — unlike a run of newlines, a long run
-// of plain spaces has no visible line break in it at all, but it still
-// WRAPS onto many blank-looking lines at the textarea's width, achieving
-// the identical "push the real content below the fold" effect the newline
-// collapse below exists to stop. 8 is deliberately well above any
-// legitimate use (a 4-space indent, a couple of spaces after a period) —
-// see normalizeHostileWhitespace's own tests for the exact boundary.
-const HOSTILE_HORIZONTAL_SPACE_RUN_RE = / {8,}/g
+// 8+ consecutive horizontal-whitespace characters collapsed to one space.
+// `[^\S\n]` ("whitespace, but not newline") rather than hand-enumerating a
+// Unicode space-character class: `\s` in JS (no `/u` flag needed here —
+// every character in play is in the Basic Multilingual Plane) is
+// spec-defined (ECMA-262) to match space, tab, and the standard Unicode
+// space-separator family in one go — NBSP U+00A0, EM SPACE U+2003 (and
+// the rest of U+2000–200A), IDEOGRAPHIC SPACE U+3000, narrow/medium
+// no-break spaces, and a few others — so `[^\S\n]` gets the whole
+// family correctly without this file re-deriving or re-typing the list
+// itself. That "don't re-type the list" property matters concretely here:
+// an earlier version of a nearby regex in this same file hand-typed a
+// Unicode escape sequence and silently ended up with literal invisible
+// characters in source instead (see ZERO_WIDTH_AND_BIDI_RE's own comment
+// and git log) — leaning on the language's own `\s` definition removes
+// that whole failure mode for this class of character. Tabs are
+// deliberately included in the collapse (not carved out): a long run of
+// tabs hides text exactly as effectively as a long run of spaces, and
+// ordinary prose never contains one — see normalizeHostileWhitespace's
+// own tests for the run that mixes spaces and tabs specifically to slip
+// under a spaces-only threshold, and for the exact 7-vs-8 boundary.
+const HOSTILE_HORIZONTAL_SPACE_RUN_RE = /[^\S\n]{8,}/g
 
-/** Strips control and zero-width/bidi-override characters, and collapses
- * both long horizontal space runs and runs of 2+ blank lines down to a
- * single one of each. Exists specifically to blunt the "push the real
- * payload below the visible fold" attack: `instructions` is reviewed by a
- * human in a small textarea before anything is sent to a session (see
- * NewTopicModal.tsx), and either dozens of blank lines OR thousands of
- * spaces (which wrap into the same visual effect — see
- * HOSTILE_HORIZONTAL_SPACE_RUN_RE above) followed by an injected "standing
+/** Strips control, zero-width, bidi, and soft-hyphen characters, and
+ * collapses both long horizontal-whitespace runs (any mix of spaces,
+ * tabs, and Unicode space separators — see HOSTILE_HORIZONTAL_SPACE_RUN_RE)
+ * and runs of 2+ blank lines down to a single one of each. Exists
+ * specifically to blunt the "push the real payload below the visible
+ * fold" attack: `instructions` is reviewed by a human in a small
+ * textarea before anything is sent to a session (see NewTopicModal.tsx),
+ * and dozens of blank lines, OR thousands of ASCII/Unicode breaking
+ * spaces (which wrap in a `white-space: pre-wrap` textarea into the
+ * identical visual effect), followed by an injected "standing
  * instruction" would previously scroll the actual content out of the
- * initially-visible area. This is NOT a semantic rewrite — ordinary prose
- * with a single blank paragraph break, tabs, a 4-space indent, or unicode
- * content (including the em-dash this app uses throughout) is untouched. */
+ * initially-visible area. This is NOT a semantic rewrite — ordinary
+ * prose with a single blank paragraph break, a short run of tabs, a
+ * 4-space indent, two spaces after a period, or unicode content in any
+ * script (including the em-dash this app uses throughout) is untouched. */
 export function normalizeHostileWhitespace(s: string): string {
   return s
     .replace(ZERO_WIDTH_AND_BIDI_RE, '')
