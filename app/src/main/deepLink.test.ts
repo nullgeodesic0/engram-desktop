@@ -106,6 +106,12 @@ describe('parseEngramDeepLink — hostile payloads', () => {
     expect(result).toEqual({ error: expect.stringContaining('host') })
   })
 
+  it('accepts the host case-insensitively (Node does not lowercase a non-special scheme host)', () => {
+    const payload = Buffer.from(JSON.stringify({ v: 1, goal: 'Learn X' })).toString('base64url')
+    const result = parseEngramDeepLink(`engram://NEW-TOPIC?payload=${payload}`)
+    expect('error' in result).toBe(false)
+  })
+
   it('rejects the wrong scheme', () => {
     const payload = Buffer.from(JSON.stringify({ v: 1, goal: 'Learn X' })).toString('base64url')
     const result = parseEngramDeepLink(`https://new-topic?payload=${payload}`)
