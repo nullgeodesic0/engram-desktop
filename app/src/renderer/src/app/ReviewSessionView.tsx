@@ -53,7 +53,7 @@ import { computeDueBuckets } from '../shared/dueBuckets'
 import { MarkView, type RitualMark } from '../components/ritual/Marks'
 import type { ReviewDocketItem } from '../components/ritual/ReviewDocket'
 import { deriveRitualMarks } from '../../../shared/ritualFromTranscript'
-import { parseAuditNotification } from '../../../shared/taskNotification'
+import { parseAuditNotification, parseCurriculumReturn } from '../../../shared/taskNotification'
 import {
   isReviewRateCommand,
   isAssessorAuditSpawnEvent,
@@ -638,6 +638,26 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
             )
             pending.splice(i, 1)
             break
+          }
+        }
+        // Live/replay parity with deriveRitualMarks' task_notification
+        // branch: a curriculum-architect return (shape-disjoint from audit
+        // results — see parseCurriculumReturn) pins its receipt instead of
+        // vanishing. Practically Learn-only, but a review replay of such a
+        // transcript would derive this mark, so the live wire must too.
+        {
+          const curriculum = parseCurriculumReturn(event.content)
+          if (curriculum) {
+            setMarks((prev) => [
+              ...prev,
+              {
+                id: `mark-${markSeq.current++}`,
+                atIndex: messagesRef.current.length,
+                kind: 'agent-return',
+                topic: curriculum.topic,
+                nodeCount: curriculum.nodeCount,
+              },
+            ])
           }
         }
         break
