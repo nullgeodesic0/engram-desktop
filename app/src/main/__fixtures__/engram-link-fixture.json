@@ -1,0 +1,10 @@
+{
+  "payload": {
+    "v": 1,
+    "goal": "Understand \"Test Paper\" (arXiv:2401.00001) deeply — claims, method, derivations",
+    "contextFiles": ["/tmp/paper.pdf", "/tmp/dossier.md"],
+    "instructions": "Ground everything in the attached paper and dossier. I need this understood by 2026-08-15 — pace the curriculum accordingly.",
+    "deadline": "2026-08-15"
+  },
+  "url": "engram://new-topic?payload=eyJ2IjoxLCJnb2FsIjoiVW5kZXJzdGFuZCBcIlRlc3QgUGFwZXJcIiAoYXJYaXY6MjQwMS4wMDAwMSkgZGVlcGx5IOKAlCBjbGFpbXMsIG1ldGhvZCwgZGVyaXZhdGlvbnMiLCJjb250ZXh0RmlsZXMiOlsiL3RtcC9wYXBlci5wZGYiLCIvdG1wL2Rvc3NpZXIubWQiXSwiaW5zdHJ1Y3Rpb25zIjoiR3JvdW5kIGV2ZXJ5dGhpbmcgaW4gdGhlIGF0dGFjaGVkIHBhcGVyIGFuZCBkb3NzaWVyLiBJIG5lZWQgdGhpcyB1bmRlcnN0b29kIGJ5IDIwMjYtMDgtMTUg4oCUIHBhY2UgdGhlIGN1cnJpY3VsdW0gYWNjb3JkaW5nbHkuIiwiZGVhZGxpbmUiOiIyMDI2LTA4LTE1In0"
+}

@@ -5,12 +5,23 @@ import { fileName } from './ChatMessageView'
 interface NewTopicModalProps {
   onClose: () => void
   onStart: (goal: string, systemPromptExtra: string, contextFiles: string[]) => void
+  /** Seeds the form on open — e.g. from an engram:// deep link, already
+   * shape-guarded and filesystem-checked by main (see LearnSessionView's
+   * modalPrefill). Prefill only: this modal still requires an explicit
+   * Start click, same as a blank form — nothing here submits automatically. */
+  initialGoal?: string
+  initialInstructions?: string
+  initialFiles?: string[]
 }
 
-export function NewTopicModal({ onClose, onStart }: NewTopicModalProps) {
-  const [goal, setGoal] = useState('')
-  const [instructions, setInstructions] = useState('')
-  const [files, setFiles] = useState<string[]>([])
+export function NewTopicModal({ onClose, onStart, initialGoal, initialInstructions, initialFiles }: NewTopicModalProps) {
+  // Lazy initializers only — this component remounts fresh every time it
+  // opens (see LearnSessionView's `{newTopicOpen && <NewTopicModal ... />}`),
+  // so seeding state from props at mount time is enough; no effect needed
+  // to re-sync on a later prop change.
+  const [goal, setGoal] = useState(initialGoal ?? '')
+  const [instructions, setInstructions] = useState(initialInstructions ?? '')
+  const [files, setFiles] = useState<string[]>(initialFiles ?? [])
 
   function submit() {
     if (!goal.trim()) return

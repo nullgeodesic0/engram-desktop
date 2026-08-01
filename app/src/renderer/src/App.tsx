@@ -13,7 +13,7 @@ import { SkeletonBar, SkeletonGrid } from './components/Skeleton'
 import { HelpSheet } from './components/HelpSheet'
 import { MisconceptionLedger } from './components/MisconceptionLedger'
 import { useCardPhysics } from './components/useCardPhysics'
-import type { Misconception } from '../../shared/types'
+import type { Misconception, NewTopicPrefill } from '../../shared/types'
 
 // Code-split: both views unmount on tab switch already (they're not inside
 // KeepMounted — see the comment on `main` below), so there's no "resolve once,
@@ -172,6 +172,13 @@ export default function App() {
   // below. `null` (not 0) until the first push/refresh lands, so the badge
   // stays hidden rather than flashing "0" before anything real is known.
   const [dueCount, setDueCount] = useState<number | null>(null)
+  // Fields to prefill the New Topic modal with, delivered by an engram://
+  // deep link (Observatory's paper→topic hand-off — see main/deepLink.ts +
+  // main/index.ts's handleDeepLink, which already shape-guarded and
+  // filesystem-checked everything). Cleared by LearnSessionView once it has
+  // read it into its own modal-open state (onNewTopicPrefillConsumed below),
+  // same one-shot idiom as deepLinkTopic/deepLinkNode above.
+  const [newTopicPrefill, setNewTopicPrefill] = useState<NewTopicPrefill | null>(null)
 
   // Deep-link target from a tray click or a background review-due notification —
   // fires even if this window was just recreated (see main/index.ts's focusOrCreateWindow).
@@ -202,6 +209,19 @@ export default function App() {
       ) {
         goToView(v)
       }
+    })
+  }, [])
+
+  // engram:// deep link with a prefill payload — main sends this alongside
+  // (not instead of) its own onNavigate('learn'); this is what actually pops
+  // the New Topic modal open, mirroring the plain 'learn:new-topic' signal
+  // above but carrying fields for LearnSessionView to seed the modal with.
+  // Never auto-starts a session — the learner still reviews and hits Start.
+  useEffect(() => {
+    return window.engram.onNewTopicPrefill((prefill) => {
+      setNewTopicPrefill(prefill)
+      setView('learn')
+      setNewTopicRequest((n) => n + 1)
     })
   }, [])
 
@@ -374,6 +394,8 @@ export default function App() {
                 onSpotlight={(s) => setPendingSpotlight(s)}
                 onGoReview={() => setView('review')}
                 openNewTopicSignal={newTopicRequest}
+                newTopicPrefill={newTopicPrefill}
+                onNewTopicPrefillConsumed={() => setNewTopicPrefill(null)}
                 onOpenNode={goToNode}
               />
             </KeepMounted>

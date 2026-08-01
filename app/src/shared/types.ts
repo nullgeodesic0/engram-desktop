@@ -590,3 +590,18 @@ export interface BackupInfo {
   lastBackupAt: string | null
   lastBackupPath: string | null
 }
+
+/** Prefill delivered by an `engram://new-topic` deep link (Observatory's
+ * paper→topic hand-off — see main/deepLink.ts's parseEngramDeepLink and
+ * main/index.ts's handleDeepLink, which shape-guards and filesystem-checks
+ * everything before this ever reaches the renderer). A deadline, if the
+ * link carried one, is already folded into `instructions` by the time this
+ * exists — the renderer never sees a separate deadline field.
+ *
+ * Prefill ONLY: this seeds the New Topic modal's fields for the learner to
+ * review; nothing may use it to auto-start a session. */
+export interface NewTopicPrefill {
+  goal: string
+  instructions: string
+  contextFiles: string[]
+}
