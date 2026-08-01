@@ -2,7 +2,7 @@
 
 # Engram Desktop
 
-[![GitHub stars](https://img.shields.io/github/stars/nullgeodesic0/engram-desktop?style=flat-square&labelColor=14151c&color=e8a857)](https://github.com/nullgeodesic0/engram-desktop/stargazers)
+[![GitHub stars](https://img.shields.io/github/stars/nullgeodesic0/engram-desktop?style=flat-square&labelColor=14151c&color=e8a857&cacheSeconds=300)](https://github.com/nullgeodesic0/engram-desktop/stargazers)
 [![Built on engram](https://img.shields.io/badge/built%20on-engram-8a6533?style=flat-square&labelColor=14151c)](https://github.com/nagisanzenin/engram)
 ![Platform](https://img.shields.io/badge/platform-macOS%20arm64-5b8fa8?style=flat-square&labelColor=14151c)
 ![Electron](https://img.shields.io/badge/Electron-36-a78bda?style=flat-square&labelColor=14151c)
