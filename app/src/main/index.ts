@@ -43,10 +43,14 @@ registerExplorableSchemePrivileges()
 
 // engram:// deep links — Observatory's paper→topic hand-off (see deepLink.ts
 // for the pure parse/shape-guard and handleDeepLink below for delivery).
-// macOS routes a click on a registered scheme to this event directly (even
-// at cold launch — Electron queues it until whenReady), so both calls must
-// be made before whenReady; Windows/Linux instead relaunch the process with
-// the URL on argv, handled by the second-instance branch below.
+// macOS routes a click on a registered scheme to this event directly, and —
+// per Electron's own docs — can deliver it BEFORE whenReady resolves on a
+// cold launch, not merely require the listener to exist by then; that's
+// exactly why both calls below must be made before whenReady rather than
+// inside it. handleDeepLink itself guards against acting on a link before
+// the app is actually ready (see its own comment) since creating a
+// BrowserWindow that early throws. Windows/Linux instead relaunch the
+// process with the URL on argv, handled by the second-instance branch below.
 app.setAsDefaultProtocolClient('engram')
 app.on('open-url', (event, url) => {
   event.preventDefault()
@@ -108,6 +112,13 @@ async function checkEnvironment(): Promise<EnvironmentCheckResult> {
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
+// A deep link's URL, held here only for the narrow window between an
+// 'open-url' arriving before app.whenReady() resolves (see handleDeepLink)
+// and the startup sequence draining it (below, in app.whenReady().then()).
+// Never read anywhere else. A later link simply overwrites an unconsumed
+// earlier one; cold-launch double-links are not a real scenario worth
+// queueing a list for.
+let pendingDeepLinkUrl: string | null = null
 
 /** Assets bundled via `extraResources` (see package.json) land beside the packaged
  * app's Resources folder; in dev they're still at the project root. */
@@ -128,13 +139,26 @@ function sendDueCount(count: number): void {
 
 /** Shared by the tray's "Open"/"Check reviews now" and a notification click —
  * brings the window forward (creating it if the app was running tray-only) and
- * optionally deep-links to a view once the renderer is actually ready for it. */
+ * optionally deep-links to a view once the renderer is actually ready for it.
+ * Guards the existing-window nav send on `isLoading()`, not just "does
+ * `mainWindow` already exist": a window can exist but still be mid-navigation
+ * (e.g. handleDeepLink below delivering to the window app.whenReady() just
+ * created, moments earlier, in the same startup) — sending before the
+ * renderer's listener is attached would silently lose the message the same
+ * way it would for a genuinely brand-new window. */
 function focusOrCreateWindow(navigateTo?: string): void {
   if (mainWindow) {
-    if (mainWindow.isMinimized()) mainWindow.restore()
-    mainWindow.show()
-    mainWindow.focus()
-    if (navigateTo) sendNav(navigateTo)
+    const win = mainWindow
+    if (win.isMinimized()) win.restore()
+    win.show()
+    win.focus()
+    if (navigateTo) {
+      if (win.webContents.isLoading()) {
+        win.webContents.once('did-finish-load', () => sendNav(navigateTo))
+      } else {
+        sendNav(navigateTo)
+      }
+    }
     return
   }
   const win = createWindow()
@@ -150,11 +174,18 @@ function focusOrCreateWindow(navigateTo?: string): void {
  * than surfaced as an error dialog: the payload is untrusted input, and a
  * bad link someone else constructed is not the learner's problem to see.
  *
- * Mirrors focusOrCreateWindow's own did-finish-load idiom for delivery: a
- * payload sent before the renderer's listener is attached is silently lost,
- * so a freshly-created window's delivery waits for the first paint while an
- * already-live window gets it immediately. */
+ * Guards on `app.isReady()` first: macOS can fire 'open-url' before
+ * whenReady resolves on a cold launch (see the comment above
+ * `app.setAsDefaultProtocolClient`), and `focusOrCreateWindow` below
+ * unconditionally creates a `BrowserWindow` when none exists yet — doing
+ * that before the app is ready throws. A link that arrives that early is
+ * queued and drained once app.whenReady()'s own startup window already
+ * exists (see the drain call below), rather than acted on directly here. */
 function handleDeepLink(url: string): void {
+  if (!app.isReady()) {
+    pendingDeepLinkUrl = url
+    return
+  }
   const parsed = parseEngramDeepLink(url)
   if ('error' in parsed) {
     console.log('[engram-desktop] ignoring engram:// deep link —', parsed.error)
@@ -165,14 +196,13 @@ function handleDeepLink(url: string): void {
     instructions: parsed.instructions,
     contextFiles: validateContextFiles(parsed.contextFiles),
   }
-  const hadWindow = mainWindow !== null
   focusOrCreateWindow('learn')
-  if (hadWindow) {
-    mainWindow?.webContents.send('app:new-topic-prefill', prefill)
+  const win = mainWindow
+  if (!win) return // defensive only — focusOrCreateWindow always sets mainWindow once app is ready
+  if (win.webContents.isLoading()) {
+    win.webContents.once('did-finish-load', () => win.webContents.send('app:new-topic-prefill', prefill))
   } else {
-    mainWindow?.webContents.once('did-finish-load', () => {
-      mainWindow?.webContents.send('app:new-topic-prefill', prefill)
-    })
+    win.webContents.send('app:new-topic-prefill', prefill)
   }
 }
 
@@ -386,6 +416,17 @@ app.whenReady().then(() => {
   registerSessionHandlers(createWindow())
   createTray()
   startReviewNotifier(() => focusOrCreateWindow('review'), sendDueCount)
+
+  // Drain a deep link that arrived before we were ready to act on it (see
+  // pendingDeepLinkUrl + handleDeepLink's own comments) — the startup window
+  // above already exists by this point, so handleDeepLink's isLoading()
+  // check (not a "just created it" assumption) is what correctly decides
+  // whether to wait for did-finish-load or send immediately.
+  if (pendingDeepLinkUrl) {
+    const url = pendingDeepLinkUrl
+    pendingDeepLinkUrl = null
+    handleDeepLink(url)
+  }
 
   // Once per launch, well after startup settles (30s — this is a `gh` network
   // call, no reason to compete with the `claude --version` probe and window
