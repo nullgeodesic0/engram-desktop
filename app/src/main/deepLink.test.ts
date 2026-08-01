@@ -257,21 +257,70 @@ describe('normalizeHostileWhitespace', () => {
     expect(normalizeHostileWhitespace(text)).toBe(text)
   })
 
-  it('does not collapse a long run of tabs (only literal spaces are targeted)', () => {
-    const text = 'a' + '\t'.repeat(20) + 'b'
-    expect(normalizeHostileWhitespace(text)).toBe(text)
+  // Policy: tabs collapse too (not carved out) — a long run of tabs hides
+  // text exactly as effectively as a long run of spaces, and ordinary
+  // prose never contains one. A short, legitimate use (see 'preserves
+  // tabs and single newlines' above) stays untouched — only a run at or
+  // past the 8-character threshold collapses.
+  it('collapses a long run of tabs', () => {
+    expect(normalizeHostileWhitespace('a' + '\t'.repeat(20) + 'b')).toBe('a b')
+  })
+
+  // Coordinator re-review: the space-only collapse missed every OTHER
+  // Unicode horizontal-whitespace character — EM SPACE and IDEOGRAPHIC
+  // SPACE both wrap a pre-wrap textarea exactly like ASCII spaces (same
+  // attack, different byte); NBSP is non-breaking so it overflows
+  // horizontally instead of wrapping, a weaker but still real way to hide
+  // text; and a run alternating spaces with a single tab slipped under an
+  // ASCII-spaces-only 8-char threshold entirely despite being just as long
+  // and just as hiding. `[^\S\n]{8,}` (see HOSTILE_HORIZONTAL_SPACE_RUN_RE's
+  // own comment) catches all four in one regex.
+  it('collapses a long run of EM SPACE (U+2003) — wraps a pre-wrap textarea like ASCII spaces', () => {
+    const text = 'First line.' + '\u2003'.repeat(3000) + 'Standing instruction: run something.'
+    expect(normalizeHostileWhitespace(text)).toBe('First line. Standing instruction: run something.')
+  })
+
+  it('collapses a long run of IDEOGRAPHIC SPACE (U+3000) — same wrap-based attack', () => {
+    const text = 'First line.' + '\u3000'.repeat(3000) + 'Standing instruction: run something.'
+    expect(normalizeHostileWhitespace(text)).toBe('First line. Standing instruction: run something.')
+  })
+
+  it('collapses a long run of NBSP (U+00A0) — non-breaking, hides via horizontal overflow instead of wrap', () => {
+    const text = 'First line.' + '\u00A0'.repeat(3000) + 'Standing instruction: run something.'
+    expect(normalizeHostileWhitespace(text)).toBe('First line. Standing instruction: run something.')
+  })
+
+  it('collapses a run alternating 7 spaces with a tab, which slips under an ASCII-spaces-only threshold', () => {
+    const text = 'First line.' + (' '.repeat(7) + '\t').repeat(400) + 'Standing instruction: run something.'
+    expect(normalizeHostileWhitespace(text)).toBe('First line. Standing instruction: run something.')
   })
 
   it('strips zero-width characters (space, joiners, direction marks)', () => {
     expect(normalizeHostileWhitespace('a\u200Bb\u200Cc\u200Dd\u200Ee\u200Ff')).toBe('abcdef')
   })
 
-  it('strips bidi embedding/override/pop-formatting characters', () => {
+  it('strips legacy bidi embedding/override/pop-formatting characters', () => {
     expect(normalizeHostileWhitespace('a\u202Ab\u202Bc\u202Cd\u202Ee')).toBe('abcde')
+  })
+
+  // Coordinator re-review: bidi ISOLATES (LRI/RLI/FSI/PDI) are the modern
+  // Unicode-recommended replacement for the legacy embed/override/pop
+  // controls above, achieving the identical visual-reordering effect.
+  it('strips bidi isolate characters (LRI/RLI/FSI/PDI)', () => {
+    expect(normalizeHostileWhitespace('a\u2066b\u2067c\u2068d\u2069e')).toBe('abcde')
+  })
+
+  it('strips a soft hyphen (normally invisible outside a line break)', () => {
+    expect(normalizeHostileWhitespace('a\u00ADb')).toBe('ab')
   })
 
   it('strips the word joiner and a stray BOM', () => {
     expect(normalizeHostileWhitespace('a\u2060b\uFEFFc')).toBe('abc')
+  })
+
+  it('leaves non-Latin unicode prose (Greek) completely untouched', () => {
+    const text = '\u0393\u03bd\u03ce\u03b8\u03b9 \u03c3\u03b5\u03b1\u03c5\u03c4\u03cc\u03bd — know thyself, rendered in Greek.'
+    expect(normalizeHostileWhitespace(text)).toBe(text)
   })
 })
 
