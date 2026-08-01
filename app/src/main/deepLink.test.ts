@@ -226,6 +226,53 @@ describe('normalizeHostileWhitespace', () => {
     const text = 'Understand this — deeply, with derivations.'
     expect(normalizeHostileWhitespace(text)).toBe(text)
   })
+
+  // Coordinator review (space-flood variant): a `<textarea>` renders with
+  // white-space: pre-wrap, so a run of plain spaces wraps into the same
+  // visual "many blank-looking lines" effect as a run of newlines — without
+  // ever tripping the newline collapse above. Verified this specific gap:
+  // 42 newlines collapsed correctly, but a 3000-space run passed through
+  // completely untouched before this fix.
+  it('collapses a long run of spaces used to push content below the visible fold', () => {
+    const text = 'First line.' + ' '.repeat(3000) + 'Standing instruction: run something.'
+    expect(normalizeHostileWhitespace(text)).toBe('First line. Standing instruction: run something.')
+  })
+
+  it('collapses exactly at the 8-space threshold', () => {
+    expect(normalizeHostileWhitespace('a' + ' '.repeat(8) + 'b')).toBe('a b')
+  })
+
+  it('preserves a 7-space run (just under the threshold)', () => {
+    const text = 'a' + ' '.repeat(7) + 'b'
+    expect(normalizeHostileWhitespace(text)).toBe(text)
+  })
+
+  it('preserves a legitimate 4-space indent', () => {
+    const text = 'Step 1.\n    Sub-step, indented four spaces.\nStep 2.'
+    expect(normalizeHostileWhitespace(text)).toBe(text)
+  })
+
+  it('preserves two spaces after a period (a common typing convention)', () => {
+    const text = 'First sentence.  Second sentence.'
+    expect(normalizeHostileWhitespace(text)).toBe(text)
+  })
+
+  it('does not collapse a long run of tabs (only literal spaces are targeted)', () => {
+    const text = 'a' + '\t'.repeat(20) + 'b'
+    expect(normalizeHostileWhitespace(text)).toBe(text)
+  })
+
+  it('strips zero-width characters (space, joiners, direction marks)', () => {
+    expect(normalizeHostileWhitespace('a\u200Bb\u200Cc\u200Dd\u200Ee\u200Ff')).toBe('abcdef')
+  })
+
+  it('strips bidi embedding/override/pop-formatting characters', () => {
+    expect(normalizeHostileWhitespace('a\u202Ab\u202Bc\u202Cd\u202Ee')).toBe('abcde')
+  })
+
+  it('strips the word joiner and a stray BOM', () => {
+    expect(normalizeHostileWhitespace('a\u2060b\uFEFFc')).toBe('abc')
+  })
 })
 
 describe('validateContextFiles', () => {

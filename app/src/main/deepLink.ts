@@ -54,18 +54,47 @@ const ALLOWED_CONTEXT_EXTENSIONS = new Set(['.pdf', '.md', '.txt'])
 // CRLF collapses to LF as a side effect of stripping it).
 const HOSTILE_CONTROL_CHARS_RE = /[\x00-\x08\x0B-\x1F\x7F]/g
 
-/** Strips control characters (other than tab/newline) and collapses runs of
- * 2+ blank lines down to a single one. Exists specifically to blunt the
- * "push the real payload below the visible fold" attack: `instructions` is
- * reviewed by a human in a small textarea before anything is sent to a
- * session (see NewTopicModal.tsx), and dozens of blank lines followed by an
- * injected "standing instruction" would previously scroll the actual
- * content out of the initially-visible area. This is NOT a semantic
- * rewrite — ordinary prose with a single blank paragraph break, tabs, or
- * unicode content (including the em-dash this app uses throughout) is
- * untouched. */
+// Zero-width and bidi-override characters — a separate injection vector
+// from visible whitespace: these can hide characters entirely (a zero-width
+// space/joiner splices invisibly into a word) or scramble the VISUAL order
+// of surrounding text (the bidi embedding/override controls) without
+// changing what bytes are actually there. Written as explicit \u escapes
+// (never literal invisible characters in source) so this is auditable by
+// reading the code, not just by trusting what a diff viewer renders:
+// U+200B–200F (zero-width space/joiners/direction marks), U+202A–202E
+// (bidi embed/override/pop), U+2060 (word joiner), U+FEFF (zero-width
+// no-break space / BOM).
+const ZERO_WIDTH_AND_BIDI_RE = /[\u200B-\u200F\u202A-\u202E\u2060\uFEFF]/g
+
+// 8+ consecutive ASCII spaces collapsed to one. A `<textarea>` renders with
+// `white-space: pre-wrap` by default — unlike a run of newlines, a long run
+// of plain spaces has no visible line break in it at all, but it still
+// WRAPS onto many blank-looking lines at the textarea's width, achieving
+// the identical "push the real content below the fold" effect the newline
+// collapse below exists to stop. 8 is deliberately well above any
+// legitimate use (a 4-space indent, a couple of spaces after a period) —
+// see normalizeHostileWhitespace's own tests for the exact boundary.
+const HOSTILE_HORIZONTAL_SPACE_RUN_RE = / {8,}/g
+
+/** Strips control and zero-width/bidi-override characters, and collapses
+ * both long horizontal space runs and runs of 2+ blank lines down to a
+ * single one of each. Exists specifically to blunt the "push the real
+ * payload below the visible fold" attack: `instructions` is reviewed by a
+ * human in a small textarea before anything is sent to a session (see
+ * NewTopicModal.tsx), and either dozens of blank lines OR thousands of
+ * spaces (which wrap into the same visual effect — see
+ * HOSTILE_HORIZONTAL_SPACE_RUN_RE above) followed by an injected "standing
+ * instruction" would previously scroll the actual content out of the
+ * initially-visible area. This is NOT a semantic rewrite — ordinary prose
+ * with a single blank paragraph break, tabs, a 4-space indent, or unicode
+ * content (including the em-dash this app uses throughout) is untouched. */
 export function normalizeHostileWhitespace(s: string): string {
-  return s.replace(HOSTILE_CONTROL_CHARS_RE, '').replace(/\n{3,}/g, '\n\n').trim()
+  return s
+    .replace(ZERO_WIDTH_AND_BIDI_RE, '')
+    .replace(HOSTILE_CONTROL_CHARS_RE, '')
+    .replace(HOSTILE_HORIZONTAL_SPACE_RUN_RE, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
 }
 
 function deadlineNote(deadline: string): string {
