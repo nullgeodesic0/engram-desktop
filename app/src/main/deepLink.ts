@@ -52,8 +52,13 @@ export function parseEngramDeepLink(url: string): NewTopicPrefill | { error: str
   }
   // For a scheme with no special-cased parsing rules, WHATWG URL treats the
   // segment right after `//` as the host — so `engram://new-topic?...`
-  // parses `new-topic` into `hostname`, not `pathname`.
-  if (parsed.hostname !== 'new-topic') {
+  // parses `new-topic` into `hostname`, not `pathname`. Unlike a special
+  // scheme (http, https, ...), Node's URL parser does NOT lowercase this
+  // host for an arbitrary scheme (verified: `new URL('engram://NEW-TOPIC')
+  // .hostname === 'NEW-TOPIC'`), so the comparison is lowercased explicitly
+  // — a host component is conventionally case-insensitive, and there is no
+  // reason a byte-for-byte case match should be load-bearing here.
+  if (parsed.hostname.toLowerCase() !== 'new-topic') {
     return { error: `wrong host: ${parsed.hostname}` }
   }
 
