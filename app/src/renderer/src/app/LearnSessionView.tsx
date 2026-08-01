@@ -307,6 +307,17 @@ export function LearnSessionView({
   // ⌘N / "New Topic" click, including ones that follow a deep-link open, so
   // a stale prefill can never leak into an unrelated fresh topic.
   const [modalPrefill, setModalPrefill] = useState<NewTopicPrefill | null>(null)
+  // Bumped only when a NEW prefill actually lands (not on every plain ⌘N),
+  // and used as NewTopicModal's `key` below — forces a remount so a second
+  // deep link arriving while the modal is ALREADY open (from an earlier
+  // deep link, or a manual "New Topic" click) still reaches the form.
+  // NewTopicModal seeds its fields from props only via a lazy useState
+  // initializer (it deliberately does not re-sync on a later prop change —
+  // see its own doc comment), so without a key change here, a same-instance
+  // prop update would be silently ignored and the new prefill lost. Kept
+  // narrow to prefill-only changes (not every open) so a plain repeat ⌘N
+  // while the learner is mid-typing doesn't wipe what they've written.
+  const [prefillEpoch, setPrefillEpoch] = useState(0)
   // Only consulted for the empty-shelf guided card below — same gate HomeView
   // uses (EnvironmentGate already blocks the app on a broken environment, but
   // its "Continue anyway" escape hatch can still land you here with topics
@@ -862,7 +873,10 @@ export function LearnSessionView({
       // re-clear state that's already null.
       setModalPrefill(newTopicPrefill ?? null)
       setNewTopicOpen(true)
-      if (newTopicPrefill) onNewTopicPrefillConsumed?.()
+      if (newTopicPrefill) {
+        setPrefillEpoch((n) => n + 1)
+        onNewTopicPrefillConsumed?.()
+      }
     }
     openNewTopicSignalRef.current = openNewTopicSignal ?? openNewTopicSignalRef.current
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2109,6 +2123,7 @@ export function LearnSessionView({
       )}
       {newTopicOpen && (
         <NewTopicModal
+          key={prefillEpoch}
           onClose={() => {
             setNewTopicOpen(false)
             setModalPrefill(null)
