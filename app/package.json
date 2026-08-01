@@ -58,6 +58,13 @@
   "build": {
     "appId": "com.tylerhadsell.engram-desktop",
     "productName": "Engram Desktop",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "nullgeodesic0",
+        "repo": "engram-desktop"
+      }
+    ],
     "files": [
       "out/**/*"
     ],
