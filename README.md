@@ -1,4 +1,12 @@
+![Engram Desktop — learn anything, keep it](docs/media/banner.png)
+
 # Engram Desktop
+
+[![GitHub stars](https://img.shields.io/github/stars/nullgeodesic0/engram-desktop?style=flat-square&labelColor=14151c&color=e8a857)](https://github.com/nullgeodesic0/engram-desktop/stargazers)
+[![Built on engram](https://img.shields.io/badge/built%20on-engram-8a6533?style=flat-square&labelColor=14151c)](https://github.com/nagisanzenin/engram)
+![Platform](https://img.shields.io/badge/platform-macOS%20arm64-5b8fa8?style=flat-square&labelColor=14151c)
+![Electron](https://img.shields.io/badge/Electron-36-a78bda?style=flat-square&labelColor=14151c)
+![License](https://img.shields.io/badge/state-100%25%20local-e6dfd0?style=flat-square&labelColor=14151c)
 
 **A native macOS home for the [engram](https://github.com/nagisanzenin/engram) learning loop — the tutor that makes you do the thinking, in an app built for the sitting.**
 
@@ -29,6 +37,12 @@ This app is what the loop looks like when it isn't happening in a terminal:
 |---|---|
 | ![Learn](docs/media/learn-list.png) | ![Review](docs/media/review.png) |
 
+<!-- Additional capture slots — drop PNGs at these paths and uncomment:
+| Grades — letter grades, GPA, trend | Command strip + misconception ledger |
+|---|---|
+| ![Grades](docs/media/grades.png) | ![Ledger](docs/media/misconception-ledger.png) |
+-->
+
 ## The loop, in this app
 
 Engram's core discipline is *generation before explanation*: the tutor opens a question, you predict, you struggle a little (hints, not answers), it resolves, you explain it back. The desktop app renders that grammar instead of flattening it into chat:
@@ -40,6 +54,32 @@ Engram's core discipline is *generation before explanation*: the tutor opens a q
 - **Session bookends**: a walk opens with the story so far (last sitting's grades, anything shaky) and closes with a signed ceremony — tally, stability movements, earliest return date, and your own return commitment.
 
 Everything advisory degrades gracefully: if a session never signals a beat or a spotlight, the transcript still reads as clean prose. The loop's philosophy — free recall before recognition, no auto-send, no pity passes — is enforced by the plugin and honored by the UI. [More in docs/learning-loop.md.](docs/learning-loop.md)
+
+## Feature tour
+
+The app's surfaces group the way its navigation does — study, track, explore — with a persistent glass command strip carrying you between them (hidden on Home, where the hub itself is the navigation).
+
+**Study**
+
+- **Learn and Review as full environments**: session mastheads with live clocks and loop position, a beat stepper, composer-first free recall, KaTeX throughout (including the floating probe card), and session bookends — the story so far on open, a signed summary ceremony on close.
+- **Structured session cards over MCP**: the tutor renders its session ticket (`render_ticket`) and the assessor's verdicts (`report_verdict`) as first-class cards — grade chips, stability movement, next due date — instead of prose you have to squint at.
+- **Exam mode**: pin a target date to a topic and the coach paces the schedule toward it.
+
+**Track**
+
+- **Grades**: every topic carries a letter grade (A–F) computed from recall, punctuality, coverage, conceptual repair, and calibration — with a GPA across topics, historical trend sparklines, assignment-style session grouping, and event rows that deep-link into the exact moment of the transcript that earned them.
+- **Misconception ledger**: misconceptions the tutor files mid-dialogue are pinned into the transcript as specimen labels, tracked in a ledger, surfaced as a digest when a review session opens, and cleared two ways — earned (demonstrate the correction and the tutor resolves it) or manual, with provenance shown either way. A per-row **Re-test** launcher spins up a targeted probe on demand.
+- **Session history**: a global, searchable record of every sitting, hydrated from transcripts on disk.
+
+**Explore**
+
+- **The topic atlas**: cluster-first layout that keeps subtopic regions geometrically disjoint (no overlapping discs, no crossed spines, even on 100+-node maps), a focus lens for reading dense neighborhoods, tutor spotlights mid-dialogue, and one-click export of the whole map as a PDF.
+- **Interactive charts**: retention, momentum, and stability surfaces with developed axes and hover instruments — all local SVG, no charting library.
+
+**Shell**
+
+- **Night Atlas design language**: sharp-cornered glass panels over a void ground, warm/cool ink telling consolidated from not-yet, subtle 3D tilt physics on cards, a full light theme, and bundled display/serif/data typefaces — documented in [docs/design-tokens.md](docs/design-tokens.md) as a portable reference.
+- **Hardening**: crash logging, a CLI watchdog for the `claude` child process, a doctrine checker that gates every commit against the philosophy constraints, and a vitest suite over the grading math.
 
 ## Architecture at a glance
 
@@ -126,6 +166,7 @@ Electron 36 · React 19 · TypeScript · electron-vite · Tailwind CSS 4 · KaTe
 - [Architecture](docs/architecture.md) — how sessions, the bridge, and IPC fit together in depth
 - [Learning loop](docs/learning-loop.md) — the philosophy constraints, the beat grammar, and how the UI honors both
 - [Design language](docs/design-language.md) — Night Atlas: palette, type roles, ink motifs, motion vocabulary
+- [Design tokens](docs/design-tokens.md) — the portable token sheet: every color, panel tier, tilt rule, and chip formula
 - [Development](docs/development.md) — building, packaging, repo layout, debugging locations
 - [Design history](docs/design-history/README.md) — the working specs and plans behind the app's evolution
 
