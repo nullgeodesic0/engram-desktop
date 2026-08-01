@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "A custom desktop app for the Engram Claude Code learning plugin — scripts the claude CLI directly, no API billing.",
   "author": "Tyler Hadsell",
+  "license": "MIT",
   "private": true,
   "type": "module",
   "main": "./out/main/index.js",

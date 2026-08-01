@@ -73,7 +73,7 @@ Contrast was verified at authoring time: text-primary ≈7.9:1, all full inks �
 
 ## Type system
 
-Three commercial faces (bundle them via `@font-face` so every install matches), with graceful fallbacks:
+Three commercial first-choice faces with graceful open fallbacks. The commercial files are NOT redistributable — don't commit them; load them at runtime only if present (this repo registers whatever exists in a git-ignored fonts directory via the FontFace API, and the stacks land on the open fallbacks otherwise):
 
 | Token | Face | Role |
 |---|---|---|

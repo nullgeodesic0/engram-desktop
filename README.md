@@ -72,7 +72,7 @@ The app's surfaces group the way its navigation does — study, track, explore �
 
 **Shell**
 
-- **Night Atlas design language**: sharp-cornered glass panels over a void ground, warm/cool ink telling consolidated from not-yet, subtle 3D tilt physics on cards, a full light theme, and bundled display/serif/data typefaces — documented in [docs/design-tokens.md](docs/design-tokens.md) as a portable reference.
+- **Night Atlas design language**: sharp-cornered glass panels over a void ground, warm/cool ink telling consolidated from not-yet, subtle 3D tilt physics on cards, and a full light theme — documented in [docs/design-tokens.md](docs/design-tokens.md) as a portable reference. Type renders on bundled open faces (Space Grotesk, Fraunces, Inter); if you own licenses for the app's first-choice commercial faces, [drop them in](app/src/renderer/src/assets/fonts/README.md) and they take over.
 - **Hardening**: crash logging, a CLI watchdog for the `claude` child process, a doctrine checker that gates every commit against the philosophy constraints, and a vitest suite over the grading math.
 
 ## Architecture at a glance
@@ -168,3 +168,7 @@ Electron 36 · React 19 · TypeScript · electron-vite · Tailwind CSS 4 · KaTe
 
 - **[engram](https://github.com/nagisanzenin/engram)** by [nagisanzenin](https://github.com/nagisanzenin) (MIT) — the learning system this app exists to serve: the concept-graph architect, the dialogue grammar, the blind assessor, and the FSRS scheduler are all engram's. If Engram Desktop makes the loop pleasant, engram is what makes it work. *"Learn anything; keep it."*
 - Built with [Claude Code](https://claude.com/claude-code); the visual system is described in [docs/design-language.md](docs/design-language.md).
+
+## License
+
+[MIT](LICENSE). The app's first-choice typefaces (Neue Haas Grotesk Display, Epoca Pro) are commercial and are **not** included — the app falls back to bundled open faces without them; see [assets/fonts](app/src/renderer/src/assets/fonts/README.md).
