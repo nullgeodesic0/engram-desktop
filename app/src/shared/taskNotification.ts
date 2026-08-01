@@ -47,7 +47,44 @@
  * does NOT start with this prefix is ordinary chat text and must be left
  * alone (no event, no parsing) by every caller. */
 export function isTaskNotificationContent(content: string): boolean {
-  return content.startsWith('<task-notification>')
+  if (content.startsWith('<task-notification>')) return true
+  // Harness-variant delivery, observed in the wild (2026-08): the same
+  // envelope prefixed by a plain-text system preamble ("[SYSTEM NOTIFICATION
+  // - NOT USER INPUT] ..."), which defeats a bare startsWith and would let
+  // the raw envelope — result payload and all — fall through to the chat as
+  // a learner bubble. The preamble check stays narrow (must be the very
+  // first characters) so a genuine learner message that merely QUOTES an
+  // envelope somewhere inside is still rendered as the real turn it is.
+  return content.startsWith('[SYSTEM NOTIFICATION') && content.includes('<task-notification>')
+}
+
+/** Reads a completed notification whose `<result>` body is a curriculum
+ * payload — the shape the curriculum-architect subagent returns for
+ * `engram.py add-topic` ({topic, nodes, ...}) — and nothing else. Returns
+ * the topic id and node count only: the pin this feeds says "the architect
+ * came back and the atlas is being filed", it never re-renders the payload
+ * (claims/probes/rubrics are exactly the graded-against material the loop
+ * keeps out of the transcript — same discipline as
+ * `parseAssessorAuditVerdict`'s closed return type above). Audit results
+ * are arrays, not objects with `topic`+`nodes`, so the two parsers are
+ * disjoint by shape and a notification resolves as at most one of them. */
+export function parseCurriculumReturn(content: string): { topic: string; nodeCount: number } | null {
+  const envelope = parseTaskNotificationEnvelope(content)
+  if (!envelope?.completed || !envelope.resultText) return null
+  let body = envelope.resultText.trim()
+  const fence = body.match(/```json\s*([\s\S]*?)```/)
+  if (fence) body = fence[1].trim()
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(body)
+  } catch {
+    return null
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null
+  const p = parsed as Record<string, unknown>
+  if (typeof p.topic !== 'string' || p.topic.length === 0) return null
+  if (typeof p.nodes !== 'object' || p.nodes === null || Array.isArray(p.nodes)) return null
+  return { topic: p.topic, nodeCount: Object.keys(p.nodes).length }
 }
 
 /** Tag extraction only — no interpretation of what's inside `<result>`. Returns

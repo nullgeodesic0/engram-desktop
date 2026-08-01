@@ -59,6 +59,7 @@ import {
   type ToolFailureKind,
 } from '../../../shared/signals/tutorSignals'
 import { parsePretestGradeResults, verdictFromGrade, isStabilityMilestone } from '../../../shared/gradeResult'
+import { parseCurriculumReturn } from '../../../shared/taskNotification'
 import { invalidateSearchIndex } from '../shared/searchIndex'
 import { humanizeNodeId } from '../../../shared/humanizeId'
 import { emitPulse, setAmbientLevel } from '../../../shared/neuralFieldBus'
@@ -1231,6 +1232,16 @@ export function LearnSessionView({
       case 'rate_limit':
         setRateLimit(event.status === 'allowed' ? null : { status: event.status, resetsAt: event.resetsAt })
         break
+      case 'task_notification': {
+        // A background subagent's completion envelope. Never rendered as
+        // prose (SessionManager already keeps it out of the message stream);
+        // here it resolves into at most one structured pin: the curriculum
+        // architect's return — mirrored exactly by deriveRitualMarks'
+        // task_notification branch, so replay shows the identical pin.
+        const curriculum = parseCurriculumReturn(event.content)
+        if (curriculum) pushMark({ kind: 'agent-return', topic: curriculum.topic, nodeCount: curriculum.nodeCount })
+        break
+      }
       case 'usage':
         setContextUsage({ usedTokens: event.usedTokens, contextWindow: event.contextWindow })
         break

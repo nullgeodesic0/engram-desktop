@@ -6,6 +6,7 @@ import { AtlasBirth } from './AtlasBirth'
 import { Frontispiece } from './Frontispiece'
 import { DiagnosticPlate, type DiagnosticPlateItem } from './DiagnosticPlate'
 import { MisconceptionPin, MisconceptionResolvedPin } from './MisconceptionPin'
+import { AgentReturnPin } from './AgentReturnPin'
 import { ExplorableForged } from './ExplorableForged'
 import { ReviewDocket, type ReviewDocketItem } from './ReviewDocket'
 import { LapseRite } from './LapseRite'
@@ -123,6 +124,7 @@ export type RitualMark = { id: string; atIndex: number } & (
   | { kind: 'diagnostic'; items: DiagnosticPlateItem[] }
   | { kind: 'misconception'; text: string; node?: string }
   | { kind: 'misconception-resolved'; misconceptionId: string }
+  | { kind: 'agent-return'; topic: string; nodeCount: number }
   | { kind: 'explorable'; title: string; path?: string; node?: string }
   | { kind: 'verify-seal' }
   | { kind: 'lapse'; node: string; returnDate: string | null }
@@ -318,6 +320,7 @@ export function MarkView({
   else if (mark.kind === 'diagnostic') content = <DiagnosticPlate items={mark.items} />
   else if (mark.kind === 'misconception') content = <MisconceptionPin text={mark.text} node={mark.node} />
   else if (mark.kind === 'misconception-resolved') content = <MisconceptionResolvedPin misconceptionId={mark.misconceptionId} />
+  else if (mark.kind === 'agent-return') content = <AgentReturnPin topic={mark.topic} nodeCount={mark.nodeCount} />
   else if (mark.kind === 'explorable') content = <ExplorableForged title={mark.title} path={mark.path} node={mark.node} />
   else if (mark.kind === 'verify-seal') content = <VerifySeal />
   else if (mark.kind === 'lapse') content = <LapseRite node={mark.node} returnDate={mark.returnDate} />

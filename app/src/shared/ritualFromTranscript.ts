@@ -30,7 +30,7 @@ import {
   type StabilityMilestoneScale,
 } from './gradeResult'
 import { humanizeNodeId } from './humanizeId'
-import { parseAuditNotification, isTaskNotificationContent } from './taskNotification'
+import { parseAuditNotification, parseCurriculumReturn, isTaskNotificationContent } from './taskNotification'
 import {
   isPretestRateCommand,
   isNextNodeCommand,
@@ -462,6 +462,7 @@ export type DerivedRitualMark =
   | { id: string; atIndex: number; kind: 'diagnostic'; items: DiagnosticItem[] }
   | { id: string; atIndex: number; kind: 'misconception'; text: string; node?: string }
   | { id: string; atIndex: number; kind: 'misconception-resolved'; misconceptionId: string }
+  | { id: string; atIndex: number; kind: 'agent-return'; topic: string; nodeCount: number }
   | { id: string; atIndex: number; kind: 'explorable'; title: string; path?: string; node?: string }
   | { id: string; atIndex: number; kind: 'verify-seal' }
   | { id: string; atIndex: number; kind: 'lapse'; node: string; returnDate: string | null }
@@ -636,6 +637,21 @@ export function deriveRitualMarks(entries: unknown[]): DerivedRitualMark[] {
           pendingAudits.splice(i, 1)
           break
         }
+      }
+      // A completed architect return — the notification's `<result>` body is
+      // a curriculum payload. Pin the moment instead of silence: the learner
+      // watched a long "atlas being drawn" wait; this is its receipt. Shape-
+      // disjoint from audit results (see parseCurriculumReturn's doctrine
+      // comment), so this never double-fires on the loop above.
+      const curriculum = parseCurriculumReturn(event.content)
+      if (curriculum) {
+        marks.push({
+          id: `dmark-${seq++}`,
+          atIndex: messageCount,
+          kind: 'agent-return',
+          topic: curriculum.topic,
+          nodeCount: curriculum.nodeCount,
+        })
       }
       continue
     }
