@@ -604,4 +604,14 @@ export interface NewTopicPrefill {
   goal: string
   instructions: string
   contextFiles: string[]
+  /** How many of the link's ORIGINAL contextFiles entries were dropped by
+   * main/deepLink.ts's validateContextFiles (missing, wrong type, a
+   * symlink, a traversal path, ...) — set by buildNewTopicPrefill so the
+   * modal can say "N files couldn't be included" instead of silently
+   * showing fewer files than the link actually carried. `undefined` (not 0)
+   * when this prefill didn't go through that composition at all (there is
+   * currently no other producer of NewTopicPrefill, but the field is
+   * optional rather than required so a future one isn't forced to fabricate
+   * a count it has no way to compute). */
+  droppedContextFileCount?: number
 }

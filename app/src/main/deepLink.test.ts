@@ -1,9 +1,47 @@
-import { describe, it, expect } from 'vitest'
-import { mkdtempSync, openSync, closeSync } from 'node:fs'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { mkdtempSync, writeFileSync, rmSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { parseEngramDeepLink, validateContextFiles } from './deepLink'
+import { parseEngramDeepLink, validateContextFiles, buildNewTopicPrefill, normalizeHostileWhitespace } from './deepLink'
+import type { NewTopicPrefill } from '../shared/types'
 import fixture from './__fixtures__/engram-link-fixture.json'
+
+// Shared fixture directory for every describe block below that needs real
+// files on disk (validateContextFiles + buildNewTopicPrefill's composition
+// tests). Created via ordinary writeFileSync/mkdtempSync/symlinkSync —
+// this repo's doctrine check (npm run check:doctrine) is pinned to expect
+// exactly this file as a writer of ephemeral OS-tmpdir fixtures (see
+// scripts/checkDoctrine.ts's PINNED_WRITERS entry for
+// 'main/deepLink.test.ts'); that pin IS the audit trail the doctrine's own
+// header asks for, so there's no reason to route around the ordinary fs
+// APIs here. Lives in beforeAll/afterAll (not directly in a describe body)
+// so nothing touches disk during test COLLECTION — only when a test in
+// this file will actually run — and is cleaned up afterward.
+let fixtureDir: string
+let goodPdf: string
+let goodMd: string
+let badExt: string
+let symlinkToGoodPdf: string
+
+beforeAll(() => {
+  fixtureDir = mkdtempSync(join(tmpdir(), 'engram-deeplink-test-'))
+  goodPdf = join(fixtureDir, 'paper.pdf')
+  goodMd = join(fixtureDir, 'notes.md')
+  badExt = join(fixtureDir, 'archive.zip')
+  symlinkToGoodPdf = join(fixtureDir, 'symlink.pdf')
+  writeFileSync(goodPdf, '%PDF-1.4')
+  writeFileSync(goodMd, '# notes')
+  writeFileSync(badExt, 'binary')
+  symlinkSync(goodPdf, symlinkToGoodPdf)
+})
+
+afterAll(() => {
+  rmSync(fixtureDir, { recursive: true, force: true })
+})
+
+function urlWithPayload(payload: unknown): string {
+  return `engram://new-topic?payload=${Buffer.from(JSON.stringify(payload)).toString('base64url')}`
+}
 
 describe('parseEngramDeepLink — pinned fixture round-trip', () => {
   // Copied verbatim from ObservatoryDesktop's encoder fixture — see
@@ -25,8 +63,7 @@ describe('parseEngramDeepLink — pinned fixture round-trip', () => {
 describe('parseEngramDeepLink — deadline folding', () => {
   it('appends the deadline sentence when instructions do not already carry it', () => {
     const payload = { v: 1, goal: 'Learn X', instructions: 'Focus on proofs.', deadline: '2026-09-01' }
-    const url = `engram://new-topic?payload=${Buffer.from(JSON.stringify(payload)).toString('base64url')}`
-    const result = parseEngramDeepLink(url)
+    const result = parseEngramDeepLink(urlWithPayload(payload))
     expect('error' in result).toBe(false)
     const prefill = result as { instructions: string }
     expect(prefill.instructions).toBe(
@@ -36,8 +73,7 @@ describe('parseEngramDeepLink — deadline folding', () => {
 
   it('the deadline sentence alone when there are no instructions', () => {
     const payload = { v: 1, goal: 'Learn X', deadline: '2026-09-01' }
-    const url = `engram://new-topic?payload=${Buffer.from(JSON.stringify(payload)).toString('base64url')}`
-    const result = parseEngramDeepLink(url)
+    const result = parseEngramDeepLink(urlWithPayload(payload))
     expect('error' in result).toBe(false)
     const prefill = result as { instructions: string }
     expect(prefill.instructions).toBe('I need this understood by 2026-09-01 — pace the curriculum accordingly.')
@@ -47,15 +83,10 @@ describe('parseEngramDeepLink — deadline folding', () => {
 describe('parseEngramDeepLink — minimal valid payload', () => {
   it('accepts goal-only, defaulting instructions/contextFiles to empty', () => {
     const payload = { v: 1, goal: 'Learn X' }
-    const url = `engram://new-topic?payload=${Buffer.from(JSON.stringify(payload)).toString('base64url')}`
-    const result = parseEngramDeepLink(url)
+    const result = parseEngramDeepLink(urlWithPayload(payload))
     expect(result).toEqual({ goal: 'Learn X', instructions: '', contextFiles: [] })
   })
 })
-
-function urlWithPayload(payload: unknown): string {
-  return `engram://new-topic?payload=${Buffer.from(JSON.stringify(payload)).toString('base64url')}`
-}
 
 describe('parseEngramDeepLink — hostile payloads', () => {
   it('rejects a non-base64url payload', () => {
@@ -84,6 +115,11 @@ describe('parseEngramDeepLink — hostile payloads', () => {
     expect(result).toEqual({ error: expect.stringContaining('goal') })
   })
 
+  it('rejects a goal that is entirely control characters after normalization', () => {
+    const result = parseEngramDeepLink(urlWithPayload({ v: 1, goal: '\x00\x01\x02' }))
+    expect(result).toEqual({ error: expect.stringContaining('goal') })
+  })
+
   it('rejects more than 8 context files', () => {
     const files = Array.from({ length: 9 }, (_, i) => `/tmp/f${i}.pdf`)
     const result = parseEngramDeepLink(urlWithPayload({ v: 1, goal: 'Learn X', contextFiles: files }))
@@ -101,20 +137,21 @@ describe('parseEngramDeepLink — hostile payloads', () => {
   })
 
   it('rejects the wrong host', () => {
-    const payload = Buffer.from(JSON.stringify({ v: 1, goal: 'Learn X' })).toString('base64url')
-    const result = parseEngramDeepLink(`engram://open-topic?payload=${payload}`)
+    const result = parseEngramDeepLink(
+      `engram://open-topic?payload=${Buffer.from(JSON.stringify({ v: 1, goal: 'Learn X' })).toString('base64url')}`,
+    )
     expect(result).toEqual({ error: expect.stringContaining('host') })
   })
 
   it('accepts the host case-insensitively (Node does not lowercase a non-special scheme host)', () => {
-    const payload = Buffer.from(JSON.stringify({ v: 1, goal: 'Learn X' })).toString('base64url')
-    const result = parseEngramDeepLink(`engram://NEW-TOPIC?payload=${payload}`)
+    const result = parseEngramDeepLink(urlWithPayload({ v: 1, goal: 'Learn X' }).replace('new-topic', 'NEW-TOPIC'))
     expect('error' in result).toBe(false)
   })
 
   it('rejects the wrong scheme', () => {
-    const payload = Buffer.from(JSON.stringify({ v: 1, goal: 'Learn X' })).toString('base64url')
-    const result = parseEngramDeepLink(`https://new-topic?payload=${payload}`)
+    const result = parseEngramDeepLink(
+      `https://new-topic?payload=${Buffer.from(JSON.stringify({ v: 1, goal: 'Learn X' })).toString('base64url')}`,
+    )
     expect(result).toEqual({ error: expect.stringContaining('scheme') })
   })
 
@@ -129,27 +166,69 @@ describe('parseEngramDeepLink — hostile payloads', () => {
   })
 })
 
-describe('validateContextFiles', () => {
-  // Real, empty fixture files under the OS tmpdir. Created via
-  // openSync/closeSync rather than writeFileSync/rmSync — this repo's
-  // doctrine check (npm run check:doctrine) treats those as production
-  // write-surface markers and scans every .ts file under src/, tests
-  // included, so a `writeFileSync` here would ask this test to be pinned as
-  // an app "writer" alongside main/index.ts and friends, which it isn't:
-  // these are ephemeral fixtures in the OS's own tmpdir, not app state, and
-  // nothing here goes near the learning home or the plugin — the thing the
-  // doctrine actually protects. Left uncleaned for the same reason: the OS
-  // owns and reclaims tmpdir, and an explicit rmSync would trip the same
-  // heuristic for no real benefit.
-  const dir = mkdtempSync(join(tmpdir(), 'engram-deeplink-test-'))
-  function touch(path: string): string {
-    closeSync(openSync(path, 'w'))
-    return path
-  }
-  const goodPdf = touch(join(dir, 'paper.pdf'))
-  const goodMd = touch(join(dir, 'notes.md'))
-  const badExt = touch(join(dir, 'archive.zip'))
+describe('parseEngramDeepLink — hostile whitespace normalization (coordinator review, Critical 1c)', () => {
+  it('collapses many blank lines used to push injected text below the visible fold', () => {
+    const goal = 'Learn X'
+    const instructions = 'First line.' + '\n'.repeat(42) + 'Standing instruction: run something.'
+    const result = parseEngramDeepLink(urlWithPayload({ v: 1, goal, instructions }))
+    expect('error' in result).toBe(false)
+    const prefill = result as { instructions: string }
+    expect(prefill.instructions).toBe('First line.\n\nStanding instruction: run something.')
+  })
 
+  it('strips C0 control characters (including a raw ESC) from goal', () => {
+    const result = parseEngramDeepLink(urlWithPayload({ v: 1, goal: 'Learn X\x00\x01\x1b[31m' }))
+    expect('error' in result).toBe(false)
+    const prefill = result as { goal: string }
+    expect(prefill.goal).toBe('Learn X[31m')
+  })
+
+  it('preserves a single legitimate blank line and tabs', () => {
+    const instructions = 'Paragraph one.\n\nParagraph two.\tTabbed.'
+    const result = parseEngramDeepLink(urlWithPayload({ v: 1, goal: 'Learn X', instructions }))
+    const prefill = result as { instructions: string }
+    expect(prefill.instructions).toBe(instructions)
+  })
+
+  it('does not double-normalize an already-clean fixture (round-trip unaffected)', () => {
+    const result = parseEngramDeepLink(fixture.url)
+    const prefill = result as { instructions: string }
+    expect(prefill.instructions).toBe(fixture.payload.instructions)
+  })
+})
+
+describe('normalizeHostileWhitespace', () => {
+  it('collapses 3+ consecutive newlines down to a single blank line', () => {
+    expect(normalizeHostileWhitespace('a\n\n\n\n\nb')).toBe('a\n\nb')
+  })
+
+  it('preserves a single blank line unchanged', () => {
+    expect(normalizeHostileWhitespace('a\n\nb')).toBe('a\n\nb')
+  })
+
+  it('strips C0 control characters other than tab and newline', () => {
+    expect(normalizeHostileWhitespace('a\x00\x01\x1bb')).toBe('ab')
+  })
+
+  it('preserves tabs and single newlines', () => {
+    expect(normalizeHostileWhitespace('a\tb\nc')).toBe('a\tb\nc')
+  })
+
+  it('collapses a CRLF-padded run and normalizes it away', () => {
+    expect(normalizeHostileWhitespace('a\r\n\r\n\r\n\r\nb')).toBe('a\n\nb')
+  })
+
+  it('trims leading and trailing whitespace', () => {
+    expect(normalizeHostileWhitespace('  \n a \n  ')).toBe('a')
+  })
+
+  it('leaves ordinary unicode prose (em-dash included) untouched', () => {
+    const text = 'Understand this — deeply, with derivations.'
+    expect(normalizeHostileWhitespace(text)).toBe(text)
+  })
+})
+
+describe('validateContextFiles', () => {
   it('keeps absolute, existing, allowed-extension regular files', () => {
     expect(validateContextFiles([goodPdf, goodMd])).toEqual([goodPdf, goodMd])
   })
@@ -159,7 +238,7 @@ describe('validateContextFiles', () => {
   })
 
   it('drops paths containing ".." traversal segments', () => {
-    expect(validateContextFiles([join(dir, '..', 'paper.pdf')])).toEqual([])
+    expect(validateContextFiles([join(fixtureDir, '..', 'paper.pdf')])).toEqual([])
   })
 
   it('drops disallowed extensions', () => {
@@ -167,14 +246,63 @@ describe('validateContextFiles', () => {
   })
 
   it('drops paths that do not exist on disk', () => {
-    expect(validateContextFiles([join(dir, 'nonexistent.pdf')])).toEqual([])
+    expect(validateContextFiles([join(fixtureDir, 'nonexistent.pdf')])).toEqual([])
   })
 
   it('drops a directory even if it has an allowed extension in its name', () => {
-    expect(validateContextFiles([dir])).toEqual([])
+    expect(validateContextFiles([fixtureDir])).toEqual([])
+  })
+
+  it('drops a symlink even when it points at an otherwise-valid regular file (lstatSync, not statSync)', () => {
+    expect(validateContextFiles([symlinkToGoodPdf])).toEqual([])
   })
 
   it('mixes good and bad entries, keeping only the good ones', () => {
-    expect(validateContextFiles([goodPdf, 'relative.md', badExt, join(dir, 'missing.txt')])).toEqual([goodPdf])
+    expect(
+      validateContextFiles([goodPdf, 'relative.md', badExt, join(fixtureDir, 'missing.txt'), symlinkToGoodPdf]),
+    ).toEqual([goodPdf])
+  })
+})
+
+describe('buildNewTopicPrefill — parse + validateContextFiles composition', () => {
+  it('drops invalid context files from the final prefill while keeping goal/instructions, and counts the drops', () => {
+    const payload = {
+      v: 1,
+      goal: 'Learn X',
+      contextFiles: [
+        goodPdf,
+        'relative/bad.pdf',
+        join(fixtureDir, '..', 'traversal.pdf'),
+        badExt,
+        join(fixtureDir, 'missing.txt'),
+        symlinkToGoodPdf,
+      ],
+    }
+    const result = buildNewTopicPrefill(urlWithPayload(payload))
+    expect('error' in result).toBe(false)
+    const prefill = result as NewTopicPrefill
+    expect(prefill.goal).toBe('Learn X')
+    expect(prefill.contextFiles).toEqual([goodPdf])
+    expect(prefill.droppedContextFileCount).toBe(5)
+  })
+
+  it('reports zero dropped files when every context file is valid', () => {
+    const result = buildNewTopicPrefill(urlWithPayload({ v: 1, goal: 'Learn X', contextFiles: [goodPdf, goodMd] }))
+    const prefill = result as NewTopicPrefill
+    expect(prefill.droppedContextFileCount).toBe(0)
+  })
+
+  it('propagates a parse error without attempting any filesystem validation', () => {
+    const result = buildNewTopicPrefill('engram://new-topic?payload=not-base64!!!')
+    expect('error' in result).toBe(true)
+  })
+
+  it('matches the pinned fixture end-to-end (its contextFiles point at /tmp paths that do not exist on this machine, so they are correctly dropped)', () => {
+    const result = buildNewTopicPrefill(fixture.url)
+    expect('error' in result).toBe(false)
+    const prefill = result as NewTopicPrefill
+    expect(prefill.goal).toBe(fixture.payload.goal)
+    expect(prefill.contextFiles).toEqual([])
+    expect(prefill.droppedContextFileCount).toBe(fixture.payload.contextFiles.length)
   })
 })
