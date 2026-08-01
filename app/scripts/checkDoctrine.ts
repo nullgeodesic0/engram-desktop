@@ -252,6 +252,15 @@ const PINNED_WRITERS: Record<string, string> = {
   'main/session/crashLog.ts': 'app userData — local crash-log.jsonl, capped at 200 entries',
   'main/session/misconceptionResolves.ts':
     'app userData — manual misconception-resolve provenance (display-only; the engine status is the grade)',
+  // Task 12 (engram:// deep link) coordinator review, additive pin — NOT a
+  // re-pin of any injected/kickoff string. This is a *test* file's own
+  // fixtures: writeFileSync/mkdtempSync/symlinkSync creating throwaway
+  // paper.pdf/notes.md/archive.zip/a symlink under os.tmpdir() so
+  // validateContextFiles and buildNewTopicPrefill (main/deepLink.ts) have
+  // real files/a real symlink to check against, cleaned up in the same
+  // file's afterAll. Never runs outside `npm run test`; never touches
+  // anything but its own tmpdir directory.
+  'main/deepLink.test.ts': 'os tmpdir — ephemeral test fixtures (paper/notes/archive files + a symlink)',
 }
 
 /** The only module allowed to name the learning home on a write. */
@@ -446,6 +455,38 @@ if (sha(injectedMessages.sort().join('\n')) !== PINNED_MESSAGE_HASH) {
     'D3.kickoff',
     `the messages the app sends into a session changed.\n      pinned: ${PINNED_MESSAGE_HASH}\n      found:  ${sha(injectedMessages.sort().join('\n'))}\n      current set:\n${injectedMessages.map((s) => `        ${s}`).join('\n')}`,
     'A kickoff message is a user turn with the app’s words in the learner’s mouth. It may say WHICH topic and WHICH skill (navigation the learner already performed by clicking); it may not say how to teach, what to skip, or how to grade — that is the skill file’s job, and a sentence here would override it invisibly. Same for text spliced into a learner’s own message: it reaches the assessor as if the learner wrote it.',
+  )
+}
+
+// ===========================================================================
+// SECTION 3b — deep-link app-authored text (Task 12): the ONE sentence
+// deepLink.ts folds into a deep-linked topic's `instructions` before it ever
+// reaches a session, once main/index.ts delivers the resulting prefill and
+// the learner clicks Start on the (unmodified, still-pinned) kickoff in
+// LearnSessionView.tsx's startNewTopic. D3.kickoff's own collector above
+// only keeps literals containing '/engram:' or '[Attached files' — this
+// sentence matches neither, so without a pin of its own it would be
+// invisible to any doctrine audit despite eventually reaching a session
+// exactly like a kickoff message does. Pinned here separately and
+// additively, rather than by widening D3.kickoff's collector to catch it:
+// that regex also governs LearnSessionView.tsx's "Standing instructions for
+// this topic" / "Context files to Read" appendices, two lines below the
+// kickoff message this sentence (and any deep-linked goal/instructions)
+// actually rides into — a real pre-existing blind spot, and now the actual
+// landing zone for a hostile deep-link payload's `instructions` text, but
+// widening that collector is a decision for the repo owner to make
+// deliberately, not something to fold quietly into this task's diff.
+// ===========================================================================
+
+const deepLinkTs = read('main/deepLink.ts')
+const deadlineNoteMatch = deepLinkTs.match(/function deadlineNote[\s\S]*?return `([^`]*)`/)
+const deadlineNoteNormalized = deadlineNoteMatch ? deadlineNoteMatch[1].replace(/\$\{[^}]*\}/g, '${}') : null
+const PINNED_DEEPLINK_DEADLINE_NOTE_HASH = '476ce8053b998a40'
+if (deadlineNoteNormalized === null || sha(deadlineNoteNormalized) !== PINNED_DEEPLINK_DEADLINE_NOTE_HASH) {
+  fail(
+    'D3.deepLinkText',
+    `deepLink.ts's app-authored deadline sentence changed or is missing.\n      pinned: ${PINNED_DEEPLINK_DEADLINE_NOTE_HASH}\n      found:  ${deadlineNoteNormalized === null ? '(deadlineNote() not found)' : sha(deadlineNoteNormalized)}\n      current text: ${deadlineNoteNormalized ?? '(none)'}`,
+    "This sentence is folded into a deep-linked topic's instructions in main/deepLink.ts before it ever reaches a session — the same authority-bearing position as a kickoff message, just delivered through a different file than permissionConfig.ts/D3.kickoff's collector, and outside both (it matches neither /engram: nor [Attached files). Pinning it here separately is what keeps a change to its wording an explicit, audited decision instead of a silent drift with no pin to update. See this check's own file-level comment for the pre-existing appendix blind spot this does NOT cover.",
   )
 }
 

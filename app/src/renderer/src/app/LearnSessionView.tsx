@@ -307,16 +307,26 @@ export function LearnSessionView({
   // ⌘N / "New Topic" click, including ones that follow a deep-link open, so
   // a stale prefill can never leak into an unrelated fresh topic.
   const [modalPrefill, setModalPrefill] = useState<NewTopicPrefill | null>(null)
-  // Bumped only when a NEW prefill actually lands (not on every plain ⌘N),
-  // and used as NewTopicModal's `key` below — forces a remount so a second
-  // deep link arriving while the modal is ALREADY open (from an earlier
-  // deep link, or a manual "New Topic" click) still reaches the form.
-  // NewTopicModal seeds its fields from props only via a lazy useState
-  // initializer (it deliberately does not re-sync on a later prop change —
-  // see its own doc comment), so without a key change here, a same-instance
-  // prop update would be silently ignored and the new prefill lost. Kept
-  // narrow to prefill-only changes (not every open) so a plain repeat ⌘N
-  // while the learner is mid-typing doesn't wipe what they've written.
+  // Bumped only when a NEW prefill actually lands AND the modal was not
+  // already open (see the openNewTopicSignal effect below), and used as
+  // NewTopicModal's `key` — forces a remount so the freshly-opened instance
+  // seeds from the new prefill. NewTopicModal seeds its fields from props
+  // only via a lazy useState initializer (it deliberately does not re-sync
+  // on a later prop change — see its own doc comment), so without a key
+  // change here, a same-instance prop update would be silently ignored and
+  // the new prefill lost.
+  //
+  // Deliberately NOT bumped when the modal is already open: an earlier
+  // version of this fix bumped unconditionally, which meant a second deep
+  // link (or any repeat "New Topic" trigger) arriving while the learner was
+  // already mid-typing into an open modal would force a remount and wipe
+  // what they'd written — trading "prefill silently lost" for "the
+  // learner's own typing silently lost," which is worse. The current
+  // choice: if the modal is already open, a new prefill is simply ignored
+  // (not queued for after the modal closes) — there's no reliable in-modal
+  // signal of "still pristine vs. already edited" without lifting
+  // NewTopicModal's internal state up, and the deep link's URL isn't
+  // retained anywhere to safely retry from later.
   const [prefillEpoch, setPrefillEpoch] = useState(0)
   // Only consulted for the empty-shelf guided card below — same gate HomeView
   // uses (EnvironmentGate already blocks the app on a broken environment, but
@@ -868,15 +878,24 @@ export function LearnSessionView({
       // came from a deep link (null/undefined for a plain ⌘N or shelf
       // click), so this closure already has the matching value from the
       // same render — see the comment above for why the ref, not the prop,
-      // is the change-detection guard. Consumed (reported back to App.tsx)
-      // only when non-null, so a plain ⌘N right after a deep link doesn't
-      // re-clear state that's already null.
-      setModalPrefill(newTopicPrefill ?? null)
-      setNewTopicOpen(true)
-      if (newTopicPrefill) {
+      // is the change-detection guard.
+      //
+      // `newTopicOpen` (read directly, not via a ref — its value here is
+      // this render's committed state, from BEFORE the setNewTopicOpen(true)
+      // below takes effect) gates whether a real prefill actually gets
+      // applied: if the modal is already open, the learner may already be
+      // mid-typing into it, and seeding+remounting would silently destroy
+      // that — see prefillEpoch's own doc comment for the full trade-off.
+      if (newTopicPrefill && !newTopicOpen) {
+        setModalPrefill(newTopicPrefill)
         setPrefillEpoch((n) => n + 1)
-        onNewTopicPrefillConsumed?.()
       }
+      setNewTopicOpen(true)
+      // Consumed (reported back to App.tsx) whenever a prefill arrived,
+      // whether it was applied or ignored above — either way App.tsx's copy
+      // must not linger and get silently applied to some LATER, unrelated
+      // signal bump (e.g. a plain ⌘N after this one).
+      if (newTopicPrefill) onNewTopicPrefillConsumed?.()
     }
     openNewTopicSignalRef.current = openNewTopicSignal ?? openNewTopicSignalRef.current
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2132,6 +2151,8 @@ export function LearnSessionView({
           initialGoal={modalPrefill?.goal}
           initialInstructions={modalPrefill?.instructions}
           initialFiles={modalPrefill?.contextFiles}
+          externalOrigin={modalPrefill !== null}
+          droppedContextFileCount={modalPrefill?.droppedContextFileCount}
         />
       )}
     </div>

@@ -22,8 +22,9 @@ import { checkForUpdate, getCachedUpdateCheck, maybeAutoCheckForUpdate } from '.
 import { restoreWindowState, trackWindowState } from './windowState'
 import { installAppMenu } from './appMenu'
 import { installGlobalErrorHandlers, getCrashLog } from './session/crashLog'
-import { parseEngramDeepLink, validateContextFiles } from './deepLink'
-import type { EnvironmentCheckResult, NewTopicPrefill } from '../shared/types'
+import { buildNewTopicPrefill } from './deepLink'
+import { createDeepLinkQueue } from './deepLinkQueue'
+import type { EnvironmentCheckResult } from '../shared/types'
 
 const execFileAsync = promisify(execFile)
 
@@ -75,14 +76,20 @@ if (!gotSingleInstanceLock) {
   // Windows/Linux this is also how an engram:// click reaches an already-
   // running instance: the OS relaunches the app with the URL as a plain
   // argv entry rather than firing 'open-url' (that event is macOS-only), so
-  // it's scanned for here before falling back to the plain focus.
+  // it's scanned for here before falling back to the plain focus. The scan
+  // is case-insensitive to match parseEngramDeepLink's own host comparison
+  // (nothing about an OS-relaunch argv is guaranteed lowercase).
   app.on('second-instance', (_event, argv) => {
-    const deepLink = argv.find((a) => a.startsWith('engram://'))
-    if (deepLink) {
-      handleDeepLink(deepLink)
-    } else {
-      focusOrCreateWindow()
-    }
+    const deepLink = argv.find((a) => a.toLowerCase().startsWith('engram://'))
+    if (deepLink) handleDeepLink(deepLink)
+    // Always bring the window forward, regardless of whether a deep link
+    // was present or valid — this handler's whole reason to exist is "a
+    // second launch attempt must not silently do nothing" (see the comment
+    // above), and a malformed/rejected link must not regress that guarantee
+    // back to silence. Harmless when handleDeepLink already succeeded: it
+    // already called focusOrCreateWindow('learn') itself, so this is just
+    // an idempotent re-focus of the same window, not a second one.
+    focusOrCreateWindow()
   })
 }
 
@@ -112,13 +119,12 @@ async function checkEnvironment(): Promise<EnvironmentCheckResult> {
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
-// A deep link's URL, held here only for the narrow window between an
-// 'open-url' arriving before app.whenReady() resolves (see handleDeepLink)
-// and the startup sequence draining it (below, in app.whenReady().then()).
-// Never read anywhere else. A later link simply overwrites an unconsumed
-// earlier one; cold-launch double-links are not a real scenario worth
-// queueing a list for.
-let pendingDeepLinkUrl: string | null = null
+// Holds a deep-link URL for the narrow window between an 'open-url' arriving
+// before app.whenReady() resolves (see handleDeepLink) and the startup
+// sequence draining it (below, in app.whenReady().then()). Factored into
+// deepLinkQueue.ts (plain, electron-free) specifically so this piece of the
+// pre-ready crash fix has real test coverage — see that file's own tests.
+const deepLinkQueue = createDeepLinkQueue()
 
 /** Assets bundled via `extraResources` (see package.json) land beside the packaged
  * app's Resources folder; in dev they're still at the project root. */
@@ -172,29 +178,12 @@ function focusOrCreateWindow(navigateTo?: string): void {
  * (see LearnSessionView's startNewTopic, which this changeset does not
  * touch). A malformed or hostile link is logged and dropped silently rather
  * than surfaced as an error dialog: the payload is untrusted input, and a
- * bad link someone else constructed is not the learner's problem to see.
- *
- * Guards on `app.isReady()` first: macOS can fire 'open-url' before
- * whenReady resolves on a cold launch (see the comment above
- * `app.setAsDefaultProtocolClient`), and `focusOrCreateWindow` below
- * unconditionally creates a `BrowserWindow` when none exists yet — doing
- * that before the app is ready throws. A link that arrives that early is
- * queued and drained once app.whenReady()'s own startup window already
- * exists (see the drain call below), rather than acted on directly here. */
-function handleDeepLink(url: string): void {
-  if (!app.isReady()) {
-    pendingDeepLinkUrl = url
+ * bad link someone else constructed is not the learner's problem to see. */
+function deliverDeepLink(url: string): void {
+  const prefill = buildNewTopicPrefill(url)
+  if ('error' in prefill) {
+    console.log('[engram-desktop] ignoring engram:// deep link —', prefill.error)
     return
-  }
-  const parsed = parseEngramDeepLink(url)
-  if ('error' in parsed) {
-    console.log('[engram-desktop] ignoring engram:// deep link —', parsed.error)
-    return
-  }
-  const prefill: NewTopicPrefill = {
-    goal: parsed.goal,
-    instructions: parsed.instructions,
-    contextFiles: validateContextFiles(parsed.contextFiles),
   }
   focusOrCreateWindow('learn')
   const win = mainWindow
@@ -204,6 +193,21 @@ function handleDeepLink(url: string): void {
   } else {
     win.webContents.send('app:new-topic-prefill', prefill)
   }
+}
+
+/** Entry point for both delivery paths ('open-url' and the second-instance
+ * argv scan). Routed through `deepLinkQueue` first: macOS can fire
+ * 'open-url' before whenReady resolves on a cold launch (see the comment
+ * above `app.setAsDefaultProtocolClient`), and `deliverDeepLink` above
+ * unconditionally creates a `BrowserWindow` when none exists yet — doing
+ * that before the app is ready throws. `deepLinkQueue.handle` returns
+ * `null` (and holds the URL) exactly when that's the case; the drain call
+ * in app.whenReady().then() below is what surfaces it again once the
+ * startup window already exists, calling `deliverDeepLink` directly rather
+ * than back through this queue gate a second time. */
+function handleDeepLink(url: string): void {
+  const ready = deepLinkQueue.handle(url, () => app.isReady())
+  if (ready !== null) deliverDeepLink(ready)
 }
 
 function createTray(): void {
@@ -418,15 +422,15 @@ app.whenReady().then(() => {
   startReviewNotifier(() => focusOrCreateWindow('review'), sendDueCount)
 
   // Drain a deep link that arrived before we were ready to act on it (see
-  // pendingDeepLinkUrl + handleDeepLink's own comments) — the startup window
-  // above already exists by this point, so handleDeepLink's isLoading()
-  // check (not a "just created it" assumption) is what correctly decides
-  // whether to wait for did-finish-load or send immediately.
-  if (pendingDeepLinkUrl) {
-    const url = pendingDeepLinkUrl
-    pendingDeepLinkUrl = null
-    handleDeepLink(url)
-  }
+  // deepLinkQueue + handleDeepLink/deliverDeepLink's own comments) — the
+  // startup window above already exists by this point, so deliverDeepLink's
+  // isLoading() check (not a "just created it" assumption) is what
+  // correctly decides whether to wait for did-finish-load or send
+  // immediately. Calls deliverDeepLink directly (not handleDeepLink) since
+  // this URL already passed the queue gate once; app.isReady() is
+  // trivially true here anyway.
+  const drainedDeepLink = deepLinkQueue.drain()
+  if (drainedDeepLink) deliverDeepLink(drainedDeepLink)
 
   // Once per launch, well after startup settles (30s — this is a `gh` network
   // call, no reason to compete with the `claude --version` probe and window
