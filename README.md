@@ -61,7 +61,7 @@ The app's surfaces group the way its navigation does — study, track, explore �
 
 **Track**
 
-- **Grades**: every topic carries a letter grade (A–F) computed from recall, punctuality, coverage, conceptual repair, and calibration — with a GPA across topics, historical trend sparklines, assignment-style session grouping, and event rows that deep-link into the exact moment of the transcript that earned them.
+- **Grades**: every topic carries a letter grade on an S–F scale — S (≥95) is a mastery rank above A, on fixed absolute cutoffs rather than a curve (there's one student here; the yardstick has to stay still to watch drift) — computed from recall, punctuality, coverage, conceptual repair, and calibration. Each subgrade gets its own letter on the same scale, a node-count-weighted GPA spans topics, and historical trend sparklines, assignment-style session grouping, and event rows deep-link into the exact moment of the transcript that earned them.
 - **Misconception ledger**: misconceptions the tutor files mid-dialogue are pinned into the transcript as specimen labels, tracked in a ledger, surfaced as a digest when a review session opens, and cleared two ways — earned (demonstrate the correction and the tutor resolves it) or manual, with provenance shown either way. A per-row **Re-test** launcher spins up a targeted probe on demand.
 - **Session history**: a global, searchable record of every sitting, hydrated from transcripts on disk.
 
