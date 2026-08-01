@@ -6,6 +6,7 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { BootSplash } from './components/BootSplash'
 import { applyStoredTheme, reapplyIfSystem, THEME_CHANGE_EVENT, type ResolvedTheme } from './shared/theme'
 import './index.css'
+import './fonts'
 
 // Applied synchronously, before ReactDOM even creates the root — a local
 // module load has no network round-trip, so this lands well before the

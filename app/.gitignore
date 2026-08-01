@@ -3,3 +3,7 @@ out/
 dist/
 *.log
 resources/mcpBridgeWorker.mjs
+
+# Licensed typefaces — not redistributable; see src/renderer/src/assets/fonts/README.md
+src/renderer/src/assets/fonts/*.ttf
+src/renderer/src/assets/fonts/*.otf
