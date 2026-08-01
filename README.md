@@ -113,6 +113,10 @@ The full story — session lifecycle, the eight bridge tools, transcript hydrati
 
    Verify with a quick `/engram:coach` in any interactive `claude` session. Engram's state lives at `~/.claude/learning/` — human-readable JSON that this app reads (via `engram.py`) but never rewrites by hand.
 
+### Download a build
+
+Grab the latest DMG from [Releases](https://github.com/nullgeodesic0/engram-desktop/releases) (Apple silicon). The build is unsigned — right-click → Open on first launch, or clear the quarantine flag as described below. Release builds render on the app's bundled open typefaces; the prerequisites above still apply.
+
 ### Run from source
 
 ```bash

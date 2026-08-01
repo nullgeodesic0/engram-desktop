@@ -1,0 +1,47 @@
+# Cut a release by pushing a version tag:
+#   1. bump "version" in app/package.json (and commit)
+#   2. git tag v<that version> && git push origin v<that version>
+# The build runs on a clean CI runner, so it is fontless by construction —
+# the licensed typefaces never exist there and the app bundles only its
+# open fallbacks (see app/src/renderer/src/assets/fonts/README.md).
+# electron-builder uploads the DMG/zip to a DRAFT release; review it on
+# GitHub and press Publish.
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-mac:
+    runs-on: macos-14 # Apple silicon — the app targets arm64
+    defaults:
+      run:
+        working-directory: app
+    env:
+      # The build is intentionally unsigned; stop electron-builder from
+      # hunting the runner's keychain for a signing identity.
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      - run: npm test
+
+      - name: Build and upload draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run dist:mac -- --publish always
