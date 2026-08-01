@@ -33,13 +33,9 @@ This app is what the loop looks like when it isn't happening in a terminal:
 |---|---|
 | ![Home](docs/media/home.png) | ![Learn session](docs/media/learn-session.png) |
 
-| Topic library — territories and due counts | `/review` — free recall, blind receipts, stability movement |
-|---|---|
-| ![Learn](docs/media/learn-list.png) | ![Review](docs/media/review.png) |
-
-| Grades — subgrades, trend, assignments | Misconception ledger — re-test and resolve |
-|---|---|
-| ![Grades](docs/media/grades.png) | ![Ledger](docs/media/misconception-ledger.png) |
+| `/review` — free recall, blind receipts, stability movement |
+|---|
+| ![Review](docs/media/review.png) |
 
 ## The loop, in this app
 
