@@ -1,6 +1,13 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { SessionEvent } from '../../../shared/sessionEvents'
-import type { TopicListEntry, ArtifactEntry, TopicGraph, ExportSittingFormat, EnvironmentCheckResult } from '../../../shared/types'
+import type {
+  TopicListEntry,
+  ArtifactEntry,
+  TopicGraph,
+  ExportSittingFormat,
+  EnvironmentCheckResult,
+  NewTopicPrefill,
+} from '../../../shared/types'
 import { RateLimitBanner } from '../components/RateLimitBanner'
 import { isBlockingRateLimitStatus } from '../../../shared/rateLimit'
 import { ChatMessageView } from '../components/ChatMessageView'
@@ -257,6 +264,16 @@ interface LearnSessionViewProps {
   /** Bumped by App.tsx (via the ⌘N menu item / 'learn:new-topic' deep link) to
    * pop the New Topic modal open — only the change matters, not the value. */
   openNewTopicSignal?: number
+  /** Set by App.tsx alongside an `openNewTopicSignal` bump when it came from
+   * an engram:// deep link (Observatory's paper→topic hand-off) rather than
+   * a plain ⌘N — already shape-guarded and filesystem-checked in main (see
+   * main/deepLink.ts). Read into the modal-open state the moment the signal
+   * fires, then reported back via onNewTopicPrefillConsumed so App.tsx can
+   * clear it — a later plain ⌘N, or the shelf's own "New Topic" affordances,
+   * must never reopen the modal with a stale prefill. Prefill only: the
+   * learner still reviews and hits Start themselves. */
+  newTopicPrefill?: NewTopicPrefill | null
+  onNewTopicPrefillConsumed?: () => void
   /** Chat Instruments Wave B — node-name chips' deep link. App.tsx's own
    * `goToNode` (the SAME callback ArtifactGalleryView's `onOpenNode` and
    * TopicDrilldownView's `onGoNode` already use for "a click landed on a
@@ -277,12 +294,19 @@ export function LearnSessionView({
   onSpotlight,
   onGoReview,
   openNewTopicSignal,
+  newTopicPrefill,
+  onNewTopicPrefillConsumed,
   onOpenNode,
 }: LearnSessionViewProps = {}) {
   // Topic-list state
   const [topics, setTopics] = useState<TopicListEntry[] | null>(null)
   const [settingsFor, setSettingsFor] = useState<TopicListEntry | null>(null)
   const [newTopicOpen, setNewTopicOpen] = useState(false)
+  // Fields to seed the New Topic modal with on its next open — set only from
+  // an engram:// deep link (see newTopicPrefill above); null for every plain
+  // ⌘N / "New Topic" click, including ones that follow a deep-link open, so
+  // a stale prefill can never leak into an unrelated fresh topic.
+  const [modalPrefill, setModalPrefill] = useState<NewTopicPrefill | null>(null)
   // Only consulted for the empty-shelf guided card below — same gate HomeView
   // uses (EnvironmentGate already blocks the app on a broken environment, but
   // its "Continue anyway" escape hatch can still land you here with topics
@@ -829,9 +853,19 @@ export function LearnSessionView({
   const openNewTopicSignalRef = useRef(0)
   useEffect(() => {
     if (openNewTopicSignal !== undefined && openNewTopicSignal !== openNewTopicSignalRef.current) {
+      // App.tsx batches newTopicPrefill alongside every signal bump that
+      // came from a deep link (null/undefined for a plain ⌘N or shelf
+      // click), so this closure already has the matching value from the
+      // same render — see the comment above for why the ref, not the prop,
+      // is the change-detection guard. Consumed (reported back to App.tsx)
+      // only when non-null, so a plain ⌘N right after a deep link doesn't
+      // re-clear state that's already null.
+      setModalPrefill(newTopicPrefill ?? null)
       setNewTopicOpen(true)
+      if (newTopicPrefill) onNewTopicPrefillConsumed?.()
     }
     openNewTopicSignalRef.current = openNewTopicSignal ?? openNewTopicSignalRef.current
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openNewTopicSignal])
 
   function handleSessionEvent(event: SessionEvent) {
@@ -1800,7 +1834,14 @@ export function LearnSessionView({
                 <div className="font-(family-name:--font-serif) text-[length:var(--text-display)] text-[var(--color-text-primary)]">
                   Every topic starts as a first-principles map.
                 </div>
-                <Button variant="primary" onClick={() => setNewTopicOpen(true)} disabled={rateLimitBlocking}>
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    setModalPrefill(null)
+                    setNewTopicOpen(true)
+                  }}
+                  disabled={rateLimitBlocking}
+                >
                   Start your first topic
                 </Button>
               </Card>
@@ -1835,7 +1876,13 @@ export function LearnSessionView({
                 />
                 {/* The shelf's last card, not a floating button below the list —
                     see AddTerritoryCard's doctrine comment. */}
-                <AddTerritoryCard onClick={() => setNewTopicOpen(true)} blocked={rateLimitBlocking} />
+                <AddTerritoryCard
+                  onClick={() => {
+                    setModalPrefill(null)
+                    setNewTopicOpen(true)
+                  }}
+                  blocked={rateLimitBlocking}
+                />
               </div>
             )}
           </div>
@@ -2060,7 +2107,18 @@ export function LearnSessionView({
           }}
         />
       )}
-      {newTopicOpen && <NewTopicModal onClose={() => setNewTopicOpen(false)} onStart={startNewTopic} />}
+      {newTopicOpen && (
+        <NewTopicModal
+          onClose={() => {
+            setNewTopicOpen(false)
+            setModalPrefill(null)
+          }}
+          onStart={startNewTopic}
+          initialGoal={modalPrefill?.goal}
+          initialInstructions={modalPrefill?.instructions}
+          initialFiles={modalPrefill?.contextFiles}
+        />
+      )}
     </div>
   )
 }

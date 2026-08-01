@@ -29,6 +29,7 @@ import type {
   DescribeArchiveResult,
   RestoreArchiveResult,
   BackupInfo,
+  NewTopicPrefill,
 } from '../shared/types'
 import type { SessionEvent } from '../shared/sessionEvents'
 import type { BridgeAskRequest, BridgeAskResponse, BridgeBeatRequest, BridgeUiRequest } from '../shared/bridgeProtocol'
@@ -148,6 +149,17 @@ const engramApi = {
     const handler = (_e: Electron.IpcRendererEvent, view: string) => cb(view)
     ipcRenderer.on('app:navigate', handler)
     return () => ipcRenderer.removeListener('app:navigate', handler)
+  },
+  // Fired by main when an engram:// deep link (Observatory's paper→topic
+  // hand-off) has been parsed, shape-guarded, and filesystem-checked — see
+  // main/deepLink.ts + main/index.ts's handleDeepLink. Delivered alongside
+  // (not instead of) onNavigate('learn'); App.tsx is what actually opens the
+  // New Topic modal with these fields prefilled. Prefill only — never starts
+  // a session on its own.
+  onNewTopicPrefill: (cb: (prefill: NewTopicPrefill) => void): (() => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, prefill: NewTopicPrefill) => cb(prefill)
+    ipcRenderer.on('app:new-topic-prefill', handler)
+    return () => ipcRenderer.removeListener('app:new-topic-prefill', handler)
   },
   // Sidebar due-badge push — see main/session/reviewNotifier.ts's 5-min poll
   // (main/index.ts's `sendDueCount`). Freshness (window focus, a sitting

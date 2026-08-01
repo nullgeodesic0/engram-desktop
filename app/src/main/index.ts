@@ -22,7 +22,8 @@ import { checkForUpdate, getCachedUpdateCheck, maybeAutoCheckForUpdate } from '.
 import { restoreWindowState, trackWindowState } from './windowState'
 import { installAppMenu } from './appMenu'
 import { installGlobalErrorHandlers, getCrashLog } from './session/crashLog'
-import type { EnvironmentCheckResult } from '../shared/types'
+import { parseEngramDeepLink, validateContextFiles } from './deepLink'
+import type { EnvironmentCheckResult, NewTopicPrefill } from '../shared/types'
 
 const execFileAsync = promisify(execFile)
 
@@ -40,6 +41,18 @@ app.setName('Engram Desktop')
 // for why explorables get a dedicated scheme instead of file://.
 registerExplorableSchemePrivileges()
 
+// engram:// deep links — Observatory's paper→topic hand-off (see deepLink.ts
+// for the pure parse/shape-guard and handleDeepLink below for delivery).
+// macOS routes a click on a registered scheme to this event directly (even
+// at cold launch — Electron queues it until whenReady), so both calls must
+// be made before whenReady; Windows/Linux instead relaunch the process with
+// the URL on argv, handled by the second-instance branch below.
+app.setAsDefaultProtocolClient('engram')
+app.on('open-url', (event, url) => {
+  event.preventDefault()
+  handleDeepLink(url)
+})
+
 // Without this, a second launch (e.g. an impatient double-click while the first
 // launch is still loading — startup does a `claude --version` exec plus other
 // I/O before the window shows) boots a genuinely separate, independent process
@@ -54,8 +67,19 @@ if (!gotSingleInstanceLock) {
 } else {
   // A second launch attempt while we're already running — bring the existing
   // window forward instead of doing nothing (which is what silently let a
-  // second process boot its own window before this fix existed).
-  app.on('second-instance', () => focusOrCreateWindow())
+  // second process boot its own window before this fix existed). On
+  // Windows/Linux this is also how an engram:// click reaches an already-
+  // running instance: the OS relaunches the app with the URL as a plain
+  // argv entry rather than firing 'open-url' (that event is macOS-only), so
+  // it's scanned for here before falling back to the plain focus.
+  app.on('second-instance', (_event, argv) => {
+    const deepLink = argv.find((a) => a.startsWith('engram://'))
+    if (deepLink) {
+      handleDeepLink(deepLink)
+    } else {
+      focusOrCreateWindow()
+    }
+  })
 }
 
 /** Surfaces the two silent-failure modes a packaged app can hit (Engram plugin not
@@ -116,6 +140,40 @@ function focusOrCreateWindow(navigateTo?: string): void {
   const win = createWindow()
   rebindWindow(win)
   if (navigateTo) win.webContents.once('did-finish-load', () => sendNav(navigateTo))
+}
+
+/** Parses + validates an engram:// deep link and, if it survives, delivers a
+ * prefill to the renderer's New Topic modal — PREFILL ONLY, this never
+ * starts a session itself; the learner still has to review and hit Start
+ * (see LearnSessionView's startNewTopic, which this changeset does not
+ * touch). A malformed or hostile link is logged and dropped silently rather
+ * than surfaced as an error dialog: the payload is untrusted input, and a
+ * bad link someone else constructed is not the learner's problem to see.
+ *
+ * Mirrors focusOrCreateWindow's own did-finish-load idiom for delivery: a
+ * payload sent before the renderer's listener is attached is silently lost,
+ * so a freshly-created window's delivery waits for the first paint while an
+ * already-live window gets it immediately. */
+function handleDeepLink(url: string): void {
+  const parsed = parseEngramDeepLink(url)
+  if ('error' in parsed) {
+    console.log('[engram-desktop] ignoring engram:// deep link —', parsed.error)
+    return
+  }
+  const prefill: NewTopicPrefill = {
+    goal: parsed.goal,
+    instructions: parsed.instructions,
+    contextFiles: validateContextFiles(parsed.contextFiles),
+  }
+  const hadWindow = mainWindow !== null
+  focusOrCreateWindow('learn')
+  if (hadWindow) {
+    mainWindow?.webContents.send('app:new-topic-prefill', prefill)
+  } else {
+    mainWindow?.webContents.once('did-finish-load', () => {
+      mainWindow?.webContents.send('app:new-topic-prefill', prefill)
+    })
+  }
 }
 
 function createTray(): void {

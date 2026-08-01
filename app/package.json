@@ -83,6 +83,14 @@
       "target": [
         "dmg",
         "zip"
+      ],
+      "protocols": [
+        {
+          "name": "Engram Deep Link",
+          "schemes": [
+            "engram"
+          ]
+        }
       ]
     },
     "dmg": {
