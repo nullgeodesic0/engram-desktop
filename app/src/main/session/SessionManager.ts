@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { EventEmitter } from 'node:events'
 import { resolveEngramPlugin } from './pluginResolver'
 import { resolveClaudeBinary } from './claudeResolver'
+import { buildSessionEnv } from './sessionEnv'
 import { prepareSessionPermissions, type SessionPermissionSetup } from './permissionConfig'
 import { NdjsonLineSplitter } from './streamParser'
 import { bridgeServer } from '../bridge/bridgeServer'
@@ -96,7 +97,7 @@ export class SessionManager extends EventEmitter {
       // resolver's root is guaranteed to contain scripts/engram.py (that
       // filter is how it picks a version), which is exactly the locator's
       // own test — the sanctioned dev-clone hook, not a plugin modification.
-      env: { ...process.env, ENGRAM_ROOT: engramRoot },
+      env: buildSessionEnv(process.env, engramRoot),
     })
 
     this.child.stdout.on('data', (chunk: Buffer) => this.handleStdout(chunk.toString('utf-8')))
