@@ -158,6 +158,18 @@ export class SessionManager extends EventEmitter {
   private handleRawEvent(d: Record<string, unknown>): void {
     const type = d.type as string
 
+    // Sidechain traffic: a spawned subagent's OWN records (its prose, tool
+    // calls, and tool results) are forwarded onto the parent session's stdout
+    // as ordinary 'assistant'/'user' records, distinguished ONLY by a
+    // non-null parent_tool_use_id (the spawning Agent call's id; the tutor's
+    // own records carry null — verified on a live wire capture, 2026-08).
+    // Without this gate the curriculum architect's final message — the entire
+    // add-topic JSON — streams into the transcript as tutor prose, fused to
+    // whatever bubble was open. Nothing a subagent says is ever the tutor's
+    // voice: drop it all here, at the single entry point, so no downstream
+    // branch has to remember to check.
+    if (d.parent_tool_use_id != null) return
+
     if (type === 'assistant') {
       const message = d.message as { content?: RawContentBlock[] } | undefined
       for (const block of message?.content ?? []) {
