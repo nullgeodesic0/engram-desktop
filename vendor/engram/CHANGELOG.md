@@ -1,0 +1,3122 @@
+# Changelog
+
+## 1.10.1 — 2026-07-29 · The plugin directory that was pretending to be two things
+
+A community PR ([#14](https://github.com/nagisanzenin/engram/pull/14), thanks
+[@luanweslley77](https://github.com/luanweslley77)) — the first outside contribution to the OpenCode
+layer. `.opencode/` held three different things at once: TypeScript source, the runtime extraction
+target, and npm artifacts. That is why an `install-type` split had to exist at all — extracting in
+dev mode would have overwritten the source it was extracting from.
+
+**Source moved to `.opencode-plugin/`**, so the extraction target is only ever a target. With that
+true, `detectInstallType()` had nothing left to decide and is gone: `selfExtract()` always runs.
+Dev mode, which quietly did not work, now does. `command/` → `commands/` (OpenCode's discovery glob
+is `{command,commands}/**/*.md`, so both spellings resolve — but shipping both would double-register
+the three commands, which is why the rename comes with a cleanup). `engram_update` is hidden by
+`cfg.permission` as well as `cfg.tools`, which is the mechanism OpenCode's runtime actually uses.
+
+### What review caught before it merged
+
+**A recursive delete that reached outside the project.** The first version of the legacy-directory
+cleanup was `rmSync(target/command, {recursive: true})`. `.opencode/command/` is not Engram's
+directory — it is the documented home for a user's *own* OpenCode commands, and Engram only ever
+wrote three files into it. Worse, `getExtractTarget()` falls back to the **global**
+`~/.config/opencode/` when a project has no `opencode.json`, so for those projects the delete
+landed in the user's home directory. Both were reproduced by running them, not by reading the diff.
+It now unlinks Engram's own three files and `rmdirSync`s the directory, which succeeds only if it is
+already empty.
+
+**And a documented safety decision, reversed.** The PR switched `.git/info/exclude` from `.engram-*`
+to `.opencode/`, four lines beneath a docstring explaining why that is exactly wrong: `.opencode/`
+holds the user's own agents and commands, `.git/info/exclude` is invisible from the working tree,
+and an exclude that outlives its reason is a trap where `git status` goes quiet about files the user
+meant to commit. The guard test written to hold that function honest had been **flipped to assert
+the new behaviour** — which is the signal to stop and read the docstring, not the signal to proceed.
+Reverted. The underlying need was real but dev-side: this repo's own `.opencode/` is generated output
+now, so it went into the repo's `.gitignore`, where it belongs.
+
+### Fixed here
+
+The manifest migration the PR added — a `.engram-update.jsonc` written by ≤1.9.1 carries the
+singular `categories.command` — **shipped with no test**, so back-compat was true by inspection
+only. Three checks now pin it at the single `readManifest` gate, including the `remaining` and
+`applied` arrays (a stale `"command"` in `remaining` names a category that no longer exists) and the
+case where both keys are present. All three mutation-tested.
+
+### Also worth saying out loud
+
+`@opencode-ai/plugin` moved from `dependencies` to `peerDependencies` inside a commit labelled
+`chore`. It is not a chore: `update-tool.ts` imports `tool` as a **value**, so the package is a
+runtime requirement. It checks out — npm resolves the peer into the lockfile, CI's `bun install`
+does too, and OpenCode installs the SDK into its own tree, so the host genuinely provides it and this
+avoids a second mismatched copy. Correct, but it was packaging scope riding under a label a reviewer
+would skim past.
+
+### Tests
+
+vitest **162 → 164**, all three new checks mutation-tested (3/3 caught by their own check). The only
+line of `engram.py` this release changes is `ENGRAM_VERSION`, so no engine behaviour moves —
+`selftest` stays at **302/302** and the fuzz gate was re-run against it anyway (0 crashes / 600
+states), because *"nothing changed"* is a claim and the fuzzer is a measurement.
+
+**§4.8 numbers audit: nothing to audit.** This release adds no number, no rate, and no count to any
+surface. **§5.5 and §5.7 are not triggered** — `skills/`, `agents/`, `codex/` and `hooks/` are
+byte-identical to v1.10.0, so no shared prose reaches the other five platforms. **§5.6, the user
+session, was not run**, for the same reason as v1.10.0: it needs a human learning something across
+real days. Nothing here changes what a learner sees; the whole diff is the OpenCode install path.
+A §5 live test drove a real 1.9.1-shaped install through the upgrade — user files kept, Engram's
+legacy copies swept, an unrelated `.opencode/agent/` untouched, the exclude still on `.engram-*`,
+and a second run a true no-op.
+
+## 1.10.0 — 2026-07-28 · The answerable rubric
+
+[Issue #13](https://github.com/nagisanzenin/engram/issues/13): *"the rubric expects a part that no
+reasonable person would include in their answer just going by the probe. I answer the probes as they
+are presented but get punished because I miss part of the rubric that I couldn't reasonably come up
+with."* Reported at 3–4 nodes per 20-node DAG, with the reporter repairing each one by hand.
+
+It reproduces, and it is not model noise. **The two agent specs disagreed by construction.** The
+architect anchored the probe to the claim — *"a free-recall question whose answer is the claim"* —
+and left the rubric free to ask for more than the claim contains. The assessor then requires **all**
+criteria for `recalled`, rounds down when torn, and has no instruction anywhere permitting it to
+discount a criterion the probe never requested. Every mismatch therefore resolved against the
+learner, and nothing in the system could even see it happening.
+
+**And the grade is not the damage.** The grade writes an FSRS receipt. A rubric asking for something
+the probe never requested does not merely annoy someone — it **schedules real reviews of material
+they already know**, forever, quietly. That is a defect in the instrument, which is why this is
+engine code and not just a better prompt.
+
+### What it looks like at scale
+
+Measured over **62 architect-authored nodes** in three topics before a line was written:
+
+- **24 (39%)** carry a *framing / purpose / consequence* criterion — "frames it as…", "connects it
+  to…", "draws the consequence…", "states the purpose is…".
+- It sits in the **last** rubric slot in 19 of those 24 (11× at 3-of-3, 8× at 4-of-4). The failure
+  has a shape: write the criteria that answer the probe, then add one more that reframes.
+- Of the graded receipts on nodes carrying one, that criterion was the one marked missed in
+  **8 of 8**.
+
+The assessor had been narrating the defect all along, into notes nobody aggregated —
+*"**Answered both direct probe asks cold**, so core is present"* (graded `partial`);
+*"'frames it as a freshness-vs-speed tradeoff' — MISSED… **the probe itself supplied that
+framing**"*; *"named 'cdn' correctly (**probe already supplied 'edge-caching building block'**),
+but produced no description"*.
+
+**The honest scope of that number:** three topics, one account, one architect model family. It is
+evidence that the defect is systematic and shaped, not a population estimate, and the 39% should not
+be quoted as a rate for anyone else's graphs.
+
+### The fix, in four places — because no single one of them is sufficient
+
+**Theory / agents.** The architect now states that the probe and the rubric are **one object**, with
+a three-step self-check done literally per node: read the probe alone, write the answer a competent
+learner would give, mark that answer against your own rubric — *every criterion it fails is a defect
+in the probe or the rubric, never in the learner*. Plus the mirror rule: **if the probe says it, the
+rubric may not require it.**
+
+**And the embarrassing part, said out loud:** the bullet that shipped this bug *demonstrated* it.
+The spec's own example rubric was `["names both terms", "explains why normalization is needed"]`,
+printed directly beneath a definition of `probe` as *"a question whose answer is the claim"* — and
+the claim ("the posterior is the prior reweighted by likelihood and renormalized") says nothing
+about why normalization is needed. A learner answering that probe perfectly was capped at `partial`
+**by the example**. It has been rewritten into a coherent pair.
+
+**Engine — `add-topic` warns at authoring time.** A deterministic check pairs each rubric criterion
+against the probe by *family*: a criterion demanding a framing, a consequence, or a why is flagged
+only when the probe requests nothing of **that kind**. A warning, never a `die()` — a payload costs
+real minutes to author and a false positive must never destroy one.
+
+Measured on three corpora, because one corpus measures the author's own habits: **precision 0.83 /
+recall 0.71** on a 48-pair adversarial set with ground truth fixed before the code ran; **7 of the 8**
+receipt-confirmed cases on real graphs (fires on 37% of 60 nodes); **7%** on the shipped gold set.
+Those are the numbers after the review below; the first draft measured **0.34**.
+
+**Engine — `doctor` finds the ones you already have.** New `probe_gaps`, uncapped, one narrator line
+per topic naming the repair command. A **note**, never an issue: a graph authored before this check
+existed is not corrupt, and flipping `doctor` red for the engine's own past leniency is the trap the
+artifact note learned two releases ago.
+
+**Agents — `probe_gap` on the assessor's output.** The regex catches a shape; only a reader catches
+meaning. The blind assessor now reports the 1-based criteria the probe never asked for — and
+**⚠ it does not move the grade, by explicit instruction.** Forgiving a criterion because the probe
+was badly written would inflate the one number this repo cannot ship wrong and bury the defect
+inside a better-looking score. It perceives; `edit-node` repairs; the grade stays honest about what
+was actually produced. `doctor` collects both halves into one list.
+
+**Engine — `edit-node`, the verb that was missing.** Until now the only way to change a probe was
+`add-topic --replace`: re-author an entire topic to fix one sentence. Nobody makes that trade
+mid-session, so the mismatch stayed and kept scheduling. `edit-node --topic T --node N --probe …`
+(and/or `--rubric-json`, `--transfer-probe`) edits **the contract and nothing else** — `fsrs`,
+`state`, `artifact`, `retired`, `arc` and every receipt are untouched, and the node records `revised`
+with the date, the fields, and how many receipts predate the change, so a later reader cannot compare
+a v2 rubric against v1 verdicts and see a learner who got worse.
+
+**Behavior.** `/learn` and `/review` relay a `probe_gap` as *the card's fault, not yours*, then repair
+it in the session while the misfiring criterion is still on screen — and grade the production exactly
+as it stands. `/review` also runs the check by hand before marking any criterion missed.
+
+### What was cut, and why that is the finding
+
+A second detector — *leak-then-demand*, where the probe states the thing in its stem and a criterion
+requires it back — was written, measured, and **removed**. Word overlap cannot separate a probe that
+**asserts** a fact from one that **asks** about it: *"what does the model condition on?"* shares
+nearly every content word with the criterion that answers it, so the rule flagged correct nodes. It
+now lives only where meaning is available — the architect's self-check and the assessor's
+`probe_gap`. **A warning nobody believes is worse than no warning**, and this repo has shipped enough
+gates that cry wolf to know the difference. (Precisely: the scan has **no rule** for the mirror case
+and catches one only by coincidence, when the criterion *also* demands an elaboration. A mirror
+criterion phrased as plain recall is invisible to it, and the specs say so rather than implying
+coverage the code does not have.)
+
+### What the dogfood found — in this release's own spec
+
+The blind assessor emitted `probe_gap` unprompted from the spec alone, it rode the receipt intact,
+it reached `doctor` beside the deterministic scan, and it caught the leak-then-demand criterion the
+regex is documented as unable to reason about. It also **did not move either grade** — though on one
+item the separation between `partial` and `recalled` rested entirely on a criterion the field had
+just flagged as unfair, which is exactly where an inflating grader would have inflated.
+
+And it found two ambiguities **in the instruction I had just written**, both of which changed its
+output:
+
+- *"Judge it the way the learner met it"* parses two ways — *read the probe alone* and *only flag
+  what they missed*. Those disagree. It is now **judge from the probe ONLY, never the production**,
+  stated as its own warning, because a criterion the learner happened to volunteer is still unfair
+  if the question never asked for it.
+- The headline bar (*"the probe does not request"*) and the elaboration bar (*"a competent answer
+  could not reach"*) were different widths, and a real criterion sat between them. There is now
+  **one bar, and it is the word *necessarily***.
+
+This is the fourth time this repo has recorded a grader defect that traced to an ambiguity in the
+grader's own spec rather than to the grader. The pattern is not going away, and the only thing that
+has ever caught one is handing the spec to a reader who was told nothing else.
+
+Two more from building it, both caught by measuring rather than by reading: an unbounded `connects?`
+matched **"least-connections"** and flagged a criterion the probe plainly asked for; and a single
+probe-level "does this ask for elaboration at all?" boolean flagged all three criteria of a node
+whose probe said *"give the mechanism"* — which requests a framing and says nothing about
+consequences. Both are now pinned by checks that fail if the fix is reverted.
+
+### What the adversarial review found — 13 defects, one HIGH, behind 294 green checks
+
+Two independent reviewers were pointed at an extracted release tree. Between them they found
+thirteen defects that every mechanical gate had passed over, and the pattern is this file's oldest:
+**a green selftest says nothing about the design.**
+
+**HIGH — the assessor half of `doctor` could never clear.** Receipts are append-only, so the
+cross-reference replayed every historical `probe_gap` on every run. A learner who repaired a node
+*exactly as the narrator instructed* watched the count refuse to move, and was re-offered the same
+now-useless repair command forever. **The release's own published instrument property — *a repaired
+probe must stop warning* — held for the regex half only.** A flag is now dropped when the node was
+revised at or after the receipt, when the criterion index no longer exists in the current rubric,
+and when the node is gone or retired. That is also what finally makes `revised` a field something
+*reads*, rather than one more guard nobody consumes.
+
+**And the check itself was measurably not believable.** A reviewer built a 48-pair set with ground
+truth fixed before running anything and measured **precision 0.34** — two of every three warnings
+wrong. Worse, it falsified the load-bearing property directly: **six of seven natural repairs of a
+probe still fired**, including one repaired with the criterion's own verb (*"...and what **connects**
+it to horizontal scaling?"*). The selftest passed only because it asserted the single phrasing that
+had been hand-tuned into the regex — a confirmatory test on the one example the author had in mind.
+
+The root cause was an asymmetry nobody would spot by reading: the *demand* side was written with
+inflections (`connects?`, `consequences?`, `\w*`) and the *request* side was not, so every
+inflection mismatch became a false positive. `implicat` could never match at all — the trailing
+`\b` requires a non-word character after it, and every real inflection continues with one. Fixed by
+inflecting the request side, and then by removing the dependence on that list entirely: **if the
+probe uses the criterion's own demand word, in any inflection, the criterion is never flagged.** An
+enumerated list cannot guarantee that property, because the list is finite and English is not.
+
+Three demand markers were **ordinary rubric vocabulary** and are gone: `so that` and `matters` (a
+titration step reads *"sets up the burette **so that** the meniscus reads zero"*), `notes that`, and
+a bare `links?` — which matched the **noun** "link" in a curriculum about certificate chains
+(*"one failing **link** fails the whole chain"*). That is the same noun/verb collision as `connects?`
+matching "least-connections", one release later, inside the fix for it.
+
+The rest, each now pinned: `receipts_under_previous` counted *every* receipt rather than those since
+the last revision, so summing the stamps exceeded the receipts on disk and the label was false —
+falsifying this release's own numbers audit, which claimed it *"cannot overcount"*; `doctor`
+interpolated hand-editable ids into a shell command the skills are written to **paste**;
+`add-topic` warned about retired nodes and re-warned every untouched node on an `--extend`, while
+`doctor` called the same nodes clean; a `no-rubric` finding got a narrator sentence describing the
+wrong defect and a repair command that is a no-op; both detectors reaching one criterion produced
+two rows in the list the numbers audit reconciles by length; `edit-node` stamped a revision for a
+no-op edit and misreported a corrupt node as an unknown one.
+
+**The uncomfortable one:** the numbers audit in `docs/release-audits/` was written before the review
+and asserted two properties the review falsified. It has been corrected in place rather than
+quietly, because *"a provenance field that lies is worse than none"* applies to an audit document
+at least as much as to a payload.
+
+**Known miss, stated rather than rounded away:** the check goes silent on any probe containing an
+explicit `why`/`explain`, which is what stops it flagging criteria such a probe plainly invited. That
+costs one of the eight confirmed cases (`cap-theorem`, whose probe ends *"and why can't you escape
+it?"* while criterion 1 asks for a scoping the probe never requests). Recall was traded for the one
+property that makes an authoring warning worth having: **a repaired probe must stop warning.**
+
+### The gate that did not run
+
+**§5.6, the user session, was not run for this release.** It is the one gate that asks *would a
+stranger get through this*, and it requires a human learning something they do not know, over real
+days. Nothing here fakes it, and no verdict is claimed on its behalf.
+
+What that leaves unmeasured is specific: whether being told *"that criterion was the card's fault,
+not yours"* mid-session actually lands as absolution rather than as an excuse, and whether stopping
+to repair a card breaks the rhythm of a review queue. Both are prose judgments this release changed,
+and both are exactly what the gate exists to catch. Everything mechanical around them — the warning
+text, the `doctor` note, the in-session repair, the schedule staying put — was driven end to end in
+§5, and the dogfood exercised the agent side.
+
+### Tests
+
+**279 → 295 checks.** All 16 mutation-tested per §4.5 — **15 real on the first attempt, one theatre.**
+The fake one asserted that `edit-node` refuses an engine-owned field, using a payload of *only*
+`{"fsrs": …}` — which the "nothing to edit" guard already rejects, so reverting the unknown-field
+refusal left the check green. §4.5's fourth failure mode, verbatim: *another gate already covers it.*
+Rebuilt with the engine-owned field smuggled **alongside** a legitimate one, so the other guard stays
+silent and only the refusal under test can fire. 16/16 after the rebuild. The running score in this
+file is now 3 fake checks in v0.6, 4 in v0.7, 1 here — and the rate still is not the point; **the
+mutation test remains the only thing that has ever caught one.**
+
+That set includes the two checks asserting an **absence** (the detector stays silent), where the
+mutation had to *introduce the false positive* rather than break the detector. `probe_gap` is
+validated as a closed shape at
+ingest: `bool` is an `int` in Python and sails straight through a naive check, so it is excluded by
+name.
+
+**And the fuzz gate caught this release's worst bug, in this release's own code.** The new
+`doctor` scan built its dedupe key straight out of a hand-editable receipt —
+`(r.get("topic"), r.get("node"), c)` — so a `topic` holding a dict made the tuple unhashable:
+**302 crashes in 600 states**, in the one command that exists to survive corruption and must never
+die of what it exists to find. Every field is coerced before it is hashed or sorted; **0 crashes /
+600 states** after. `scripts/fuzz.py` also now randomizes `rubric`, `revised` and `probe_gap`,
+because a feature that adds read paths and not their fuzz coverage produces a gate that comes back
+green about code it never executed.
+
+Two smaller ones from the same discipline. **`revised` is engine-owned and arrived with both halves
+of invariant 4** — stripped from any payload, carried across `--replace` — because `retired` shipped
+with *neither* and cost a release; one check pins both so they cannot rot apart. And the missed
+`ENGRAM_VERSION` bump went red exactly where §2 says it would.
+
+
+## 1.9.1 — 2026-07-24 · What the merge gates found
+
+Before merging v1.3–v1.9 to `main`, the two gates that had been skipped across the whole
+series were finally run: **§4.6 the adversarial review** (four reviewers over the 5.7k-line
+diff) and **§5.5 the agent dogfood** (three, on the flows added since v1.3). Between them
+they found **nine HIGH defects**, and the pattern is the one this file keeps recording:
+every mechanical gate was green the entire time.
+
+**The badge could be re-licensed by a grader that never sat the exam.** One `canary-pass`,
+run under *any* model, permanently disabled both staleness triggers — `export` re-opened
+and the dashboard read "grader validated · QWK 1.00" with no failure word anywhere. A canary
+now re-licenses only its **own** grader context, only within the audit's own 90-day window,
+and an **incomplete** canary cannot pass at all. v1.4's central safety claim was
+unenforceable for a release.
+
+**`--extend` orphaned every registered explorable.** A shallow dict comprehension aliased the
+carried-forward nodes, so `node.pop("artifact")` deleted the value from the object the
+carry-forward then read — and the `.bak` was written *after* the mutation, so the backup
+could not recover it. The extend selftest was structurally blind: its fixture had no artifact.
+
+**`retired` was neither stripped nor carried.** A payload could **mint** a retirement
+(emptying the due queue and un-gating the capstone, since a retired prerequisite counts as
+satisfied), and `--replace` **destroyed** a real one — reverting the learner's own decision
+on the graph that is its only record.
+
+**`doctor --fix` renamed files into the live graph path without the lock** — a TOCTOU that
+POSIX `rename` turns into a silently clobbered topic.
+
+**`refit --force` rescaled every interval in the account off one receipt** (the floor guarded
+only the *reported* fit; the multiplier wrote underneath it) and narrated the 1.5× stretch as
+a finding.
+
+**The published npm package omitted `gold/` and `experiments/`** — so for every OpenCode
+user the audit chain was dead, `export` permanently refused, and both v1.9 presets missing.
+The engine's own selftest detected it (260/269 inside the package); nobody had run it there.
+
+**`stats.relearning.first_vs_latest` compared two different populations** and read as a
+paired trend: a fixture whose only twice-looped node got *worse* still printed an
+improvement.
+
+**Tier 2 fits four parameters and claims seventeen** — `_fit_loss` never calls the growth
+functions, so w[4..16] are invisible to it. **Not fixed here**; the fit is honest at tier 1
+and the claim is corrected in the docs. Making tier 2 real needs a replay loss, and is filed
+rather than rushed.
+
+**The assessor's documented audit output could not produce a usable audit receipt.** It was
+told to omit `rating` — which the engine requires — so `audited_rating`/`agree` never
+arrived and `stats.self_grading` sat at zero while audits were being run. `agents/*.md` and
+their Codex ports had not changed in seven releases; the parity gate only fires when an agent
+file changes, so it had never once run.
+
+Plus: `model --set` validated only the root key (a typo wrote a dead field **and** minted a
+`consented` ledger row for a change that never happened); `--kind audit` without
+`--audited-rating`, `--attempt` without `--relearn`, and a negative `--cap` were all accepted
+silently; the fit acceptance passed a 1.5e-8 "improvement"; the 10-anchor calibration gate had
+no minimum count; `--error-class` was accepted on concept and `recalled` items; `--preset`
+silently discarded a caller's own design.
+
+**And two things this release says out loud rather than fixing quietly.** The v1.3 entry
+claimed the savings curve's peak "independently reproduces" Lindsey's θ ≈ 0.33 — it does not;
+the peak sits at a `DUE_MINUTES_BY_R` boundary **this repo chose**, and calling a calibration
+coincidence a convergence is exactly the circularity the README warns about for its own gold
+set. And the **streak contradiction**: three files banned streak counts while two ordered the
+narrator to say one. The instructions to say it are gone.
+
+`scripts/fuzz.py` ships, because the CHANGELOG has been quoting its numbers as measurements
+while it lived only on one machine.
+
+### Tests
+
+274 → **279** checks; every fix mutation-tested, three fixtures rewritten after coming back
+fake. Fuzz 0/600 + 0/300 on the audit paths. vitest 165/165. **And the package now passes
+its own selftest** (279/279 staged from `files`), which is how the missing `gold/` was caught.
+
+
+## 1.9.0 — 2026-07-24 · The sharper question
+
+The n-of-1 machinery has been randomized, stratified, pre-registered and powered since
+v0.9 — and could ask **exactly one question**. The evidence audit then licensed two review-
+format changes *as experiments and explicitly not as defaults*, and the engine could not
+run either. This closes that gap.
+
+**The metric registry.** Four metrics, each reading its **own** population through the same
+shared predicates `stats` uses, so a settled experiment and the dashboard can never tell
+two different stories about one learner:
+
+| metric | population | floor/arm |
+|---|---|---|
+| `first_review_recall` | the node's first genuine review | 15 |
+| `retention_7d` | reviews 4–14 days after encoding — the north star's own window | 15 |
+| `transfer_fired` | did the capability fire in different clothes | 8 |
+| `slip_share` | of classified procedure errors, the slip fraction | 10 |
+
+**A node with no evidence for the chosen metric contributes nothing — never a zero.** "Not
+measured" and "measured as a failure" are different facts, and pooling them is the
+survivorship bug this repo keeps re-learning. Verified with one receipt log scored four
+ways: 6 data points under the recall metrics, **0** under `transfer_fired` (no probe was
+ever served) — identical receipts, honestly different answers. **The floor moves with the
+metric** too: a rarer population needs the same number of *data points*, which takes longer
+to reach, and the engine says so rather than letting a transfer trial settle on the recall
+metric's number and call itself powered.
+
+**Two pre-registered designs ship in the repo** (`experiments/*.json`), so *what was
+registered* is a checked-in artifact rather than a matter of memory:
+
+- **`probe-variation`** — varied wording vs the stored probe. The direction is well
+  evidenced (varied retrieval cues beat constant ones for the *same* target, and the
+  benefit compounds with spacing); it has **never** been tested on rubric-graded conceptual
+  recall, which is the only thing Engram serves. Both arms are graded by the **blind
+  assessor** so the metric's receipts come from one oracle.
+- **`topic-reconstruction`** — rebuild the topic's argument skeleton from memory vs the
+  ordinary queue. Strong single-session science; **zero** spaced-session studies.
+
+Each names its own **threat to validity** in the file, before any datum exists —
+difficulty drift and time-on-task respectively — and a `why_not_a_default` paragraph
+saying why it is a question rather than a feature.
+
+### One property got stronger, so a check moved with it
+
+An un-scoreable receipt used to enter an arm as a `None` that every downstream statistic
+had to survive. The registry drops it **at the source**: it yields no datum, exactly like
+"assigned but not yet reviewed". The v1.0.2-era degradation check was rewritten to pin the
+stronger invariant rather than the old one.
+
+### Tests
+
+267 → **269** checks; all four new mutations real after one rewrite — a floor check that
+compared two constants (§4.5's "asserts a constant, not a behavior") now starts two real
+experiments and reads the floors the engine actually assigned. Fuzz: **0 crashes / 600
+states**.
+
+
+## 1.8.0 — 2026-07-24 · The steering mirror
+
+Engram computes a great deal about a learner and steers on almost none of it. This is the
+release where the measurements start steering — and the whole design problem is that **a
+system that adapts to you is one hallucinated correlation away from a horoscope.**
+
+**Article 12 joins the constitution:** *every adaptation is proposed by the engine's
+numbers, consented by the learner, logged with its evidence, and reversible.* The engine
+never infers a trait, and never applies a change itself.
+
+**`propose`** emits at most three adaptations it can justify from this learner's own
+receipts, each carrying its `evidence` string and its `grade` (`evidence-backed` /
+`model-derived` / `heuristic`). It is **read-only** — verified by a check that hashes the
+learner model before and after.
+
+**The families are closed, and that is the entire safety argument.** Adaptivity's evidence
+base is mostly a graveyard: learning styles (dead, including "inferred from telemetry" —
+the same corpse in ML clothing), the general aptitude-treatment program (dead; prior
+knowledge × guidance is the one replicated survivor), chronotype scheduling (>80% of adult
+studies find no main effect and no intervention study exists), learner control over method
+(measurably *worse* than non-personalized). What Engram is allowed to steer on:
+
+1. **session shape**, from completion telemetry;
+2. **assistance level**, from demonstrated prior knowledge — the surviving ATI (expertise
+   reversal: assistance helps novices d = +0.505 and *harms* the knowledgeable d = −0.428),
+   and only ever proposed upward on clean evidence, because the meta-analysts' own
+   asymmetry says assist when unsure;
+3. **the workload curve** — and here the engine proposes **no number at all**, only that
+   they look at it;
+4. **one metacognitive prompt**, specific and fading, because generic prompting at scale is
+   a documented null.
+
+**`adaptations`** is the append-only ledger: field, from, to, the evidence, the grade, who
+asked, reversible. `/coach` explains current settings *from the ledger* rather than from
+memory — *"Sprint has been your default since 30 July, because five of six sessions ended
+early. Revert any time."* A change the learner makes themselves is recorded too, marked
+`learner`; a no-op writes nothing.
+
+**`rhythms` is retired.** It was defined in the schema, written by nothing, and "read" by
+`/coach` for four releases — a promised adaptation surface that could never fire. What
+replaces it is **description, not scheduling**: `stats.sessions` reports the learner's own
+session pattern with the note that Engram does not schedule by time of day. An existing
+model that already carries the key keeps it; new ones never gain it.
+
+### The fuzz earned its place again
+
+Adding `propose` to the `stats` path introduced **472 crashes in 600 fuzzed states** — an
+unhashable `topic` in a hand-edited receipt poisoning a dict key, which is the exact shape
+`_by_node` was hardened against in v0.6 and which **every new receipt-walking function
+re-earns from scratch**. `stats`, the dashboard and therefore `/coach` all went down with
+it. Fixed at the gate, and pinned by a check that feeds `propose` an unhashable topic, a
+bare integer session, and a dict timestamp.
+
+### Tests
+
+261 → **267** checks; every new check mutation-tested. Two came back fake on the first
+pass — a cap that could not bind because only three of four families fired, and a floor
+whose fixture qualified either way — both rewritten with fixtures that actually reach the
+guard. Fuzz: 472 → **0 crashes / 600 states**.
+
+
+## 1.7.0 — 2026-07-24 · The open frontier
+
+The founding question asks for a system where a learner can learn **anything, at any level
+of mastery**. "Anything" has been true since v1.1. "Any level" was false at both ends: an
+expert entering a 20-node topic got a novice's three-node pretest, and a *finished* topic
+dead-ended at its capstone with nowhere to go. (The founder's own graphs are hand-titled
+"Arc 1 of 2" precisely because the second half had no mechanism.)
+
+**`add-topic --extend` — a topic gains an arc instead of ending.** New nodes only; every
+existing node keeps its schedule, receipts and state **byte-for-byte**; new nodes are
+stamped with their `arc`; and the capstone re-mints over the union so the build still
+requires the whole topic. An id collision is **refused**, not silently merged — re-authoring
+a node the learner has receipts for is `--replace`'s job, and confusing the two is how a
+learner loses evidence. `/learn` offers it once when the capstone is done.
+
+**`next --frontier-of <node>` — the adaptive pretest, without inventing mastery.** A learner
+who says "I know the basics" gets asked a mid-arc probe; if they have it, the engine returns
+that node's unreceipted prerequisites, **deepest first**, with their probes. The walk decides
+what to **ask** — it credits nothing, advances nothing, and every node it surfaces still
+earns its own graded receipt. Skipping without evidence is the same unearned claim as
+advancing without evidence, and the constitution does not distinguish them. Bounded at 6
+probes per sitting, resumable, declinable.
+
+**`doctor --fix` — the diagnostic finally finishes the sentence.** `doctor` has always named
+the problem and stopped, so an unregistered explorable or a quarantined file sat there until
+a human happened to read a note. It now emits `fixes` with the exact commands, and `--fix`
+applies them **one at a time, validated first**: a quarantined graph is restored only once it
+actually parses and only if nothing live occupies its path. There is deliberately **no
+`--yes`** — a batch repair of state nobody looked at is how a diagnostic becomes a data-loss
+bug.
+
+**Two-phase authoring** (skills): where the platform can spawn background work, `/learn` asks
+the architect for a first arc of 4–6 nodes plus an outline, starts teaching immediately, and
+lands the rest mid-session with `--extend` — the ~7 minutes of silent terminal that the §5.6
+user session called the most likely first-session abandonment point. The capstone is minted
+only once the full arc is in, never on a half-map. Platforms without background spawning keep
+today's flow and its load-bearing warning line.
+
+### Tests
+
+258 → **261** checks; all six new checks mutation-tested and real on the first pass — the
+first release in this series where none came back fake. Fuzz: **0 crashes / 600 states**.
+
+
+## 1.6.0 — 2026-07-24 · The fitted learner
+
+"Fits your memory" has been **one coarse interval multiplier** since v0.2, and no real user
+has ever earned even that. This release makes the claim literal — and, after measuring what
+the alternative was worth, deliberately does **not** do the other half the roadmap planned.
+
+**The fitting ladder.** `refit` now fits the model, not just a rescale:
+
+| tier | gate | what it fits |
+|---|---|---|
+| 0 | ≥50 review receipts | the interval multiplier (unchanged since v0.2) |
+| 1 | **64 usable reviews** | the four initial-stability weights, one per first rating |
+| 2 | **400 usable reviews** | the whole 17-parameter vector, coordinate descent, hard-clamped |
+
+Every tier ends in **the acceptance check**: a fit ships only if it beats the learner's
+current parameters *on the learner's own reviews*. Otherwise `refit` says so and changes
+nothing — Anki's "parameters appear optimal" behaviour, and the only thing that makes a
+low-n fit safe. Re-running on unchanged evidence is therefore a no-op, by construction.
+
+Stdlib, no framework, and that is not a compromise: production `fsrs-rs` replaced its ML
+framework with hand-derived gradients, so a framework-free fit is the shipping norm. What
+it needs is the *scaffolding* — bounds, an L1 prior toward the shipped defaults, a
+monotonicity repair across ratings, and validation so a hand-edited `fsrs_params` is
+clamped rather than trusted into the scheduler.
+
+**`stats.workload` — the trade-off, drawn and never recommended.** Reviews/day and mean
+interval at 80/85/90/95% desired retention, computed from the learner's own stabilities,
+on the dashboard. **No auto-recommendation**: Anki — holding the largest review dataset in
+existence — *removed* its "compute minimum recommended retention" feature in 25.07, and
+every implementation needs per-review **duration** telemetry that Engram's receipts do not
+carry and could not honestly attribute (a review here is embedded in a tutoring dialogue).
+Drawing the curve is honest; naming a point on it would be theatre.
+
+### What this release deliberately does NOT ship, and why
+
+`docs/14` v1.6 planned an **FSRS-6 migration by replay**. It is not here, and the reasoning
+is the release's most useful output:
+
+- **The measured benefit for this user base is ~zero.** On the 10k-user benchmark, *fitted*
+  FSRS-4.5 (log loss 0.3624) matches or beats *default-parameter* FSRS-6 (0.3664) and
+  FSRS-7 (0.3629). Engram's users run near-defaults, so a version bump alone buys them
+  nothing anyone could honestly announce. **Fitting is worth about two version upgrades** —
+  so this release shipped the fitting.
+- **The cost is real.** Migration re-derives every stored `s`/`d` and moves every due date
+  on thousands of machines. Risk with no measured benefit is not a trade.
+- **The one genuine argument for it is currently moot.** FSRS-6's short-term formula is
+  where same-day dynamics *would* live — but v1.5 deliberately excludes relearn rows from
+  the model until a validation earns them a place.
+- **And the honest blocker:** the 21 default weights would have to be verified against the
+  primary source before being written into a scheduler that governs other people's
+  memories. Unverified constants are fabricated data, whatever the changelog says.
+
+Measured on the founder's own state while deciding: **13 usable rows** against a tier-1
+floor of 64. Nobody is close to fitting yet, which makes shipping the ladder now (and the
+migration never-on-a-hunch) the right order.
+
+### The defects this release's gates found — and one is the sharpest yet
+
+- **The S0 fitter was a NO-OP on real receipts**, and it looked like it worked: loss fell a
+  hair, output was monotone, and the synthetic instrument test passed. The loss used each
+  row's *recorded* `s_before` — computed under the **old** weights — so it never depended
+  on the parameters being fitted. Only first reviews can teach S0, and only if their
+  stability is recomputed from the candidate. **Found by mutating the tier floor**: removing
+  the gate changed nothing, because there was nothing to gate.
+- **The L1 prior was calibrated for a summed loss and applied to a mean**, so it outweighed
+  the data ~15:1 and the fitter silently never moved. Recovery of a known parameter went
+  from 3.79 to **20.25 against a true 20.0** once scaled. Caught by the §5.5 instrument test
+  — generate data from known parameters and demand recovery.
+- **Four checks came back FAKE across the run** (§4.5): a floor test that passed `--force`
+  and therefore bypassed the floor; an acceptance test blocked by the floor instead;
+  a fixture with no later reviews; and no check at all asserting the fitted vector
+  *reaches the scheduler*. All rewritten. One mutation was **correctly** fake — the
+  first-reviews filter is genuinely a no-op optimization, not a correctness guard, and the
+  comment now says so instead of overclaiming.
+
+### Tests
+
+253 → **258** checks; every new check mutation-tested. Fuzz: **0 crashes / 600 states**.
+
+
+## 1.5.0 — 2026-07-24 · The relearning loop
+
+`docs/07` flagged successive relearning in v0.6 as *"the most promising unexploited item in
+the retention literature for this codebase"* and ordered it specified against primary
+sources before anyone built it. `docs/13` §2.5 is that specification; this is the build.
+
+**The session no longer ends on a failed retrieval.** When a concept or fact comes back
+`lapsed`, the tutor re-derives it, puts another item in between (**never** an immediate
+re-ask — every protocol that worked used a delay or an intervening item), and asks again,
+up to three passes, stopping at **one** correct recall. One, not three: the "relearning
+override" is the clearest result in this literature — with spaced relearning to follow, a
+higher initial criterion buys almost nothing and costs ~2 minutes a concept.
+
+**The dose is guaranteed rather than hoped for.** The quantity the evidence is actually
+about is *spaced sessions in the first weeks*, and FSRS left alone can starve a lucky first
+recall of them by booking a long second interval. So the first two post-encode intervals
+are capped at **3 and 9 days** (inside the Cepeda ridgeline), which puts ≥3 spaced sessions
+inside the 30-day north-star window — then the node **graduates** and FSRS runs untouched.
+Verified end to end: 4d → 3d → 9d → 128d.
+
+The numbers, quoted at their honest size: 3 vs 1 relearning sessions is **+60% relative
+recall at one month**; one correct recall in each of three spaced sessions beats three
+massed into one **68% vs 26%** at a week; and the only *exposure-controlled* study puts the
+pure effect at **d ≈ 0.7**, not the d ≈ 4 of confounded designs. Transfer under exposure
+control is **≈ 0.15** — this buys durability of the practiced item and we do not claim more.
+
+**What it deliberately does not do:**
+- **Procedures are excluded, and the engine refuses the flag on them.** The one direct test
+  of this protocol on problem-solving material found "only meager benefits". They keep the
+  problem grammar's lapse path.
+- **New material only.** A pre-v1.5 node is never retroactively shortened; the caps ride an
+  `fsrs.dose` stamp written at first encode. `settings.relearning: "off"` disables the whole
+  layer, and an untouched v1.4 state behaves exactly as before.
+- **No claim that this is settled.** No published study combines successive relearning with
+  an adaptive scheduler; the cap is a labeled **policy layer over FSRS**, not a scheduler
+  change, and the payload says so.
+
+### G11 — the live defect this release had to fix first
+
+A same-day re-attempt is a review at `elapsed == 0`, where `retrievability` is **1.0 by
+construction**. Left alone, the very behaviour this release asks for would have: strengthened
+stability off a 100%-recall prediction, counted as a retention review it is not, and inflated
+**both** `predicted` and `observed` in `refit`'s sample — biasing the schedule fit toward
+*"your memory is better than the model thinks"*. Upstream FSRS trains on `(i > 1 AND
+delta_t > 0)` for exactly this reason.
+
+So `relearn` rows are recorded append-only (receipts-or-it-didn't-happen applies to the
+criterion claim too) and excluded from state transitions, from every retention-family
+population, and from the fit — by **one line in the shared predicate**, so every reader
+inherits it (the v0.6.4 lesson). Legacy same-day rows written before the stamp existed are
+caught by an elapsed guard.
+
+**`stats.relearning`** reports loops, criterion-met, and the literature's own efficiency
+signature — retries per loop falling as material comes back — **derived at read time** from
+each (node, day) group, because the day's first receipt is already on disk when a retry
+happens and receipts are never retro-stamped.
+
+### The defects the gates found
+
+- **A fixture's premise died** the moment the dose shipped: a check that needed a "far-out"
+  node got a capped one instead. Rewritten to graduate *through* the dose window, which now
+  also pins that the caps release a node rather than trapping it.
+- **Two new checks came back FAKE** (§4.5, and this is the fourth release running):
+  the dose-scoping fixture used a node whose dose window had already passed, so the
+  `was_new` guard was never reached; and the `refit` elapsed-guard was untestable because
+  the relearn filter had already removed every row the fixture produced. Both rewritten —
+  one with a node *inside* the window, one with a hand-written legacy row carrying
+  `retrievability: 1.0` and no stamp.
+
+### Tests
+
+249 → **253** checks; all six new checks mutation-tested (two fake, both rewritten).
+Fuzz: **0 crashes / 600 states**.
+
+
+## 1.4.0 — 2026-07-24 · The audited tutor
+
+v0.7 built the audit that measures the blind assessor and shipped it as the project's
+central safety claim. It has never measured **the other grader** — and the tutor writes
+*every* `/review` receipt and every `error_class` behind `procedure_slip_share`,
+in-context, with the dialogue it just ran sitting in front of it. That is the exact
+condition the separation of powers exists to distrust, and it was the one grader nothing
+checked. Meanwhile the assessor's badge, once earned, was **permanent**.
+
+**Audit receipts persist, and reschedule nothing.** `/review` has spawned the assessor to
+spot-audit the tutor's grades since v0.2; the verdict was narrated once and evaporated.
+`KINDS` has carried an `audit` slot the whole time with nothing writing it. Now
+`rate --kind audit --audited-rating <what the tutor said>` records the comparison as
+evidence on disk that touches **no** FSRS state, no node state, no due date, no `reps` —
+"audits inform, they don't reschedule" is structural rather than a sentence in a skill
+file. `/review` also escalates on **any** `partial` now, not just partial-heavy sessions,
+because the mid-band is where graders measurably diverge.
+
+**`stats.self_grading` — the tutor's number, with its limits attached.** Agreement (QWK)
+and **signed direction** between the tutor and the blind assessor, banded, with the honest
+label in the `read`: *agreement with the blind assessor, whose own validity is what
+`/coach audit` measures — tutor validity is bounded by that chain, never better.* No
+blindness property is claimed for the tutor and none can be: dialogue context is a
+permanent confound. Direction is published because a mean bias of zero is also what
+"inflates half, deflates half" looks like.
+
+**The badge expires (v1.4's teeth).** `assessor-audit --grader-context` records *which*
+grader earned a verdict; `grader-health --grader-context` compares it to the grader
+running today. A mismatch → `stale-model`, `grader_unvalidated: true`, and **`export`
+refuses** — because the one published measurement of a silent judge-model swap found it
+uniformly **more lenient**, which is this project's single dangerous direction. When the
+context is unknowable, age is the fallback (90 days). Naive rolling drift detectors are
+deliberately not used: their measured false-alarm rate on drift-free streams is 75%, and a
+gate that cries wolf is a gate nobody reads.
+
+**And the cheap way back: the canary.** `gold --canary` emits 15 items chosen the same way
+every time — hash-stable, **stratified across all three bands** with the mid-band and this
+grader's historically-weak case types oversampled. A clean run re-licenses the badge; a
+dirty one demands the full 86×3. **A canary can never mint a `pass`** — its verdict domain
+is `canary-pass`/`canary-fail`, enforced in the engine, because otherwise the cheap path
+would quietly replace the expensive one.
+
+**Band-stratified audits.** `by_gold_band` reports agreement, signed bias and inflation
+count per gold band. The 2026 short-answer literature finds rubric-anchored LLM graders
+near-human at the extremes and materially off in the middle — so a healthy pooled QWK can
+sit on top of a soft `partial` band, which is exactly where a learner's borderline answers
+live.
+
+**The adjudication kit, at last.** Since v0.7 the engine has printed, on every audit, that
+its gold set is authored rather than independently adjudicated and that one outside human
+would be the highest-value contribution to this repository. [`docs/ADJUDICATION.md`](docs/ADJUDICATION.md)
+is the procedure and `adjudication-stats --file` is the procedure in code: a 10-anchor
+calibration gate (≥80% exact) that runs **before** any agreement number is trusted, then
+exact / QWK / **ordinal Krippendorff's α with a bootstrap CI** / direction counts /
+confusion, against thresholds fixed in advance (α ≥ 0.80 corroborated · 0.667–0.80
+tentative · below contested). One external rater **corroborates**; replacing the author
+would take two independent externals agreeing with each other, and the engine keeps saying
+so.
+
+### The defects this release's own gates found
+
+- **The canary was 100% mid-band on the first cut** — structurally blind to a grader that
+  had started failing the *clear* cases. A tripwire that can only see one band is not a
+  tripwire; it is a narrower badge. Now quota-stratified across all three.
+- **A canary audit hijacked "the latest audit."** `_latest_audit` took the newest file, so
+  running a canary replaced an 86-item verdict with a 15-item one — and `canary-pass`,
+  not being a valid *full* verdict, then read as `unreadable` and **voided a badge that
+  was fine**. The cheap path may vouch for the expensive one; it may never overwrite it.
+- **`export` did not inherit staleness** until it was given its own `--grader-context`.
+  Contributing to a shared corpus is precisely where a badge nobody re-earned matters most.
+- **The fuzz found a brick in the adjudication reader**: `{"a":1} in GOLD_SCORE` raises
+  `unhashable type` rather than returning False — 35 crashes in 300 states, in a read path
+  whose entire job is surviving a human's hand-authored file.
+- **One new check came back FAKE** (§4.5): the guard keeping audit receipts out of
+  `_by_node` was mutation-tested green, because the fixture always had the audit arrive
+  *last* and never reached the line. The case the guard exists for — an audit as a node's
+  **first** receipt, which would invent an encoding event that never happened — is now
+  asserted directly.
+
+### Numbers audit (§4.8)
+
+`self_grading` fails **pessimistically by construction** (a missed audit shows as a
+smaller `n`, never as agreement) and its denominators are named: `n` is spot-audits, the
+band rows carry their own. Below 20 audits it publishes **counts only** — never a rate.
+`by_gold_band`'s counts are *judgments* (items × runs) and say so, keeping `items` and
+`judgments` in separate keys (bug class #7). `grader_context` is **stored verbatim, never
+inferred** — a model naming its own weights is fabricated data, and `"unknown"` is honest.
+The staleness flag is *derived* from the verdict and the context, never read from a file.
+
+### Tests
+
+243 → **249** checks; every new check mutation-tested (one came back fake and was
+rewritten — see above). Fuzz: **0 crashes / 600 states** on the standard read paths, plus
+a new 300-state sweep over garbage audit files and hand-authored adjudication input
+(35 → 0 after the fix).
+
+
+## 1.3.0 — 2026-07-24 · The kept word
+
+The first release on the road to 2.0 (`docs/14`), and it is the return release: the
+binding constraint has been adherence since `docs/08` was written, and three of the four
+things this ships were *already in the schema, computed by nothing*.
+
+**The commitment is finally shown back.** `commit` has written the learner's if-then plan
+since v0.6 and **no surface has ever displayed it** — the `transfer_probe` defect, repeated
+on the strongest licensed adherence lever in the repo. What the direct RCTs actually tested
+is the *read-back* (Messmer 2022; Prestwich 2010), not the storing. The session hook now
+prints it, and `/review`'s amnesty block shows it once on return, in the learner's own words
+— rationed by exactly the decay line's return-event rule (never-closed loop, or a real
+absence), because a sentence you wrote becomes nagging the moment it greets you daily.
+Their text is printed as an inert quoted literal: hook output is injected into an agent's
+context, so a commitment reading *"ignore previous instructions"* must arrive as text.
+`commit` also stamps renewals and emits `age_days`, which is what drives the keep/rephrase/
+drop offer at a seam (the ~28-day cadence is labeled inference, not evidence).
+
+**The capped session stops serving the worst-ranked order.** `due --cap N` ranks by
+expected 30-day retention saved per expected minute; `--limit` is untouched and still emits
+the bare list in the old most-overdue-first order, so an older skill file against a newer
+engine gets byte-identical behavior. Uncapped queues are unchanged.
+
+> **The roadmap's own formula did the opposite of what its prose claimed, and the fixture
+> built to make the two orders diverge is the only reason we know.** `docs/14` asserted that
+> savings-per-minute "deprioritizes the nearly-lost (little savable)". It does not: reviewing
+> a near-dead concept *resurrects* it, so the raw metric ranks it highest. Sweeping stability
+> shows the curve is an inverted U whose peak sits at the mid-band boundary of
+> `DUE_MINUTES_BY_R` — **a constant this repo chose**, not a derived optimum: move the
+> breakpoint and the peak moves with it. An earlier draft of this entry called that an
+> independent reproduction of Lindsey's θ ≈ 0.33 threshold, which is precisely the
+> circularity the README calls out for its own gold set. It is a coincidence of calibration
+> and it is written down as one. The peak is kept; the left tail is **parked**: items below R = 0.10 are flagged
+> `effectively_relearn` and sort last whatever their raw score, because a one-shot 30-day
+> knapsack cannot see that a resurrection buys several more reviews of future budget, and
+> every budgeted analysis in the record says do not serve the hopeless first. Docs 13/14/15
+> are corrected rather than quietly reconciled.
+
+**`retire` — the autonomy verb Engram never had.** Take something off your list: out of
+`due`, `next`, `decay`, transfer candidates and the frontier; **counted in every denominator
+it leaves** (`adherence.loop_closure.retired_excluded`, `retention.unmeasured.retired`,
+`funnel.nodes_retired`, and a line on the dashboard). It is deliberately *not* a `state`
+value — a fourth state would ripple through every state reader, and the capstone requires
+every node, so retirement would have blocked the build forever. Instead: an engine-owned
+block plus one shared `is_retired` predicate, and a **retired prerequisite counts as
+satisfied**, so retiring something opens the frontier rather than sealing the topic.
+**The engine never proposes retiring a specific node** — auto-retiring whatever a learner
+keeps failing is a flattering denominator wearing a helpful face.
+
+**The hook now opens with amnesty — and the reason it does is the most useful thing this
+release found.** The first cut of the plan line printed it *after* the decay cost, so the
+ambient surface read: **count → what it's costing you → your own unkept promise**, with no
+amnesty anywhere, fired automatically before `/review` is typed. Every engine gate was green.
+The §5.5 dogfood — an uncontaminated agent handed only the skill file and a seeded state —
+read that sequence cold and named it: *"cost-of-decay followed by their own unkept promise,
+with no amnesty before it, at the exact moment the protocol says the learner is most likely
+to churn. Read cold, that pair is a debt collector, and it ships enabled by default."*
+`/review`'s protocol has always guaranteed *nothing owed → what it costs → a path*, and the
+skill **cannot repair an ordering violation that happens before it runs**. So the guarantee
+now lives in the hook: amnesty first (dated when session history allows), then their plan,
+then the cost. The ordering is pinned by a selftest, because a check that merely asserts the
+lines exist cannot see the defect.
+
+**The hook stops presenting the wall.** Above `2 × the review cap` (or on the Focus
+profile), the ambient line leads with a path that fits and still states the full count:
+*"28 reviews due · /review quick clears the 5 most urgent (~3 min) · full queue ~17 min."*
+The amnesty protocol existed only inside `/review`; the line that reached the learner first
+was the wall it was written to prevent.
+
+Also: `/coach` offers the grader audit **once**, when there are ≥20 receipts and it would
+change something (the founder's own machine has 42 receipts and every number stamped
+unearned); `/learn` may suggest — once, declinably — anchoring a clock-time cue to an
+existing routine (event cues build habits, time cues measurably don't); `/review` carries
+one honest line about automaticity taking ~2 months with a huge range, and **no day count,
+ever** — the constant does not exist and a countdown is a streak with better manners.
+
+### Numbers audit (§4.8)
+
+`savings_per_min` fails **pessimistically** (a mis-ranked item is still a due item, and the
+cap is a floor not a target); its denominator is *expected minutes*, published per item
+beside it; `order_basis` ships inside the payload. `retired_excluded` is the one number here
+that could flatter — a learner who retires everything unreviewed drives `loop_closure` up —
+so the count travels with the rate, reaches the `read` string, and `/coach` is instructed to
+voice it. `retired` is reported **beside** `states`, never inside it: the three state counts
+still sum to the node total, because two populations may not share a container (bug class
+#7). Cross-consistency verified live on one state: `retention.unmeasured.projected_recall_now`,
+`decay.now.mean_recall_due` and every `due --cap` item's `r_now` agree to the digit (0.49).
+
+### Tests
+
+234 → **243** checks; every new check mutation-tested (each fails when, and only when, its
+own fix is reverted). **Two mutations came back FAKE and were rewritten** — one asserted the
+amnesty existed without ever reaching the branch that dates it, which is §4.5's "the fixture
+returns before execution reaches the code under test", exactly as the protocol predicts. Fuzz re-run after the last commit:
+**0 crashes / 600 states / 19,800 read calls** with `retired` randomized to every JSON type.
+
+
+## 1.2.2 — 2026-07-22 · closing the review's MED/LOW tail, and one the fuzz found
+
+v1.2.1 fixed the two HIGH defects and left four smaller findings open. Three were real on
+1.2.1 and are fixed here; one had already been closed by the 1.2.1 locator rewrite. Fixing
+them surfaced a fifth that no reviewer had seen.
+
+- **A version-less `<!-- engram -->` marker was invisible to the filters.** `OPEN_RE` demanded
+  a version, so a user who tidied the marker by hand got the worst of both: the block was
+  **committed verbatim** on `git add`, and a **second copy prepended** on checkout. The model
+  then received the instructions twice and every commit carried a KB of Engram text. The
+  version is optional now, in both filters and in `install.ts`.
+- **Installing over a tracked `AGENTS.md` dirtied the user's file.** `writeOrPrependAgentsMd`
+  laid the block down as `block + "\n\n" + existing` while the smudge filter writes
+  `template + content`. The two blank lines survived `clean`, so the bytes handed back to git
+  differed from what the user had committed and their file showed modified with a diff they
+  never wrote. Install now matches smudge exactly.
+- **CRLF files gained blank lines at the seam on every version bump.** The strip was `/^\n+/`,
+  which cannot see a CRLF blank line — its first character is `\r`. An LF file got a one-line
+  seam, a CRLF file got three.
+- **MED 6 as originally reported (a permanently-dirty file) was already gone**, closed by the
+  1.2.1 locator rewrite. Verified rather than assumed before it was ticked off.
+
+### The one the fuzz found
+
+`clean` removed **one** block per invocation. Stacked markers — exactly what the version-less
+marker bug produced by prepending a second block — left another complete block behind, and git
+runs the clean filter **once** per staging. So a file with two blocks committed with one still
+in it. `clean` now strips every block in a single pass; each iteration removes at least two
+marker lines, so it terminates. Nothing outside a marker pair is touched.
+
+Fuzz on this release, 1500 states across six seeds under `LC_ALL=en_US.UTF-8`: **0 crashes,
+0 states with no block on disk, 0 leaked to git, 0 duplicated, 0 non-idempotent, 0 roundtrip
+failures.**
+
+### Tests
+
+160 → 165 vitest checks; `selftest` unchanged at 234.
+
+**A second fake check, caught by the same gate as the first.** The LOW-7 check asserted "the
+seam does not GROW across bumps" — which was true under both the old and new strip, so it
+passed with the fix reverted. The property that actually separates them is that a CRLF file
+and an LF file get the *same* seam; rewritten that way it fails correctly (CRLF 3, LF 1). Two
+fake checks in two releases is the rate §4.5 warns about, and both were invisible until the
+mutation was run.
+## 1.2.1 — 2026-07-22 · what §7.5 found in v1.2.0, forty minutes later
+
+v1.2.0 shipped with every gate green and **two HIGH defects of the exact class it was cut to
+fix**. Both were found by the adversarial review (§4.6) reporting *after* the tag was pushed.
+npm was never published, so no installer received them; the tag and GitHub release did.
+
+Measured on the shipped v1.2.0 filters, 1000 generated states under `LC_ALL=en_US.UTF-8`:
+**376 crashes, 99 states left with no block on disk, 1 leaking the block into git.**
+The same fuzz on this release: **0, 0, 0.**
+
+### The two HIGH defects
+
+- **`clean` and `smudge` disagreed about what a block is.** `clean` required an opening AND a
+  closing marker; `smudge` was satisfied by an opening one. Any `AGENTS.md` holding an unmatched
+  open marker — a user quoting Engram's own syntax at line start — made `smudge` no-op, so the
+  block was **never restored on checkout and Engram's instructions silently stopped reaching the
+  model.** That is v1.1.1's bug, reintroduced one function over, in the release that fixed it.
+  The two now share one byte-identical locator and a check asserts they cannot drift.
+- **One non-UTF-8 byte disabled the filter and leaked the block into git.** Both scripts used
+  `sys.stdin.read()`, which is strict UTF-8 under any `*.UTF-8` locale — the macOS Terminal and
+  Linux desktop default. A single latin-1 byte raised `UnicodeDecodeError`; git reported
+  *"external filter failed"*, fell back to **unfiltered** content, and committed `AGENTS.md`
+  with the full Engram block in it, on every `git add` and every `git checkout` thereafter.
+  Both filters now read and write **bytes**, decoding with `surrogateescape`, so arbitrary
+  byte sequences round-trip untouched.
+
+### Also fixed
+
+- **Mixed line endings were rewritten wholesale.** One CRLF line anywhere converted the entire
+  file, contradicting the script's own docstring. The markers now tolerate an optional CR
+  instead of the document being normalised.
+- **An orphan `<!-- /engram -->` above the block disabled the filter entirely.** The locator took
+  the first closing marker outright; with no opening marker before it, it returned "no block"
+  and committed the whole thing verbatim. It now takes the first close that *has* an open
+  before it.
+
+### Why the v1.2.0 gates missed both
+
+Worth writing down, because the gates were run and were green.
+
+- **The fuzz asserted the wrong property.** It checked `clean(smudge(x)) == x` — roundtrip
+  stability, which stops the file reading as permanently dirty. It never checked contract 1,
+  *"the block is on disk"*. HIGH 1 satisfies roundtrip perfectly: smudge no-ops, clean no-ops,
+  the value is stable — and the instructions are gone. A stable wrong answer passes a stability
+  check.
+- **The environment hid HIGH 2.** Every filter run during v1.2.0's gates had `LANG` unset, so
+  Python used `surrogateescape` and the latin-1 byte sailed through. Under any desktop locale it
+  raised. **A gate that passes because of an unset environment variable has not run.** The fuzz
+  now pins `LC_ALL` explicitly.
+- **Two unit checks were asserting the bugs.** `opencode-engram-smudge passes through when
+  content already has marker` fed an *unmatched* opening marker and asserted pass-through —
+  that is HIGH 1, written down as the expected result. It went green through the whole release.
+
+### Tests
+
+155 → 160 vitest checks; `selftest` unchanged at 234. The shared locator is duplicated in both
+filters rather than imported: an import is one more file that can go missing, and v1.2.0 proved
+what a crashing filter costs. A check asserts the two copies are byte-identical.
+
+## 1.2.0 — 2026-07-22 · AGENTS.md, and the instructions that deleted themselves
+
+The OpenCode plugin wrote its model instructions to `.opencode/instructions.md` and registered
+that path in `cfg.instructions`. That only ever worked on OpenCode's v1 session path; the v2
+runner (`packages/core/src/instruction-context.ts`) discovers `AGENTS.md` natively and never
+reads `cfg.instructions` at all. So the instructions were one refactor away from silently not
+loading. #11 (thanks @luanweslley77) moves them into `AGENTS.md`, behind a versioned
+`<!-- engram v… -->` marker.
+
+**The first implementation of that move deleted the instructions it existed to install** — and
+it took an end-to-end test against a real OpenCode to see it, because every unit test passed.
+
+### Packaging
+
+- **A pre-commit hook stripped the block from the working tree, not just from the commit.**
+  The design was "always on disk, never in git". The strip script rewrote the file in place, so
+  after one `git commit` the block was gone from disk too — and `selfExtract` returns early when
+  the version is unchanged, so nothing put it back until the next release. Measured on OpenCode
+  1.18.4: a project with a `CLAUDE.md` went from *"Instructions from: CLAUDE.md"* to a **0-byte
+  `AGENTS.md` and no instructions block at all**, permanently. Replaced with a git
+  **clean/smudge filter pair** — `clean` strips the block on the way into the index, `smudge`
+  restores it on checkout. The working tree always has it; git never does.
+- **The hook also swept unstaged work into commits.** `git add AGENTS.md` after stripping
+  staged the whole file, so anyone using `git add -p` on it committed hunks they had held back.
+  Gone with the hook.
+- **A project-root `AGENTS.md` silently suppresses the user's `CLAUDE.md`.** Not our bug, but
+  ours to disclose: OpenCode's `instruction.ts:122-133` breaks on the first *filename* that
+  matches anywhere in the ancestor chain, and `AGENTS.md` is first in that list. Creating one
+  takes `CLAUDE.md` away, and `findUp` tests existence, so even an empty `AGENTS.md` does it.
+  Engram now warns when both exist. **The warning fires from the config hook, once per session,
+  not from `selfExtract`** — a `CLAUDE.md` added the week after install would otherwise never
+  be flagged, which is precisely the case the warning is for.
+- **`.git/info/exclude` no longer hides the user's own rules.** Keeping `AGENTS.md` out of git
+  is right while the file holds only Engram's block, and a trap the moment it doesn't: the
+  exclude is invisible from the working tree — it is not `.gitignore`, and finding it takes
+  `git check-ignore -v` — so `git status` stays silent and the user's rules are never committed.
+  The entry now tracks **content, not authorship**: present while Engram-only, removed as soon
+  as there is anything else in the file, with a log line saying so. `.opencode/` is deliberately
+  *not* excluded — it can hold the user's own commands and agents, and hiding those would be the
+  same bug.
+- **The clean and smudge filters disagreed about what a block is.** `clean` was line-anchored;
+  `smudge` used a substring test. A user whose rules merely mention `<!-- engram v` inline made
+  `smudge` no-op, so the block was never restored on checkout and the instructions quietly
+  stopped reaching the model. Both are anchored now, and a check holds them together.
+- **The clean filter could delete user prose above the block.** The old regex was `DOTALL` with
+  no `$`, so `.+?` crossed newlines: a line mentioning the marker swallowed everything down to
+  the real close marker — and the truncated file is what git stored. The locator now takes the
+  **last** opening marker before the closing one, both anchored alone on their line.
+- **The clean filter no longer rewrites the user's line endings.** It normalized CRLF→LF across
+  the whole file, user content included. CRLF is now normalized only for matching and restored
+  on the way out.
+- `cfg.instructions` is no longer set. Once the file is `AGENTS.md` at project root, v1
+  discovers it natively (and de-duplicates against config — `instruction.ts:113` is a `Set`), and
+  v2 never reads the field. It was dead either way.
+- Legacy `.opencode/instructions.md` is removed on upgrade.
+
+### Tests
+
+110 → 155 vitest checks; `selftest` unchanged at 234 (the engine is untouched).
+
+The filter pair was fuzzed at 600 generated `AGENTS.md` states across three seeds.
+`clean(smudge(x)) == x` holds 600/600 for every value `clean` itself produces — the invariant
+the system actually maintains, so the file never reads as permanently dirty. A block that
+reached git wrongly (possible via the `else cat` fallback, when a commit lands before
+extraction) **converges to a fixed point in one pass in 122/122 cases, with no oscillation**;
+it shows up as a one-time diff removing the block, which is the repo being corrected. Nothing
+outside the block was lost in 900 cases. `opencode-engram-clean`'s docstring records this so
+the one-time diff does not read as a bug later.
+
+Four checks cover `.git/info/exclude` specifically, because `syncAgentsExclude` rewrites a
+user-owned file by splitting and rejoining lines: user comments, blank lines, ordering and
+negation patterns all survive; 25 consecutive sessions produce byte-identical output with no
+duplicate entries; and a `.git` that is a *file* (worktree, submodule) no-ops instead of
+throwing.
+
+**One of the new checks was fake, and the mutation gate caught it** — §4.5, for the fourth
+release running. The fixture for "user prose above the block survives" used an *inline* mention,
+which the anchored regex never matches, so `opens[0]` and `opens[-1]` were the same element and
+flipping between them changed nothing. Rewritten with two genuinely-anchored markers so the two
+definitions diverge. Worth recording that the `$`-anchor and the last-marker rule are
+belt-and-braces: either alone saves the inline case, so only the fenced-example fixture
+separates them, and the locator has to be mutation-tested as a unit. The test file says so.
+
+## 1.1.1 — 2026-07-22 · What the post-release review found, three hours later
+
+v1.1.0 shipped with every gate green. §7.5 — an independent reviewer reading the **shipped**
+code with one standing instruction, *"find a number that is wrong, especially one wrong in
+the direction that reassures the learner"* — found **two HIGH defects of exactly that class**,
+plus four more. Every one is a number a learner would have believed.
+
+- **The `fact` bar had no floor and drew 100% off a single review.** v1.1.0 fixed precisely
+  this bug for the `concept`/`procedure` bars — by gating them on `read`, which is computed
+  from *procedure vs concept only*. The `fact` arm, which `read` never looks at, sailed
+  through the gate one line further down. The v1.1.0 selftest could not see it because its
+  fixture built no fact nodes. **Every arm now carries its own floor**; sub-floor kinds are
+  listed as counts.
+- **`procedure_slip_share`'s floor counted judgments, not nodes.** One procedure node the
+  learner had failed **five times running** supplied the whole denominator, and the page
+  read *"100% were execution slips"* — the single most flattering sentence available about
+  a node that keeps dying, printed directly beside a recall rate the same page had just
+  suppressed for want of data. The floor now counts **distinct nodes** (`n_nodes` ships
+  beside `n_classified`), and both narrators gate on it.
+- **The circularity caveat understated the author's own concessions** — hardcoded "5 items
+  were corrected" while the shipped gold carried **6**, the sixth being the one corrected
+  *because all three grader runs disagreed*. The string that exists to disclose the
+  instrument's contamination was itself contaminated, in the flattering direction. Now
+  derived from the file. The adversarial-share figure in `bias_note` was likewise stale
+  (88%, from the 66-item era; the shipped set is 86%) and is now computed.
+- **The wrong-core grading rule reached 2 of the 3 rulebooks — and missed the one that
+  matters most.** Traced through the shipped skills: the assessor only ever writes `encode`
+  receipts, so **every `review` receipt carrying `error_class` — the entire denominator of
+  `procedure_slip_share` — is written by the /review tutor**, grading from
+  `problem-grammar.md`, which lacked the rule. The tutor is also the one grader `/coach
+  audit` never measures. Both shared grammars now carry it, and say so.
+- **`export` stamped the audited assessor's QWK on tutor-graded receipts.** v1.1 made this
+  material by exporting `error_class`, a tutor-only field. A corpus consumer would have read
+  one oracle's measured validity across two populations, one of which nothing has ever
+  audited. `grader_qwk` is now null where no audited grader signed the verdict, and each
+  receipt carries `self_graded`.
+- **`add-topic --replace` silently demoted procedure → concept.** A re-authored payload that
+  forgot `kind` stopped /review serving fresh instances, and a tutor still passing
+  `--error-class` wrote receipts stamped `concept` carrying a slip. It now warns, as every
+  other reclassification in that function already did.
+
+Selftest 230 → **234**, every new check mutation-tested; fuzz re-run clean (0 / 600).
+
+**The lesson, which is the same one every time:** the gate that catches a bug class will not
+catch that bug class in itself. v1.1.0's dashboard-floor fix shipped a dashboard-floor bug
+one line away, and its slip-share fix shipped a slip-share denominator bug. Only the reviewer
+who did not write the code saw either.
+
+## 1.1.0 — 2026-07-22 · The procedure layer — practice what must be performed
+
+Engram could teach *why* and could not teach *doing*. Every node was a declarative claim,
+every probe verbal free recall, every receipt graded prose — which converts "differentiate
+this" into "recite how differentiation works," and the transfer literature prices that
+conversion at half the effect or, without elaborated feedback, near zero (Pan & Rickard
+2018: congruent d = 0.58, incongruent 0.28, neither-condition ≈ 0 bias-adjusted). v1.1
+adds the third knowledge kind. **Engram stays a general learn-anything system** — the kind
+is declared per node by the content (a `procedure` is a git workflow or a conjugation as
+readily as an integral); there is no math mode, and a topic with zero procedure nodes
+behaves exactly as on v1.0.8 — same schedule, same grades, same flow. (Precisely, not
+byte-identically: new receipts carry a `node_kind` stamp, `due` gains two additive keys,
+`stats` gains `by_kind` — additions old code paths never read.)
+
+**Theory (docs/11 + docs/12).** Two new pillars, adversarially verified before code: three
+independent refute-first passes over the acquisition, retention, and grading literature
+(ten full-text reads) **corrected five claims, deflated two effect sizes to their adult
+magnitudes, and inverted one design rule** — the honest parts are in docs/11 §Method,
+including the ones that made the first draft wrong: interleaved-math d = 0.83 is a
+7th-grade number (adults: g ≈ 0.3–0.4); "always serve fresh isomorphs" was backwards
+(retention lives in *algorithmic variants* — new values, same structure; re-clothed
+isomorphs stay with `transfer_probe`); and the erroneous-example novice gate did not
+survive its replication literature (rewritten: after instruction, always scaffolded, never
+a default).
+
+**Engine (`scripts/engram.py`, all additive, zero migration).** Node `kind`
+(`concept|procedure|fact`) + `practice` blocks stored under the `viz` opaque-metadata
+covenant with warn-don't-die validation; `node_kind` stamped on receipts at grading time
+(the `artifact`-stamp discipline); `error_class` (`conceptual|slip`) validated at ingest,
+carried on receipts, `rate --error-class`; `due` payload carries `node_kind` + `practice`;
+`stats.by_kind` (first-review recall per kind, the modality mold: same predicates, honest
+floor, confound caveat *inside the payload*, slip share with its own `n_classified`
+denominator); dashboard "Knowledge kinds" section (the caveat reaches the page); export
+gains `node_kind`/`error_class` as closed enums. Selftest 217 → **230**, every new check
+mutation-tested (11/11 fail when their fix is reverted).
+
+**Behavior (skills + agents).** New `skills/_shared/problem-grammar.md`: the worked-example
+ladder (study → complete → faded → cold solve, faded step = the principle-bearing one,
+pace from measured state), fresh algorithmic variants with **answer keys computed by
+execution — never inspection** (generated-problem pipelines carry a measured ~3–5%
+wrong-key rate even with execution checks), the discrimination beat (confusable
+`discriminates_from` siblings served adjacently — juxtaposition carries the interleaving
+effect: g 0.73 adjacent vs 0.22 scattered), slip ≠ lapse pricing, and the scaffolded
+erroneous-example rung. The architect declares kinds + practice frames and seeds error
+banks from documented misconception catalogs (FCI, DIRECT, CAOS/SCI, natural-number bias,
+progmiscon.org). The assessor gains the execution duty and `error_class`, with
+right-answer-wrong-method capped at `partial` — the step-graded LLM literature is bimodal,
+and reference-plus-engineered-rubric is the configuration that reaches human parity.
+
+**The grader is measured on solutions before its solution verdicts count — and the
+measurement bit back.** The gold set grows 66 → **86** (20 adversarial procedure items:
+right-answer-wrong-method, slip-vs-conceptual both directions, fluent-wrong-step,
+terse-but-correct-solution, alternate-valid-method, clean/lapsed/boundary anchors — every
+number verified by execution at authoring time).
+
+Extending the set falsified the badge. **v0.7's "0 of 198 · it has never once inflated a
+grade" did not survive**: three audits over **774 judgments** caught **3 real inflations**,
+and both root causes were ambiguities in the grader's *own instructions* —
+
+- `cap at partial` was read as an instruction to **award** partial rather than to limit it
+  (one run wrote "MISSED" against all three criteria and then graded `partial`);
+- the right-answer-wrong-method tiebreak **this release introduced** generalized into a
+  universal criteria-counting rule that overrode `lapsed = core absent or wrong`.
+
+Both are closed; the shipping spec measures **0 inflations in 258 judgments**, and the badge
+now reads `0/258` with that history stated rather than hidden. Every fix made the grader
+*stricter*, so agreement with the author fell as safety rose (QWK 0.983 → 0.964) — and the
+two categories where all three runs now disagree with the author are **left contested on
+purpose**, because three rounds of conceding to your own instrument is not adjudication.
+Full account: [`docs/release-audits/v1.1.0-grader-audit.md`](docs/release-audits/v1.1.0-grader-audit.md).
+
+**Still honestly open** (docs/11 §7): FSRS has no published validation on procedural skill
+(DAS3H is the citable precedent; `by_kind` is the per-learner instrument); slip pricing is
+a labeled engineering inference, now n-of-1-testable; nobody anywhere has published a
+delayed-retention math-tutoring RCT — the Commons question extends to procedures.
+
+## 1.0.8 — 2026-07-19 · OpenClaw — the sixth platform, and the tutor leaves the terminal
+
+Engram now installs on **[OpenClaw](https://docs.openclaw.ai)**, the self-hosted gateway
+that fronts an agent with Discord, Slack, Telegram, WhatsApp, iMessage, and Signal. Every
+claim below was verified against a live **2026.7.1-2** install on macOS, under an isolated
+`OPENCLAW_STATE_DIR` so nothing touched a real gateway or a real learning store.
+
+This is the first platform where `/review` happens on a phone. The FSRS schedule has always
+booked reviews for moments you are not at a desk; until now the tool only existed at one.
+
+- **One command:** `openclaw plugins install engram --marketplace nagisanzenin/engram`.
+  OpenClaw reads engram's existing Claude-compatible `marketplace.json` straight from
+  GitHub — no new manifest, no ClawHub publish. `/learn`, `/review`, and `/coach` register
+  as slash commands on every OpenClaw surface.
+
+- **Packaging: the `hooks` key was aimed at a file, and the capability report hid it.**
+  OpenClaw matches `.codex-plugin/plugin.json` *before* every other marker, so engram is
+  always a Codex bundle there — and for Codex bundles it reads the manifest's `hooks` value
+  as a list of **directories to scan for hook packs**. Engram declared
+  `"hooks": "./hooks/hooks.json"`, so the scanner was pointed at a *file*, found no
+  `*/HOOK.md`, and loaded nothing — while `plugins inspect` still cheerfully reported
+  `hooks` among the bundle capabilities. Declared-and-broken looked exactly like working.
+  The key is now **removed**, which is also the more correct manifest: OpenAI documents
+  that Codex auto-discovers `./hooks/hooks.json` when no `hooks` entry is present, so the
+  key was redundant on the platform it was written for. Both platforms now fall back to
+  their own documented conventions and both find their hooks.
+
+- **The nudge, ported as a hook pack** (`hooks/engram-due/` — `HOOK.md` + `handler.js`).
+  It binds to `command:new` and `command:reset` because those are the only two internal
+  hook events whose `event.messages` OpenClaw routes back to the conversation; the
+  `session:*` events exist but discard pushed output. Same contract as every other
+  platform: forwards what `engram.py session-start` prints, composes nothing itself, and
+  degrades to silence on missing `python3`, missing engine, non-zero exit, timeout, or
+  oversized output.
+
+- **A silent-failure trap worth naming, because it is the kind that reads as success.**
+  OpenClaw skips internal hook discovery entirely until something opts in, and shipping a
+  hook pack inside a plugin does *not* opt in. Without
+  `openclaw config set hooks.internal.enabled true`, `openclaw hooks list` shows
+  `engram-due ✓ ready` — correct events, requirements satisfied, green tick — and the hook
+  never runs once. Proven both ways in the gateway loader log: **zero** internal handlers
+  registered without the flag, `Registered hook: engram-due -> command:new, command:reset`
+  with it. The install doc leads with this rather than burying it in troubleshooting.
+
+- **The assessor stays blind, structurally.** No OpenClaw bundle format maps an `agents/`
+  directory into a usable registry — Claude-format bundles detect `agents` and explicitly
+  decline to execute them — so engram's three agents are not registered here. They are
+  spawned instead through `sessions_spawn`, whose default `context: "isolated"` starts the
+  child with a clean transcript: it sees the task text and nothing else of the tutoring
+  conversation. That is the assessor's blindness requirement met by construction rather
+  than by politeness. New `skills/_shared/subagents.md` carries the contract — children
+  read `agents/<name>.md` from the installed plugin rather than receiving an inlined copy,
+  so there remains exactly one definition of each agent across all six platforms, and it
+  states plainly that if `sessions_spawn` is absent under a narrow tool profile there is no
+  degraded mode: engram does not let the tutor grade its own learner.
+
+- **The engine-resolution snippet was rewritten because a live model got it wrong.** The
+  first port added OpenClaw as a second line — `[ -f "$ENGRAM" ] || ENGRAM="…"` after the
+  existing nested-default expression. A live `/review` then failed with
+  `Exec failed: python3 $HOME/.openclaw/extensions/engram/scripts/engram.py`: the model had
+  read two lines of shell and *paraphrased* them into one guessed path, and the guess was
+  wrong under a non-default state dir. `$OPENCLAW_STATE_DIR` was verified present in the
+  exec environment, so this was not a missing variable — it was a snippet that invited
+  improvisation. All three skills now carry one copy-and-run `for` loop over the candidate
+  roots, each guarded by an existence check, prefixed *"RUN THIS BLOCK VERBATIM — do not
+  substitute a path you guessed."* This also hardens the other five platforms: the old form
+  took the first *set* variable even when nothing was there, the new one takes the first
+  root that actually **exists**. Verified identical across bash, zsh, and POSIX sh, and
+  under each platform's env layout.
+
+- **And then that rewrite introduced its own regression, caught by a blind agent read.**
+  The first draft ended in `: "${ENGRAM:?engram engine not found…}"`. In a **dev clone** —
+  no plugin-root variable set, which is exactly how contributors run this repo — nothing
+  matched, and `:?` **aborts the shell**, killing the rest of the block. The old code failed
+  softer there and let the skill's prose fallback recover. Two fixes: `$PWD` and
+  `git rev-parse --show-toplevel` are now the final candidates (so a dev clone resolves at
+  all, which the old chain never did either), and the hard `:?` became a non-fatal warning
+  on stderr. The finding came from handing the edited files to an uncontaminated agent and
+  asking only *"which mechanism applies to you, and does the block succeed?"* — a question
+  no test in this repo asks.
+
+- **Known ordering caveat, unchanged from previous releases and deliberately left alone:**
+  the Antigravity staging path is checked *before* `$PWD`, so on a machine carrying a stale
+  Antigravity install, a dev clone will silently run the installed engine rather than the
+  checkout. Reordering would change resolution behavior on a supported platform to fix a
+  contributor-only papercut, which is the wrong trade in a release whose whole claim is
+  "no regressions elsewhere."
+
+- **The cross-platform prose was made platform-agnostic after a pollution check.** The
+  first draft wrote *"On OpenClaw, engram's agents are not registered — call
+  `sessions_spawn`…"* into all three **shared** skills, which every platform's agent reads.
+  A blind agent test flagged the branch as stated in terms of two platforms with Claude
+  Code's own `Agent`/Task tool never named, and noted the skills use bare agent names where
+  that platform requires a namespaced `engram:engram-assessor`. Rewritten to describe the
+  *property* — "a fresh-context child running that agent's definition" — and to name both
+  mechanisms. Re-tested blind: correct tool, correct namespaced type, three separate
+  spawns for the audit, and no ambiguity reported.
+
+- **Verified live, not merely wired.** Driven against `gpt-5.4` with `ENGRAM_HOME` pointed
+  at a throwaway store: a model asked to name its learning skills answered
+  `coach`/`learn`/`review`; `/review` and `/coach` produced real output end-to-end; the
+  hook was observed on a live `/new` resolving the engine and pushing the 217-character
+  nudge; and the assessor round-trip completed — an isolated child read
+  `agents/engram-assessor.md` and returned a valid receipt (`recalled`/`easy`, `rubric_notes`
+  quoting both criteria). **The child's prompt was read out of the trajectory log and
+  contained only the task text** — the blindness claim is now evidence, not architecture.
+  A negative case landed too: pointed at a missing instructions file the child returned
+  `{"status":"blocked"}` and declined to grade rather than inventing a verdict.
+
+- **Still not claimed:** delivery of the nudge into a real chat surface. The push onto
+  `event.messages` is proven; routing needs a connected channel, and the CLI `agent` path
+  has no conversation to reply into. `/learn` end-to-end and the artifact smith are also
+  unverified. §5.6 discipline: the unverified list ships with the release.
+
+- **A testing note worth writing down, because it produced a false negative for three
+  rounds.** `pkill -f "openclaw.mjs gateway run"` matches nothing — the Gateway renames its
+  process to `openclaw-gateway`. Three consecutive "the hook never fires" results were
+  actually the *original* gateway still holding the port and serving a stale copy of the
+  handler; the new instrumented process was exiting on `Port already in use` while its log
+  scrolled past unread. The hook had been firing correctly the whole time. Stop it with
+  `openclaw gateway stop` or by PID, and check that the port is free before concluding
+  anything about a hook.
+
+- Upstream discrepancy, reported here for the next reader: OpenClaw's own
+  `docs/plugins/bundles.md` states native manifests win detection ("If a directory contains
+  both, OpenClaw uses the native path"), but the shipped `detectBundleManifestFormat`
+  checks `.codex-plugin/plugin.json` first and only reaches `openclaw.plugin.json` fourth.
+  An `openclaw.plugin.json` was written, tested, observed to be inert, and **deliberately
+  not shipped** — it would do nothing today and would silently change engram's plugin shape
+  the day upstream makes the code match the docs.
+
+- **The adversarial pass found one of its own release's claims to be false.** `HOOK.md` said
+  *"Every failure path degrades to silence"* — but only the **engine** call was inside a
+  `try`. Delivery was not: `event.messages.push(...)` throws if `messages` is frozen, absent,
+  or not an array, and a thrown handler is not a silent one. Two mitigating facts, both
+  verified in OpenClaw's shipped source: `triggerInternalHook` wraps every handler in
+  try/catch and logs, so this could never break a session; and `createInternalHookEvent`
+  always supplies a real extensible array, so the normal path cannot reach it. Severity is
+  therefore low — but *"the host catches my exception"* is not silence, it is a line in an
+  operator's error log, and a hook that advertises silence should not be relying on its host
+  to keep that promise. Delivery is now guarded too, which makes the documented contract true
+  unconditionally rather than by courtesy of the runtime. Found by attacking the handler with
+  frozen/absent/non-array `messages` and a throwing `push` — cases the earlier unit test
+  missed because it ran against an *empty* store, where the handler returns before ever
+  reaching delivery. **A negative test that exits early proves nothing about the code past the
+  exit.**
+
+- **Gates.** Selftest **217/217** (unchanged — no engine behavior changed, so no new check was
+  owed; §4.5 mutation-testing is therefore N/A this release). OpenCode suite **88/88**. Fuzz
+  gate re-run against the final commit across every read path enumerated from the dispatch
+  table plus the read-only sub-actions the table cannot see: **0 crashes / 500 states / 2
+  seeds**, the §4.7 target exactly. Live engine test
+  green — `s_after` 3.71 → 29.55 across a day-11 review, `momentum.recalled_7d` matching
+  `reviews_7d` (the v1.0.7 fix holding), `retention` carrying its `grader_unvalidated`,
+  `doctor ok=true`.
+
+- **§5's read-only check needs an amendment, and it is not a v1.0.8 bug.** Hashing
+  `~/.claude/learning` before and after every read path reports a mutation — traced to
+  `report`, whose documented job is writing `artifacts/dashboard.html`. `report` is
+  classified non-mutating in the dispatch table because it touches no *learning state*, so
+  the protocol's own enumeration recipe hands it to a gate that then fails on it. Re-run with
+  `report` excluded, every read path leaves the store byte-identical, and no state file is
+  touched. **The gate should exempt `report` (or compare state files only)** — as written it
+  cries wolf on every release, which is how a real read-path write would get waved through.
+
+## 1.0.7 — 2026-07-19 · a flattering number, caught by the gate built for it
+
+One engine fix, shipped hours after v1.0.6 because RELEASE_PROTOCOL §7.5 says a wrong
+number does not get to stand. The independent post-release reviewer — standing
+instruction: *"find a number that is wrong, especially one that is wrong in the
+direction that reassures the learner"* — found exactly one, and it is bug class #1:
+
+- **`momentum.recalled_7d` counted encode and pretest receipts as retrieval wins.** The
+  docstring's contract is *"retrievals cleared, and genuine wins among them"* — wins ⊆
+  retrievals — but the counter took ANY in-window receipt with `grade: "recalled"`.
+  Encodes and pretests carry that grade in normal use, so a learner who encoded three
+  concepts and never came back once read `recalled_7d: 3` beside `reviews_7d: 0` —
+  three "genuine wins" with zero retrievals. One-line fix: the counter now shares the
+  same genuine-retrieval predicate as `reviews_7d`.
+- **And the embarrassing part, per protocol: the guarding selftest was theatre.** The
+  v1.0.6 check asserting `recalled_7d == 1` could not fail — its encode fixtures were
+  both out-of-window AND gradeless, so the inflating population never reached the
+  counter under test. The fixture now carries an in-window `grade: "recalled"` encode
+  AND pretest; the check fails by name when the fix is reverted (mutation-tested).
+  That is the fourth §4.5 lesson in four releases: *a check that cannot see the
+  inflating population proves nothing about inflation.*
+- Blast radius, honestly: the prescribed `/coach` narration leads with
+  `stability_gained_7d` / `reviews_7d` / `most_durable` (all correct) and never quotes
+  `recalled_7d`; exposure was a narrator improvising off the JSON — which the docstring
+  invited, by calling the field retrieval wins.
+- Noted, unchanged: `retained_total`/`state_counts` label a node "retained" on FSRS
+  graduation (before any retention test). That matches its docstring and the system-wide
+  state convention, and the retention *metric* correctly excludes first exposures — a
+  labeling convention to revisit, not a wrong number.
+- Selftest count unchanged at **217/217** (an inert check was made real, none added).
+  Re-fuzz after the fix: 0 crashes / 800 states.
+
+## 1.0.6 — 2026-07-18 · Antigravity — the fifth platform
+
+Engram now installs natively on **Google Antigravity** (`agy` CLI) — contributed by
+@mertso13 in #8, two review rounds, every claim below verified live against agy 1.1.4
+with a sandboxed `$HOME`.
+
+- **One command:** `agy plugin install https://github.com/nagisanzenin/engram`. Root
+  `plugin.json` is schema-minimal on purpose — the official
+  `antigravity.google/schemas/v1/plugin.json` allows exactly `name` + `description`
+  (`additionalProperties: false`); everything else is directory-crawled. The manifest is
+  inert on the other four platforms (Claude Code reads `.claude-plugin/`, Codex
+  `.codex-plugin/`, OpenCode npm/`.opencode/`, Hermes `skills.external_dirs`).
+- **The bug that made it possible was ours, not theirs.** `agy plugin install` stats every
+  file it copies — and died on `.opencode/skills/{learn,coach,review}/SKILL.md`, whose
+  symlinks have been **self-referential loops since f3ccc76** (`../../` where three levels
+  were needed: from `.opencode/skills/<n>/`, `../../skills/<n>/SKILL.md` resolves to
+  *itself*). Nobody noticed for four releases because npm packs exclude symlinks and
+  OpenCode's loader never stats them. Retargeted to `../../../`; git-clone OpenCode
+  installs get real links out of it too.
+- **Engine resolution gains the AG default** — the skills' chain is now
+  `OPENCODE_PLUGIN_ROOT → CLAUDE_PLUGIN_ROOT → CODEX_PLUGIN_ROOT → ENGRAM_ROOT →
+  ~/.gemini/config/plugins/engram` (agy sets no plugin-root variable at all; the staging
+  path is deterministic, so it rides last as the default).
+- **And the embarrassing part, per protocol — this time the reviewer's.** The first
+  review round's fix sketch *replaced* `$ENGRAM_ROOT` with the AG path while its prose
+  said "before `$ENGRAM_ROOT`". The contributor implemented the sketch faithfully — which
+  would have **broken Hermes**, the platform shipped one release ago, whose entire engine
+  resolution runs through `ENGRAM_ROOT` (INSTALL-HERMES.md sets no plugin-root var). Caught
+  in the second round by evaluating the installed chain side-by-side under
+  `ENGRAM_ROOT=/fake/dev/clone`: new chain ignored it, old chain honored it. The lesson is
+  §4.6's, inverted: *a reviewer's sketch is a diff too, and it gets the same scrutiny.*
+- **Known limits, stated in the README footnote:** agy 1.1.4 **silently drops any agent
+  whose frontmatter carries a `tools:` field** (any value — Claude names and snake_case
+  both tested), so `engram-curriculum-architect` and `engram-artifact-smith` don't register
+  on AG; only `engram-assessor` does. `agy plugin validate` still reports "3 agents
+  processed" — *validate ≠ install ≠ register*. The due-review session nudge isn't ported
+  (AG hooks use a different mechanism). Stripping `tools:` was rejected deliberately: it
+  would grant those agents all tools on Claude Code, trading a real restriction for a
+  cosmetic registration.
+- **Engine: three shipped read-path bricks, found by this release's own fuzz gate** (§4.7:
+  800 randomized garbage states × 24 read paths — the 24 include every read-only
+  sub-action, per the amendment). All three predate this release; all three are the same
+  lesson again:
+  - `artifact list` crashed on an unhashable entry in `order` — because it hand-rolled the
+    walk instead of using `graph_order`, the helper whose docstring *names this exact
+    crash*. The checklist line "grep for the N+1th call site (`cmd_artifact` was the one
+    missed)" was written about this command in v1.0.1. It was still the one missed.
+  - `misconception list` crashed on a `None` entry (`it.get`) — reads now degrade past
+    non-dict entries; mutators still refuse an unusable file outright (a lossy "repair"
+    a mutator then saved would be data loss wearing a hard hat).
+  - `report` crashed rendering an int-typed misconception field (`escape(123)`) — the
+    dashboard, the one surface a human actually looks at, bricked by a hand-edited file.
+    Fixed at the gate: `_open_misconceptions` now coerces narrator-facing fields to text.
+  - Each fix carries a selftest check that asserts the *behavior* (the real entry survives
+    the garbage beside it), and each check was mutation-tested: revert the fix, that
+    specific check goes red. Selftest **214 → 217**. Re-fuzz after the fixes: **0 crashes**.
+
+## 1.0.5 — 2026-07-18 · Hermes — the fourth platform, and the README stops being misread
+
+Engram now runs on **Nous Research's Hermes Agent** (requested in #9), and the README
+finally says out loud what too many people had to ask: this is a **learning system for
+the human, not an agent-memory plugin**.
+
+- **Hermes support, verified live** — not speculated. Every claim in
+  [INSTALL-HERMES.md](INSTALL-HERMES.md) was exercised against a real Hermes v0.18.2
+  install: external-dir discovery of all three skills (`_shared/` correctly ignored),
+  `/review` and `/coach` slash registration, full SKILL.md injection on invocation
+  (11.5 KB `/review`, 17.9 KB via a `/study` bundle), and the ambient nudge landing in
+  the composed user message at the wire level (request dump inspected).
+- **The install route is clone + `skills.external_dirs`, deliberately.** Hermes' hub
+  installer copies only files referenced inside each skill folder, which would sever the
+  skills from the shared `scripts/engram.py` engine. The doc says so and says why.
+- **The `/learn` collision, handled honestly.** `/learn` is Hermes' own built-in
+  (it authors new agent skills). Hermes detects the clash and skips auto-registering
+  engram's `learn`, printing the escape hatch we document: `/skill learn` — or the
+  optional one-line `/study` bundle. The new Hermes nudge rewrites its own
+  "/learn to continue" line accordingly.
+- **New `hooks/session-start-hermes.sh`** — a `pre_llm_call` port of the SessionStart
+  re-anchor: same self-resolution, same degrade-to-silence contract, plus once-per-session
+  dedupe keyed on Hermes' `session_id`. The engine is untouched (state still shared across
+  every platform via `~/.claude/learning`).
+- **README rework.** Leads with the disambiguation (agent memory vs. human learning —
+  the most common misread), then a five-platform matrix: Claude Code (born here), Codex,
+  OpenCode, Hermes, Antigravity (in review, #8). New first FAQ entry for the same
+  confusion. `INSTALL-CODEX.md` omni-repo line updated.
+- **Known limits, stated in the doc:** headless `hermes chat -q` does not expand
+  slash-skills (interactive CLI/TUI/gateway only); the delegate_task assessor flow and
+  gateway/cron delivery are recipe-documented but not yet driven end-to-end with a
+  capable model. Engine selftest unchanged at 214/214; no engine code changed
+  (`ENGRAM_VERSION` pin only).
+- **And the embarrassing part, per protocol.** The pre-release review (28 agents,
+  10 confirmed findings) caught the brand-new hook **failing open two independent
+  ways** — an empty `session_id` bypassed the once-per-session guard entirely, and a
+  misplaced `2>/dev/null` meant an unwritable TMPDIR both leaked bash errors to stderr
+  and re-nudged on *every* LLM call. The hook whose one-line contract is "ambient,
+  never nagging" shipped to review as a per-call nagger under exactly two failure
+  modes its author had tested around. Both fixed (dedupe now fails *closed* to a
+  per-process key; unwritable marker → silence), plus a 9-case failure battery
+  including both reviewer repros. The same review caught the install doc omitting the
+  `ENGRAM_ROOT` export the skills' engine resolution depends on, the cron recipe
+  delivering the un-rewritten `/learn` it warns about two sections earlier (the hook
+  is now dual-mode: JSON for `pre_llm_call`, plain rewritten text on empty stdin for
+  cron), a missed `package-lock.json` bump, and five README cross-consistency slips
+  (the nudge exists on OpenCode too; "five platforms" counted one still in review;
+  the Codex install cell was missing its second command; the OpenCode global-path and
+  pin-to-source details had been dropped; the `/learn` onboarding example sat unscoped
+  under a matrix that includes Hermes).
+
+## 1.0.4 — 2026-07-17 · updates that only speak when something changed
+
+The OpenCode update flow gets honest and inspectable, and its last shell command is gone.
+
+- **Content-aware diff.** `diffCategory` now compares files byte-for-byte
+  (`Buffer.equals`) instead of by existence. Identical files are silently ignored, new
+  files ride the `copyMissing` extract, and only genuinely modified files reach the
+  `skipped` list — so a metadata-only version bump produces no manifest, no
+  pseudo-command, no notification. Unreadable files fail safe into `skipped`.
+- **Unified diff viewer.** A version bump with real changes now also writes
+  `.engram-update.diff` (standard `---/+++/@@` format), and `/engram-update` grows a
+  "View changes" option — the model reads the diff and summarizes what changed before
+  the user decides. Cleaned up alongside the manifest in every resolution mode.
+- **Zero Bash in the update template.** A new `cleanup` mode on the `engram_update`
+  tool replaces the template's last `rm -f`, and an `isWithinTarget` path-traversal
+  guard validates every resolved path in `auto` and `per_file` modes — defense in
+  depth against tampered manifests. Uses `path.sep`, so the guard holds on Windows.
+- **Verification.** Vitest 51 → 88 (new `diffLines` suite incl. an insertion
+  trailing-context regression test, tampered-manifest traversal tests, cleanup-mode
+  tests). Engine selftest unchanged at 214/214.
+
+Contributed by @luanweslley77 (#6), one review round.
+
+## 1.0.3 — 2026-07-16 · OpenCode — the third platform
+
+Engram now runs on **OpenCode**, alongside Claude Code and Codex. Same skills, same
+`engram.py` engine, same receipts — the port is a thin TypeScript adapter that satisfies
+OpenCode's plugin contract and shells out to the unchanged Python core.
+
+- **Self-extract bridge.** OpenCode loads plugins from its npm cache, which is not a
+  config directory, so native discovery never sees the plugin's skills/agents. On first
+  run the `config` hook extracts `skills/ agents/ scripts/` into the OpenCode config dir
+  (`~/.config/opencode/` or the project's `.opencode/`) behind a `copyMissing` guard that
+  never overwrites a user's edits; a first-session `cfg.*` bridge registers everything
+  immediately, and disk discovery takes over thereafter.
+- **Deterministic update tool.** `/engram-update` appears on a version bump and applies
+  refreshes through the `engram_update` custom tool — deletes go through `unlinkSync` with
+  every path validated against the manifest allowlist. No bash, no interpolation.
+- **Hooks.** `shell.env` exports `OPENCODE_PLUGIN_ROOT`; `experimental.chat.system.transform`
+  carries the review-due nudge; a `session.idle` toast announces available updates.
+- **Verification.** New vitest suite (67 tests) covering extract, the manifest state machine,
+  and the update tool's path validation; `.github/workflows/test.yml` runs vitest +
+  `tsc --noEmit` + `engram.py selftest` on every push. Engine selftest unchanged at 214/214.
+
+Contributed by @luanweslley77 (#5), hardened across four review rounds.
+
+## 1.0.2 — 2026-07-11 · a regression my own fix caused
+
+The v1.0.1 verification review confirmed both headline fixes hold (the export leak is closed; the
+power floor is unbuyable) — and found that **v1.0.1's finding-#4 fix introduced a new crash.**
+
+Switching `compute_modality` to the shared `_outcome` predicate was correct — but `_outcome`
+returns `None` on a hand-edited un-scoreable receipt, and `0.0 += None` is a `TypeError` that
+bricked `stats`, and therefore `/coach`. **The same release fixed this exact bug class in `settle`
+(finding #5) and did not carry the guard one function over.** The test gap mirrored the code gap:
+there was a settle-degradation check and no modality one, so 213/213 stayed green over a live brick.
+
+- **Fixed:** modality drops the un-scoreable datum, like every other read path. Reads degrade, they
+  never brick.
+- **The fuzz fixture now includes an un-scoreable FIRST review**, so this class cannot hide again —
+  the gate missed it because no fixture gave a node a `None`-outcome first review, which is the only
+  shape that reaches modality's per-node first-review logic.
+
+Selftest **213 → 214.**
+
+## 1.0.1 — 2026-07-11 · TWO post-release reviews, and the leak the whole project exists to prevent
+
+Two independent reviewers read shipped code — v1.0.0 (the Commons) and the still-in-`main` v0.9.0
+(the Method). Between them, **one critical leak and one severe measurement bug**, plus five more.
+Selftest **207 → 213.**
+
+### ⚠⚠ CRITICAL — `export` leaked free text verbatim. The v1.0 headline was false.
+
+`arm` and `stratum` were **strings on the whitelist** — and a whitelist that admits a free-text
+field is a hole in the whitelist. `stratify_by: ["claim"]` routed **every node's `claim` text,
+verbatim**, into the export's `stratum` field — while the file's own `stripped` list swore `claim`
+was removed. The learner-authored `arm` label leaked on **every** experiment. A hand-forged
+`grader` string left uncapped.
+
+```
+LEAKED into the "attributed, text-stripped" export:
+  CLAIM-CANARY: 4   ARCHITECT-SECRET-CANARY: 4   ARM-CANARY-LEAK: 1   stigmatized: 4
+```
+
+**Fixed:** `arm`, `stratum`, and `grader` now leave as **hashes** (`arm_hash`, `stratum_hash`,
+`grader_hash`). The only strings that leave un-hashed are `kind`/`grade`/`rating` — **closed
+enums the engine validates**, not text a human wrote. *A whitelist that admits a free-text field
+strips nothing.*
+
+**And the reviewer named exactly why the gate missed it:** the leak-test **never started an
+experiment**, so `arm`/`stratum` were always `None` in the fixture. **It asserted the whitelist
+keys were clean by never populating them.** The test now stuffs the canary into *every* authored
+surface — the experiment arm, a stratum pointed at a node's `claim`, an arbitrary architect
+field — which is the exact path the reviewer used.
+
+### ⚠ SEVERE — the power floor could be bought down with one payload field
+
+`experiment settle` gated `powered` on the *design's own* `min_per_arm`. A trial declaring
+`min_per_arm: 6` — the underpowered v0.8 default this release exists to **kill** — certified as
+`powered: true` and read *"suggestive"* on six data points per arm. **And the shipped skill
+promised the opposite:** *"the settle will read underpowered, and it will be right."* It did not.
+
+**Fixed:** `powered` gates on `max(design, EXPERIMENT_MIN_PER_ARM)`. A design may set a *higher*
+bar; it can never buy the engine's floor down. *A power gate you can lower with a payload field is
+not a power gate.*
+
+### And five more, all in shipped code
+
+- **Optional stopping.** `settle` had no status guard — re-settling as data arrived kept only the
+  last verdict and **roughly tripled the false-positive rate (0.04 → 0.117)**. Peek-and-re-settle
+  until the coin lands is the exact fallacy pre-registration forbids. Now: **an experiment is
+  analysed once.** `start` already refused a second active experiment; `settle` now refuses a
+  second analysis of the same one.
+- **A broken bootstrap CI.** It percentile-bootstrapped `max(mean) − min(mean)`, a non-negative
+  extreme-order statistic — so for 3+ arms the *"95% CI" excluded its own point estimate* (three
+  identical arms, spread 0.000, CI [0.033, 0.367]). It manufactured a strategy separation that was
+  not there. Now: a **signed two-arm difference** CI (which has no such floor), and **None for
+  k > 2** with the read saying so. *Refusing to draw a bad CI is more honest than drawing one.*
+- **`first_review_recall` meant two different numbers.** `stats.modality` scored a `partial` as a
+  full **1.0**; the experiment engine, on the identically-named metric, scored it **0.5**. Same
+  name, same engine, same data, two answers — and modality's was the lenient one. Both now use
+  `_outcome`, the shared predicate. (§4.8 Q1: the engine's commands must agree.)
+- **`settle` bricked** (not degraded) on a hand-edited receipt whose `rating` was a truthy
+  non-rating with no grade — `sum([1.0, None])` → `TypeError`, and `status` had greenlit the settle
+  first. Now it drops the un-scoreable data point, like every other read path.
+- **The no-network guarantee, made honest about its limit.** The AST scan is a strong regression
+  guard, not an impossibility proof (`__import__`, `importlib`, `ctypes`, `exec` would pass it). So
+  the engine also contains **none of those dynamic-import primitives**, checked by a new selftest —
+  the two checks together support "no network code AND no way to smuggle one in dynamically," which
+  a single import-scan cannot claim alone.
+- `grader_qwk` on each receipt now ships with a `qwk_note` stating plainly that it is the grader's
+  validity **at export time**, stamped on every receipt regardless of when it was graded — the best
+  available estimate, not a per-receipt measurement.
+
+**Everything the two reviewers checked and found clean is on the record:** the randomization-test
+p-value (valid under unequal n, false-positive rate at/below nominal), block randomization (stable,
+balanced, reproducible), the modality floor move, and **every v0.8.1 fix still holds after the
+merge.**
+
+## 1.0.0 — 2026-07-11 · THE COMMONS — the first learning system that is also an experiment the whole field can read
+
+The evidence base of learning science is built on **undergraduates, word pairs, and 20-minute
+retention intervals.** Almost nothing tests *self-directed adults*, on *hard conceptual material*,
+at *30–90 day horizons*, with *blind-graded free recall*.
+
+That is not a gap anyone chose. It is a gap because, until roughly 2026, **grading free recall at
+scale was impossible.** You needed a human to read every answer.
+
+Engram produces exactly that data as a byproduct of being useful — and, since v0.7, with a
+**measured** oracle behind every grade. The open question is sitting right there: an AI tutor built
+on this exact dialogue grammar produced **~2× the learning gains of an active-learning classroom**
+([Kestin et al., Harvard, *Scientific Reports*, 2025](https://www.nature.com/articles/s41598-025-97652-6))
+— measured on an **immediate post-test.** **Nobody has ever measured whether AI-tutoring gains
+survive to thirty days.**
+
+Selftest **201 → 207**.
+
+### `export` — a file, not a request
+
+```bash
+python3 scripts/engram.py export --contributor "@you"
+```
+
+| leaves | never leaves |
+|---|---|
+| grades, ratings, confidence | **your productions** — every word you wrote |
+| timings, stability, intervals, retrievability | **probes, claims, rubrics** |
+| `kind`, `artifact`, `arm`, `stratum` | **goals, interests, misconception text** |
+| `grader` and its **measured QWK** | **topic names and node ids** — hashed, not carried |
+
+- **The payload is a WHITELIST.** Every field is constructed by name. **There is no code path by
+  which a production could arrive** — not *"we remembered to delete it."* A blacklist is a promise
+  you must keep every release; a whitelist is one you keep by construction. (Same lesson `gold`
+  taught in v0.7, and the reason both are built the same way.) A **property-based selftest** puts a
+  canary string in *every* field the schema has — **and some it doesn't** — and asserts not one
+  character survives.
+- **The `stripped` list ships INSIDE the file**, so the promise is verifiable by the person making
+  it rather than merely asserted at them.
+- **The hash caveat, stated out loud:** a hash of a *common* topic name (`transformers`) is
+  recoverable by dictionary attack in seconds. It hides the topic from a casual reader, **not from
+  someone who wants it** — and the export is attributed anyway. `export --topic T` exists so you can
+  choose. *An honest caveat beats a fake guarantee.*
+
+### v0.7 GATES v1.0 — and it is a refusal, not a warning
+
+`export` **refuses** if your assessor has not passed its audit:
+
+```
+REFUSING TO EXPORT: the grader behind every one of these grades is unaudited.
+A finding aggregated from unaudited oracles is not a finding — it is noise with a schema,
+and publishing it would put a number into the world that nobody can stand behind.
+```
+
+Every shared receipt carries its grader's **measured QWK**, and the bundle carries the gold set's
+own **circularity limit** (`gold_adjudication: "authored"`). A number you cannot stand behind should
+not enter the world with your name on it.
+
+### THE ENGINE HAS NO NETWORK CODE — and that is now structural, permanent, and mutation-tested
+
+Not *"no network by default."* **None.**
+
+```
+⚠ THE ENGINE HAS NO NETWORK CODE — structural, permanent, and never to be deleted
+⚠ …and it never SHELLS OUT (no subprocess, no os.system/popen/exec/spawn)
+```
+
+- The check **parses the engine's own AST** — it does not grep. **The first draft grepped its own
+  source for the word `curl` and found it, in its own comment and inside its own regex literal. It
+  failed on itself.** The AST cannot see a comment or a string; it reports only what the interpreter
+  will actually execute. *If a structural guarantee can be defeated by a comment, it was never
+  structural.*
+- And it is **mutation-tested by INTRODUCING the thing** — four mutations add a real `import
+  socket`, a real `import urllib.request`, a real `import subprocess`, and a real
+  `os.system("curl …")`, and all four go red. **For an absence check, nulling the detector proves
+  nothing** — it just makes the check vacuously true, which is exactly what it already is on a clean
+  codebase. (Now written into the protocol.)
+
+`export` writes a file and stops. The **agent** posts — via `gh`, which is already installed,
+already authenticated, and already trusted with the whole machine. That is not a loophole; **it is
+the correct place to put the boundary**, because the thing the *100% local* badge is about is
+`engram.py`, and `engram.py` will never grow a socket.
+
+### It is ATTRIBUTED, and we are not going to lie to you about it
+
+`gh` posts from your account. A **"salted anonymous hash"** riding inside a signed envelope would be
+theatre the moment the envelope is signed. **You cannot have one-keystroke upload *and* anonymity.
+Pick one, and say which out loud.**
+
+**Attribution is also the stronger science.** A retention study lives on **longitudinal linkage** —
+following *the same learner across months* **is** the question. Attributed, linkable series at n=100
+are worth more than anonymous one-shot dumps at n=500. It also buys dedup, fabrication detection,
+the ability to ask a follow-up, and the ability to **credit you** — the only honest incentive on
+offer.
+
+This is not telemetry. **It is a consenting, named, informed participant in an open study**, which is
+what every good study has always had.
+
+### `/coach contribute` — and degrading to silence is what makes the consent real
+
+Shows you the file. Names the exact handle it will post under, **before** it asks. Posts only on an
+explicit yes.
+
+**No `gh`, not authenticated, offline, any failure at all → print the path, one line, stop.** No
+error. No retry. **No nag.** The file is still yours.
+
+> **`gh` is a convenience, never a dependency — and declining must cost the learner nothing, or the
+> consent is not real.** A person who feels a cost in saying no has not consented. They have complied.
+
+### Also
+
+- **[CONTRIBUTING-DATA.md](CONTRIBUTING-DATA.md)** — a real informed-consent document, not a privacy
+  policy. What leaves, what never does, that it is **public and attributed**, and how to withdraw
+  (**it is a GitHub post — delete it**; that is the entire mechanism, deliberately).
+- `ENGRAM_VERSION` — the engine finally knows its own version, pinned against the plugin manifest by
+  a selftest so it cannot drift. A corpus of receipts from unknown engine versions is not a corpus.
+- `exports/` created on `init`. Exports are append-only, like receipts and audits.
+
+## 0.9.0 — 2026-07-11 · THE METHOD — the experiment machinery was not sound enough to support the claims it exists to make
+
+Article 7 (*"adapt on evidence, never taxonomy"*) is the article that replaces learning styles with
+real n-of-1 measurement. **Four defects, all in shipped code, and the last one is the worst thing in
+this repository's history:**
+
+| # | the defect | what it means |
+|---|---|---|
+| 1 | `arm = arms[len(assignments) % len(arms)]` | **ROUND-ROBIN, not randomized.** Perfectly predictable. |
+| 2 | unstratified | Explorables are routed to the hardest concepts **on purpose**, so the comparison carried the **material** as well as the medium. `docs/06` open-Q2 disclosed that confound *honestly* — and never fixed it. |
+| 3 | `min_per_arm: 6` | The SCED alternating-treatments literature puts sufficient power at ~28–30 observations. Six per arm is **underpowered by ~2.5×** (`docs/07` §9). |
+| 4 | **`exp["verdict"] = args.verdict`** | **THE MODEL COMPUTED THE VERDICT.** A payload said *"derivation-first won"* and the engine wrote it down. A direct violation of **invariant #2 — the engine owns every number** — in the one command whose entire purpose is a number nobody is allowed to make up. |
+
+**A confounded, unpowered, round-robin trial settled by narration is not evidence. It is a vibe
+with a JSON file.**
+
+Selftest **191 → 201** (this release merges the v0.8.1 fixes).
+
+### What it is now
+
+- **Randomized, and reproducible.** Balanced **block randomization** keyed on `(seed, stratum)`:
+  within each block the order is random, and every arm appears exactly once. Not `random.choice`
+  (which randomizes and never balances — a 20-node run could land 14/6 and the effect would be
+  measured over an arm that barely exists). Not round-robin (which balances and never randomizes —
+  which is what shipped). **The seed is recorded, so every assignment is recomputable by anyone who
+  holds it.** An assignment nobody can reproduce is not an assignment; it is an anecdote.
+- **Stratified — and this is the part that kills the confound.** Randomize the medium *within* one
+  affordance class and the material stops riding along with it. `docs/06`'s open question 2 is
+  finally *answerable* instead of merely disclosed.
+- **Pre-registered.** The design file **is** the pre-registration: question, arms, metric, seed,
+  strata, power, analysis — written before a single datum exists. An **unknown metric dies**: the
+  engine will not guess which number you meant and then report it as fact.
+- **Powered.** `min_per_arm` defaults to **15** (~30 observations). You may set it lower — the engine
+  records a `power_note` saying you chose to, and the settle reads `underpowered`, and it is right.
+- **THE ENGINE COMPUTES THE VERDICT.** `settle --verdict` is now **refused, loudly.** The engine
+  returns per-arm n and means, the effect, an **exact randomization test** p-value (shuffle the arm
+  labels — valid *by construction*, because the engine randomized them itself), a bootstrap 95% CI,
+  and the per-stratum balance. The model narrates it. It does not make it up.
+- **`experiment status`** — progress against the power floor, so nobody settles early by accident.
+- **p is never 0.** Add-one correction: with 10,000 permutations the floor is 1/10,001. A p-value of
+  exactly zero is a claim no finite test can make, and this engine does not make claims it cannot.
+
+### `stats.modality`'s floor moved with it — and that SUPPRESSES a number some learners can see today
+
+`MODALITY_MIN_N` was **6**, inherited from the same underpowered convention, and `docs/10` predicted
+this exactly: *"stats.modality's identical ≥6 floor inherits the same defect and moves with it."* It
+is now **15**.
+
+**This means some existing learners will lose a number their dashboard used to show.** That is
+correct. **The number was never earned.** Suppressing an unearned number is not a regression — it is
+the product.
+
+### The §4.7 rule that found the bug had a hole, and the hole was the same shape
+
+The protocol says: *enumerate the read paths from the **dispatch table**, not from memory.* But
+`experiment` lives in `mutating` (start/assign/settle write) — so its **read sub-actions**
+(`status`, `list`) were **invisible to the enumeration** and had never been fuzzed. The first time
+they were: **72 crashes in 600 states.** `arms` as an int, `arms` absent, `arms` holding a dict
+(unhashable, and it poisoned the dict it was used as a key in).
+
+**A command with sub-actions has a read path PER SUB-ACTION.** Fixed at one gate (`_exp_arms`), and
+the rule is amended.
+
+### `as_number` let infinity through — the numeric gate for the entire engine
+
+`Infinity` and `NaN` are **not valid JSON** — and Python's `json` module parses them anyway. An
+`inf` sailed through every `isinstance(x, float)` check and then died on the first `int()`
+(`OverflowError`), and a `NaN` **compares False to everything, including itself**, so it poisons
+every comparison it touches without raising anything at all.
+
+Three crashes in `decay` and `experiment status`, in code with no other flaw. **Fixed at the gate**
+— `as_number` is the funnel for every scheduler leaf, every metric, every threshold in the engine.
+One line here; forty at the call sites, and the forty-first is the one that ships.
+
+Fuzz: **0 crashes / 13,500 invocations across 18 read paths.**
+
+## 0.8.1 — 2026-07-11 · THE RULER WAS NEVER TESTED, ONLY THE SUBJECT
+
+The post-release review (§7.5) found **11 defects in shipped v0.8.0**, and the two worst are the
+same failure the release was written to end.
+
+Selftest **180 → 191**.
+
+### ⚠ #1 — The capstone's transfer receipt was DEAD DATA
+
+The learner builds the capstone, passes it, and `stats.transfer` reads
+**"NO CAPABILITY HAS EVER BEEN MEASURED"** — while the receipt sits on disk. Two independent causes:
+
+- The capstone is built **once**, so its transfer receipt is its **first** receipt — and the v0.6.1
+  rule (*"a node's first receipt is its encoding event"*) swallowed it. But **a capstone has no
+  encoding phase at all.** The build *is* the event.
+- The census skipped it anyway: it is minted with `transfer_probe: None` (*"the capstone IS the
+  transfer probe"*), and the census required a non-empty one.
+
+**A FAILED capstone was discarded entirely** — the single most diagnostic event in the whole system
+(*"I could not actually use this topic"*), silently dropped.
+
+This is v0.8's own thesis — *"`transfer_probe` was authored since v0.1 and read by NOTHING"* —
+**reproduced one level up, on the most important node in the graph.** Receipts now carry a
+`capstone` stamp (written at grading time, like the `artifact` medium stamp), and the census asks
+`has_transfer_question()`, which the capstone answers yes to.
+
+### ⚠ #2 — The headline ranked a learner who LOST every capability ABOVE one who MASTERED every one
+
+`node.transfer.state` was deliberately **latest-evidence**, with a docstring saying *"a capability
+that fired in June and failed in September is not currently owned, and pretending otherwise would
+be a wrong number in the flattering direction."*
+
+They fixed it in `state` and shipped it in `rate_fired` — which pooled the **entire lifetime log**
+and was **order-blind**. It is the number `/coach` leads with and the dashboard's first chip:
+
+| learner | history | **owns now** | **v0.8.0 headline** |
+|---|---|---|---|
+| IMPROVING | failed all 5 twice, then **mastered all 5** | `applied: 5` | **"FIRED on 33%"** |
+| DECLINING | passed all 5 twice, then **lost all 5** | `applied: 0` | **"FIRED on 67%"** |
+
+**The learner with zero current capability scored exactly double the one who owned all five** — and
+the dashboard rendered `fired 67%` and `owned 0` as **adjacent chips.** That is not a lenient
+ruler. It is a **negative** one, and every number downstream had its sign flipped.
+
+**Two numbers, two names:** `owned_rate` (**THE HEADLINE** — of the capabilities you have probed,
+how many do you own *right now*; order-aware, exactly as `state` is) and `probe_fire_rate` (the
+lifetime probe-level **history**, order-blind by construction, named as history so it can never be
+mistaken for the headline again).
+
+> **And the part that matters most.** The shipped §5.5 instrument gate missed this because it
+> varied the **bar** (recalled / partial / lapsed, on one node, with one receipt) and **never varied
+> the population.** *It tested the subject, not the ruler* — the exact lesson v0.7 was written to
+> teach, repeated one release later, in the gate written to teach it.
+
+### ⚠ #4 — A failed transfer probe destroyed 97% of the memory's durability
+
+v0.8 separated the three populations **in the metrics** and pooled them **in the scheduler.** On a
+mature node — the only kind the system ever probes — one failed probe did this:
+
+```
+s: 443.5 → 12.3      (97% of the memory's durability, deleted)
+state: review → learning     lapses: 0 → 1     due: 2027-03-01 → 2026-03-17
+```
+
+…and dropped the node below the transfer bar, so it could never be re-probed. **Answering a HARDER
+question wrong demolished the schedule for the ORIGINAL concept.** It contradicted three separate
+sentences the same release shipped, including `_transfer_ready`'s own docstring warning about
+*"a lapse the schedule then punishes — a fabricated setback."* The maturity gate was built to
+prevent exactly that, and only ever guarded *immature* nodes.
+
+**A transfer lapse now leaves `fsrs` completely untouched** — and the receipt records
+`s_before == s_after` plus a `schedule_unchanged` note, so the evidence is honest about the fact
+that nothing moved. A transfer **success** still strengthens the memory, because applying an idea
+*is* a retrieval, and a strong one.
+
+### And seven more, all in shipped code
+
+3. **`add-topic --replace` destroyed a completed capstone's schedule.** The payload never contains a
+   capstone, so `_has_capstone` was always false on a replace and it was always re-minted `state:
+   new` — after the carry-forward loop, making it the one surviving node never carried forward. And
+   it **flattered**: the reset removed the rotting capstone from `retention.unmeasured`, so *"1
+   concept past due and unretrieved"* became *"30-day recall 100%"*. **Survivorship bias, through a
+   new door.**
+5. **`--replace` wiped `node.transfer` and never rebuilt it** (unlike `artifact`, which is recomputed
+   from evidence). Graph said `None`; `stats` still said `applied: 1`. Two sources, two truths.
+6. **No maturity gate at INGEST** — only at *selection*. A bare CLI `rate --kind transfer` certified
+   `applied` on a node encoded **yesterday**, while `transfer` itself returned zero candidates: the
+   engine refused to probe the very node it had just certified. (§4.8 Q5: the skills pass what the
+   engine expects; the CLI is the door nobody guards.)
+7. **`calibration_encode` was a RESIDUAL bucket** (`not in review_ids`), so transfer receipts fell
+   straight into a bucket whose own docstring calls it *"first-exposure (encode) guesses."* Transfer
+   is precisely where a learner is **most** overconfident — they know the concept, the capability
+   doesn't fire — so that overconfidence was misattributed to their encoding self-assessment, and
+   `/coach` would diagnose the wrong faculty and prescribe the wrong fix. **A residual bucket
+   silently absorbs every kind you add later.** Now named: `calibration_transfer`.
+8. **A payload node named `capstone` was silently destroyed** — and the minted capstone then listed
+   **itself** in `requires`, so it could never be served, while `next` cheerfully reported *"this
+   topic is finished."* Now refused, like `cmd_capstone` already did.
+9. **`stats.transfer` had no minimum-n floor.** Every sibling has one (calibration 10, modality 15,
+   the grader audit 30). One probe read **"FIRED on 100%"** and chipped it on the dashboard while
+   `calibration` correctly said `insufficient-data` on the same state. Floor: **5**. Counts are facts
+   and are always shown; a rate a single datum can swing by 20 points is not a rate.
+10. **`reps >= 3` counted the ENCODE**, so an advertised *"3+ retrievals"* delivered **2**. Maturity
+    now counts retrievals from the receipt log — the engine's own doctrine is that the first receipt
+    is the encoding event, *not* a retrieval.
+11. **An UNDATED receipt became the LATEST transfer evidence.** `_sort_key` deliberately sorts a
+    garbage-`ts` receipt **last** (so it can never win day-0) — and taking `ts[-1]` therefore handed
+    it the crown. A hand-edited undated `recalled` flipped a node to `applied` over a real, dated
+    `lapsed`. **The v0.6 fix and the v0.8 rule collided, and they collided in the flattering
+    direction.**
+
+### Also
+
+- **`as_number` let `Infinity` and `NaN` through** — not valid JSON, and Python's `json` module
+  parses them anyway. An `inf` sailed through every `isinstance(x, float)` check and died on the
+  first `int()`; a `NaN` compares False to everything, including itself, and never raises at all.
+  Fixed at **the** numeric gate for the entire engine. Fuzz: **0 crashes / 12,750 invocations.**
+
+## 0.8.0 — 2026-07-11 · THE CLAIM — Engram measured memory and claimed capability. Now it measures both.
+
+`transfer_probe` has been authored by the curriculum architect **since v0.1**, stored by the
+engine, and **read by nothing.** On the founder's own graph, **12 of 13 nodes carry one**, and
+`grep transfer_probe scripts/engram.py` found exactly one line: a `setdefault`. **Zero transfer
+receipts existed anywhere, ever.**
+
+`skills/learn` §5 said of the capstone: *"this is the point of the whole topic — do not let it
+silently not happen."* It silently did not happen, every single time, because it was **a line of
+prose in a skill file** — and a tutor running low on context drops a suggestion. It does not drop
+a DAG.
+
+Engram has been a very good memory system wearing a capability system's marketing.
+
+Selftest **167 → 180**.
+
+### The three populations — because there are now genuinely three questions
+
+v0.6.4's bug was **four implementations of one rule**, three of them wrong, and the fix was one
+shared predicate. The temptation now is to bolt transfer onto that predicate — which is the same
+bug from the other end: **one definition covering three questions, and therefore answering none.**
+
+| population | the question it answers | who reads it |
+|---|---|---|
+| `_review_receipts` | *does the memory survive N days?* | **retention (the north star)**, recall_by_stability, calibration, modality, adherence |
+| `_transfer_receipts` | *does the capability fire in new clothes?* | `stats.transfer`, `node.transfer` |
+| `_retrieval_receipts` | *how much durability was actually grown?* | momentum |
+
+**Never pooled.** Retention pooled with transfer would drag the north star down with a harder
+question and answer neither. Momentum *without* transfer would understate real growth — a transfer
+probe advances the FSRS schedule like any other rating, and **undercounting a learner's real
+progress is its own dishonesty**, in the direction that quietly tells them their work did not land.
+
+### Engine
+
+- **`transfer [--topic T]`** — the mature concepts ready for the harder question. Eligible = stability
+  over **21 days** across **3+ retrievals**, a non-null `transfer_probe`, and not probed in the last
+  **30 days** (it is a tool, not a quiz show). Untested first, then coldest.
+- **`node.transfer`** — `untested → probed → applied`. Engine-owned, written only by a transfer
+  receipt, derived from the append-only log. **Computed from the LATEST evidence, not from "ever":**
+  a capability that fired in June and failed in September is not currently owned, and pretending
+  otherwise would be a wrong number in the flattering direction.
+- **`stats.transfer`** — reported beside retention and never inside it.
+- **`capstone --topic T`** — materialize the build as a **real node in the DAG** (idempotent: twice →
+  one node). New topics get one from `add-topic` automatically. It `requires` **every** other
+  concept, so it unlocks exactly when the frontier empties and then arrives in `next` like anything
+  else. **It cannot silently not happen, because it is in the graph.**
+- **The capstone gets NO provisional credit.** An ordinary node advances on a stashed-but-ungraded
+  prerequisite (so the tutor can keep teaching while the assessor works). The capstone does not — it
+  is the claim that the learner can now *use* the topic, and serving it on mastery the assessor has
+  not confirmed is exactly the unearned claim the constitution forbids. *Found by an existing check
+  breaking the moment the capstone entered the DAG.*
+- A payload can no longer **claim** a transfer state or mint its own capstone (invariant #4: state
+  advances only through receipts).
+- `due` now carries `transfer_ready` + `transfer_probe`, so `/review` serves the harder question
+  without a second engine call.
+
+### §4.8 Q1 caught a two-bar bug before the gate even ran
+
+The first cut reported a single `rate` counting anything not-`lapsed` — so a node whose only
+transfer receipt was `partial` read **`rate: 1.0`** while its own state read **`probed`**, because
+`state: applied` requires `recalled`. **Two numbers, one state, two silently different definitions
+of success — and the looser one was the flattering one.**
+
+Now **`rate_fired`** (recalled only — the bar `state: applied` uses) is the headline, because *"is
+this capability mine?"* is a yes/no question and a half-application is not a yes. **`rate_any`**
+(recalled-or-partial) ships beside it, because that is the **same bar retention uses** and the two
+numbers are only comparable if they are measured the same way. **There is no bare `rate` key.**
+
+### The new protocol gates, applied to the release that wrote them
+
+- **§5.5 THE INSTRUMENT GATE** — earned in v0.7.1, where a gold set built to catch a lenient grader
+  turned out to be *rewarding* leniency. `stats.transfer` **certifies** ("this capability is yours"),
+  so a deliberately WRONG subject must score WORSE: a learner who fails every transfer probe now
+  provably reads below one whose capability fires. *A ruler that ranks failure above success is not
+  a lenient ruler; it is a negative one, and every number downstream has its sign flipped.*
+- **§4.8 Q4 — open the dashboard.** `stats.transfer` renders on the HTML page, and **"NO CAPABILITY
+  HAS EVER BEEN MEASURED"** appears there **in red** — not only in the JSON that just a test ever
+  opens. That is the rule v0.7 shipped a bug to learn.
+- **§4.7 — enumerate the read paths from the dispatch table, not from memory.** It caught `transfer`
+  missing from the fuzzer immediately. Fuzz: **0 crashes / 9,600 invocations, 16 read paths.**
+
+## 0.7.1 — 2026-07-11 · THE GOLD SET FAILED BEFORE THE GRADER DID
+
+Shipped within the hour of v0.7.0, because the post-release review (§7.5) found that **the
+instrument built to catch a lenient grader was itself rewarding leniency.** Everything below was
+found in *shipped* code, by a reviewer who was not the author.
+
+### The finding, and it is more important than any number here
+
+The reviewer ran the one test nobody had thought to run: it graded the gold set with a **correct**
+grader and with a deliberately **fooled** one.
+
+| grader | QWK |
+|---|---|
+| says `lapsed` on `g_009` (**correct** — 0 of 3 rubric criteria met) | 0.990 |
+| says `partial` on `g_009` (**fooled** by a fluent-but-empty production) | **1.000** |
+
+**The fooled grader scored higher. The gold set was ranking leniency above correctness.** The
+instrument was inverted.
+
+The cause: **five lenient adjudications by the gold set's own author**, every one the same
+species — *crediting an adjacent fact as partial credit.* Majority is not intersection
+(`g_034`). Consonance is not pitch-set arithmetic (`g_038`). The history of a theory is not its
+mechanism (`g_009`). *"It's ambiguous, break the tie"* is not *"the vectors assert concurrency"*
+(`g_039`). *"You don't need inference any more"* is not *"the likelihood dominates"* (`g_032`).
+
+**The grader had caught all five, three runs out of three** — including on a `fluent-but-empty`
+item, which means **the author was fooled by fluency in the very category built to catch being
+fooled by fluency.**
+
+### What that does to the number
+
+Correcting them moves agreement **0.889 → 0.965** and QWK **0.93 → 0.978**.
+
+> **That rise is not evidence the grader got better. It is evidence that the instrument had been
+> measuring the AUTHOR'S inconsistency, not the grader's validity.**
+
+And the corrections were *prompted by the grader's own disagreements* — so the QWK that follows is
+**circular**. An authored gold set cannot validate a grader from the same model family: when the
+two disagree and the author concedes, the agreement that follows measures only the author's
+willingness to concede.
+
+- **The engine now says this on every audit** (`gold_adjudication: "authored"`, and the caveat
+  rides in the `read` string), until someone who is not the author adjudicates the set.
+- **The QWK badge is gone.** Replaced by **`grader never inflates · 0/198`** — the one claim that
+  survives, and that the correction made *stronger*: every authoring error was LENIENT, so fixing
+  them moved the bar **down**, giving the grader more room to be caught inflating. Across 198 blind
+  judgments it still graded UP exactly zero times. That is a **safety property**, and it does not
+  depend on the gold being perfectly calibrated.
+- **One genuine disagreement (`g_054`) is deliberately KEPT.** The reviewer read both readings and
+  judged the gold's defensible. Correcting an item to match the grader *when an independent party
+  says the gold was right* is exactly the fitting that turns a measurement into a mirror.
+  **An instrument with no disagreement left in it measures nothing.**
+- Every corrected item carries a `disputed` record with its original grade, so the correction is
+  **auditable rather than laundered**.
+- `by_case_type["fluent-but-empty"]` — the canary v0.7.0 told v0.8 to watch for harshness drift —
+  was reading **90% / −0.10** when the truth was **100% / +0.00**. A maintainer could have "fixed"
+  a harshness that did not exist by loosening the grader on precisely the case the separation of
+  powers exists to protect.
+
+### And three more, all in shipped code
+
+1. **A `pass` threw away its own caveats — and `pass` is the ONE verdict where the teeth are off.**
+   The pass branch built a fresh `read` and never joined `reasons`; `grader-health` never returned
+   the key at all, though `skills/coach` is told to *"read `reasons` aloud."* So three copy-pasted
+   runs produced `identical_runs: true`, the engine wrote *"test-retest measures nothing here"* to
+   disk — and then printed **"test-retest 1.00"** as a validated figure. The most reassuring number
+   in the payload, quoted as evidence, by the branch that had just discarded the note explaining it
+   was evidence of nothing. **Bug class #4 — a guard nobody reads — reproduced inside the release
+   built to catch it.** And the selftest was complicit: it asserted `reasons` *contained* the
+   caveat, which proves nothing about whether any surface ever reads it. **A field is not a
+   narrator.**
+2. **`grader_unvalidated` was believed from the file instead of derived from the verdict.** An
+   audit carrying `"verdict": "fail"` with `"grader_unvalidated": false` silenced the teeth
+   completely — no stamp, no red on the dashboard, retention reading a clean *"30-day recall 100%"* —
+   in the one function whose docstring swears it *"fails toward 'we don't know', never toward
+   'it's fine'."* It is now a **function of the verdict**, not an input.
+3. **`cmd_artifact set|clear` was the last mutator reading a raw node value** — `TypeError` on a
+   corrupt node. Worse than an ordinary crash: **`doctor` recommends `artifact clear` as the fix
+   for a corrupt artifact field**, so the repair the tool told you to run was the thing that blew up.
+
+## 0.7.0 — 2026-07-11 · THE ORACLE — the grader that writes every receipt has now itself been graded
+
+The blind assessor's verdict drives mastery, retention, calibration, and the schedule. Its
+agreement with any ground truth had **never been measured**. The constitution says *"the oracle
+is never a vibe"*; it had been one — an excellent one, unaudited — and the hole sat directly
+under the foundation, because **if the grader is lenient, every number Engram has ever printed
+is inflated and nothing in the system could discover it.**
+
+Selftest **129 → 152**.
+
+### The result — and we publish it whatever it says
+
+Ran the real assessor against the new gold set, three independent times, blind:
+
+| | |
+|---|---|
+| **QWK 0.93** | vs. a 0.70 conventional bar, 0.60 floor |
+| **leniency bias −0.11** | signed, `+` = inflating. It is **harsh**, not lenient |
+| **0 of 198 judgments graded UP** | 66 items × 3 runs. **It has never once inflated a grade** |
+| **test–retest 0.97** | consistency — which the engine deliberately refuses to accept as validity |
+| **verdict `pass`** | so retention figures are not stamped `grader_unvalidated` |
+
+The bug class this whole release was built to catch — a lenient oracle quietly inflating every
+retention number — **does not exist in this grader.** It errs only in the safe direction. That
+was worth finding out, and it was not knowable before today.
+
+**Weakest case type: `right-answer-wrong-reason` — 52% agreement, bias −0.48.** On productions
+that reach the correct conclusion through a broken derivation, the grader is *harsher* than our
+adjudication. Whether the grader or the gold set is right there is honestly open, and it ships
+written down rather than smoothed away.
+
+**The caveat that matters most:** the gold adjudications are **authored, not independently
+human-adjudicated.** Every item carries a written rationale you can dispute, and a dispute is a
+first-class contribution (`gold/local-gold.jsonl` overrides ours by `sid`). But an authored gold
+set is a weaker instrument than a human-adjudicated one, and saying otherwise would be the exact
+dishonesty this feature exists to kill.
+
+### Engine
+
+- **`gold`** — the 66-item gold set, **88% adversarial** (fluent-but-empty, terse-but-correct,
+  confident-and-wrong, right-answer-wrong-reason, paraphrase, partial-credit boundary), emitted
+  as a **bare array shaped exactly like `stash list`** and **stripped of the answer by
+  construction**. The strip is a **whitelist, not a blacklist**: a field added to the gold schema
+  later cannot leak by being forgotten in a delete-list.
+- **`assessor-audit --file F`** — QWK (**the headline**), raw agreement (**never quoted alone** —
+  it overstates chance-corrected agreement by 34–41 points), signed leniency bias, test–retest
+  over ≥3 runs, confusion matrix, per-case-type breakdown. Writes `audits/<date>-NN.json`.
+- **`grader-health`** — the latest audit's verdict. `stats` embeds it.
+- **THE TEETH** — `qwk < 0.60`, `leniency_bias > +0.15`, or the paradox → `grader_unvalidated:
+  true` on **every retention figure**, and the stamp goes into the **`read` string** the narrator
+  actually speaks, not a nested key only a test ever opens. **An unaudited grader is unvalidated
+  too**: it fails toward *"we don't know"*, never toward *"it's fine"*.
+- **The consistency–bias paradox gate.** Engram's assessor is *prompted* to be a skeptic, so it
+  will be extremely self-consistent — and the literature's central warning is that a judge can
+  hit test–retest 0.992 with bias 0.192: perfectly reproducible, systematically wrong. So
+  **consistency may never certify.** Above 0.95 test–retest the engine demands leniency strictly
+  under the ceiling, and **fewer than three runs cannot pass at all** (`insufficient-runs`).
+- **ONE denominator for every number in the audit** — the gold items graded in *every* run.
+  A grader that silently drops 20 of 66 sids and nails the rest reports **`incomplete`**, never a
+  flattering `QWK 1.00 pass`. (That is issue #3's bug class aimed at the audit itself.)
+- **The contamination guard.** If the grader's output carries `gold_grade`, it was *shown*
+  `gold_grade` — the audit **dies** rather than certify. A test that hands the subject the answer
+  is not a test, and v0.6 shipped a dead feature because a dogfood did exactly that.
+- Receipts carry **`grader`** when the assessor states it, and the engine **never invents one**.
+  A model naming its own weights is fabricated data; an omitted `grader` stays honestly null.
+
+### The pre-existing crash class this release also fixes — 447 crashes, in shipped code
+
+The v0.7 fuzz gate ran the read paths that v0.6's fuzz list **had never included** — and found
+**447 crashes in 300 garbage states on `main`.** Every one in **`next`** and **`topic-status`**:
+`nodes` as a string, `order` holding a dict (an unhashable key), a node that is a list.
+
+**`next` is the command `/learn` calls at the start of every session** — the hottest path in the
+product. A hand-edited graph could take it down mid-lesson, and it could have done so since v0.1.
+
+The cause has exactly the shape of the original bug: v0.6 put a shape gate in `iter_graphs` —
+which every *aggregate* read funnels through — and **`load_graph`, the gate every *single-topic*
+command funnels through, never got one.** The v0.6 fuzz list was written from the `/coach`
+surface and simply forgot the `/learn` surface. **The list you write is the list you already
+thought of.**
+
+- `load_graph` now **refuses** an unusable graph with a fix path, instead of half-reading it. It
+  drops and rewrites **nothing** — mutators save what they read, so a lossy "repair" here would be
+  a data-loss bug wearing a hard hat.
+- `graph_nodes` / `graph_order` — the read views that tolerate partial garbage.
+- `apply_item` **refuses** to advance a schedule into a corrupt node rather than write FSRS state
+  on top of garbage (receipts are append-only; bad evidence could never be taken back).
+- **`reps` and `lapses` were the last two raw arithmetic leaves in the scheduler** — every other
+  one already went through `as_number`, and these two did `fsrs.get("reps", 0) + 1` straight.
+  A hand-edited `"reps": "many"` raised `TypeError` on the **mutator** path too, so it took `rate`
+  down, not just `decay`.
+- Fuzz: **891 → 0 crashes across 750 states × 13 read paths (9,750 invocations, 3 seeds).**
+
+### The three selftests that turned out to be theatre
+
+§4.5 (mutation-test every new check) caught **three of this release's own checks** faking it —
+the same rate as v0.6, which is the honest news here: *writing a fake check is the default, and
+only the mutation test finds it.*
+
+1. **"QWK weights are QUADRATIC"** asserted only that a 2-step error hurts *more* than a 1-step
+   one — which **linear weights satisfy just as happily**. Reverting the fix left it green. (And
+   a *balanced* confusion matrix is no good either: with equal marginals the two schemes
+   normalize to the same kappa and prove nothing.) Now pinned to a hand-computed value on an
+   unbalanced matrix carrying both error distances: quadratic → 0.383, linear → 0.407.
+2. **"raw agreement is a liar"** did not isolate the QWK floor — its always-says-recalled grader
+   trips the *bias* ceiling too, so reverting the floor left it green. Now paired with a **noisy
+   but perfectly unbiased** grader (bias exactly 0.00) that only the floor can catch.
+3. **"a grader that drops sids"** used three **identical** runs — so the union and the
+   intersection of graded sids were the same set, and swapping the honest denominator for the
+   flattering one **changed nothing**. Now each run drops a *different* five.
+
+The mutation run also surfaced a **latent crash**: the `pass` read formatted `test_retest` with
+`%.2f`, and the only thing between it and a `TypeError` on `None` was a branch three `if`s up the
+ladder — a landmine for whoever next edits the verdict order.
+
+And the check harness itself got fixed: **a check that raises now fails BY NAME** instead of
+taking the whole suite down. Every mutation of a crash-guard used to report *"the selftest
+crashed"* — true, unmissable, and useless for locating which guard you just reverted.
+
+### What the independent reviewer found — 8 defects behind 155 green checks
+
+Every gate above is run by the person who wrote the code, on the code they believe is right.
+**That is their structural limit.** §4.6 found eight more, and the worst of them is the one this
+release was supposedly *about*.
+
+1. **THE TEETH NEVER REACHED THE HTML DASHBOARD.** `retention.read` was the only carrier of the
+   grader stamp, and `cmd_report` rendered it **exclusively in the branch that fires when there
+   is no retention data.** On the happy path it drew the bars and threw the stamp away. So a
+   grader that inflated every second item produced a **full-width green bar reading 100%**, with
+   nothing anywhere on the page to say the grade behind it had failed its own audit —
+   `grep -ci 'grader\|unvalidated\|qwk' dashboard.html` → **0**. That is bug class #1 *and* #4, on
+   the single surface where a number is most believed. `compute_retention`'s own comment claimed
+   the dashboard was covered; the dashboard funnelled through the function and discarded the
+   result. **The live test, the fuzz, the numbers audit and the user session all walked straight
+   past it — because every one of them reads JSON.** The dashboard now renders the read
+   unconditionally, stamps it, and carries a full grader block (QWK · leniency · graded-UP).
+2. **`gold_source` — the §4.8 Q5 fix — asserted a provenance that was FALSE.** `gold/local-gold.jsonl`
+   overrides bundled adjudications by `sid`, **on the default path, no flag required.** A local
+   file that re-grades the set to agree with the grader turns `fail` (QWK 0.55, leniency +0.64)
+   into `pass` (QWK 1.00) — and the audit still wrote `"bundled:gold/assessor-gold.jsonl"` into
+   the file. **A provenance field that lies is worse than no provenance field, because it is
+   believed.** Now `load_gold` counts overrides and additions, `gold_source` names them, and a
+   pass against a modified gold set is *stamped as such* on every retention figure.
+3. **A grader could mark its own homework twice and keep the better score.** `_run_grades` was
+   last-wins, so a grader that got 12 items wrong and re-emitted those sids later in the array —
+   *exactly what an LLM self-correcting mid-array produces* — turned `fail` (QWK 0.00, leniency
+   +0.67) into `pass` (QWK 1.00), silently, with `n` intact. The mirror image of the dropped-sid
+   bug the coverage guard already caught: same class, opposite mechanism. **First verdict stands;
+   duplicates are a coverage failure.**
+4. **Three copy-pasted runs are indistinguishable from three independent ones.** `test_retest:
+   1.00` then *asserts* a reproducibility figure nobody measured — and `MIN_AUDIT_RUNS` and the
+   paradox gate, which exist precisely to prevent that, are both satisfied by copy-paste. The
+   engine cannot prove independence, so it now refuses to *claim* it: identical runs are flagged
+   and named in the read.
+5. **The new corrupt-node refusal tore a receipt batch in half.** The `cmd_receipt` pre-flight
+   promised *"confirm every node exists before applying ANY, so a bad item can't half-apply the
+   batch"* — and checked **existence, not shape.** v0.7 added a `die()` inside `apply_item` that
+   the pre-flight didn't screen for, so a 3-item batch with a corrupt middle node **wrote item 1's
+   receipt and then died.** Receipts are append-only. A new refusal must be hoisted into the
+   pre-flight, or it is not a refusal — it is a tear.
+6. **Audit 99 shadowed audit 100.** `sorted()` on `2026-07-11-100.json` puts it *before* `-99.json`,
+   so the 100th audit of a day — a `fail` — would be overruled by the 99th, a `pass`. Improbable
+   and flattering, which is the worst pair. Now sorted numerically.
+7. **The contamination guard falsely accused innocent graders.** It died on any output key named
+   `rationale` — the single most natural key for a grader to invent unprompted — *accusing it of
+   having been shown the answer* and making the audit unrunnable. Narrowed to `gold_grade` and
+   `case_type`, the two keys that could only come from the gold schema.
+8. **`leniency_bias` is measured on an 88%-adversarial set**, so it bounds how far the grader
+   *can* be pushed; it is not an unbiased estimate of its bias on ordinary productions. The read
+   presented it as the latter. Now says so, in the payload.
+
+The reviewer also **independently verified the QWK math** against a closed-form variance
+implementation over 4,000 random matrices (max diff 6.7e-16), confirmed the `GRADES`/`GOLD_SCORE`
+ordinal trap is not hit, reproduced the crash-class fix (**506 → 0** on its own fuzzer), and read
+all 24 `recalled` and all 9 `right-answer-wrong-reason` gold items, finding **no adjudication
+error in the lenient direction.**
+
+### Behavior
+
+- **`/coach` reports the oracle before any number it produced.** `unaudited` → one calm line,
+  once, and the dashboard still runs. `fail` → said first, plainly, with every retention figure
+  named as unearned until it is fixed. **Raw agreement never travels without its QWK.**
+- **`/coach audit`** — runs the real assessor on the gold set, three independent times, and
+  narrates the engine's verdict. The assessor is **never told it is being audited**: a subject
+  that knows it is being tested is not the subject.
+- **The §5.6 user session, run against the founder's own state, killed a line before it shipped.**
+  It read: *"[grader unaudited — QWK unknown; run /coach audit] insufficient-data (no reviews
+  yet)"* — **a caveat on a number that does not exist**, stacked as a second reproach on top of
+  *"THE LOOP HAS NEVER CLOSED"*. That is the wall of debt, and the wall of debt is the churn
+  trigger, not the cure (`docs/05` P14). The flag stays true in the payload; the narrator is no
+  longer handed a disclaimer for a measurement nobody made. **No selftest could have found it. A
+  person had to look at the screen.**
+
+### Also
+
+- `audits/` and `gold/` created on `init`. The bundled gold set is **not copied** into the state
+  dir — a copy would shadow the plugin's set forever, so a future gold item would never reach an
+  existing learner. The plugin's file is the source of truth; `gold/local-gold.jsonl` is additive
+  and wins on a `sid` collision, because a human who disputed an adjudication outranks ours.
+- Audits are **append-only**, like receipts. A same-day re-audit writes `-02`, never overwrites.
+  (`docs/09` §3.4 specified `<date>.json`; destroying evidence to keep a filename tidy is not a
+  trade this project makes.)
+- A **corrupt latest audit reads `unreadable`** and never falls back to an older, rosier one.
+  A stale `pass` is worse than no pass.
+- Codex parity: `codex/agents/engram-assessor.toml` carries `grader`, in lockstep.
+
+## 0.6.4 — 2026-07-11 · one definition of "review", and the denominator on the label
+
+Found by running **§7.5 (post-release review)** and **§4.8 (the numbers audit)** of the release
+protocol *on the release that added them*. Both are cross-command disagreements: the engine
+telling one story in one place and a different story in another, on the same state.
+
+### 1. Four implementations of one rule, three of them wrong
+
+v0.6.1 established the principle — **a node's first receipt is its ENCODING event, whatever it
+is labelled** — and fixed it in `_by_node`, which feeds `adherence` and `retention`. It left
+`stats.reviews`, `compute_momentum`, `compute_modality` and the calibration split filtering on
+`kind == "review"` **directly**.
+
+`rate --kind` defaults to `"review"`, so a bare CLI `rate` on a never-encoded node produced this,
+on **one state**:
+
+```
+adherence.loop_closure : 0 reviews     ← correct
+retention.coverage     : 0 reviews     ← correct
+stats.reviews          : 1             ← wrong
+modality.dialogue.n    : 1             ← wrong, and it CORRUPTS the medium telemetry:
+                                          an ENCODING receipt became a node's "first review",
+                                          which is the exact comparison docs/06 exists to make
+calibration.n          : 1             ← wrong pool (it is an encode, not a retrieval)
+```
+
+Two commands, same state, contradictory answers. **Fixed:** one predicate, `_review_receipts()`,
+shared by every counter. `adherence`, `retention`, `stats`, `momentum`, `modality` and both
+calibration pools now agree by construction.
+
+*(The three selftests that broke on this fix were themselves the tell: they passed synthetic
+receipts carrying **no `topic`/`node` at all** — fixtures that had never been shaped like real
+data. They were rewritten as real receipt streams.)*
+
+### 2. The denominator was not on the label
+
+Three surfaces reported "current recall" and meant different populations:
+
+```
+retention.unmeasured.projected_recall_now : 56%   over the PAST-DUE nodes
+session hook ("those N sit at ~X%")       : 56%   over the PAST-DUE nodes
+decay.now.mean_recall                     : 66%   over ALL ENCODED nodes
+```
+
+**Neither number was lying. The labels were.** Both are correct for what they measure, and a
+learner comparing them could not possibly tell which to believe. `decay` now ships
+`mean_recall_due` beside `mean_recall`, with a `population` string naming each denominator — and
+the three surfaces reconcile exactly.
+
+### Engine (selftest 127 → 129)
+
+Both fixes selftested and **mutation-tested**. A new check asserts the cross-command agreement
+directly, so the four counters can never drift apart again.
+
+No schema change, no migration.
+
+## 0.6.3 — 2026-07-11 · what a real session found
+
+The release protocol gained a gate it never had — **§5.6, the user session: stop testing, be a
+learner, and write down how it felt.** This is the first release to pass through it, and it found
+three things that 126 selftests, a fuzzer, two adversarial reviews and an agent dogfood all
+walked straight past — because none of them *reads the sentence as a human*.
+
+Full report: `docs/user-sessions/v0.6.2.md`.
+
+### The seven-minute silence
+
+The curriculum architect took **~7 minutes of completely silent terminal** before the first
+question. No spinner, no "this takes a minute", nothing. That silence lands *before the learner
+has seen a single thing this product does well* — and it is, by a distance, the most likely
+moment a first-time user closes the tab. A stranger will not stare at a blank screen for seven
+minutes on faith.
+
+**`/learn` now sets the expectation before it spawns the architect.** One line of prose, and it
+is the highest-value change in this release.
+
+### `decay` told you reviewing was pointless
+
+With nothing yet due, `decay` reported:
+
+> *"1 concept encoded; 0.4 expected to survive 30 days untouched, 0.4 if reviewed today
+> (0 minutes) — **a difference of 0.0**"*
+
+Arithmetically correct — nothing is due, so there is nothing to review today. **Rhetorically the
+exact opposite of the truth**: a learner reads *"a difference of 0.0"* and concludes reviewing
+buys nothing. This is the same bug class v0.6.1/v0.6.2 are named for — a number that misleads —
+simply pointing the other way. It now says:
+
+> *"1 concept encoded, none due yet — nothing to save today. The schedule brings each one back
+> just before it fades; 0.6 of 1 are expected to survive the next 30 days on that schedule."*
+
+### Two adjacent sections both called "Retention"
+
+The dashboard put *"Retention — recall by days since you first learned it"* directly above
+*"Retention by memory strength"*, and a user cannot tell which is the real number. The older view
+is renamed and demoted.
+
+### Engine (selftest 126 → 127)
+
+- `decay` with an empty due queue emits an honest read instead of a discouraging zero. Selftest
+  added and **mutation-tested**.
+- **The dashboard could be killed by a hand-edited `state`.** `cmd_report` tested `st not in
+  STATE_DOTS` without coercing first — an unhashable value (`state: {}`) raises `TypeError` and
+  takes `/coach`'s HTML down. `state_counts()` was guarded for exactly this and `cmd_report` was
+  not. **Caught by the §4.7 fuzz gate on its first run under the new protocol** — 35 crashes / 500
+  states, from a generator shape the previous sweep never produced. Now **0 / 900 across 3 seeds**,
+  with an unhashable-state fixture added to the read-path check.
+
+  *(And the first version of that check was itself theatre — the fixture's `order` didn't list the
+  new nodes, so `cmd_report` never visited them. §4.5 caught it. The gates catch the gates.)*
+
+### Release protocol
+
+`RELEASE_PROTOCOL.md` substantially rewritten around what actually caught bugs across v0.5–v0.6:
+
+- **The bug classes this repo cannot ship** — led by *a number wrong in the flattering direction*,
+  because a crash gets fixed and a flattering number gets believed.
+- **§4.5 mutation-test every new check** — three of ours were theatre (one asserted a constant;
+  one had a fixture where the old and new definitions agreed by coincidence).
+- **§4.7 the fuzz gate** — 0 crashes / 500 type-corrupt states. Read paths degrade; `doctor`
+  reports corruption and must never die of what it exists to find.
+- **§4.8 the numbers audit** — five questions, answered in writing, for every number a release
+  adds. Question 1 is *"do the engine's own commands agree with each other?"* — `retention` once
+  said 100% while `decay` said 56%, and nobody had ever run them side by side.
+- **§5.5 the dogfood must be UNCONTAMINATED** — give each agent exactly what the real skill gives
+  it. Ours once *certified* a dead feature because the prompt handed the assessor the answer.
+- **§5.6 the user session** — the gate this release is named for. Its verdict is **binding**: if
+  you would not hand it to a stranger, it does not ship, however green the tests are.
+- **§7.5 the post-release review** — because the two worst v0.6 bugs were found in *shipped* code.
+
+No schema change, no migration.
+
+## 0.6.2 — 2026-07-11 · the honest denominator was not honest
+
+Four defects in released v0.6.0/v0.6.1, found by an **independent reviewer working from the
+shipped code** — none of them in the nine the pre-release review caught. Two are the same
+failure mode this release was written to eliminate, hiding inside the machinery written to
+eliminate it.
+
+### 1. HIGH — the honest denominator exempted anyone who reviewed once, ever
+
+`retention.unmeasured` counted concepts that came due and were **never reviewed**. So a node
+was exempted the *moment* it was retrieved even once — forever after.
+
+Reproduced on shipped code: encode ten concepts, review all ten at day 7 (all recalled), then
+vanish for 200 days.
+
+```
+retention.read   : "measured over 10 retrievals"      buckets: 7d n=10, rate 1.0
+unmeasured       : 0
+coverage         : complete
+loop_closure     : "the loop is closing"
+
+the engine's OWN decay command, on the same state:
+  10 concepts due · mean current recall 56%
+```
+
+The dashboard reported **100% recall, nothing unmeasured, loop closing** while ten concepts sat
+at 56% and falling. That is *"survivorship bias with a progress bar"* — this block's own
+docstring — reproduced **inside the block written to prevent it**. The `coverage` guard could
+not see it either: coverage counts *reviews*, and every review here bucketed perfectly.
+
+**Fixed.** The denominator is now everything **past due right now** (`past_due_now`), with
+`never_reviewed` kept as a sub-count. A node past due *now* has, by definition, not been
+retrieved since it came due — whatever its history. And the debt now reaches the **narrator**,
+not just a nested key: every `read` string carries it, because a `read` of *"measured over 10
+retrievals"* while ten concepts rot is precisely the lie.
+
+### 2. HIGH — the normal settle path destroyed a second, ungraded production
+
+v0.6.0 fixed `drop_stash(topic, node)` on the rare **idempotent no-op** branch and left it live
+on the branch that runs on **every single settle**. `stash add` appends without deduping on
+node, so a node can legitimately hold two productions (a re-attempt, a park-and-resume, a slow
+assessor). Settling the first drained *both*:
+
+```
+stash before : [P1, P2 — second attempt, never graded]
+settle P1    -> stash after: []          P2 is gone. Never assessed, never a receipt.
+```
+
+The exact data loss that was fixed on the rare path, still live on the common one. **Fixed:**
+a settle drains only its own `sid`; the legacy sid-less `rate` path keeps its self-drain.
+
+### 3. MEDIUM — `kind` was unvalidated, and the two entry points disagreed on its default
+
+`rate --kind` defaulted to `"review"`; `cmd_receipt` defaulted to `"encode"`; neither validated
+it. Every v0.6 metric keys off the exact literal `"review"`, so a typo'd or invented kind is
+permanently invisible to `loop_closure`, every retention bucket, calibration and `stats.reviews`
+— and **unfixable**, because receipts are append-only. This was also the root cause of v0.6.1.
+**Fixed:** a `KINDS` constant, `choices=` on the flag, and validation in `validate_item`, so a
+bad batch dies before any write.
+
+### 4. LOW
+- A backward clock step could stamp a **negative** `days_since_encode` into an append-only
+  receipt, permanently. Clamped to ≥ 0.
+- `commit --clear --cue X --action Y` silently *cleared* (the `elif` made the set-branch
+  unreachable). Now refused.
+
+### Engine (selftest 120 → 126)
+
+Six new checks, every one **mutation-tested** — reverted to the broken behaviour to confirm it
+actually fails. Verified against the founder's real state: all numbers unchanged and now
+*mutually consistent* (`retention` and `decay` both report 70%), state byte-identical.
+
+No schema migration. `retention.unmeasured.past_due_never_reviewed` is replaced by
+`past_due_now` + `never_reviewed`; nothing outside this repo consumed it (v0.6 is hours old).
+
+## 0.6.1 — 2026-07-11 · loop_closure could lie in the one direction that matters
+
+A defect in v0.6.0, found by an independent reviewer after release. It is small, it is
+narrow, and it is exactly the kind this release cannot tolerate — **the metric built to say
+*"you never came back"* could say the opposite.**
+
+`rate`'s `--kind` argparse default is `"review"`. The skills always pass an explicit
+`--kind`, so the documented flows are unaffected — but a bare CLI `rate --topic t --node a
+--rating good` writes that node's **only** receipt as `kind: review`. `_by_node` then treated
+that single receipt as *both* the node's day-0 encoding event *and* a retention test, so:
+
+```
+loop_closure:  1 of 1  ·  rate 1.0  ·  "the loop is closing"
+```
+
+…for a learner who had **never come back once**. `retention` likewise counted it as a day-0
+retrieval.
+
+**The fix is a principle, not a patch: a node's FIRST receipt is its encoding event, whatever
+it happens to be labelled.** There was no prior memory to retain, so a first exposure cannot
+be a retention test and must never count toward `loop_closure` or a retention bucket. A
+genuine second retrieval still closes the loop, exactly as before.
+
+Wrong numbers are the only bug class this project is not allowed to ship. A number that is
+wrong in the *flattering* direction — telling a learner their loop is closing when they have
+abandoned it — is the worst instance of it.
+
+### Engine (selftest 119 → 120)
+- `_by_node`: the first receipt is never appended to a node's `reviews` list. Covered by a
+  selftest that asserts both directions (a once-touched node reads `NEVER CLOSED`; a real
+  second retrieval reads `1.0`), and mutation-tested to confirm it fails without the fix.
+
+No schema change, no migration, no default change.
+
+## 0.6.0 — 2026-07-11 · the loop closes
+
+Engram has been an excellent **encoding** machine bolted to a **retention** machine that
+never ran. This release is about the second half.
+
+The finding that forced it, found by reading the author's own state: on 2026-07-05 he ran a
+45-minute `/learn` on transformer internals. The architect built a 13-node DAG, the tutor ran
+generation-first dialogue, the smith built an explorable, the blind assessor graded six
+productions and honestly rounded most down to `partial`. Seven concepts encoded, seven review
+dates booked. **Then nobody came back.** Six days later: zero reviews, zero streak, seven items
+overdue, one session in the log — ever. Meanwhile 501 people starred the repo.
+
+Run Engram's own FSRS curve over Engram's own state and it says: those seven decay to **2.7 of 7
+over the next 30 days untouched, or hold at 5.6 of 7 if the four-minute review happens** — a
+difference of 2.9 concepts. The engine could always compute both numbers. Its entire ambient
+surface, on the sixth day of a memory dying on schedule, was `[engram] 7 reviews due`.
+
+This is not a story about a lazy user. It is the product's own failure mode executing perfectly
+on the person most invested in it, which makes it architectural rather than personal.
+
+Three gaps, each confirmed by reading the code rather than the docs:
+
+- **The north star was never implemented.** `docs/04` named "7-day and 30-day retention on
+  scheduled reviews" the north star in Phase 0. `grep` found no such metric. `stats` bucketed by
+  memory *strength*, never elapsed *time*. **Naming a metric is not measuring it.**
+- **Adherence was invisible.** No signal anywhere for *"was this encoded concept ever reviewed?"*
+  The system could not see its own binding constraint.
+- **`receipt --file` was not idempotent** (issue #3) — a crash-retry between `receipt` and
+  `stash clear` double-counted reps permanently.
+
+### Engine (selftest 86 → 119)
+
+- **`adherence`** — the funnel Engram never looked at: `loop_closure` (encoded → came due →
+  actually reviewed), `return` (session cadence, days since last), `funnel` (topic → encoded →
+  due → reviewed → retained@30d). Pure read over data already on disk; no schema change.
+  **`loop_closure` is the binding-constraint number: the value a learning system produces is
+  Return × Encoding × Retention × Transfer, and those terms multiply — a perfect encoder with
+  zero return is worth exactly zero.**
+- **`retention`** — the north star, finally computed. Recall bucketed by each review's own
+  days-since-first-encode, in windows that **partition [0, ∞)** so no review is ever dropped:
+  `early` 0–3 (still re-encoding — reported, *never* pooled into a retention claim) · `7d` 4–14 ·
+  **`30d` 15–59 (the headline)** · `90d` 60–179 · `180d+`. Ships two honesty guards:
+  - **`unmeasured`** — the concepts that came due and were *never reviewed*. Their recall is
+    **unknown, not absent**, and FSRS projects it. A retention figure computed only over
+    *completed* reviews silently drops exactly the concepts the learner abandoned — survivorship
+    bias with a progress bar. The engine refuses to report one without the other.
+  - **`coverage`** — `reviews_bucketed / reviews_total`, which must be 1.0. This exists because
+    the *first* cut of this feature used disjoint windows (5–10 / 25–40 / 80–110) and **the live
+    test caught a real day-11 review falling into a gap and vanishing** — `retention` cheerfully
+    reported "no reviews yet" with a review sitting on disk. Under real FSRS intervals (~4d, ~12d,
+    ~30d, ~70d) most reviews would have landed in those holes and the north star would have been
+    computed on an arbitrary subset of the evidence. A metric that quietly discards data is worse
+    than no metric. Now selftested by sweeping 19 elapsed-day values across the full range.
+- **`decay`** — what is dying and what N minutes would save, in real FSRS numbers. Both arms
+  measured over the *same future window*, so it is a comparison rather than a rhetorical device.
+  The `due` payload now carries `last`, so current recall is computed from the learner's **actual**
+  last retrieval rather than reconstructed from `interval_for(s, 0.90) + overdue` — a
+  reconstruction that silently breaks for anyone who moved `desired_retention` (measured: **3.3
+  percentage points of *overstated* decay** at 0.97) and breaks in the one direction an honesty
+  feature is not permitted to err in: alarming the learner.
+- **`commit`** — the learner's implementation intention, in their own words (Gollwitzer & Sheeran
+  2006: 94 tests, N > 8,000, **d = 0.65**, robust to publication-bias correction). Stored because
+  they said it, shown back at the moment it names, **never enforced**.
+- **`sid` — receipts are idempotent** (closes #3). The stash id rides stash → assessor → receipt;
+  `apply_item` refuses one already on disk. Additive: a receipt without a `sid` applies exactly as
+  in v0.5.
+- **`days_since_encode`** stamped on every receipt — makes the north star a one-pass query.
+- **Fixed a latent race, present since v0.5:** `report` and `doctor` called `load_model()`, which
+  *persists* a self-heal — while holding no lock. An unlocked read could flush a stale snapshot
+  over a concurrent locked mutator, silently reverting a `refit`. New `read_model()` heals in
+  memory and never writes. Covered by a selftest that fails without it.
+- **Receipt log is cached per process, keyed by absolute path.** A batch settle re-read the whole
+  topic log once *per item* — measured at 1.85s for a 60-item settle against a 10k-line log, now
+  0.19s. The cache is keyed by path (never by topic alone, or a second `ENGRAM_HOME` would read
+  the first one's receipts) and kept in sync on append, so a duplicate `sid` appearing later in
+  the *same* batch is still caught. Both properties have selftests.
+- **Read paths now degrade instead of bricking — a whole class of crashes, several pre-existing.**
+  Fuzzing 3,000 randomized garbage states found **259 unhandled crashes in the first 300**. A
+  hand-edited state file can be perfectly valid JSON with the *wrong types*: `nodes` as a string,
+  `fsrs` as a list, an unhashable `topic`, a `rating` that is a dict — and every one of those
+  raised `TypeError`/`AttributeError` and took `stats` down with it, and therefore `/coach`.
+  Several predate this release (`compute_momentum` since v0.4, `due_items` and `compute_streak`
+  since v0.1, `_outcome` since v0.3, `compute_modality` since v0.5); v0.6 *widened* the blast
+  radius by making `stats` call `adherence` and `retention` too. The fix is one gate, not twenty
+  patches: **`iter_graphs` now validates the graph's shape** and skips what is structurally
+  unusable, because every read path funnels through it. `doctor` still reads graphs raw — it is
+  the thing that *reports* corruption, and it must never die of what it is there to find.
+  **Now 0 crashes / 3,000 states**, locked in by a selftest that feeds every read path a
+  deliberately type-corrupt state and demands they all return.
+
+### What the adversarial review caught that the tests, the live test, and the dogfood all missed
+
+Protocol step 4.5 earned its place again. **Nine defects behind a green selftest, an exhaustive
+live test, and a passing agent dogfood** — and the worst of them was one the dogfood had actively
+*certified*:
+
+- **Issue #3 was not actually fixed.** The `sid` never survived the assessor, because
+  `agents/engram-assessor.md` declares a *strict* output schema that never mentioned it. The
+  guard was dead code in the shipped pipeline. **The dogfood "passed" only because the prompt
+  written for it told the assessor to pass the field through — an instruction the real `/learn`
+  skill never gives.** A test that hands the subject the answer is not a test. The `sid` is now
+  part of the assessor's contract (Claude *and* Codex ports), `/learn` step 4 checks it came back
+  before applying, and the round-trip has been re-verified with the real agent and **no hint**.
+- **The idempotent "no-op" was a data-loss bug.** It called `drop_stash(topic, node)`, which
+  drains *every* stash entry for that node — so a crash-retry would silently destroy a second,
+  newer, never-graded production. The guard written to prevent corruption would have corrupted.
+  Now drops only its own `sid`.
+- **`decay --topic <unknown>` returned a confident false all-clear** ("nothing to lose") instead
+  of erroring. From a command whose entire job is honest accounting, that is the worst available
+  failure mode. It now refuses.
+- **`decay` overstated its own headline.** The benefit arm simulated reviewing *every encoded
+  node* while pricing `minutes` from the *due queue only*. The not-yet-due nodes now keep their
+  own curve in both arms — you are quoted exactly what those minutes buy.
+- **The `coverage` guard was inert.** It was computed, stored in a nested key, and read by
+  nobody — so the anti-data-loss check could not actually prevent the regression it existed for.
+  An incomplete partition now hijacks `read` with **UNTRUSTWORTHY** in the one field a narrator
+  is guaranteed to see.
+- **Two contradictory definitions of "retained at 30 days" shipped in the same payload** —
+  `funnel.nodes_retained_30d` used `>= 25` days while `retention`'s 30d bucket is `[15, 59]`.
+  One definition now, from one source.
+- **A receipt with a missing `ts` sorted first** and became a node's day-0 anchor, poisoning
+  every elapsed-day metric downstream. Broken timestamps now sort last.
+- **`median_gap_days` was not a median** (it took the upper element on even-length lists).
+- **The dashboard never showed any of it.** `/coach`'s HTML still headlined a strength-bucketed
+  retention with no `unmeasured` denominator. It now opens with `loop_closure` and states the
+  concepts that came due and were never reviewed.
+
+Each has a selftest, and each selftest was **mutation-tested** — reverted to the broken behavior
+to confirm it actually fails. Two first drafts turned out to be theatre (one asserted a constant
+instead of a behavior; one had a fixture where the old and new definitions coincided by
+coincidence) and were rebuilt until the regression is genuinely caught.
+
+### Behavior
+
+- **The ambient hook now says what the decay costs** — but only as a *return event*: it fires on a
+  never-closed loop or after a real absence, never per-session. *"Those 7 sit at ~70% recall and
+  still falling · 4 min now is the difference between keeping them and re-learning them."*
+  **Information, never pressure** (`docs/05` P13). No should, no scold, and
+  `settings.decay_notice = "off"` silences it entirely.
+- **`/review`** states the honest number once on return — *after* amnesty, *before* the capped
+  offer. The order is: nothing is owed → here is what it costs → here is a two-minute path.
+  Reversed, it is a debt collector.
+- **`/learn` books the return** — one plain question at the close, their words, stored via
+  `commit`, never enforced, never asked twice.
+- **`/coach` reports `loop_closure` FIRST.** When it is zero it says so plainly and stops: there
+  is no point narrating calibration over a loop that has never run.
+
+### Docs
+
+- **`docs/07-the-measured-loop.md`** — the frontier audit. Learning rate is close to a category
+  error (Koedinger 2023 *PNAS*, replicated EDM 2024: intercept variance dwarfs slope variance —
+  you cannot make people climb faster, only give them more climbs; the 2026 re-analysis contesting
+  the *magnitude* is recorded too). LLM-as-judge is **"reliability without validity"** (κ ≈
+  0.38–0.51 vs humans; raw agreement overstates chance-corrected κ by 34–41 points; **high
+  self-consistency + high bias is the documented failure mode** — precisely what a skeptic-prompted
+  assessor selects for). Pan & Rickard 2018: retrieval transfers at d = 0.40, but **d = 0.28 when
+  the response format differs vs d = 0.58 when it matches** — a quantified critique of verbal-only
+  review for doing-goals. The n-of-1 machinery is **underpowered ~2.5×**.
+- **`docs/08-vision.md`** — the objective function, which metrics are traps (confidence and joy
+  both are), and the final state: Tutor → Instrument → Commons. Adds **Article 11: the system's
+  success is measured by what the learner can do without it.**
+- **`docs/09-target-architecture.md`** · **`docs/10-roadmap-to-1.0.md`** — schemas, invariants, and
+  v0.6 → v1.0 as executable work orders.
+- `docs/04` marked complete and superseded.
+
+### Migration
+
+None. Every field is additive and self-heals: a v0.5 (or v0.3) learner model gains
+`commitment: null` and `decay_notice: "on"` on next load and behaves exactly as before. Receipts
+without a `sid` apply as they always did. Nothing to migrate, nothing to delete.
+
+## 0.5.2 — 2026-07-11 · confidence before the verdict, not after
+
+Reported from real use (#4 — thank you, @kosh-jelly): at VERIFY the tutor praised the
+answer — *"that's a complete, well-integrated answer…"* — and **then** fired the
+confidence picker. A sureness collected after the learner has been told they nailed it
+is not sureness; it is an echo of the verdict. Confidence-before-feedback exists to
+measure calibration and to catch high-confidence errors for hypercorrection — both die
+the instant any signal of correctness reaches the learner first.
+
+The intent was never in doubt: the picker itself asks *"before I show the answer."* The
+prose had a seam. The gate was worded around the **reveal** ("before you reveal or
+grade", "no canonical answer until confidence"), and `/learn`'s VERIFY step granted
+*"immediate content feedback is yours to give"* right beside it. So the model did what a
+careful reading allowed — withheld the canonical answer, kept the picker's framing
+honest, and let the *evaluation* through. The pretest step one screen up already had the
+tight wording ("before saying anything about correctness"); VERIFY did not.
+
+### Behavior (prose only; selftest unchanged, 86 → 86)
+- **`/learn` VERIFY** (`skills/learn/SKILL.md`): the pick fires **first**, gated on
+  "before you say a word about correctness," with the exact failure banned by example
+  (*"that's complete," "close," "nice"*). "Immediate content feedback is yours to give"
+  moved to **after** the pick; the pick is now also stated to precede the stash (its
+  value is a stash field, so it cannot come later).
+- **Confidence-integrity rule** (`skills/_shared/dialogue-grammar.md`): "feedback"
+  redefined as *any* signal of correctness — approving tone included — not just the
+  shown answer.
+- **Anti-sycophancy oath** (same file, hard rules): the gate broadened from "no
+  canonical answer until confidence" to "no verdict — not even a bare *'that's right'* —
+  until confidence is collected."
+- **Terse-production move** (same file): at VERIFY the *"credit what's there"* step now
+  waits until after the confidence pick — closing the one path (a fragment answer) where
+  the sharpened rule would otherwise still leak a correctness signal first. Found by this
+  release's own adversarial review, not in the wild.
+
+No engine touched: whether the tutor asks in the right order is a dialogue property,
+provable only by a live VERIFY, not a selftest. The old order didn't merely mis-sequence
+the question — it recorded a corrupted "Certain" as real calibration data. Putting the
+pick first is the fix; there is no unit test that can stand in for using it.
+
+## 0.5.1 — 2026-07-10 · the modality confound, said out loud
+
+Found by doing what the release protocol asks and 0.5.0 skipped: a real `/learn`
+session, driven end to end with the actual agents. The pipeline held up — the
+curriculum architect tagged every node's visual affordance, the artifact-smith built a
+Contract-v2 explorable for the threshold node and registered it unprompted, the blind
+assessor rounded a shaky production down to `partial`, and the receipt carried its
+medium stamp. But the session exposed something no code review could: **the medium
+comparison in `stats.modality` is confounded by construction.**
+
+Explorables are routed to threshold and high-affordance concepts *on purpose* — that
+is the whole content rule. So the dialogue arm fills with the remaining material, and
+the two arms never differ only in medium. Under `threshold-only` the explorable arm is
+exactly the topic's hardest, portal concepts. A lower explorable-arm recall may mean
+nothing more than that explorables were spent on the hard things.
+
+The number was already labeled suggestive. That was not enough: a coach narrating from
+the JSON could report it as a clean result. So the caveat now travels *with* the data.
+
+### Engine (selftest 85 → 86)
+- `stats.modality` gains a **`caveat`** field, present in every read state
+  (`insufficient-data` included), stating that the arms are not randomized and the
+  comparison carries medium *and* material. Covered by a new selftest — a narrator
+  reading only this JSON cannot see the verdict without seeing why it is soft.
+- The dashboard's "Encoding medium" section prints the caveat beside the bars, so a
+  learner reading the HTML alone gets the same warning.
+
+### Behavior
+- `/coach` **must voice** the caveat whenever it reports the medium yield, and is
+  explicitly forbidden from presenting the number as proof the medium works or fails.
+  Sample narration updated to model the honest version.
+
+### Theory
+- `docs/06-visual-encoding.md` open question 2 now documents the confound in full,
+  including why it *cannot* be fixed by randomizing arms without violating the content
+  rule the document itself establishes — and names the honest form of the question
+  (a randomized `experiment` within one affordance class; future work).
+
+### Examples
+- `examples/pid-error-feedback-loop.html` — the explorable the artifact-smith actually
+  generated in that session (drone altitude hold; a wind gust drives the error, the
+  throttle answers), now hosted next to the hand-authored reference implementation.
+  Its header says which is which, because "the kind of thing Engram builds" and "the
+  thing Engram built" are not the same claim.
+
+No schema change, no default change, nothing to migrate.
+
+## 0.5.0 — 2026-07-10 · the visual-encoding layer — explorables audited, adaptive, and measured
+
+The explorable engine grows up. Until now, interactive explorables fired only on
+threshold nodes — which conflated *importance* with *visualizability* — the graph never
+recorded which artifacts existed (the smith wrote files nothing tracked), and nothing
+measured whether the medium actually works for a given learner. v0.5 fixes all three,
+under a new adversarially-verified evidence base.
+
+### Theory
+- **New: `docs/06-visual-encoding.md`** — the visual-encoding audit, built the same way
+  as docs/05: a fan-out research pass (27 primary sources, 135 claims extracted, the 25
+  load-bearing ones each verified by three refute-first voters; 23 survived, 2 killed).
+  Adds **Pillar 15 — the guided manipulable**: manipulable models carry the largest
+  verified interactivity effect (simulations g+ = 0.62), but *guidance inside the
+  artifact is the active ingredient* (scaffolded versions of the same simulation
+  g+ = 0.60; learner control per se g = 0.05 ≈ nothing; unassisted discovery loses,
+  d = −0.38), the payoff concentrates where the dynamics ARE the content
+  (representational d = 0.40 vs decorative ≈ −0.05), and expertise reversal is a
+  confirmed disordinal crossover (+0.505 novices / −0.428 knowledgeable, Tetzlaff 2025).
+  Two refuted claims are recorded as do-not-build-on; four areas that produced no
+  verifiable evidence (visual retrieval formats, n-of-1 medium methodology,
+  preference-engagement value, LLM-artifact efficacy) are stated as **open questions**
+  with deliberately conservative design stances.
+- **Explorable Contract v2** (same seven clauses, sharpened by the audit): the
+  manipulable is now explicitly *guided* — predict → act → **explain** micro-cycle
+  (self-explanation g = 0.46), content-relevant degrees of freedom only, a **worked
+  drive** gates the model at novice scaffold (worked examples g = 0.48; "provide
+  assistance when in doubt"); no text over motion; learner advances *between* segments,
+  dynamics run themselves *within* one; registration is part of clause 7. New widget:
+  **feature-space navigator** (several sliders, each a dimension; one holistic output
+  morphing live — the founder's draggable-face moment, now in the vocabulary).
+
+### Engine (`scripts/engram.py`) — selftest 70 → 85
+- **`artifact set|clear|list`** — explorable registration is now engine-owned like
+  `fsrs`/`state`: the file must exist, paths under the state dir are stored
+  home-relative, payload-supplied `artifact` values are stripped at `add-topic`, and
+  registrations survive `--replace` alongside the schedule. (Fixes a real gap: built
+  artifacts were invisible to the graph, so regeneration tracking and Contract clause 7
+  had no data trail.)
+- **Medium-stamped receipts** — every `rate`/`receipt` stamps whether the node had a
+  registered explorable *at grading time*, so evidence of the encoding medium can never
+  be rewritten retroactively.
+- **`stats.modality`** — the honest per-learner answer to "do explorables work for ME":
+  first-review recall of explorable-encoded vs dialogue-only nodes, one datum per node,
+  ≥6 per arm (the n-of-1 experiment floor) before any verdict; reads
+  `explorable-encoded ahead / dialogue-encoded ahead / indistinguishable /
+  insufficient-data`. Also rendered as an "Encoding medium" dashboard section. This is
+  the instrument the Phase-2 exit criterion (docs/04) always called for.
+- **`visuals eager|threshold|off|status`** — the discoverable dial over
+  `settings.artifacts`, sibling to `focus`. `eager` extends explorables beyond threshold
+  nodes to any node whose *content* declares high visual affordance. Default remains
+  `threshold-only`: existing users see zero behavior change.
+- **`viz` node field** — the curriculum architect now declares each node's visual
+  affordance (`affordance high|some|none`, `kind`, one-line manipulation `hook`);
+  the engine stores it opaquely (object kept, garbage dropped with a warning).
+- `due` payload now carries an `artifact` presence flag (review's re-encode path reads
+  it); `doctor` notes unregistered artifact files with the exact fix command (non-failing)
+  and fails dangling registrations.
+
+### Behavior (skills + agents; defaults unchanged)
+- `/learn`: explorables are now **content-triggered and learner-dialed** — threshold
+  nodes as before; at `visuals eager`, also `viz.affordance: high` nodes; an explicit
+  "make it visual" builds for any node at any level (autonomy override, same shape as
+  "just tell me"). One **ask-once-per-topic** offer when a high-affordance node meets the
+  default setting (arrow-key; "always" sets `visuals eager` with consent echoed back).
+  The smith now runs **in the background** while the dialogue beats continue, registers
+  what it builds, and hand-off is an arrow-key choice (open it now / homework — homework
+  is the Sprint default; the two-minute floor outranks the medium).
+- `/review`: the second-lapse re-encode move now knows whether an explorable already
+  exists (regenerate it differently) or not (offer to build one) — background spawn,
+  hand-off at the close, never mid-queue.
+- `/coach`: narrates the medium comparison when it has a verdict, with its n and the
+  explicit honesty that n-of-1 medium measurement is suggestive telemetry, not settled
+  methodology; offers the matching `visuals` move arrow-key style, applied only on yes.
+- curriculum-architect (both platforms): declares `viz` per node with an evidence leash —
+  a false `high` is worse than a false `none`, because decorative interactivity reverses
+  the effect (≈ −0.05).
+- artifact-smith (both platforms): consumes `viz.kind`/`viz.hook`, applies the novice
+  worked-drive gate, registers after writing, echoes the registration JSON in its report.
+
+### Hardening (adversarial review before release — 10 confirmed findings, all fixed)
+- **State mutex.** Every state-mutating command now serializes on an advisory
+  lockfile (`.engram.lock`; stale locks broken after 60s). The new background
+  artifact-smith registering while the tutor rates on the same topic was a
+  last-writer-wins race on the whole-file graph write — it could silently revert
+  a just-graded node's schedule or drop a fresh registration.
+- **The `valid_artifact` gate.** Receipt stamping, the due-payload flag, and
+  `--replace` carry-forward now all require a non-empty string whose file exists.
+  v0.4's `add-topic` silently kept payload-supplied artifact strings; without the
+  gate those phantoms would stamp append-only receipts into the wrong modality arm
+  forever. Registration also now survives a corrupt `fsrs` on restructure (it was
+  being destroyed), and phantoms die at `--replace` instead of living on.
+- **doctor** reports all artifact problems (unregistered, dangling, garbage-typed)
+  as *notes* with pasteable shell-quoted fix commands — an upgrade must not flip
+  doctor red for v0.4's own leniency.
+- **Input hardening:** `artifact list` degrades gracefully on nodeless graphs and
+  lists registrations on nodes outside `order`; `visuals status` reports a
+  hand-edited non-string setting instead of crashing; `add-topic` rejects a
+  non-object node with a clean error.
+- README's `visuals` CLI row described the levels in swapped order (taught
+  `eager` = default) — fixed. Selftest 79 → 85 across the fixes.
+
+### Packaging
+- Version 0.5.0 everywhere (plugin.json ×2, badges); README: science point 6, visual
+  FAQ entry, CLI table rows for `visuals`/`artifact`, docs table row for docs/06,
+  Discord community badge (discord.gg/temm1e); INSTALL-CODEX selftest count 85/85.
+
+Existing users: `claude plugin marketplace update engram && claude plugin update
+engram@engram`, then restart Claude Code. A v0.4 learner model self-heals; nothing
+about your schedule, receipts, or defaults changes until you touch the `visuals` dial.
+Optional one-time heal: `doctor` will point out any explorable built before 0.5 so you
+can register it (`artifact set …`) and start counting it in the medium comparison.
+
+## 0.4.4 — 2026-07-09 · fix the confidence picker not firing (contradiction in the oath)
+
+0.4.3 added the imperative picker instruction but a stale line survived in the most-obeyed
+section — the anti-sycophancy **oath** still read *"Confidence in the same breath as the
+probe"*, which tells the tutor to ask for a number inline (the "Answer + 0-100" a user saw
+on 0.4.3). It overrode the new rule. The ⚠ section and beats were updated in 0.4.2/0.4.3;
+this oath line was missed.
+
+### Behavior (dialogue grammar; no engine change)
+- The oath line is replaced with **"Confidence is a picker, never a typed number"**, and
+  the **reveal is now gated on it**: no canonical answer until confidence is collected via
+  `AskUserQuestion` (or a volunteered number, or dismissed → null). Gating on the reveal —
+  an action the tutor always performs — is the most reliable way to make the tool call fire,
+  versus a standalone "please call the picker".
+- Removed every remaining "answer + 0–100 / gut number" cue from probe-prompt guidance.
+
+## 0.4.3 — 2026-07-09 · make the confidence picker actually fire
+
+0.4.2 described the confidence picker but left the instruction too soft and framed it
+as a fallback *after* a text ask — so the tutor kept asking for a typed number instead
+of showing the arrow-key box. Fixed by adopting the production-grade pattern: an
+imperative MUST, the explicit `AskUserQuestion(...)` call inlined in the dialogue
+grammar, and no "give a number" wording left in any probe prompt.
+
+### Behavior (grammar + skills; no engine change)
+- The four-band Confidence picker (Certain 90 / Pretty sure 70 / Half unsure 50 /
+  Just guessing 25) is now the **primary, mandatory** way confidence is collected —
+  before the reveal, every item — with the tool's built-in "Other" for an exact number
+  or skip (→ null). The tutor only skips the picker if the learner volunteered a number
+  unprompted. Applied to `/learn` encode, the pretest, and `/review`.
+- Verified live: the picker renders and a selection round-trips to its number.
+
+## 0.4.2 — 2026-07-09 · confidence UX — pick, don't type
+
+Collecting the 0–100 gut-confidence (which powers calibration and hypercorrection —
+kept, because it earns its place) used to force the learner to *type a number* every
+item, then nagged with a text re-ask if they skipped it. Friction the data can't afford.
+
+### Behavior (dialogue grammar + skills; no engine change)
+- **Confidence is now a one-tap pick, not a typed number.** It's offered as an optional
+  add-on in the same breath as the probe (type `…, about 70` if you like). If you give no
+  number, a picker (AskUserQuestion) appears **before the reveal** with four bands —
+  Certain (90) / Pretty sure (70) / Half unsure (50) / Just guessing (25), plus Other for
+  an exact number or skip. Dismiss → `null`, still never estimated.
+- **Guardrails made explicit** so the convenience stays honest and bugless: the picker
+  fires *before* feedback every time (confidence-after-answer is discarded as null); a
+  picked band is the learner's own stated confidence, not an invented one; and confidence
+  is *metadata, not knowledge*, so a menu is allowed there while the probe stays open
+  free-recall. Applied consistently across `/learn` encode, the pretest, and `/review`.
+
+## 0.4.1 — 2026-07-09 · discoverable Focus mode + release hygiene
+
+Follow-up to 0.4.0: the ADHD Focus profile shipped but was undiscoverable (no README,
+no clean command), and one toggle path was buggy.
+
+### Engine
+- **`focus on|off|status` command** — a first-class, discoverable wrapper over
+  `model --set settings.profile=...`. Turning it on flips the ADHD profile (Sprint
+  default, competence growth surfaced every review, always-on amnesty); `status` reports
+  without changing anything.
+- **Bug fix: `model --set <key>=null` now clears to real `None`**, not the string
+  `"null"` — so turning Focus (or any nullable setting) *off* actually works. `null`/`none`
+  (any case) are recognized alongside the existing int/float/bool casts.
+- Selftests 68 -> **70** (the `focus` on/off round-trip; the `=null` clear).
+
+### Docs
+- **README now documents Focus mode** (FAQ entry + CLI table row) with both activation
+  paths: say "I have ADHD, turn on focus mode" in `/learn`/`/coach`, or run `focus on`.
+  This omission is what prompted the fix — a shipped feature nobody can find isn't shipped.
+- **`RELEASE_PROTOCOL.md`** added at root: the repeatable release checklist (version-bump
+  locations, selftest gate, a live dogfood test, and the merge → tag → `gh release` steps),
+  written after v0.4.0 shipped with its files bumped but no git tag / release cut.
+- `INSTALL-CODEX.md` selftest count corrected (68 -> 70).
+
+## 0.4.0 — 2026-07-09 · the affective layers (motivation + wisdom)
+
+Two new layers around the unchanged engine, for the part the first four pillars
+implied but never voiced: *why the learner returns tomorrow*, and *how a wise tutor
+carries them through the part where learning is supposed to hurt*. Every load-bearing
+claim was assembled by an adversarial research pass (100+ searches, primary sources
+fetched, each number verified by a voter told to refute it) and is cited in the new
+theory doc. The design rule throughout: **surface what is already true; invent nothing.**
+
+### Theory
+- **`docs/05-affective-layers.md`** — the constitution extension. Two new pillars:
+  **P13 Competence salience** (making *real* progress visible is a reward without
+  gamification's risks — Harkin 2016 d=0.40; Deci/Koestner/Ryan 1999 competence
+  feedback d=+0.33 for adults, but d=−0.78 when *controlling*) and **P14 The mentor
+  stance** (struggle-as-encoding, absolve-don't-pity, self-generated relevance,
+  return-after-absence amnesty — Silverman & Barasch 2023; D'Mello 2014; Graham 1984).
+  Includes the adversarial backbone (why *not* to gamify: Sailer & Homner 2020;
+  Hanus & Fox 2015; over-helpful AI harms — Bastani 2025) and the ADHD resolution.
+
+### Engine (additive, default-safe — the FSRS core is untouched)
+- **`stats.momentum`** — the deterministic core (never the model — Article 10) now
+  computes a weekly competence-growth block from real receipts: reviews cleared,
+  **days of durability added** (`stability_gained_7d`), genuine recalls, and the
+  most-durable memory now. Purely additive to the `stats` JSON; ignored safely if unused.
+- **Two self-healed settings keys:** `settings.momentum` (`on`/`off`) and
+  `settings.profile` (`null`/`adhd`). A pre-0.4 model missing them is repaired on load
+  (as every settings key already is) — behavior is byte-for-byte v0.3 with momentum off.
+- Selftests 63 → **68** (durability arithmetic in isolation, in-window filtering, the
+  no-negative-growth rule, the momentum block in `stats`, and the settings self-heal).
+
+### Behavior (skills & dialogue grammar — prose, no new commands)
+- **Naming real growth** (`/learn`, `/review`): on a genuine stability gain, one flat
+  informational line from the engine's own `s_before → s_after` ("holds ~9 days now,
+  up from ~2") — never a score, streak, or should-statement; silent when
+  `settings.momentum=off` or the gain isn't real.
+- **The mentor register** (dialogue grammar): a bounded stance fired only at specific
+  moments (difficulty, lapse, return-after-absence, sagging motivation), silence by
+  default. Two new lines in the anti-sycophancy oath: *encouragement is information,
+  never pressure*; *after a lapse, absolve — never pity*.
+- **Return-after-absence amnesty** (`/review`): a large post-gap queue is met with
+  amnesty + load renegotiation and a capped catch-up choice — the highest-evidence
+  Layer-2 move — instead of dumping the debt.
+- **Momentum in the coach** (`/coach`): the check-in opens by *reporting* real progress
+  (the intervention itself — Harkin 2016), honestly saying so when nothing grew.
+- **ADHD Focus profile** (`settings.profile=adhd`): turns up dials the skills already
+  read (Sprint default, immediate growth surfacing, earlier boredom response, optional
+  if-then plan, always-on amnesty). No new pedagogy, no game; a declared need, honored.
+- README: v0.4 science paragraph, new pillar #5, docs table entry, version → 0.4.0.
+
+## 0.3.0 — 2026-07-06 · bulletproof-foundation hardening + Codex support
+
+A deep hardening pass before new features: every reported bug fixed, plus a full
+adversarial sweep of the boundary where LLM/human text enters the deterministic
+core. Two independent security audits, two code reviews, and a QA pass fed this;
+every fix is locked by a selftest (33 → **63 checks**) and re-verified live.
+
+### Fixes for the reported issues (#1, #2)
+- **FSRS-4.5 difficulty anchor corrected.** `next_difficulty` mean-reverted toward `D0(4)` (the FSRS-5 rule) under an otherwise-4.5 engine, inflating interval growth ~21% and silently undershooting the 90% retention target. Now reverts toward `D0(3)`, per the open-spaced-repetition reference. Pinned by a fixed-point selftest. (#1)
+- **Evidence before state.** `apply_item` now appends the receipt *before* saving the graph, so a crash (or a bad-type confidence that made `make_receipt` throw) can only ever cost a harmless re-review — never advance mastery with no receipt. (#1)
+- **`refit --force` on empty data** no longer divides by zero. (#1)
+- **Corrupt state is quarantined, not discarded.** A malformed JSON file is renamed to `<file>.corrupt.<date>` and surfaced by `doctor`, instead of being silently overwritten with defaults. (#1)
+- **Calibration scores partial credit correctly.** It now reads the assessor `grade` (recalled=1.0 / partial=0.5 / lapsed=0.0), not the scheduler `rating` — a `hard`/`partial` answer was being scored as a total miss, flipping the verdict to "maximally overconfident". Confidence is clamped to 0–100; a min-n floor (10) replaces definitive verdicts on thin data with `insufficient-data`; encode-time confidences are split into their own pool instead of polluting review calibration. (#2)
+- **`next` is stash-aware.** It skips a node whose production is already stashed, and treats a stashed-but-ungraded prerequisite as provisionally met — so the batch-graded `/learn` flow keeps advancing instead of re-serving one node or dead-ending on a chain. Payload now carries `pending_verify` and `provisional_requires`. (#2)
+- **`--add-goal`** writes the previously orphan `goals` field; long productions carry a `production_truncated` marker instead of clipping silently. (#2)
+
+### Hardening (found in the sweep)
+- **Path-traversal / arbitrary-write closed.** Topic slugs and node ids are validated at every ingress (`add-topic`, `receipt`, `--topic`), and all state writes are confined to the state dir (`report --out` too, unless `--allow-outside`); appends refuse to follow symlinks. An absolute/`..` topic could previously write attacker-controlled JSON anywhere — including a malicious `~/.claude/settings.json`.
+- **Shell-injection channel removed.** The skills now pass learner text through a file or stdin (`stash add --file`, `rate --production-file`, `--json -`) and never inline it into a command; a hard rule was added to the dialogue grammar. A production (or a document being taught) containing `'` or `$(…)` can no longer execute.
+- **`add-topic` no longer trusts LLM-supplied mastery.** Payload `state`/`fsrs` are ignored (the engine owns scheduling — no mastery without receipts); `--replace` now *preserves* surviving nodes' schedule and writes a `.bak` instead of wiping it; `order` is deduped and requires-cycles are flagged.
+- **`model --set` can't brick the install** — it refuses to overwrite an object with a scalar and clamps known numerics (a bad `desired_retention` no longer crashes every `rate`); the learner model self-heals a deleted/mistyped subtree on load.
+- **Batch receipts are atomic** — every item is validated (and every node confirmed to exist) before any is applied; the stash self-drains as receipts land.
+- **Crash-proofing:** malformed dates, unknown node states, ghost `order` ids, and one corrupt graph no longer brick `topics`/`stats`/`report`/`due`/`session-start`; the session hook only ever echoes validated slugs (closing an indirect prompt-injection vector) and degrades to silence on any failure.
+- **Report XSS closed** — every interpolated field (incl. `due`/`lapses`) is escaped.
+- **Portability:** dropped the hardcoded personal fallback path; cross-platform dashboard open (`open`/`xdg-open`/`explorer.exe`); scoped the "nothing leaves your machine" claim (the engine never egresses; the curriculum architect uses web search on the topic/goal). `doctor` gained checks for bad states, unparseable dates, and quarantined files.
+
+### Codex support (omni-repo)
+- Engram now runs on **OpenAI Codex** from the same repo — `skills/` and `scripts/engram.py` are shared verbatim. Added `.codex-plugin/plugin.json`, `.agents/plugins/marketplace.json`, TOML ports of the three subagents (`codex/agents/*.toml`), a self-resolving SessionStart hook, `scripts/install-codex.sh`, and `INSTALL-CODEX.md`. The Claude Code path is unchanged.
+
+### Known limitation
+- Re-running the exact same `receipt --file` twice still double-applies (the settle flow clears the stash after, so the documented path is safe; batch *atomicity* is fixed). Full cross-invocation idempotence is deferred — it needs a stash-id threaded through the assessor contract.
+
+## 0.2.0 — 2026-07-05 · release-hardening after first live dogfood
+
+Every change below traces to something observed in a real `/learn` session.
+
+### Integrity
+- **Confidence is never invented.** The dialogue grammar and assessor now hard-require: ask in the same breath as the probe, one casual retry, then record `null`. Calibration counts only numbers the learner actually said. (Found: the tutor had estimated confidences during the first session, silently poisoning calibration.)
+- **Pending-verification stash** (`engram.py stash add|list|count|clear`): learner productions are persisted to disk the moment they exist. A crashed or compacted session can no longer lose ungraded work; the session-start hook surfaces leftover items. (Found: the tutor was hand-maintaining scratch files.)
+
+### New capabilities
+- **`engram.py report`** — deterministic, self-contained HTML dashboard (per-topic mastery maps with progress bars, retention-by-strength vs. the 85% band, honest calibration, open misconceptions, next-7-days forecast; light+dark, no network, no JS). `/coach dashboard` now uses it.
+- **`engram.py refit`** — coarse per-user schedule fit (v1): compares predicted vs. observed recall over ≥50 review receipts and rescales intervals via a clamped multiplier along the FSRS forgetting curve. Guarded and honest about thin data; full FSRS parameter optimization remains future work.
+- **`engram.py doctor`** — state/environment diagnostics for troubleshooting installs.
+
+### Bug fixes
+- `model --add-interest` dropped all but the last value when passed multiple times in one call (argparse `append` missing). Now keeps every value.
+- Streak computation returned 0 when yesterday had activity but today didn't (broken grace-day loop). Rewritten and tested.
+- Receipt ids could collide within a fast batch (millisecond timestamps). Now suffixed with a monotonic sequence.
+
+### UX
+- `topic-status` renders a progress bar and plain-language legend ("retained / learning / untouched").
+- Session ticket and receipt-strip display formats standardized in the dialogue grammar; per-item progress markers in `/review` (`[3/6]`).
+- Park-and-resume protocol: mid-session subject changes are parked cleanly; re-anchoring is always from disk.
+- Pretest capped at 3 probes (a diagnostic, not an exam); unanswered probes stay untouched without nagging.
+- Session-start nudge now also surfaces ungraded pending work.
+
+### Packaging
+- MIT LICENSE (swap if you prefer another).
+- `ENGRAM_ROOT` env var respected as a dev-clone fallback path in all skills.
+- Selftest grown from 18 → 33 checks (stash, refit direction+guard+persistence, report self-containment, doctor, streak cases, id uniqueness, interest append, interval multiplier).
+
+## 0.1.0 — 2026-07-05
+
+Initial build: FSRS-4.5 deterministic core (`engram.py`, 18-check selftest), three skills (/learn, /review, /coach), three agents (curriculum-architect, assessor, artifact-smith), SessionStart hook, theory docs (foundations, prior art, architecture, roadmap), Explorable Contract.

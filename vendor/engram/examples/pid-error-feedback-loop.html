@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<!--
+  GENUINE PIPELINE OUTPUT. Built by the engram-artifact-smith agent during a real
+  v0.5.0 session (topic: pid-altitude-hold, node: error-feedback-loop, threshold,
+  viz.affordance=high, scaffold=novice), under the seven-clause Explorable Contract v2.
+  Not hand-authored. Registered on the concept graph via `engram.py artifact set`.
+  Contract: skills/_shared/explorable-contract.md · Theory: docs/06-visual-encoding.md
+
+  Engram explorable — Contract v2
+  node id:        error-feedback-loop  (threshold)
+  topic:          pid-altitude-hold
+  generated:      2026-07-10
+  interests used: drones/embedded systems, physical/spatial intuition, math/stats
+  scaffold level: NOVICE (first exposure to feedback; clause-2 worked drive applies)
+  targets misconception: "altitude hold just holds a fixed throttle value that makes it hover"
+  learner-model snapshot inputs: interests=[drones,spatial,math]; scaffold=novice; state=new; artifacts=eager
+  self-contained: no CDNs, no external fonts/images/fetches. Light + dark via CSS tokens.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The self-correcting loop — drone altitude hold</title>
+<style>
+  :root{
+    --bg:#f6f8fb; --panel:#ffffff; --panel2:#eef2f7; --ink:#18212f; --muted:#586576;
+    --line:#d3dae4; --alt:#2563c9; --thrust:#c9760f; --setpoint:#2563c9; --hover:#8b94a2;
+    --error:#d0323f; --good:#1a915a; --gust:rgba(80,98,124,.13); --focus:#2563c9;
+    --btn:#eef2f7; --btnink:#18212f; --btnon:#2563c9; --btnonink:#ffffff;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#0e131b; --panel:#151d28; --panel2:#1b2530; --ink:#e7ecf3; --muted:#93a0b2;
+      --line:#293544; --alt:#5aa2ff; --thrust:#f0a24b; --setpoint:#5aa2ff; --hover:#7d8a9a;
+      --error:#ff6b74; --good:#3fca8b; --gust:rgba(150,172,204,.14); --focus:#5aa2ff;
+      --btn:#1b2530; --btnink:#e7ecf3; --btnon:#5aa2ff; --btnonink:#0e131b;
+    }
+  }
+  :root[data-theme="light"]{
+    --bg:#f6f8fb; --panel:#ffffff; --panel2:#eef2f7; --ink:#18212f; --muted:#586576;
+    --line:#d3dae4; --alt:#2563c9; --thrust:#c9760f; --setpoint:#2563c9; --hover:#8b94a2;
+    --error:#d0323f; --good:#1a915a; --gust:rgba(80,98,124,.13); --focus:#2563c9;
+    --btn:#eef2f7; --btnink:#18212f; --btnon:#2563c9; --btnonink:#ffffff;
+  }
+  :root[data-theme="dark"]{
+    --bg:#0e131b; --panel:#151d28; --panel2:#1b2530; --ink:#e7ecf3; --muted:#93a0b2;
+    --line:#293544; --alt:#5aa2ff; --thrust:#f0a24b; --setpoint:#5aa2ff; --hover:#7d8a9a;
+    --error:#ff6b74; --good:#3fca8b; --gust:rgba(150,172,204,.14); --focus:#5aa2ff;
+    --btn:#1b2530; --btnink:#e7ecf3; --btnon:#5aa2ff; --btnonink:#0e131b;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  main{max-width:760px; margin:0 auto; padding:0 18px 90px}
+  header{max-width:760px; margin:0 auto; padding:34px 18px 6px; display:flex; align-items:flex-start; gap:14px}
+  header .grow{flex:1}
+  h1{font-size:26px; line-height:1.25; margin:0 0 6px}
+  h2{font-size:19px; margin:0 0 10px}
+  .kicker{font-size:12.5px; letter-spacing:.09em; text-transform:uppercase; color:var(--muted); margin:0 0 8px}
+  .sub{color:var(--muted); margin:2px 0 0}
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:20px 20px 22px; margin:20px 0}
+  p{margin:0 0 12px}
+  .muted{color:var(--muted)}
+  strong{font-weight:650}
+  .lead{font-size:17px}
+  code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  .eq{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; background:var(--panel2); border:1px solid var(--line); border-radius:8px; padding:2px 7px; white-space:nowrap; display:inline-block}
+  button{font:inherit; cursor:pointer; color:var(--btnink); background:var(--btn); border:1px solid var(--line); border-radius:10px; padding:9px 15px}
+  button:hover{border-color:var(--focus)}
+  button:disabled{opacity:.45; cursor:not-allowed}
+  button.primary{background:var(--btnon); color:var(--btnonink); border-color:var(--btnon); font-weight:600}
+  :focus-visible{outline:3px solid var(--focus); outline-offset:2px; border-radius:8px}
+  .row{display:flex; flex-wrap:wrap; gap:10px; align-items:center}
+  .stack{display:flex; flex-direction:column; gap:6px}
+  fieldset{border:1px solid var(--line); border-radius:12px; padding:14px 16px 16px; margin:14px 0}
+  legend{padding:0 8px; color:var(--muted); font-size:14px}
+  .choice{display:flex; gap:10px; flex-direction:column; margin:8px 0 2px}
+  .choice label{display:flex; gap:10px; align-items:flex-start; padding:11px 13px; border:1px solid var(--line); border-radius:10px; background:var(--panel2); cursor:pointer}
+  .choice label:hover{border-color:var(--focus)}
+  .choice input{margin-top:3px}
+  .seg{display:inline-flex; border:1px solid var(--line); border-radius:10px; overflow:hidden}
+  .seg button{border:0; border-radius:0; background:var(--panel2); padding:9px 16px}
+  .seg button[aria-pressed="true"]{background:var(--btnon); color:var(--btnonink); font-weight:600}
+  input[type=range]{width:210px; accent-color:var(--focus); vertical-align:middle}
+  textarea{width:100%; min-height:96px; resize:vertical; font:inherit; color:var(--ink); background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:11px 12px}
+  .stage{background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:12px 12px 10px; margin:12px 0}
+  canvas{width:100%; height:auto; display:block; border-radius:8px}
+  .readout{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:13.5px; color:var(--ink); margin-top:9px; min-height:1.4em}
+  .legend{display:flex; flex-wrap:wrap; gap:14px; font-size:12.5px; color:var(--muted); margin-top:7px}
+  .legend span{display:inline-flex; align-items:center; gap:6px}
+  .swatch{width:16px; height:0; border-top:3px solid currentColor; display:inline-block}
+  .swatch.dash{border-top-style:dashed}
+  .swatch.box{width:14px; height:12px; border-top:0; background:var(--gust); border:1px solid var(--line)}
+  .reveal{margin-top:14px; padding:14px 16px; border-left:3px solid var(--good); background:var(--panel2); border-radius:0 10px 10px 0}
+  .reveal.err{border-left-color:var(--error)}
+  .outcome{font-weight:600}
+  .pill{display:inline-block; font-size:12px; padding:2px 9px; border-radius:999px; background:var(--panel2); border:1px solid var(--line); color:var(--muted)}
+  .locknote{color:var(--muted); font-size:14px; display:flex; gap:8px; align-items:center}
+  .themebtn{white-space:nowrap; font-size:13px; padding:7px 11px}
+  ol.skeleton{margin:6px 0 0; padding-left:20px}
+  ol.skeleton li{margin:6px 0}
+  .hint{font-size:13.5px; color:var(--muted); margin-top:6px}
+  svg.loop{width:100%; height:auto; display:block}
+  .loop .bx{fill:var(--panel2); stroke:var(--line)}
+  .loop text{fill:var(--ink); font:13px ui-monospace,Menlo,monospace}
+  .loop .lbl{fill:var(--muted); font:12px -apple-system,Segoe UI,Roboto,sans-serif}
+  .loop .ar{stroke:var(--muted); fill:none}
+  .loop .fb{stroke:var(--alt); fill:none; stroke-dasharray:4 3}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important; transition:none!important}}
+</style>
+</head>
+<body>
+<header>
+  <div class="grow">
+    <p class="kicker">Engram · feedback &amp; control · threshold idea</p>
+    <h1>The self-correcting loop</h1>
+    <p class="sub">Your drone is on altitude hold at 10&nbsp;m. What is actually keeping it there?</p>
+  </div>
+  <button class="themebtn" id="themeBtn" aria-label="Toggle light or dark theme">Theme</button>
+</header>
+
+<main>
+
+  <!-- ============================ CLAUSE 1: PREDICTION GATE ============================ -->
+  <section class="card" id="s1">
+    <h2>First, commit to a guess</h2>
+    <p>Picture the drone hovering steadily at <strong>10&nbsp;m</strong>. Your current mental model:
+      <em>altitude hold means the flight controller found the throttle value that hovers, and it just holds that number.</em></p>
+    <p>Now a <strong>wind gust</strong> shoves the drone downward for about a second. Suppose the throttle really is
+      <strong>locked</strong> at the exact hover value the whole time — it never changes. Drag to your prediction:</p>
+    <fieldset>
+      <legend>Where is the drone <strong>6&nbsp;seconds</strong> after the gust, if the throttle stays fixed?</legend>
+      <div class="row">
+        <input type="range" id="guess" min="6" max="11" step="0.1" value="10.0"
+               aria-label="Predicted final altitude in meters, from 6 to 11">
+        <span class="mono" id="guessVal" aria-hidden="true">10.0 m</span>
+      </div>
+      <div class="hint">6&nbsp;m (sank a lot) &nbsp;·&nbsp; 8&nbsp;m (sank a little) &nbsp;·&nbsp; 10&nbsp;m (came right back) &nbsp;·&nbsp; 11&nbsp;m (overshot up)</div>
+      <div class="row" style="margin-top:12px">
+        <button class="primary" id="guessSubmit">Lock in my guess</button>
+        <span class="pill" id="guessEcho" hidden></span>
+      </div>
+    </fieldset>
+  </section>
+
+  <div id="gated" hidden>
+
+    <!-- ============================ CLAUSE 2: WORKED DRIVE (novice) ============================ -->
+    <section class="card" id="s2">
+      <p class="kicker">Worked run · your model, tested</p>
+      <h2>Watch a truly fixed throttle meet a gust</h2>
+      <p>We will run <em>your</em> model exactly: the throttle is welded to the hover value and never reads anything.
+        Before we release the gust, make one more call.</p>
+
+      <fieldset id="wgate">
+        <legend>What happens next?</legend>
+        <p style="margin:2px 0 6px">The gust is about to knock the drone down. The throttle stays locked at the hover value the entire time.
+          Once it has been pushed low, does that fixed throttle climb it back to 10&nbsp;m?</p>
+        <div class="choice">
+          <label><input type="radio" name="wg" value="back"> Yes — a fixed hover throttle brings it back to 10&nbsp;m.</label>
+          <label><input type="radio" name="wg" value="low"> No — it stops falling but stays low, below 10&nbsp;m.</label>
+        </div>
+      </fieldset>
+
+      <div class="stage">
+        <canvas id="cvWorked" width="680" height="360" role="img"
+                aria-label="Two stacked plots over time: altitude with the 10 meter setpoint as a dashed line, and throttle with the hover value as a dashed line."></canvas>
+        <div class="readout" id="roWorked" aria-hidden="true">Press “Release the gust” to run.</div>
+        <div class="legend" aria-hidden="true">
+          <span style="color:var(--alt)"><i class="swatch"></i>altitude</span>
+          <span style="color:var(--setpoint)"><i class="swatch dash"></i>setpoint 10&nbsp;m</span>
+          <span style="color:var(--thrust)"><i class="swatch"></i>throttle</span>
+          <span style="color:var(--hover)"><i class="swatch dash"></i>hover throttle</span>
+          <span style="color:var(--error)"><i class="swatch"></i>error&nbsp;e (the gap)</span>
+          <span><i class="swatch box"></i>wind gust</span>
+        </div>
+      </div>
+      <div class="row">
+        <button class="primary" id="runWorked" disabled>Release the gust</button>
+        <span class="muted" id="wgateHint" style="font-size:13.5px">Answer above to arm the gust.</span>
+      </div>
+
+      <div class="reveal err" id="workedReveal" hidden aria-live="polite">
+        <p class="outcome" id="workedOutcome"></p>
+        <p style="margin-bottom:0">The throttle bar never moved. A hover throttle only balances gravity while the drone is
+          <em>at rest</em>; it has no idea the aircraft is low, because <strong>nothing in it ever looks at the gap</strong>.
+          Drag bleeds off the fall, so the drone just parks below the setpoint and forgets it was ever supposed to be at 10&nbsp;m.
+          That is a fixed command — and it is exactly what altitude hold is <em>not</em>.</p>
+      </div>
+    </section>
+
+    <!-- ============================ CLAUSE (claim delivered after the failure) ============================ -->
+    <section class="card" id="s3">
+      <p class="kicker">The idea</p>
+      <h2>A feedback controller acts on the error, not on a number it memorised</h2>
+      <p>Every control cycle — for a drone, typically 50 to 400 times a second — the controller does one small piece of arithmetic:</p>
+      <p style="text-align:center"><span class="eq">error&nbsp;&nbsp;e = setpoint &minus; measurement</span></p>
+      <p>Then it commands the actuator (the motors) <strong>in proportion to that error</strong>, in the direction that shrinks it:
+        low &rarr; push thrust up, high &rarr; ease thrust off. Because the command is <em>made of</em> the error, the loop closes
+        itself: as the measured altitude climbs back toward the setpoint, the error shrinks, so the correction shrinks, and the drone
+        settles right on the line. Nobody stored a magic throttle value — the error <em>is</em> the input.</p>
+      <svg class="loop" viewBox="0 0 680 150" role="img"
+           aria-label="Feedback loop: setpoint and measured altitude go into a subtraction that makes the error; the error feeds the controller, which sets thrust, which moves the drone; the measured altitude feeds back into the subtraction.">
+        <!-- boxes -->
+        <circle class="bx" cx="150" cy="52" r="20"></circle>
+        <text x="150" y="57" text-anchor="middle">&minus;</text>
+        <text class="lbl" x="150" y="20" text-anchor="middle">compare</text>
+        <rect class="bx" x="245" y="32" width="120" height="40" rx="8"></rect>
+        <text x="305" y="57" text-anchor="middle">controller</text>
+        <rect class="bx" x="470" y="32" width="120" height="40" rx="8"></rect>
+        <text x="530" y="57" text-anchor="middle">drone</text>
+        <!-- setpoint in -->
+        <text class="lbl" x="18" y="49">setpoint 10&nbsp;m</text>
+        <line class="ar" x1="112" y1="52" x2="128" y2="52" marker-end="url(#a)"></line>
+        <!-- error -->
+        <line class="ar" x1="171" y1="52" x2="243" y2="52" marker-end="url(#a)"></line>
+        <text class="lbl" x="207" y="44" text-anchor="middle">error&nbsp;e</text>
+        <!-- thrust -->
+        <line class="ar" x1="366" y1="52" x2="468" y2="52" marker-end="url(#a)"></line>
+        <text class="lbl" x="417" y="44" text-anchor="middle">thrust</text>
+        <!-- output -->
+        <line class="ar" x1="590" y1="52" x2="640" y2="52"></line>
+        <text class="lbl" x="628" y="44" text-anchor="middle">altitude</text>
+        <!-- feedback path -->
+        <path class="fb" d="M628 60 L628 120 L150 120 L150 74" marker-end="url(#b)"></path>
+        <text class="lbl" x="389" y="136" text-anchor="middle">measured altitude fed back every cycle</text>
+        <defs>
+          <marker id="a" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="var(--muted)"></path></marker>
+          <marker id="b" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="var(--alt)"></path></marker>
+        </defs>
+      </svg>
+    </section>
+
+    <!-- ============================ CLAUSE 2: GUIDED FEEDBACK + FREE MANIPULATION ============================ -->
+    <section class="card" id="s4">
+      <p class="kicker">Now you fly it</p>
+      <h2>Same gust — but the throttle reads the error</h2>
+
+      <fieldset id="ptouch">
+        <legend>Predict before you touch it</legend>
+        <p style="margin:2px 0 6px">You are about to run <strong>feedback</strong> mode and, later, to drag the <strong>setpoint</strong>.
+          If you slide the setpoint from 10&nbsp;m up to 13&nbsp;m while the drone is still at 10, what happens the instant it jumps?</p>
+        <div class="choice">
+          <label><input type="radio" name="pt" value="up"> The error <span class="mono">(setpoint &minus; altitude)</span> jumps positive, so thrust rises and the drone climbs to 13.</label>
+          <label><input type="radio" name="pt" value="zero"> Nothing — the drone memorised 10&nbsp;m, so thrust stays put.</label>
+          <label><input type="radio" name="pt" value="down"> The error goes negative, so thrust drops and the drone sinks.</label>
+        </div>
+      </fieldset>
+
+      <div class="stage">
+        <div class="row" style="margin-bottom:10px" role="group" aria-label="Flight controls">
+          <span class="seg" role="group" aria-label="Controller mode">
+            <button id="mFixed" aria-pressed="false">Fixed throttle</button>
+            <button id="mFb" aria-pressed="true">Feedback</button>
+          </span>
+          <label class="row" style="gap:7px">setpoint
+            <input type="range" id="sp" min="8" max="14" step="0.5" value="10" aria-label="Setpoint altitude, 8 to 14 meters">
+            <span class="mono" id="spVal" aria-hidden="true">10.0 m</span>
+          </label>
+          <label class="row" style="gap:7px"><input type="checkbox" id="gustOn" checked> wind gust</label>
+        </div>
+        <canvas id="cvPlay" width="680" height="360" role="img"
+                aria-label="Two stacked plots over time: altitude with the setpoint dashed line, and throttle with the hover dashed line."></canvas>
+        <div class="readout" id="roPlay" aria-hidden="true">Set it up, then press Run.</div>
+        <div class="legend" aria-hidden="true">
+          <span style="color:var(--alt)"><i class="swatch"></i>altitude</span>
+          <span style="color:var(--setpoint)"><i class="swatch dash"></i>setpoint</span>
+          <span style="color:var(--thrust)"><i class="swatch"></i>throttle</span>
+          <span style="color:var(--hover)"><i class="swatch dash"></i>hover throttle</span>
+          <span style="color:var(--error)"><i class="swatch"></i>error&nbsp;e</span>
+          <span><i class="swatch box"></i>wind gust</span>
+        </div>
+      </div>
+      <div class="row">
+        <button class="primary" id="runPlay" disabled>Run</button>
+        <span class="muted" id="ptHint" style="font-size:13.5px">Make your prediction above to unlock Run.</span>
+      </div>
+
+      <div class="reveal" id="playReveal" hidden aria-live="polite">
+        <p class="outcome" id="playOutcome"></p>
+        <p>Watch the coupling: the moment the gust opens a gap, the <span style="color:var(--thrust)"><strong>throttle bar rises on its own</strong></span>,
+          it drives the altitude back up, and as the gap closes the throttle eases back to hover. The command tracked the error the whole way down and back.</p>
+        <p class="muted" style="margin-bottom:0">Now experiment: flip to <strong>Fixed throttle</strong> and Run the same gust to feel the contrast, then set feedback back on and drag the <strong>setpoint</strong> up to 13&nbsp;m with the gust off — watch it chase a target it was never told to memorise.</p>
+      </div>
+
+      <fieldset id="selfx" hidden>
+        <legend>Say why (one line, from memory)</legend>
+        <p style="margin:2px 0 8px">You injected a gust and the throttle climbed on its own — even though you never typed a new throttle value.
+          In your own words: <strong>what made the thrust go up?</strong></p>
+        <textarea id="selfxIn" placeholder="Type your explanation before revealing…"></textarea>
+        <div class="row" style="margin-top:8px"><button id="selfxBtn" disabled>Reveal a strong answer</button></div>
+        <div class="reveal" id="selfxReveal" hidden>
+          <p style="margin-bottom:0">The gust opened a gap between where the drone was and where you set it — a nonzero <span class="mono">error e = setpoint &minus; altitude</span>.
+            In feedback mode the throttle is computed <em>from</em> that error every cycle, so the instant the gap appeared, the command rose by itself.
+            No one sent a new throttle value; <strong>the error is the throttle's input.</strong></p>
+        </div>
+      </fieldset>
+    </section>
+
+    <!-- ============================ CLAUSE 3: RETRIEVAL #1 (the node's probe) ============================ -->
+    <section class="card" id="s5">
+      <p class="kicker">Retrieval · no peeking at the widget</p>
+      <h2>Bring it back from memory</h2>
+      <p>In a drone's altitude hold, what does the controller actually act on each control cycle, and why does that make
+        the aircraft self-correct rather than just holding a fixed motor command?</p>
+      <textarea id="r1" placeholder="Write your recall first — then check it."></textarea>
+      <div class="row" style="margin-top:8px"><button id="r1Btn" disabled>Show a strong answer</button></div>
+      <div class="reveal" id="r1Reveal" hidden>
+        <p style="margin-bottom:0">Each cycle it computes the <strong>error, e = setpoint &minus; measured altitude</strong> (desired minus actual).
+          It doesn't send a stored throttle; it <strong>drives the motors from that error</strong>, so any nonzero error produces a
+          correction — low pushes thrust up, high eases it off. As the drone nears the setpoint the error shrinks, so the correction
+          shrinks too, and it <strong>settles right on the setpoint</strong>: the loop closes. A fixed throttle can't self-correct because
+          it never looks at the error.</p>
+      </div>
+    </section>
+
+    <!-- ============================ CLAUSE 3: RETRIEVAL #2 (transfer_probe) ============================ -->
+    <section class="card" id="s6">
+      <p class="kicker">Retrieval · transfer</p>
+      <h2>Same loop, different machine</h2>
+      <p>A home thermostat holds a room at 21&deg;C as the weather outside changes. In feedback terms, what two quantities is it
+        comparing, and what makes the furnace switch on when a cold front hits?</p>
+      <textarea id="r2" placeholder="Write your recall first — then check it."></textarea>
+      <div class="row" style="margin-top:8px"><button id="r2Btn" disabled>Show a strong answer</button></div>
+      <div class="reveal" id="r2Reveal" hidden>
+        <p style="margin-bottom:0">It compares the <strong>setpoint (21&deg;C)</strong> with the <strong>measured room temperature</strong>:
+          <span class="mono">error = 21 &minus; actual</span>. When a cold front drops the room below 21, the error goes positive, and that
+          <strong>nonzero error is what switches the furnace on</strong>; as the room warms back to 21 the error closes to zero and it switches
+          off. Exactly the drone's loop: act on <em>setpoint minus measurement</em>, correct until the error disappears.</p>
+      </div>
+    </section>
+
+    <!-- ============================ CLAUSE 6: BLANK-PAGE ENDING ============================ -->
+    <section class="card" id="s7">
+      <p class="kicker">Blank page</p>
+      <h2>Rebuild it from nothing</h2>
+      <p>Cover the screen. From memory, reconstruct the whole idea in <strong>three beats</strong>:</p>
+      <ol class="skeleton">
+        <li>What one number does the controller compute every cycle?</li>
+        <li>What does it <em>do</em> with that number?</li>
+        <li>Why does that make the drone return to the setpoint on its own after a gust?</li>
+      </ol>
+      <div class="row" style="margin-top:12px"><button id="skelBtn">Reveal the skeleton</button></div>
+      <div class="reveal" id="skelReveal" hidden>
+        <ol class="skeleton">
+          <li><strong>The error:</strong> <span class="mono">e = setpoint &minus; measurement</span>, recomputed every control cycle.</li>
+          <li><strong>Drive the actuator from it:</strong> a nonzero error produces a correction that shrinks it (low &rarr; more thrust, high &rarr; less).</li>
+          <li><strong>The loop closes:</strong> as the measurement nears the setpoint the error shrinks, so the correction shrinks, and it settles on the setpoint. Self-correcting because the command is <em>made of</em> the error, not a memorised fixed value.</li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- ============================ CLOSING ============================ -->
+    <section class="card" id="s8">
+      <h2>Before you close this</h2>
+      <p>One line to carry away: <em>a fixed throttle holds a number; a feedback controller holds a</em> <strong>goal</strong>,
+        because every cycle it acts on <span class="eq">setpoint &minus; measurement</span> and shrinks it.</p>
+      <p style="margin-bottom:0"><strong>Tell Engram your two retrieval answers next time you talk — they become part of your schedule.</strong></p>
+    </section>
+
+  </div><!-- /#gated -->
+</main>
+
+<script>
+(function(){
+  "use strict";
+  var $ = function(id){ return document.getElementById(id); };
+  var REDUCED = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function cssv(n){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+  function clamp(x,a,b){ return x<a?a:(x>b?b:x); }
+  function reveal(el){ if(el){ el.hidden=false; } }
+
+  /* ---------- theme toggle (both themes are token-driven; this is an a11y control) ---------- */
+  (function(){
+    var sysDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    $("themeBtn").addEventListener("click", function(){
+      var cur = document.documentElement.getAttribute("data-theme");
+      var isDark = cur ? cur === "dark" : sysDark;
+      document.documentElement.setAttribute("data-theme", isDark ? "light" : "dark");
+    });
+  })();
+
+  /* =======================================================================
+     Physics: one point-mass vertical model shared by every run.
+     e = setpoint - altitude ; command accel = Kp*e (feedback) or 0 (fixed).
+     Hover throttle only balances gravity at rest, so fixed mode never returns.
+     ======================================================================= */
+  var P = { dt:0.03, dur:8, tg:1.2, Dg:0.85, G:4.0, c:1.4, Kp:1.6, HT:55, Ktp:6.0, h0:10 };
+
+  function trajectory(cfg){
+    var s = { t:0, h:cfg.h0, v:0 }, out = [];
+    var N = Math.round(cfg.dur/cfg.dt), i, e, aCmd, thrust, gust, a, v;
+    for(i=0;i<=N;i++){
+      e = cfg.sp - s.h;
+      aCmd = (cfg.mode==="feedback") ? cfg.Kp*e : 0;
+      thrust = clamp(cfg.HT + cfg.Ktp*aCmd, 35, 80);
+      gust = (cfg.gust && s.t>=cfg.tg && s.t<cfg.tg+cfg.Dg) ? -cfg.G : 0;
+      out.push({ t:s.t, h:s.h, e:e, thrust:thrust, gust: gust!==0 });
+      a = aCmd - cfg.c*s.v + gust;
+      v = s.v + a*cfg.dt;
+      s = { t:s.t+cfg.dt, h:s.h + v*cfg.dt, v:v };
+    }
+    return out;
+  }
+
+  /* =======================================================================
+     Stage: draws two stacked time plots (altitude, throttle) on one canvas
+     and animates a run left-to-right. Reduced motion -> draw the finished
+     trace in one frame (no continuous motion), still fully legible.
+     ======================================================================= */
+  function Stage(canvas, readoutEl){
+    this.cv = canvas; this.ro = readoutEl;
+    this.ctx = canvas.getContext("2d");
+    this.hist = []; this.idx = 0; this.cfg = null; this.raf = 0;
+    this._resize();
+    var self = this;
+    window.addEventListener("resize", function(){ self._resize(); self.draw(); });
+  }
+  Stage.prototype._resize = function(){
+    var cssW = this.cv.clientWidth || 680;
+    var ratio = 360/680;
+    var dpr = window.devicePixelRatio || 1;
+    this.W = cssW; this.H = Math.round(cssW*ratio);
+    this.cv.width = Math.round(this.W*dpr);
+    this.cv.height = Math.round(this.H*dpr);
+    this.cv.style.height = this.H + "px";
+    this.ctx.setTransform(dpr,0,0,dpr,0,0);
+  };
+  Stage.prototype._geom = function(){
+    var padL=46, padR=14, padT=14, padB=24, gap=30;
+    var plotH = this.H - padT - padB - gap;
+    var altH = plotH*0.6, thrH = plotH*0.4;
+    return {
+      padL:padL, padR:padR, x0:padL, x1:this.W-padR,
+      altTop:padT, altBot:padT+altH,
+      thrTop:padT+altH+gap, thrBot:padT+altH+gap+thrH,
+      altMin:4, altMax:15, thrMin:35, thrMax:80
+    };
+  };
+  Stage.prototype.run = function(cfg, onDone){
+    this.cfg = Object.assign({}, P, cfg);
+    this.hist = trajectory(this.cfg);
+    var self = this;
+    if(this.raf){ cancelAnimationFrame(this.raf); this.raf=0; }
+    if(REDUCED){
+      this.idx = this.hist.length-1;
+      this.draw();
+      if(onDone) onDone(this.hist[this.hist.length-1]);
+      return;
+    }
+    this.idx = 0;
+    (function frame(){
+      self.idx = Math.min(self.idx+2, self.hist.length-1);
+      self.draw();
+      if(self.idx >= self.hist.length-1){ self.raf=0; if(onDone) onDone(self.hist[self.hist.length-1]); return; }
+      self.raf = requestAnimationFrame(frame);
+    })();
+  };
+  Stage.prototype.draw = function(){
+    var ctx=this.ctx, g=this._geom(), cfg=this.cfg, hist=this.hist, idx=this.idx;
+    var ink=cssv("--ink"), muted=cssv("--muted"), line=cssv("--line"),
+        alt=cssv("--alt"), thr=cssv("--thrust"), sp=cssv("--setpoint"),
+        hov=cssv("--hover"), err=cssv("--error"), gust=cssv("--gust"), panel=cssv("--panel");
+    ctx.clearRect(0,0,this.W,this.H);
+    if(!cfg){ return; }
+    var xt = function(t){ return g.x0 + (t/cfg.dur)*(g.x1-g.x0); };
+    var ya = function(h){ return g.altBot - (clamp(h,g.altMin,g.altMax)-g.altMin)/(g.altMax-g.altMin)*(g.altBot-g.altTop); };
+    var yt = function(v){ return g.thrBot - (clamp(v,g.thrMin,g.thrMax)-g.thrMin)/(g.thrMax-g.thrMin)*(g.thrBot-g.thrTop); };
+
+    // panel backgrounds
+    ctx.fillStyle=panel;
+    ctx.fillRect(g.x0, g.altTop, g.x1-g.x0, g.altBot-g.altTop);
+    ctx.fillRect(g.x0, g.thrTop, g.x1-g.x0, g.thrBot-g.thrTop);
+
+    // gust band
+    if(cfg.gust){
+      ctx.fillStyle=gust;
+      var gx0=xt(cfg.tg), gx1=xt(cfg.tg+cfg.Dg);
+      ctx.fillRect(gx0, g.altTop, gx1-gx0, g.altBot-g.altTop);
+      ctx.fillRect(gx0, g.thrTop, gx1-gx0, g.thrBot-g.thrTop);
+      // downward gust arrows in altitude panel
+      ctx.strokeStyle=muted; ctx.fillStyle=muted; ctx.lineWidth=1;
+      var ax=(gx0+gx1)/2;
+      ctx.beginPath(); ctx.moveTo(ax,g.altTop+6); ctx.lineTo(ax,g.altTop+22); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(ax-4,g.altTop+16); ctx.lineTo(ax,g.altTop+23); ctx.lineTo(ax+4,g.altTop+16); ctx.fill();
+    }
+
+    // axes / ticks
+    ctx.strokeStyle=line; ctx.fillStyle=muted; ctx.lineWidth=1;
+    ctx.font="11px ui-monospace,Menlo,monospace"; ctx.textBaseline="middle";
+    var hticks=[6,8,10,12,14], k;
+    ctx.textAlign="right";
+    for(k=0;k<hticks.length;k++){
+      var yy=ya(hticks[k]);
+      ctx.globalAlpha=0.5; ctx.beginPath(); ctx.moveTo(g.x0,yy); ctx.lineTo(g.x1,yy); ctx.stroke(); ctx.globalAlpha=1;
+      ctx.fillText(hticks[k], g.x0-6, yy);
+    }
+    ctx.fillText("m", g.x0-6, g.altTop+6);
+    // hover baseline tick label on thrust panel
+    ctx.fillText("55", g.x0-6, yt(cfg.HT));
+    ctx.fillText("%", g.x0-6, g.thrTop+6);
+    // x ticks
+    ctx.textAlign="center"; ctx.textBaseline="top";
+    for(k=0;k<=cfg.dur;k+=2){ ctx.fillText(k+"s", xt(k), g.thrBot+5); }
+
+    // setpoint dashed (altitude) + hover dashed (throttle)
+    ctx.setLineDash([5,4]); ctx.lineWidth=1.5;
+    ctx.strokeStyle=sp; ctx.beginPath(); ctx.moveTo(g.x0,ya(cfg.sp)); ctx.lineTo(g.x1,ya(cfg.sp)); ctx.stroke();
+    ctx.strokeStyle=hov; ctx.beginPath(); ctx.moveTo(g.x0,yt(cfg.HT)); ctx.lineTo(g.x1,yt(cfg.HT)); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.textAlign="right"; ctx.textBaseline="bottom";
+    ctx.fillStyle=sp; ctx.fillText("setpoint "+cfg.sp.toFixed(0)+" m", g.x1-2, ya(cfg.sp)-3);
+    ctx.fillStyle=hov; ctx.textBaseline="top"; ctx.fillText("hover", g.x1-2, yt(cfg.HT)+3);
+
+    // curves up to idx
+    function curve(color, yf, key){
+      ctx.strokeStyle=color; ctx.lineWidth=2.4; ctx.beginPath();
+      for(var i=0;i<=idx;i++){ var pt=hist[i]; var X=xt(pt.t), Y=yf(pt[key]);
+        if(i===0) ctx.moveTo(X,Y); else ctx.lineTo(X,Y); }
+      ctx.stroke();
+    }
+    curve(thr, yt, "thrust");
+    curve(alt, ya, "h");
+
+    // head + error connector
+    var head=hist[idx];
+    var hx=xt(head.t), hy=ya(head.h);
+    if(Math.abs(head.e)>0.12){
+      ctx.strokeStyle=err; ctx.lineWidth=2; ctx.setLineDash([2,2]);
+      ctx.beginPath(); ctx.moveTo(hx,hy); ctx.lineTo(hx,ya(cfg.sp)); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle=err; ctx.textAlign="left"; ctx.textBaseline="middle";
+      ctx.fillText("e="+(head.e>=0?"+":"")+head.e.toFixed(1), hx+5, (hy+ya(cfg.sp))/2);
+    }
+    // drone glyph
+    ctx.fillStyle=alt; ctx.strokeStyle=alt; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(hx-9,hy); ctx.lineTo(hx+9,hy); ctx.stroke();
+    ctx.beginPath(); ctx.arc(hx-9,hy-1,2.2,0,7); ctx.arc(hx+9,hy-1,2.2,0,7); ctx.fill();
+    ctx.fillRect(hx-2.5,hy-1,5,4);
+
+    // readout (labels on the thing; not aria-live to avoid SR spam)
+    if(this.ro){
+      var e=head.e, push=Math.round(head.thrust-cfg.HT);
+      var eStr="e = "+cfg.sp.toFixed(1)+" − "+head.h.toFixed(1)+" = "+(e>=0?"+":"")+e.toFixed(1)+" m";
+      var tStr;
+      if(cfg.mode==="feedback"){
+        tStr="throttle = 55% "+(push>=0?"+ "+push:"− "+Math.abs(push))+"% = "+head.thrust.toFixed(0)+"% (driven by e)";
+      } else {
+        tStr="throttle = 55% (fixed — it never reads e)";
+      }
+      this.ro.textContent = "t = "+head.t.toFixed(1)+" s      "+eStr+"      "+tStr;
+    }
+  };
+
+  /* =======================================================================
+     Wiring
+     ======================================================================= */
+  var store = { guess:null, wgate:null, ptouch:null, finalFixed:null };
+
+  /* --- Clause 1: prediction gate --- */
+  var guess=$("guess"), guessVal=$("guessVal");
+  guess.addEventListener("input", function(){ guessVal.textContent = parseFloat(guess.value).toFixed(1)+" m"; });
+  $("guessSubmit").addEventListener("click", function(){
+    store.guess = parseFloat(guess.value);
+    var echo=$("guessEcho");
+    echo.textContent = "You committed: "+store.guess.toFixed(1)+" m";
+    reveal(echo);
+    reveal($("gated"));
+    $("s2").scrollIntoView({behavior: REDUCED?"auto":"smooth", block:"start"});
+  });
+
+  /* --- Clause 2 worked drive: gate the gust behind a commitment --- */
+  var worked = new Stage($("cvWorked"), $("roWorked"));
+  worked.cfg = Object.assign({}, P, {mode:"fixed", sp:10, gust:true});
+  worked.hist = trajectory(worked.cfg); worked.idx = 0; worked.draw();
+  Array.prototype.forEach.call(document.getElementsByName("wg"), function(r){
+    r.addEventListener("change", function(){
+      store.wgate = r.value;
+      $("runWorked").disabled = false;
+      $("wgateHint").textContent = "Gust armed — release it.";
+    });
+  });
+  $("runWorked").addEventListener("click", function(){
+    $("runWorked").disabled = true;
+    worked.run({mode:"fixed", sp:10, gust:true}, function(fin){
+      store.finalFixed = fin.h;
+      var said = store.guess!=null ? store.guess.toFixed(1) : "—";
+      var predText = store.wgate==="back" ? "You predicted it would climb back to 10 m." : "You predicted it would stay low.";
+      $("workedOutcome").textContent =
+        predText+" You guessed "+said+" m at the gate. A fixed throttle left it at "
+        + fin.h.toFixed(1) + " m — it never came back.";
+      reveal($("workedReveal"));
+      $("runWorked").disabled = false;
+      $("runWorked").textContent = "Run it again";
+    });
+  });
+
+  /* --- Clause 2 free manipulation: pre-touch prediction unlocks Run --- */
+  var play = new Stage($("cvPlay"), $("roPlay"));
+  var mode="feedback";
+  function setMode(m){
+    mode=m;
+    $("mFb").setAttribute("aria-pressed", m==="feedback");
+    $("mFixed").setAttribute("aria-pressed", m==="fixed");
+  }
+  play.cfg = Object.assign({}, P, {mode:mode, sp:10, gust:true});
+  play.hist = trajectory(play.cfg); play.idx=0; play.draw();
+  $("mFb").addEventListener("click", function(){ setMode("feedback"); });
+  $("mFixed").addEventListener("click", function(){ setMode("fixed"); });
+  var sp=$("sp"), spVal=$("spVal");
+  sp.addEventListener("input", function(){ spVal.textContent = parseFloat(sp.value).toFixed(1)+" m"; });
+
+  Array.prototype.forEach.call(document.getElementsByName("pt"), function(r){
+    r.addEventListener("change", function(){
+      store.ptouch = r.value;
+      $("runPlay").disabled = false;
+      $("ptHint").textContent = (r.value==="up")
+        ? "Good prediction — Run it and watch."
+        : "Run it and watch whether that holds.";
+    });
+  });
+
+  var sawFeedbackGust = false;
+  $("runPlay").addEventListener("click", function(){
+    $("runPlay").disabled = true;
+    var cfg = { mode:mode, sp:parseFloat(sp.value), gust:$("gustOn").checked };
+    play.run(cfg, function(fin){
+      $("runPlay").disabled = false;
+      // resolution + self-explanation appear only after a feedback+gust run (the recovery)
+      if(cfg.mode==="feedback" && cfg.gust && !sawFeedbackGust){
+        sawFeedbackGust = true;
+        $("playOutcome").textContent =
+          "Error spiked to about +"+ (cfg.sp - Math.min.apply(null, play.hist.map(function(p){return p.h;}))).toFixed(1)
+          +" m at the gust, the throttle pushed up, and altitude returned to "+ fin.h.toFixed(1) +" m — back on the setpoint.";
+        reveal($("playReveal"));
+        reveal($("selfx"));
+      } else if(cfg.mode==="fixed" && cfg.gust){
+        $("playOutcome").textContent =
+          "Fixed throttle again: it parked at "+ fin.h.toFixed(1) +" m and stayed there. The throttle bar never moved.";
+        reveal($("playReveal"));
+      } else if(cfg.mode==="feedback" && !cfg.gust){
+        $("playOutcome").textContent =
+          "No gust — feedback drove the drone straight to the "+ cfg.sp.toFixed(1) +" m setpoint by shrinking the error to zero.";
+        reveal($("playReveal"));
+      }
+    });
+  });
+
+  /* --- attempt-before-reveal helpers (Clause 3 + self-explanation) --- */
+  function gateReveal(taId, btnId, revId){
+    var ta=$(taId), btn=$(btnId), rev=$(revId);
+    ta.addEventListener("input", function(){ btn.disabled = ta.value.trim().length < 3; });
+    btn.addEventListener("click", function(){ reveal(rev); btn.disabled=true; btn.textContent="Answer shown"; });
+  }
+  gateReveal("selfxIn","selfxBtn","selfxReveal");
+  gateReveal("r1","r1Btn","r1Reveal");
+  gateReveal("r2","r2Btn","r2Reveal");
+
+  /* --- Clause 6: blank-page reveal --- */
+  $("skelBtn").addEventListener("click", function(){ reveal($("skelReveal")); $("skelBtn").disabled=true; $("skelBtn").textContent="Skeleton shown"; });
+
+  // initial theme-independent draw already done; redraw both on load for correct sizing
+  worked.draw(); play.draw();
+})();
+</script>
+</body>
+</html>
