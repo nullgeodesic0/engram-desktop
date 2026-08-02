@@ -12,6 +12,7 @@ app/build/*
 !app/build/icon.png
 !app/build/icon.icns
 !app/build/dmg-background.png
+!app/build/entitlements.mac.plist
 *.log
 .DS_Store
 .remember/

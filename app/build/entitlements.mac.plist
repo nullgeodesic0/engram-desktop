@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Hardened-runtime entitlements for signed/notarized distribution builds
+     (Phase 0 sell-readiness). The minimal Electron set: JIT + unsigned
+     executable memory are what V8 needs; nothing else is granted — the app
+     is NOT App-Store-sandboxed (deliberately: it spawns the user's own
+     `claude` binary, which MAS sandboxing forbids; see the strategy plan's
+     "skip Mac App Store permanently"). Unused while package.json's
+     mac.identity stays null (unsigned dev builds skip signing entirely). -->
+<plist version="1.0">
+  <dict>
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+  </dict>
+</plist>
