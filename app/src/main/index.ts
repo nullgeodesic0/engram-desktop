@@ -16,6 +16,8 @@ import {
 } from './explorableProtocol'
 import { bridgeServer } from './bridge/bridgeServer'
 import { getNotifierSettings, setNotifierSettings } from './session/notifierState'
+import { getAuthSettings, setAuthMode } from './session/authSettings'
+import { apiKeyStore, isPlausibleApiKey } from './session/auth'
 import { getUnlockedAchievements, recordUnlocked } from './session/achievementsStore'
 import { startReviewNotifier, stopReviewNotifier, checkReviewsNow, refreshDueCount } from './session/reviewNotifier'
 import { checkForUpdate, getCachedUpdateCheck, maybeAutoCheckForUpdate } from './session/updateCheck'
@@ -368,6 +370,24 @@ app.whenReady().then(() => {
     await mkdir(dest, { recursive: true })
     await cp(home, dest, { recursive: true })
     return { canceled: false, path: dest }
+  })
+
+  // Dual-mode auth (authSettings.ts / auth.ts / apiKeyStore.ts). The key
+  // never crosses this boundary outward — status carries presence + last4.
+  ipcMain.handle('auth:getSettings', () => getAuthSettings())
+  ipcMain.handle('auth:setMode', (_e, mode: unknown) => {
+    if (mode !== 'subscription' && mode !== 'apiKey') throw new Error(`auth:setMode: invalid mode: ${JSON.stringify(mode)}`)
+    return setAuthMode(mode)
+  })
+  ipcMain.handle('auth:keyStatus', () => apiKeyStore().status())
+  ipcMain.handle('auth:setApiKey', (_e, key: unknown) => {
+    if (!isPlausibleApiKey(key)) throw new Error('auth:setApiKey: not a plausible API key (8–256 printable characters, no spaces)')
+    apiKeyStore().set(key)
+    return apiKeyStore().status()
+  })
+  ipcMain.handle('auth:clearApiKey', () => {
+    apiKeyStore().set(null)
+    return apiKeyStore().status()
   })
 
   // Review-reminder settings + manual trigger (see notifierState.ts / reviewNotifier.ts).

@@ -16,4 +16,23 @@ describe('buildSessionEnv', () => {
     expect(env.ANTHROPIC_AUTH_TOKEN).toBeUndefined()
     expect(base.ANTHROPIC_API_KEY).toBe('sk-stray')
   })
+
+  it('apiKey mode injects the stored key, replacing any inherited value', () => {
+    const base = { PATH: '/usr/bin', ANTHROPIC_API_KEY: 'sk-stray' }
+    const env = buildSessionEnv(base, '/root', 'apiKey', 'sk-real')
+    expect(env.ANTHROPIC_API_KEY).toBe('sk-real')
+    expect(env.ANTHROPIC_AUTH_TOKEN).toBeUndefined()
+    expect(env.ENGRAM_ROOT).toBe('/root')
+  })
+
+  it('apiKey mode with no stored key throws with an actionable message — never a silent fallback', () => {
+    for (const missing of [null, '', '   ']) {
+      expect(() => buildSessionEnv({}, '/root', 'apiKey', missing)).toThrow('Settings → Authentication')
+    }
+  })
+
+  it('subscription mode ignores a stored key entirely', () => {
+    const env = buildSessionEnv({}, '/root', 'subscription', 'sk-stored')
+    expect(env.ANTHROPIC_API_KEY).toBeUndefined()
+  })
 })

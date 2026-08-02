@@ -252,6 +252,12 @@ const PINNED_WRITERS: Record<string, string> = {
   'main/session/crashLog.ts': 'app userData — local crash-log.jsonl, capped at 200 entries',
   'main/session/misconceptionResolves.ts':
     'app userData — manual misconception-resolve provenance (display-only; the engine status is the grade)',
+  // Dual-mode auth (suite doctrine, mirrored from Observatory Desktop).
+  // Both destinations are fixed app-userData filenames — never derived from
+  // the learning home, never inside the installed plugin.
+  'main/session/authSettings.ts': 'app userData — auth-settings.json (auth mode only; the key is never in this file)',
+  'main/session/apiKeyStore.ts': 'app userData — auth-api-key.enc, safeStorage-encrypted API key (path injected by main/session/auth.ts)',
+  'main/session/apiKeyStore.test.ts': 'os tmpdir — ephemeral mkdtemp fixtures for the key store round-trip tests, removed in afterEach',
   // Task 12 (engram:// deep link) coordinator review, additive pin — NOT a
   // re-pin of any injected/kickoff string. This is a *test* file's own
   // fixtures: writeFileSync/mkdtempSync/symlinkSync creating throwaway

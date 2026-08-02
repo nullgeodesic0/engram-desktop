@@ -4,6 +4,8 @@ import { EventEmitter } from 'node:events'
 import { resolveEngramPlugin } from './pluginResolver'
 import { resolveClaudeBinary } from './claudeResolver'
 import { buildSessionEnv } from './sessionEnv'
+import { getAuthSettings } from './authSettings'
+import { apiKeyStore } from './auth'
 import { prepareSessionPermissions, type SessionPermissionSetup } from './permissionConfig'
 import { NdjsonLineSplitter } from './streamParser'
 import { bridgeServer } from '../bridge/bridgeServer'
@@ -83,6 +85,12 @@ export class SessionManager extends EventEmitter {
     ]
 
     const claudeBin = await resolveClaudeBinary()
+    // Dual-mode auth, resolved per session start so a mode/key change in
+    // Settings applies to the very next sitting. `buildSessionEnv` throws
+    // an actionable error when apiKey mode has no stored key — the session
+    // fails to start rather than running on ambient billing.
+    const { authMode } = await getAuthSettings()
+    const sessionEnv = buildSessionEnv(process.env, engramRoot, authMode, authMode === 'apiKey' ? apiKeyStore().get() : null)
     this.child = spawn(claudeBin, args, {
       cwd: homedir(),
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -97,7 +105,7 @@ export class SessionManager extends EventEmitter {
       // resolver's root is guaranteed to contain scripts/engram.py (that
       // filter is how it picks a version), which is exactly the locator's
       // own test — the sanctioned dev-clone hook, not a plugin modification.
-      env: buildSessionEnv(process.env, engramRoot),
+      env: sessionEnv,
     })
 
     this.child.stdout.on('data', (chunk: Buffer) => this.handleStdout(chunk.toString('utf-8')))
