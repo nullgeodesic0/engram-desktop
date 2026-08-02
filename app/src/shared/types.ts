@@ -276,6 +276,26 @@ export interface NotifierSettings {
   dockBadgeEnabled: boolean
 }
 
+/** Dual-mode auth (suite doctrine, mirrored from Observatory Desktop).
+ * `subscription` = the CLI's own Claude Code login, with stray
+ * ANTHROPIC_API_KEY/AUTH_TOKEN stripped from session spawns so a shell
+ * export can never silently flip tutoring onto per-token billing.
+ * `apiKey` = same binary billed against the key in the encrypted store
+ * (`session/apiKeyStore.ts` — never plaintext, never in a settings file). */
+export type AuthMode = 'subscription' | 'apiKey'
+
+export interface AuthSettings {
+  authMode: AuthMode
+}
+
+/** What the renderer may know about the stored API key: presence and the
+ * last four characters for the Settings readout. Never the key itself —
+ * that stays main-process-only. */
+export interface ApiKeyStatus {
+  present: boolean
+  last4: string | null
+}
+
 export interface EnvironmentCheckResult {
   pluginOk: boolean
   pluginVersion?: string

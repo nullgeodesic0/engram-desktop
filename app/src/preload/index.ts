@@ -11,6 +11,9 @@ import type {
   TopicSettings,
   EnvironmentCheckResult,
   NotifierSettings,
+  AuthMode,
+  AuthSettings,
+  ApiKeyStatus,
   UpdateCheckResult,
   ReceiptsHistory,
   SessionIndexEntry,
@@ -62,6 +65,13 @@ const engramApi = {
   pickFiles: (): Promise<string[]> => ipcRenderer.invoke('dialog:pickFiles'),
   exportLearningData: (): Promise<{ canceled: boolean; path?: string }> => ipcRenderer.invoke('engram:exportData'),
   environmentCheck: (): Promise<EnvironmentCheckResult> => ipcRenderer.invoke('engram:environmentCheck'),
+
+  // Dual-mode auth — the API key never crosses this boundary outward.
+  getAuthSettings: (): Promise<AuthSettings> => ipcRenderer.invoke('auth:getSettings'),
+  setAuthMode: (mode: AuthMode): Promise<AuthSettings> => ipcRenderer.invoke('auth:setMode', mode),
+  authKeyStatus: (): Promise<ApiKeyStatus> => ipcRenderer.invoke('auth:keyStatus'),
+  authSetApiKey: (key: string): Promise<ApiKeyStatus> => ipcRenderer.invoke('auth:setApiKey', key),
+  authClearApiKey: (): Promise<ApiKeyStatus> => ipcRenderer.invoke('auth:clearApiKey'),
 
   getNotifierSettings: (): Promise<NotifierSettings> => ipcRenderer.invoke('notifier:getSettings'),
   setNotifierSettings: (patch: Partial<NotifierSettings>): Promise<NotifierSettings> =>

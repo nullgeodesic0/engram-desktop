@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import type {
+  ApiKeyStatus,
+  AuthSettings,
   BackupInfo,
   DescribeArchiveResult,
   DoctorResult,
@@ -415,6 +417,10 @@ export function SettingsView() {
   const [exporting, setExporting] = useState(false)
   const [exportResult, setExportResult] = useState<string | null>(null)
   const [notifier, setNotifier] = useState<NotifierSettings | null>(null)
+  const [auth, setAuth] = useState<AuthSettings | null>(null)
+  const [keyStatus, setKeyStatus] = useState<ApiKeyStatus | null>(null)
+  const [apiKeyDraft, setApiKeyDraft] = useState('')
+  const [authError, setAuthError] = useState<string | null>(null)
   const [launchAtLogin, setLaunchAtLoginState] = useState(false)
   const [checkResult, setCheckResult] = useState<string | null>(null)
   const [checking, setChecking] = useState(false)
@@ -438,6 +444,8 @@ export function SettingsView() {
     window.engram.model().then(setModel)
     window.engram.anySessionActive().then(setSessionActive)
     window.engram.getNotifierSettings().then(setNotifier)
+    window.engram.getAuthSettings().then(setAuth)
+    window.engram.authKeyStatus().then(setKeyStatus)
     window.engram.getLoginItemSettings().then((s) => setLaunchAtLoginState(s.openAtLogin))
     window.engram.getBackupInfo().then(setBackupInfo)
     window.engram.getCrashLog().then(setCrashLog)
@@ -446,6 +454,31 @@ export function SettingsView() {
   }
 
   useEffect(refresh, [])
+
+  async function pickAuthMode(v: string) {
+    setAuth(await window.engram.setAuthMode(v === 'apiKey' ? 'apiKey' : 'subscription'))
+  }
+
+  async function saveApiKey() {
+    const key = apiKeyDraft.trim()
+    if (key === '') return
+    setAuthError(null)
+    try {
+      setKeyStatus(await window.engram.authSetApiKey(key))
+      setApiKeyDraft('')
+    } catch (err) {
+      setAuthError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  async function removeApiKey() {
+    setAuthError(null)
+    try {
+      setKeyStatus(await window.engram.authClearApiKey())
+    } catch (err) {
+      setAuthError(err instanceof Error ? err.message : String(err))
+    }
+  }
 
   async function toggleReminders(v: string) {
     const next = await window.engram.setNotifierSettings({ remindersEnabled: v === 'on' })
@@ -908,6 +941,59 @@ export function SettingsView() {
           </Button>
           {checkResult && <span className="text-xs text-[var(--color-ink-cool)]">{checkResult}</span>}
         </div>
+      </div>
+
+      <div className="panel px-5 py-5 flex flex-col gap-3">
+        <SectionBanner label="Authentication" className="border-t-0" />
+        <DendriteDivider />
+        <ToggleRow
+          label="Claude auth"
+          hint={
+            (auth?.authMode ?? 'subscription') === 'apiKey'
+              ? 'Sessions run with your Anthropic API key under the Commercial Terms, pay per token. The key is encrypted with the system keychain, stored outside any settings file, and never leaves this machine.'
+              : 'Engram drives the Claude Code binary you already installed and pay for. The CLI authenticates from its own login; a stray ANTHROPIC_API_KEY in your shell is ignored so it can never flip sessions onto per-token billing.'
+          }
+          current={auth?.authMode ?? 'subscription'}
+          onPick={pickAuthMode}
+          options={[
+            { value: 'subscription', label: 'Claude Code subscription' },
+            { value: 'apiKey', label: 'API key' },
+          ]}
+        />
+        {(auth?.authMode ?? 'subscription') === 'apiKey' && (
+          <div className="flex flex-col gap-2">
+            {keyStatus?.present ? (
+              <div className="flex items-center justify-between gap-3">
+                <span className="label-data text-[11px] text-[var(--color-text-dim)]">Key stored · ····{keyStatus.last4}</span>
+                <Button variant="ghost" onClick={removeApiKey}>
+                  Remove key
+                </Button>
+              </div>
+            ) : (
+              <div className="text-xs text-[var(--color-ink-danger)]">
+                No key stored — sessions will fail to start until one is added or the mode is switched back.
+              </div>
+            )}
+            <div className="flex gap-2">
+              <input
+                type="password"
+                value={apiKeyDraft}
+                onChange={(e) => setApiKeyDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') saveApiKey()
+                }}
+                placeholder={keyStatus?.present ? 'Replace key…' : 'sk-ant-…'}
+                maxLength={256}
+                autoComplete="off"
+                className="focus-ring panel px-3 py-2 text-sm bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] text-[var(--color-text-primary)] flex-1 max-w-xs"
+              />
+              <Button variant="ghost" onClick={saveApiKey} disabled={!apiKeyDraft.trim()}>
+                Save key
+              </Button>
+            </div>
+            {authError && <div className="text-xs text-[var(--color-ink-danger)]">{authError}</div>}
+          </div>
+        )}
       </div>
 
       <div className="panel px-5 py-5 flex flex-col gap-3">
