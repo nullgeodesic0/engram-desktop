@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en" data-node="features-as-dimensions">
+<!--
+  Engram explorable — a live example of what the plugin generates.
+  Built under the seven-clause Explorable Contract v2 (skills/_shared/explorable-contract.md):
+  prediction gate · guided manipulable (predict -> act -> explain; worked drive at novice
+  scaffold) · >=2 embedded retrievals · Mayer-minimal, no text over motion · self-contained,
+  both themes · blank-page ending · versioned header.
+  Theory + citations: docs/06-visual-encoding.md · https://github.com/nagisanzenin/engram
+-->
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="An interactive explorable of the kind the Engram learning plugin generates: five sliders, one face, and the idea that a feature is a dimension.">
+<title>A face is five numbers — an Engram explorable</title>
+<style>
+  /* Palette: Engram's own — plum accent (#6D4AA8, the repo badge), neutrals
+     biased warm-plum, semantic classifier colors kept separate from the accent.
+     Type: system serif for prose (the tutor's voice), mono for anything the
+     engine computed (vectors, scores) — the same split the CLI dashboard uses.
+     Layout: single 660px reading column; the manipulable sits beside its
+     controls, stacking under 640px. Zero decoration is the subject's own law. */
+  :root{
+    color-scheme: light dark;
+    --bg:#f7f6f3; --surface:#fffefc; --soft:#eeece7; --ink:#1f1c24; --muted:#605a68;
+    --line:#dcd8d3; --accent:#6d4aa8; --accent-soft:#ece4f7; --accent-ink:#5b3c90;
+    --happy:#1a6b46; --angry:#b0442a; --good-soft:#e2efe7;
+    --focus:#6d4aa8;
+  }
+  @media (prefers-color-scheme: dark){ :root{
+    --bg:#17141d; --surface:#201c29; --soft:#282232; --ink:#eae6f0; --muted:#a49dae;
+    --line:#352f42; --accent:#b8a0e8; --accent-soft:#2a2340; --accent-ink:#cbb8f2;
+    --happy:#6dc094; --angry:#e29070; --good-soft:#1e2f26;
+    --focus:#b8a0e8;
+  }}
+  :root[data-theme="light"]{
+    --bg:#f7f6f3; --surface:#fffefc; --soft:#eeece7; --ink:#1f1c24; --muted:#605a68;
+    --line:#dcd8d3; --accent:#6d4aa8; --accent-soft:#ece4f7; --accent-ink:#5b3c90;
+    --happy:#1a6b46; --angry:#b0442a; --good-soft:#e2efe7; --focus:#6d4aa8;
+  }
+  :root[data-theme="dark"]{
+    --bg:#17141d; --surface:#201c29; --soft:#282232; --ink:#eae6f0; --muted:#a49dae;
+    --line:#352f42; --accent:#b8a0e8; --accent-soft:#2a2340; --accent-ink:#cbb8f2;
+    --happy:#6dc094; --angry:#e29070; --good-soft:#1e2f26; --focus:#b8a0e8;
+  }
+
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:17px/1.62 "Iowan Old Style",Charter,Palatino,Georgia,serif;
+    padding:0 18px 88px;
+  }
+  main{max-width:660px; margin:0 auto; display:flex; flex-direction:column; gap:16px}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+        font-variant-numeric:tabular-nums}
+
+  header{padding:44px 0 4px}
+  .eyebrow{font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:11.5px;
+           letter-spacing:.14em; text-transform:uppercase; color:var(--accent-ink); margin:0 0 12px}
+  h1{font-size:clamp(28px,5vw,38px); line-height:1.12; margin:0 0 10px; text-wrap:balance;
+     letter-spacing:-.015em}
+  .standfirst{color:var(--muted); font-size:16px; margin:0; text-wrap:pretty}
+
+  section{background:var(--surface); border:1px solid var(--line); border-radius:12px;
+          padding:20px 22px; margin:0}
+  section.locked{display:none}
+  section > :first-child{margin-top:0} section > :last-child{margin-bottom:0}
+  h2{font-size:19px; margin:0 0 10px; letter-spacing:-.01em}
+  .gatehead{font-family:ui-monospace,Menlo,monospace; font-size:11px; letter-spacing:.12em;
+            text-transform:uppercase; color:var(--muted); margin:0 0 10px}
+  p{margin:0 0 12px}
+
+  button{font:inherit; font-size:15px; color:var(--ink); background:var(--soft);
+         border:1px solid var(--line); border-radius:8px; padding:8px 14px; cursor:pointer;
+         transition:background .15s, border-color .15s}
+  button:hover:not(:disabled){border-color:var(--accent)}
+  button:focus-visible, input:focus-visible, summary:focus-visible, textarea:focus-visible{
+    outline:2px solid var(--focus); outline-offset:2px}
+  button.primary{background:var(--accent); border-color:var(--accent); color:#fff}
+  button:disabled{opacity:.4; cursor:not-allowed}
+  .chip{margin:0 6px 6px 0}
+  .chip[aria-pressed="true"]{background:var(--accent-soft); border-color:var(--accent);
+                             color:var(--accent-ink)}
+  .btnrow{display:flex; flex-wrap:wrap; gap:0; margin:6px 0 0}
+
+  .reveal{border-left:3px solid var(--accent); background:var(--accent-soft);
+          padding:12px 14px; border-radius:0 8px 8px 0; margin-top:14px; font-size:16px}
+  .reveal.locked{display:none}
+  .quiet{color:var(--muted); font-size:15px}
+
+  .row{display:flex; gap:22px; flex-wrap:wrap; align-items:flex-start; margin-top:6px}
+  .facewrap{flex:0 0 240px}
+  .controls{flex:1 1 260px; min-width:240px}
+  svg{display:block; max-width:100%; height:auto}
+  svg .stroke{stroke:var(--ink); fill:none; stroke-width:3; stroke-linecap:round}
+  svg .fill{fill:var(--ink)}
+
+  .ctl{margin:0 0 12px}
+  .ctl label{display:flex; justify-content:space-between; gap:10px; font-size:14.5px;
+             color:var(--muted); margin-bottom:2px}
+  .ctl input[type=range]{width:100%; accent-color:var(--accent); cursor:pointer}
+  .ctl.off{opacity:.32}
+  .ctl.off input{cursor:not-allowed}
+
+  .vec{background:var(--soft); border:1px solid var(--line); border-radius:8px;
+       padding:8px 10px; font-size:13.5px; margin-top:12px}
+  .label-happy{color:var(--happy); font-weight:600}
+  .label-angry{color:var(--angry); font-weight:600}
+
+  .caption{min-height:1.6em; margin:10px 0 0; font-size:15.5px}
+  .steps{display:flex; flex-direction:column; gap:6px}
+
+  textarea{width:100%; font:inherit; font-size:15px; background:var(--soft); color:var(--ink);
+           border:1px solid var(--line); border-radius:8px; padding:9px 10px; min-height:66px;
+           resize:vertical}
+  details{margin-top:6px}
+  summary{cursor:pointer; color:var(--accent-ink); font-size:15px}
+
+  footer{margin-top:14px; padding:20px 22px; border:1px solid var(--line); border-radius:12px;
+         background:var(--surface); color:var(--muted); font-size:14.5px}
+  footer h2{color:var(--ink); font-size:16px}
+  footer ul{margin:0; padding-left:18px} footer li{margin:4px 0}
+  a{color:var(--accent-ink)}
+  code{font-family:ui-monospace,Menlo,monospace; font-size:.9em; background:var(--soft);
+       padding:1px 5px; border-radius:4px}
+
+  @media (prefers-reduced-motion: no-preference){
+    svg ellipse, svg circle, svg line, svg path{transition:all .25s ease}
+  }
+  @media (max-width:640px){ .facewrap{flex:1 1 100%} }
+</style>
+
+
+<style>
+  .themebtn{position:fixed; top:12px; right:12px; z-index:10; font-size:12.5px;
+            padding:6px 11px; background:var(--surface); border:1px solid var(--line);
+            border-radius:999px; color:var(--muted); cursor:pointer}
+  .themebtn:hover{border-color:var(--accent); color:var(--ink)}
+</style>
+</head>
+<body>
+<button class="themebtn" id="themeToggle" aria-label="Switch color theme">theme</button>
+<main>
+<header>
+  <p class="eyebrow">Engram v0.5.0 · a generated explorable</p>
+  <h1>A face is five numbers</h1>
+  <p class="standfirst">This is the kind of page the <a href="https://github.com/nagisanzenin/engram">Engram</a> learning plugin builds for you, mid-lesson, when a concept is genuinely manipulable. It teaches one idea — <em>a feature is a dimension</em> — and it will not explain anything until you commit to a guess. That's the rule, not the personality.</p>
+</header>
+
+<!-- Clause 1: prediction gate -->
+<section id="gate">
+  <p class="gatehead">Before anything — commit a guess</p>
+  <p>Below waits a face drawn from exactly <b>five numbers</b>: eye size, brow tilt, mouth curve, mouth width, face width. A tiny classifier reads those five and calls the face <span class="label-happy">happy</span> or <span class="label-angry">angry</span>.</p>
+  <p><b>If you could keep only two of the five, which two would still separate happy from angry?</b> Pick exactly two. Your answer is held, and checked against reality later.</p>
+  <div id="gateChips" class="btnrow"></div>
+  <p style="margin-top:14px"><button class="primary" id="gateGo" disabled>Lock my two in</button></p>
+</section>
+
+<!-- Clause 2, novice scaffold: the worked drive -->
+<section class="locked" id="drive">
+  <h2>1 · Watch one feature earn its keep</h2>
+  <p>One slider only: <b>brow tilt</b>. Before each move, say what the face will do. <span class="quiet">The other four numbers are frozen — one dimension at a time.</span></p>
+  <div class="row">
+    <div class="facewrap"><svg id="face1" viewBox="0 0 200 200" width="240" height="240" role="img" aria-label="A parametric face, currently neutral"></svg></div>
+    <div class="controls">
+      <div class="steps" id="driveSteps"></div>
+      <p class="caption" id="driveCaption"></p>
+    </div>
+  </div>
+</section>
+
+<!-- Clause 2: free manipulation + self-explanation -->
+<section class="locked" id="lab">
+  <h2>2 · Now drive all five</h2>
+  <p id="labPredict"><b>Predict before you touch:</b> which slider flips the verdict with the smallest move?</p>
+  <div id="labChips" class="btnrow"></div>
+  <div class="row" id="labRow" style="display:none">
+    <div class="facewrap">
+      <svg id="face2" viewBox="0 0 200 200" width="240" height="240" role="img" aria-label="A parametric face you control with the five sliders"></svg>
+      <div class="vec mono" id="vec"></div>
+      <div class="vec">verdict: <span id="verdict"></span></div>
+    </div>
+    <div class="controls" id="sliders"></div>
+  </div>
+  <div id="labExplain" class="locked" style="margin-top:16px">
+    <p><b>Say why a face can <em>be</em> a point.</b> One sentence, in your own words — then check.</p>
+    <textarea id="explainBox" placeholder="Because…" aria-label="Your explanation"></textarea>
+    <p style="margin-top:10px"><button id="explainReveal">I said it — compare</button></p>
+    <div class="reveal locked" id="explainAnswer">
+      Each feature is one <b>axis</b>. This face's five values are one <b>coordinate</b> on those five axes. Move a slider and the point slides along exactly that axis. The face and the vector <span class="mono">[eyes, brow, curve, width, face]</span> are the same object wearing two costumes.
+    </div>
+  </div>
+</section>
+
+<!-- Clause 3: retrieval prompt 1 -->
+<section class="locked" id="ret1">
+  <p class="gatehead">Retrieval — answer out loud before you open it</p>
+  <p><b>Q1.</b> Mechanically, what <em>is</em> a feature? Not an example of one — the definition.</p>
+  <details><summary>My answer is committed — reveal</summary>
+    <div class="reveal">One measured dimension of an example: an axis of feature space, with a value on it. Five features means every example lives as a point in a five-dimensional space.</div>
+  </details>
+</section>
+
+<!-- The gate pays off -->
+<section class="locked" id="project">
+  <h2>3 · Your two dimensions, tested</h2>
+  <p>You kept <b id="keptNames">…</b>. The other three axes are now <em>deleted</em> — every face is squashed onto just your two. Try to build a face the classifier calls <span class="label-happy">happy</span>, and one it calls <span class="label-angry">angry</span>.</p>
+  <div class="row">
+    <div class="facewrap">
+      <svg id="face3" viewBox="0 0 200 200" width="240" height="240" role="img" aria-label="A face projected onto only the two features you kept"></svg>
+      <div class="vec">verdict: <span id="verdict3"></span></div>
+    </div>
+    <div class="controls" id="sliders3"></div>
+  </div>
+  <p style="margin-top:14px"><button id="projDone">I tried both</button></p>
+  <div class="reveal locked" id="projVerdict"></div>
+</section>
+
+<!-- Clause 3: retrieval prompt 2 (why-chain link) -->
+<section class="locked" id="ret2">
+  <p class="gatehead">Retrieval — answer out loud before you open it</p>
+  <p><b>Q2.</b> Why does <em>adding</em> a feature add a <em>dimension</em>? What breaks if you just fold the new number into an existing axis?</p>
+  <details><summary>My answer is committed — reveal</summary>
+    <div class="reveal">Independence. A new measurement can vary while every old one stays fixed, so it needs a direction of its own. Fold it into an old axis and two unrelated quantities are forced to move together — faces differing only in the new feature collapse onto the same point.</div>
+  </details>
+</section>
+
+<!-- Clause 6: blank-page ending -->
+<section class="locked" id="blank">
+  <h2>4 · Close this. Rebuild it.</h2>
+  <p>Cover the page. From nothing, reconstruct the skeleton: <em>feature → axis → example as point → what moving one slider does → what deleting axes does.</em> Say it in full sentences, then peek.</p>
+  <details><summary>The skeleton — compare against yours</summary>
+    <div class="reveal">
+      A feature is one measured dimension. Each feature is an axis, and an example's values place it as a single point. Moving one slider is moving along one axis — the face and the vector are the same object. Deleting axes projects the space down, and points that differed only on the deleted axes become indistinguishable. Which is why feature <em>choice</em> decides what a model can ever separate.
+    </div>
+  </details>
+  <p class="quiet" style="margin-top:16px">In a real session the closing line reads: <b>“Tell Engram your two retrieval answers next time you talk — they become part of your schedule.”</b> Those answers get graded by a separate agent that never saw the lesson, and the concept is booked for review just before you'd forget it.</p>
+</section>
+
+<footer>
+  <h2>What you just used, by the rules it obeys</h2>
+  <p>Engram generates these under a binding seven-clause contract, because a beautiful page you read passively is a fluency trap — it feels like learning and isn't. Every rule here traces to a measured effect:</p>
+  <ul>
+    <li><b>Nothing unlocks without a commitment.</b> Guided discovery beats free exploration (d = +0.30 vs −0.38 for unguided).</li>
+    <li><b>The model is guided, never a sandbox.</b> Scaffolded simulations beat the identical unscaffolded ones (g+ = 0.60).</li>
+    <li><b>A worked drive comes first for novices</b>, then free manipulation — expertise reversal is real (+0.505 novices with assistance, −0.428 for the knowledgeable).</li>
+    <li><b>Zero decoration.</b> Seductive details reliably depress learning. Nothing on this page is here to look nice.</li>
+    <li><b>It ends with a blank page</b>, because retrieval is the treatment, not the measurement.</li>
+  </ul>
+  <p style="margin-top:12px">Full evidence, including what failed verification: <a href="https://github.com/nagisanzenin/engram/blob/main/docs/06-visual-encoding.md">docs/06-visual-encoding.md</a>. The plugin: <code>claude plugin install engram@engram</code> · <a href="https://github.com/nagisanzenin/engram">GitHub</a> · <a href="https://discord.gg/temm1e">Discord</a>. All learner data stays on your machine.</p>
+</footer>
+</main>
+
+<script>
+"use strict";
+const FEATS = [
+  {k:"eyes",  name:"eye size"},
+  {k:"brow",  name:"brow tilt"},
+  {k:"curve", name:"mouth curve"},
+  {k:"width", name:"mouth width"},
+  {k:"face",  name:"face width"},
+];
+// classifier: happy iff 1.6*curve + 1.0*brow + 0.35*eyes - 0.15*width > 0
+const W = {eyes:.35, brow:1.0, curve:1.6, width:-.15, face:0};
+const TOTAL_W = Object.values(W).reduce((s,w)=>s+Math.abs(w),0);
+const score = v => FEATS.reduce((s,f)=> s + W[f.k]*v[f.k], 0);
+const $ = id => document.getElementById(id);
+const show = id => { $(id).classList.remove("locked"); };
+const reduceMotion = () => !matchMedia("(prefers-reduced-motion: no-preference)").matches;
+
+function drawFace(svg, v){
+  const fw = 62 + 16*v.face, er = 7 + 4*v.eyes, tilt = 14*v.brow;
+  const mw = 26 + 12*v.width, mc = 22*v.curve;
+  svg.innerHTML =
+    `<ellipse class="stroke" cx="100" cy="102" rx="${fw}" ry="72"/>`+
+    `<circle class="fill" cx="74" cy="86" r="${er}"/>`+
+    `<circle class="fill" cx="126" cy="86" r="${er}"/>`+
+    `<line class="stroke" x1="60" y1="${68+tilt}" x2="86" y2="${68-tilt}"/>`+
+    `<line class="stroke" x1="114" y1="${68-tilt}" x2="140" y2="${68+tilt}"/>`+
+    `<path class="stroke" d="M ${100-mw} 136 Q 100 ${136+mc} ${100+mw} 136"/>`;
+}
+const fmt = v => FEATS.map(f=>(v[f.k]>=0?"+":"")+v[f.k].toFixed(2)).join(", ");
+const verdictHTML = s => s > 0
+  ? '<span class="label-happy">happy</span>' : '<span class="label-angry">angry</span>';
+
+// ── Clause 1: the prediction gate ──────────────────────────────────────────
+const picked = new Set();
+FEATS.forEach(f=>{
+  const b = document.createElement("button");
+  b.className="chip"; b.textContent=f.name; b.setAttribute("aria-pressed","false");
+  b.onclick = ()=>{
+    picked.has(f.k) ? picked.delete(f.k) : (picked.size<2 && picked.add(f.k));
+    b.setAttribute("aria-pressed", String(picked.has(f.k)));
+    $("gateGo").disabled = picked.size!==2;
+  };
+  $("gateChips").appendChild(b);
+});
+$("gateGo").onclick = ()=>{ $("gateGo").disabled=true; show("drive"); $("drive").scrollIntoView({behavior:reduceMotion()?"auto":"smooth", block:"start"}); };
+
+// ── Clause 2a: the worked drive (novice scaffold) ──────────────────────────
+const v1 = {eyes:0, brow:0, curve:0, width:0, face:0};
+drawFace($("face1"), v1);
+const DRIVE = [
+  {ask:"Brow tilt goes up (+0.9). The face reads…", opts:["angrier","happier"], right:1,
+   move:()=>{v1.brow=.9;},
+   after:"Inner brow ends dropped, outer lifted — the whole face relaxed. One number, global change."},
+  {ask:"Now brow tilt down to −0.9. The face reads…", opts:["angrier","happier"], right:0,
+   move:()=>{v1.brow=-.9;},
+   after:"Same axis, other direction. The feature is the dial; the emotion is downstream of it."},
+  {ask:"Brow back to 0, nothing else moves. The mouth will…", opts:["also reset","stay exactly as it is"], right:1,
+   move:()=>{v1.brow=0;},
+   after:"Axes are independent — moving one leaves the other four coordinates untouched. That independence is what makes them dimensions."},
+];
+let di = 0;
+function renderDrive(){
+  const box = $("driveSteps"); box.innerHTML="";
+  if(di >= DRIVE.length){
+    const b=document.createElement("button");
+    b.className="primary"; b.textContent="Unlock all five sliders";
+    b.onclick=()=>{ show("lab"); $("lab").scrollIntoView({behavior:reduceMotion()?"auto":"smooth", block:"start"}); };
+    box.appendChild(b); return;
+  }
+  const st = DRIVE[di];
+  const q=document.createElement("p");
+  q.style.margin="0"; q.innerHTML="<b>What happens next?</b> "+st.ask;
+  box.appendChild(q);
+  const row=document.createElement("div"); row.className="btnrow";
+  st.opts.forEach((o,idx)=>{
+    const b=document.createElement("button"); b.className="chip"; b.textContent=o;
+    b.onclick=()=>{
+      st.move(); drawFace($("face1"), v1);          // the motion runs itself…
+      const hit = idx===st.right;
+      setTimeout(()=>{                               // …the words arrive after it
+        $("driveCaption").innerHTML =
+          (hit?"<b>Called it.</b> ":"<b>Watch again — it went the other way.</b> ")+st.after;
+        di++; renderDrive();
+      }, reduceMotion() ? 0 : 320);
+    };
+    row.appendChild(b);
+  });
+  box.appendChild(row);
+}
+renderDrive();
+
+// ── Clause 2b: free manipulation, then self-explanation ────────────────────
+const v2 = {eyes:.2, brow:-.55, curve:-.45, width:.1, face:0};
+let labPick=null, touches=0;
+FEATS.forEach(f=>{
+  const b=document.createElement("button"); b.className="chip"; b.textContent=f.name;
+  b.setAttribute("aria-pressed","false");
+  b.onclick=()=>{
+    if(labPick) return;
+    labPick=f.k; b.setAttribute("aria-pressed","true");
+    $("labRow").style.display="flex"; buildSliders(); paintLab();
+  };
+  $("labChips").appendChild(b);
+});
+function buildSliders(){
+  const c=$("sliders"); c.innerHTML="";
+  FEATS.forEach(f=>{
+    const d=document.createElement("div"); d.className="ctl";
+    d.innerHTML=`<label for="sl-${f.k}">${f.name}<span class="mono" id="val-${f.k}"></span></label>
+      <input type="range" min="-1" max="1" step="0.05" value="${v2[f.k]}" id="sl-${f.k}">`;
+    c.appendChild(d);
+    $("sl-"+f.k).addEventListener("input", e=>{
+      v2[f.k]=parseFloat(e.target.value); touches++; paintLab();
+      if(touches===8){ show("labExplain"); }
+    });
+  });
+}
+function paintLab(){
+  drawFace($("face2"), v2);
+  $("vec").textContent = "point = ["+fmt(v2)+"]";
+  const s=score(v2);
+  $("verdict").innerHTML = verdictHTML(s) +
+    ` <span class="quiet mono">(score ${(s>=0?"+":"")+s.toFixed(2)})</span>`;
+  FEATS.forEach(f=>{ const el=$("val-"+f.k); if(el) el.textContent=(v2[f.k]>=0?"+":"")+v2[f.k].toFixed(2); });
+}
+$("explainReveal").onclick=()=>{
+  $("explainAnswer").classList.remove("locked");
+  show("ret1"); show("project"); prepProject();
+  $("ret1").scrollIntoView({behavior:reduceMotion()?"auto":"smooth", block:"start"});
+};
+
+// ── Clause 2c: the projection — the gate's commitment, tested ──────────────
+const v3 = {eyes:0, brow:0, curve:0, width:0, face:0};
+let sawHappy=false, sawAngry=false;
+function prepProject(){
+  const kept=[...picked];
+  $("keptNames").textContent = kept.map(k=>FEATS.find(f=>f.k===k).name).join(" and ");
+  const c=$("sliders3"); c.innerHTML="";
+  FEATS.forEach(f=>{
+    const on = picked.has(f.k);
+    const d=document.createElement("div"); d.className="ctl"+(on?"":" off");
+    d.innerHTML=`<label for="s3-${f.k}">${f.name}${on?"":" — deleted"}<span class="mono" id="v3-${f.k}"></span></label>
+      <input type="range" min="-1" max="1" step="0.05" value="0" id="s3-${f.k}" ${on?"":"disabled"}>`;
+    c.appendChild(d);
+    if(on) $("s3-"+f.k).addEventListener("input", e=>{
+      v3[f.k]=parseFloat(e.target.value); paintProject();
+    });
+  });
+  paintProject();
+}
+function paintProject(){
+  drawFace($("face3"), v3);
+  const s=score(v3);
+  $("verdict3").innerHTML = verdictHTML(s);
+  if(s>0.4) sawHappy=true;
+  if(s<-0.4) sawAngry=true;
+  FEATS.forEach(f=>{ const el=$("v3-"+f.k); if(el) el.textContent=(v3[f.k]>=0?"+":"")+v3[f.k].toFixed(2); });
+}
+$("projDone").onclick=()=>{
+  const kept=[...picked];
+  const share = Math.round(100*(Math.abs(W[kept[0]])+Math.abs(W[kept[1]]))/TOTAL_W);
+  const good = sawHappy && sawAngry;
+  $("projVerdict").innerHTML = good
+    ? `<b>Both verdicts reached. Your two axes carry ${share}% of the classifier's total weight.</b>
+       Deleting the rest cost detail but kept the decision — a projection that preserved the signal.
+       That is feature selection, in one sentence.`
+    : `<b>You couldn't reach both verdicts. Your two axes carry only ${share}% of the classifier's weight.</b>
+       Faces that differ on the deleted axes now sit on top of each other: the information isn't hidden,
+       it's <em>gone</em>. That is what a bad projection does — and why feature choice decides what a model
+       can ever separate.`;
+  $("projVerdict").classList.remove("locked");
+  show("ret2"); show("blank");
+  $("ret2").scrollIntoView({behavior:reduceMotion()?"auto":"smooth", block:"start"});
+};
+</script>
+
+<script>
+  (function(){
+    var b=document.getElementById("themeToggle"), r=document.documentElement;
+    b.addEventListener("click",function(){
+      var cur=r.dataset.theme||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");
+      r.dataset.theme = cur==="dark"?"light":"dark";
+    });
+  })();
+</script>
+</body>
+</html>
