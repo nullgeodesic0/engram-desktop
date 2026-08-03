@@ -583,7 +583,10 @@ const OVERLAY_DIR = join(ROOT, '..', 'plugin-overlays', 'engram')
 const PINNED_OVERLAY_HASHES: Record<string, string> = {
   'explorable-contract.qa-checklist-item.md': '3038484342c5c9fe',
   'explorable-contract.visual-design-section.md': '8ed0ac6a70ce56b7',
-  'review-skill.quick-checkpoint-protocol.md': 'b2e33ab9864d304c',
+  // 2026-08-03 second pin (first live sitting's lessons): step 2 gains the
+  // ask-fields-are-not-markdown LaTeX rule and the never-reference-options-
+  // by-position rule (the app shuffles checkpoint option display order).
+  'review-skill.quick-checkpoint-protocol.md': 'dd49fcd70b6ee8c8',
   'dialogue-grammar.checkpoint-exception.md': '9c4b24e6b10a16d4',
 }
 const overlayFiles = readdirSync(OVERLAY_DIR).filter((f) => f.endsWith('.md'))

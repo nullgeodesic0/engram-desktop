@@ -1,7 +1,35 @@
-import { memo, useRef, useState } from 'react'
+import { memo, useMemo, useRef, useState } from 'react'
 import { useFocusTrap } from '../useFocusTrap'
 import { MathRenderer } from '../MathRenderer'
 import { isCheckpointHeader, parseCheckpointHeader } from '../../shared/checkpointHeader'
+
+/** FNV-1a over the ask's own text — a STABLE seed, so one ask keeps one
+ * order across re-renders, resume, and history replay (Math.random would
+ * reshuffle under the learner's cursor on every state change). */
+function askSeed(s: string): number {
+  let h = 0x811c9dc5
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i)
+    h = Math.imul(h, 0x01000193)
+  }
+  return h >>> 0
+}
+
+/** Fisher–Yates under a tiny LCG from the seed. Checkpoint asks only: models
+ * put the correct option first far too often for a knowledge check to
+ * survive it (observed live on day one — position was the tell). Answers
+ * travel by LABEL, never index, so display order is the app's to own; the
+ * tutor is told (overlay) to never reference options by position. */
+function seededShuffle<T>(items: T[], seed: number): T[] {
+  const out = [...items]
+  let state = seed || 1
+  for (let i = out.length - 1; i > 0; i--) {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0
+    const j = state % (i + 1)
+    ;[out[i], out[j]] = [out[j], out[i]]
+  }
+  return out
+}
 
 export interface AskCardOption {
   label: string
@@ -84,6 +112,13 @@ export const AskCard = memo(function AskCard({
   const isOpen = live && answer === null
   const isOrphaned = !live && answer === null
   const headerInk = isCheckpoint ? 'text-[var(--color-ink-cool)]' : 'text-[var(--color-ink-warm)]'
+  // Checkpoint options render in a seeded-shuffled order (see seededShuffle's
+  // doctrine comment) — everything else keeps the tutor's own order (the
+  // confidence picker's band order is semantic and must never move).
+  const displayOptions = useMemo(
+    () => (isCheckpoint ? seededShuffle(options, askSeed(`${header}${question}`)) : options),
+    [isCheckpoint, options, header, question],
+  )
 
   useFocusTrap(containerRef, isOpen)
 
@@ -142,11 +177,13 @@ export const AskCard = memo(function AskCard({
             </div>
           ) : (
             <div className="flex flex-col gap-2">
-              {options.map((opt) => (
+              {displayOptions.map((opt) => (
                 <button
                   key={opt.label}
                   onClick={() => onAnswer?.([opt.label])}
-                  className="focus-ring panel px-4 py-2.5 text-left hover:bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] hover:border-[var(--color-ink-warm-dim)] transition-colors duration-[var(--dur-base)]"
+                  className={`focus-ring panel px-4 py-2.5 text-left hover:bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] transition-colors duration-[var(--dur-base)] ${
+                    isCheckpoint ? 'hover:border-[var(--color-ink-cool-dim)]' : 'hover:border-[var(--color-ink-warm-dim)]'
+                  }`}
                 >
                   <MathRenderer text={opt.label} inlineOnly className="text-sm text-[var(--color-text-primary)]" />
                   {opt.description && (

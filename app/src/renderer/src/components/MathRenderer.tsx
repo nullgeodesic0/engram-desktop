@@ -63,9 +63,22 @@ function renderPlainText(text: string, key: string) {
   )
 }
 
+/** `\\langle` → `\langle` — the model's markdown-reflex over-escape.
+ * Everything this component renders arrives OUTSIDE the markdown pipeline
+ * (ask questions/options, probe cards, pins), so a doubled backslash that
+ * markdown would have collapsed reaches KaTeX raw — where `\\` is a line
+ * break and `langle` is six variables (observed live: checkpoint asks
+ * rendering as vertical letter soup). Only a doubled backslash DIRECTLY
+ * before a letter is rewritten — a real row break (`\\` before whitespace,
+ * `&`, or end) is untouched, and the lookbehind keeps `\\\alpha` (a break
+ * followed by a real command) intact. */
+function normalizeOverEscaped(tex: string): string {
+  return tex.replace(/(?<!\\)\\\\(?=[a-zA-Z])/g, '\\')
+}
+
 function renderMath(tex: string, displayMode: boolean): string {
   try {
-    return katex.renderToString(tex, { throwOnError: false, displayMode })
+    return katex.renderToString(normalizeOverEscaped(tex), { throwOnError: false, displayMode })
   } catch {
     return displayMode ? `$$${tex}$$` : `$${tex}$`
   }

@@ -22,7 +22,7 @@
  * precedes it in the same message, never before it. */
 
 import type { ChatMessage } from './chatMessages'
-import { parseProbeHeader, type ProbeHeader } from './probeHeader'
+import { parseAllProbeHeaders, type ProbeHeader } from './probeHeader'
 
 /** Every probe header in `messages`, in order, alongside the message index it
  * lives in. A message carries at most one — `parseProbeHeader` matches only
@@ -37,8 +37,15 @@ export function allProbeHeaders(messages: ChatMessage[]): Array<{ index: number;
   const out: Array<{ index: number; header: ProbeHeader }> = []
   for (let i = 0; i < messages.length; i++) {
     if (messages[i].role !== 'assistant') continue
-    const header = parseProbeHeader(messages[i].text)
-    if (header) out.push({ index: i, header })
+    // ALL markers per bubble, not just the first — a checkpoint sitting's
+    // bubbles legitimately carry two (verdict of N + header of N+1 in one
+    // text block); the old first-only read left `current`, the QueueRail
+    // and the minimap one item behind. Multiple entries may share an
+    // `index`; consumers that key per-message (crossings' atMessageIndex,
+    // the hover linkage) keep working because order is preserved.
+    for (const header of parseAllProbeHeaders(messages[i].text)) {
+      out.push({ index: i, header })
+    }
   }
   return out
 }
@@ -102,7 +109,7 @@ export function deriveReviewCrossings(messages: ChatMessage[]): ReviewCrossing[]
 export function nextProbeHeaderAt(messages: ChatMessage[], fromMessageIndex: number): number | null {
   for (let i = fromMessageIndex; i < messages.length; i++) {
     if (messages[i].role !== 'assistant') continue
-    if (parseProbeHeader(messages[i].text)) return i
+    if (parseAllProbeHeaders(messages[i].text).length > 0) return i
   }
   return null
 }

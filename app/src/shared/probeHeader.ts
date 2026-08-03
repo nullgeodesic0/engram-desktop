@@ -102,6 +102,40 @@ export function parseProbeHeader(text: string): ProbeHeader | null {
   return splitAroundProbeHeader(text)?.header ?? null
 }
 
+/** EVERY marker line in `text`, in order — not just the first. Checkpoint
+ * sittings taught us a single bubble can legitimately carry two headers
+ * (verdict of item N and the header of N+1 stream as one text block when no
+ * boundary tool fires between them — observed live, 2026-08-03: `current`
+ * lagged one item behind because the walk only ever saw a bubble's first
+ * marker). Each header's `body` runs to the NEXT marker or end-of-text, so
+ * the last entry's body matches what splitAroundProbeHeader would report. */
+export function parseAllProbeHeaders(text: string): ProbeHeader[] {
+  const out: ProbeHeader[] = []
+  let rest = text
+  let consumed = 0
+  // Re-run the anchored single-match splitter over the remaining tail — the
+  // regex owns all decoration/edge cases; this loop only owns advancing.
+  for (;;) {
+    const m = HEADER_RE.exec(rest)
+    if (!m) break
+    const split = splitAroundProbeHeader(rest)
+    if (!split) break
+    // Find where the NEXT marker starts inside this header's body, if any,
+    // and truncate the body there so each header owns only its own text.
+    const nextInBody = HEADER_RE.exec(split.header.body)
+    out.push({
+      ...split.header,
+      body: nextInBody ? split.header.body.slice(0, nextInBody.index).trim() : split.header.body,
+    })
+    const advance = m.index + m[0].length
+    consumed += advance
+    rest = rest.slice(advance)
+    if (advance === 0) break // safety: a zero-width match must never loop
+  }
+  void consumed
+  return out
+}
+
 /** True when `text` is (up to trailing whitespace) NOTHING but a bare probe
  * header — matched, and `header.body` empty. This is the shape a tutor's
  * text block has when it emits `**[3/5] · \`node\`**` and then immediately
