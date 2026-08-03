@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest'
-import { composeReviewKickoff, capForMins, coveredCount, TIME_CAPS, type SittingMins, type SittingStyle } from './reviewKickoff'
+import {
+  composeReviewKickoff,
+  composeResumeNudge,
+  detectResumeState,
+  capForMins,
+  coveredCount,
+  TIME_CAPS,
+  type SittingMins,
+  type SittingStyle,
+} from './reviewKickoff'
 
 // Built by concatenation so checkDoctrine's D3.kickoff collector (which
 // hashes every literal containing the skill marker) never collects test
@@ -86,6 +95,34 @@ These are filed open for this queue's nodes; "misconception resolve --id <ID>" r
 
   it('default shape with no digest is the bare invocation', () => {
     expect(composeReviewKickoff({ style: 'standard', mins: 10, totalDue: 0, recallDueNodes: [], retest: null, digestLines: [] })).toBe(MARKER)
+  })
+
+  it('resume nudges: prose marker, no command line, pinned-net compliant', () => {
+    for (const checkpoint of [true, false]) {
+      const nudge = composeResumeNudge(checkpoint)
+      expect(nudge.includes('/engram' + ':review'), String(checkpoint)).toBe(true)
+      expect(nudge.startsWith('/engram'), 'must not re-invoke the skill').toBe(false)
+      expect(nudge.includes('`')).toBe(false)
+      expect(BLINDNESS.test(nudge)).toBe(false)
+      expect(nudge.length).toBeLessThan(400)
+    }
+    expect(composeResumeNudge(true)).toContain('checkpoint style')
+    expect(composeResumeNudge(false)).not.toContain('checkpoint style')
+  })
+
+  it('detectResumeState: trailing open ask and checkpoint election', () => {
+    const askUse = (id: string, header: string) => ({
+      message: { content: [{ type: 'tool_use', id, name: 'mcp__engram-ui-bridge__ask_user_question', input: { header } }] },
+    })
+    const result = (id: string) => ({ message: { content: [{ type: 'tool_result', tool_use_id: id }] } })
+    const rate = (cmd: string) => ({ message: { content: [{ type: 'tool_use', id: 'r1', name: 'Bash', input: { command: cmd } }] } })
+    expect(detectResumeState([askUse('a', 'Checkpoint 1/3')])).toEqual({ trailingOpenAsk: true, checkpoint: true })
+    expect(detectResumeState([askUse('a', 'Confidence'), result('a')])).toEqual({ trailingOpenAsk: false, checkpoint: false })
+    expect(detectResumeState([askUse('a', 'Confidence'), result('a'), rate('engram rate --rating good --source quick-mc')])).toEqual({
+      trailingOpenAsk: false,
+      checkpoint: true,
+    })
+    expect(detectResumeState([])).toEqual({ trailingOpenAsk: false, checkpoint: false })
   })
 
   it('coverage math: cap clamps to totalDue', () => {
