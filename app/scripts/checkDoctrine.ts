@@ -455,7 +455,16 @@ for (const f of FILES) {
 // navigational voice ("I picked one open misconception from my ledger"),
 // deferring to the skill for the rest of the sitting. Verified captured
 // un-truncated by the printed current-set.
-const PINNED_MESSAGE_HASH = '7a9b482dbd1030a7'
+// 2026-08-03 re-pin: Review's kickoffs consolidate into
+// shared/reviewKickoff.ts (retest + digest text byte-identical, only the
+// collector's file prefix moved) and gain two sitting-shape variants — a
+// time-sized standard sitting naming the skill's own --cap vocabulary, and
+// the checkpoint opt-in naming the protocol the review skill itself defines
+// (the D5-pinned overlay), plus the app-computed recall-floor node list.
+// Both are navigational learner voice — what I want covered and in which
+// style the skill offers — saying nothing about how to teach or judge.
+// Verified captured un-truncated by the printed current-set.
+const PINNED_MESSAGE_HASH = '27970213c2843227'
 if (sha(injectedMessages.sort().join('\n')) !== PINNED_MESSAGE_HASH) {
   fail(
     'D3.kickoff',
