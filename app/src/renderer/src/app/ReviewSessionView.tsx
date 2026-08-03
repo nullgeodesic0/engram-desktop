@@ -41,7 +41,9 @@ import { StatFraction } from '../components/ui/StatFraction'
 import { ErrorPanel } from '../components/ErrorPanel'
 import { recordConfidence, latestPickFor } from '../shared/calibrationStore'
 import { extractTicketFromMessages } from '../shared/ticketParser'
-import { composeReviewKickoff } from '../shared/reviewKickoff'
+import { composeReviewKickoff, capForMins } from '../shared/reviewKickoff'
+import { loadSittingPrefs, saveSittingMins, type SittingPrefs } from '../shared/sittingPrefs'
+import { recallDueNodes, quickShare, type RecallDueEntry } from '../shared/checkpointEvidence'
 import { TicketCard } from '../components/ritual/TicketCard'
 import { ReadyRoomPlate } from '../components/ritual/ReadyRoomPlate'
 import { ReviewHorizon } from '../components/ReviewHorizon'
@@ -347,7 +349,11 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
   }
 
   function refreshQueue(): Promise<DueItem[]> {
-    return window.engram.due(12).then((items) => {
+    // Sized to the sitting the learner picked (sessionCapRef, default 12) so
+    // the QueueRail's invariant survives a 5-cap checkpoint sitting — the
+    // mid-session refresh must never re-inflate the queue past what the
+    // kickoff asked the tutor to cover.
+    return window.engram.due(sessionCapRef.current).then((items) => {
       setQueue(items)
       return items
     })
@@ -846,11 +852,17 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
         // Ledger/due read failed — plain kickoff, never block the sitting.
       }
     }
+    // A FRESH sitting locks in the picker's shape: the cap sizes every later
+    // queue refresh (sessionCapRef), and the kickoff carries the style, the
+    // time budget, and — for checkpoint sittings — the recall-floor node
+    // list computed from receipt sources. Resume keeps the cap of the
+    // sitting being re-entered (app-restart resume degrades to 12).
+    if (!resume) sessionCapRef.current = capForMins(sittingPrefs.mins)
     const kickoff = composeReviewKickoff({
-      style: 'standard',
-      mins: 10,
+      style: sittingPrefs.style,
+      mins: sittingPrefs.mins,
       totalDue,
-      recallDueNodes: [],
+      recallDueNodes: checkpointBooks.recallDue.map((e) => e.node),
       retest: resume ? null : (retest ?? null),
       digestLines,
     })
@@ -1287,6 +1299,60 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
   const [sessionQuickCount, setSessionQuickCount] = useState(0)
   const [sessionCapViolations, setSessionCapViolations] = useState(0)
   const pendingRateQuickRef = useRef(false)
+  // The intake picker (appended hooks, KeepMounted append rule). Time
+  // persists across restarts; style always mounts as 'standard' — the
+  // per-sitting election is half the checkpoint bargain (sittingPrefs.ts).
+  const [sittingPrefs, setSittingPrefs] = useState<SittingPrefs>(loadSittingPrefs)
+  // The cap the CURRENT sitting was started with — a ref, not state: it only
+  // changes at startSession, and refreshQueue must read the value of the
+  // sitting it is refreshing, not a picker the learner is idly toggling.
+  const sessionCapRef = useRef(12)
+  // Receipt-derived checkpoint books for the ready plate + kickoff: the
+  // recall-floor node list and the quiet quick-share meter. Best-effort on
+  // the ready/detached pages only — a failed read renders no meter and
+  // sends no floor list, never blocks the plate.
+  const [checkpointBooks, setCheckpointBooks] = useState<{
+    recallDue: RecallDueEntry[]
+    share: { quick: number; total: number } | null
+  }>({ recallDue: [], share: null })
+  useEffect(() => {
+    if (phase !== 'ready' && !detachedFromSitting) return
+    let cancelled = false
+    window.engram
+      .receiptsHistory()
+      .then((h) => {
+        if (cancelled) return
+        setCheckpointBooks({ recallDue: recallDueNodes(h.receipts), share: quickShare(h.receipts) })
+      })
+      .catch(() => {
+        /* no books — plate renders without the meter, kickoff sends no floor list */
+      })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, detachedFromSitting])
+  // The picker's time choice re-sizes the READY page's queue preview via the
+  // engine's own savings-ordered triage read. Falls back to the plain limit
+  // read on engines without --cap (the promise rejects) — the plate then
+  // shows today's exact behavior.
+  useEffect(() => {
+    if (phase !== 'ready' && !detachedFromSitting) return
+    const cap = capForMins(sittingPrefs.mins)
+    let cancelled = false
+    window.engram
+      .dueCapped(cap)
+      .then((payload) => {
+        if (!cancelled) setQueue(payload.items)
+      })
+      .catch(() => {
+        if (!cancelled) void window.engram.due(cap).then((items) => !cancelled && setQueue(items))
+      })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, detachedFromSitting, sittingPrefs.mins])
   // Minimap Precision fix (second report on the same bug) — jumps straight to
   // the checkpoint's OWN `CheckpointAnchor`, never the host message; see
   // shared/jumpToCheckpoint.ts's doctrine comment for the full root-cause
@@ -1472,7 +1538,15 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
               honest-subset framing ReadyRoomPlate's own caption states in
               prose ("a normal sitting covers about 12"), read here as a
               readout instead. */}
-          <SectionBanner label="REVIEWS" count={<StatFraction n={queue.length} d={totalDue} />} />
+          <SectionBanner
+            label="REVIEWS"
+            count={
+              <>
+                <StatFraction n={queue.length} d={totalDue} />
+                {sittingPrefs.style === 'checkpoint' ? ' · checkpoint' : ''}
+              </>
+            }
+          />
           <ReadyRoomPlate
             dueItems={queue}
             totalDue={totalDue}
@@ -1481,6 +1555,12 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
             onResume={() => startSession(true)}
             hasPriorSession={hasPriorSession}
             blocked={blocked}
+            prefs={sittingPrefs}
+            onPrefsChange={(p) => {
+              setSittingPrefs(p)
+              saveSittingMins(p.mins)
+            }}
+            quickShareStat={checkpointBooks.share}
           />
           {/* Reuses the same computeDueBuckets fetch the empty/done phases
               already read from (refreshHorizon, fetched unconditionally on
@@ -1511,6 +1591,12 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
             onResume={returnToSitting}
             hasPriorSession
             blocked={blocked}
+            prefs={sittingPrefs}
+            onPrefsChange={(p) => {
+              setSittingPrefs(p)
+              saveSittingMins(p.mins)
+            }}
+            quickShareStat={checkpointBooks.share}
             resumeLabel="Return to the sitting"
           />
           {horizonBuckets && <ReviewHorizon buckets={horizonBuckets} holdingCount={holdingCount} />}
