@@ -7,6 +7,7 @@ import {
   engramDirectMutate,
   readTopicGraph,
 } from '../engramCli/readOnly'
+import { buildDueArgs, buildDueCappedArgs } from '../engramCli/dueArgs'
 import { getTopicsCached } from '../engramCli/topicsCache'
 import { readReceiptsHistory } from '../engramCli/receiptsHistory'
 import { readGraderAuditHistory } from '../engramCli/graderAuditHistory'
@@ -87,12 +88,12 @@ async function artifactListWithMtime(): Promise<ArtifactEntry[]> {
 export function registerReadHandlers(): void {
   ipcMain.handle('engram:topics', () => getTopicsCached())
   ipcMain.handle('engram:stats', () => engramRead('stats'))
-  ipcMain.handle('engram:due', (_e, limit?: number, topic?: string) => {
-    const args: string[] = []
-    if (limit != null) args.push('--limit', String(limit))
-    if (topic) args.push('--topic', topic)
-    return engramRead('due', args)
-  })
+  ipcMain.handle('engram:due', (_e, limit?: number, topic?: string) => engramRead('due', buildDueArgs({ limit, topic })))
+  // The savings-ordered triage read (`due --cap`) — same allowlisted command,
+  // different payload shape (DueCappedResult). Used by the review ready
+  // plate's time picker; older engines without --cap reject the flag, which
+  // surfaces as a rejected promise the caller must catch and fall back from.
+  ipcMain.handle('engram:dueCapped', (_e, cap: number, topic?: string) => engramRead('due', buildDueCappedArgs(cap, topic)))
   ipcMain.handle('engram:decay', (_e, topic?: string, horizon?: number) => {
     const args: string[] = []
     if (topic) args.push('--topic', topic)

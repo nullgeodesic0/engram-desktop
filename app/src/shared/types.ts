@@ -118,6 +118,23 @@ export interface DueItem {
   transfer_ready: boolean
   transfer_probe: string | null
   capstone: boolean
+  /** Present only on `due --cap` (savings-ordered) payloads — the engine's
+   * own "so overdue it is effectively a relearn" flag. Sparse by nature:
+   * absent on `--limit` reads and on older engines; never assume (same
+   * discipline as every other sparse projection in this file). */
+  effectively_relearn?: boolean
+}
+
+/** The `due --cap` payload shape (engine v1.3+): the same items, ranked by
+ * expected 30-day retention saved per expected minute, plus the ranking's
+ * own label. `--limit` reads return a bare DueItem[] instead — see
+ * main/engramCli/dueArgs.ts for which caller wants which. */
+export interface DueCappedResult {
+  order: string
+  order_basis: string
+  cap: number
+  n: number
+  items: DueItem[]
 }
 
 export interface EngramStats {
