@@ -396,7 +396,7 @@ if (!eq(registered, PINNED_BRIDGE_TOOLS)) {
 if (!eq(allowlisted, PINNED_BRIDGE_TOOLS)) {
   fail(
     'D3.bridgeTools',
-    `--allowedTools names a different bridge tool set than the pinned nine.\n      found: ${allowlisted.join(', ')}`,
+    `--allowedTools names a different bridge tool set than the pinned set.\n      found: ${allowlisted.join(', ')}`,
     'The allowlist and the registered set must match exactly: a registered-but-unallowed tool fails mid-session, and an allowed-but-unregistered one is a promise the app cannot keep.',
   )
 }
@@ -548,6 +548,123 @@ for (const msg of injectedMessages) {
       'The assessor is deliberately blind to the tutoring dialogue: it receives only items, rubrics and productions, and returns receipt JSON. That blindness is what makes the grade independent evidence rather than the tutor’s opinion with extra steps. The app has no legitimate reason to address it — the tutor spawns it from the stash. Naming it while also writing into a session is how that boundary would erode.',
     )
   }
+}
+
+// ===========================================================================
+// SECTION 5 — plugin overlays: the one door into the plugin's own files
+// ===========================================================================
+// applyPluginOverlays.ts writes into the INSTALLED plugin's skill files —
+// a file set this script otherwise never reads, which made overlays the
+// least-audited path in the repo exactly when the charter widened to admit
+// one pedagogy overlay (the learner-elected checkpoint protocol). This
+// section closes that gap three ways: every overlay content file is pinned
+// by hash; the pedagogy overlay's load-bearing sentences are asserted
+// verbatim (so a rewording that softens the bargain can't ride an
+// innocent-looking re-pin); and the INSTALLED plugin is checked for the
+// applied markers, so a `claude plugin update` silently reverting pedagogy
+// is a gate failure on this machine, not a shrug. (The installed check
+// SKIPS — with a console note — when no plugin install is present, so CI
+// and fresh clones still gate cleanly.)
+
+const OVERLAY_DIR = join(ROOT, '..', 'plugin-overlays', 'engram')
+// 2026-08-03 pin: the two explorable-contract presentation overlays
+// (unchanged), plus the checkpoint-protocol pedagogy overlay and its
+// dialogue-grammar companion — the first admissions under the widened
+// charter (see plugin-overlays/README.md).
+const PINNED_OVERLAY_HASHES: Record<string, string> = {
+  'explorable-contract.qa-checklist-item.md': '3038484342c5c9fe',
+  'explorable-contract.visual-design-section.md': '8ed0ac6a70ce56b7',
+  'review-skill.quick-checkpoint-protocol.md': 'b2e33ab9864d304c',
+  'dialogue-grammar.checkpoint-exception.md': '9c4b24e6b10a16d4',
+}
+const overlayFiles = readdirSync(OVERLAY_DIR).filter((f) => f.endsWith('.md'))
+for (const f of overlayFiles) {
+  const found = sha(readFileSync(join(OVERLAY_DIR, f), 'utf-8'))
+  if (!(f in PINNED_OVERLAY_HASHES)) {
+    fail(
+      'D5.overlayHash',
+      `plugin-overlays/engram/${f} is not pinned.\n      found: ${found}`,
+      'Overlays write into the plugin’s own skill files — text with HIGHER authority than any kickoff the app types. An unpinned overlay is an unaudited voice in the loop’s own instructions. Pin it here, in the same commit, with a rationale.',
+    )
+  } else if (found !== PINNED_OVERLAY_HASHES[f]) {
+    fail(
+      'D5.overlayHash',
+      `plugin-overlays/engram/${f} changed.\n      pinned: ${PINNED_OVERLAY_HASHES[f]}\n      found:  ${found}`,
+      'An overlay edit changes what the plugin’s own skills say. Re-read the whole content file, confirm the charter terms still hold (opt-in per sitting; source stamp; constitutional-exception header for pedagogy overlays), then re-pin in the same commit — that edit is the audit trail.',
+    )
+  }
+}
+for (const f of Object.keys(PINNED_OVERLAY_HASHES)) {
+  if (!overlayFiles.includes(f)) {
+    fail(
+      'D5.overlayHash',
+      `pinned overlay plugin-overlays/engram/${f} is missing from the repo.`,
+      'A pinned overlay that vanishes without unpinning means the installed plugin may still carry its content with no source of truth left in the repo. Remove the pin in the same commit that removes the file — never let them drift apart.',
+    )
+  }
+}
+
+// (b) The pedagogy overlay's load-bearing sentences, asserted verbatim.
+const checkpointOverlayPath = join(OVERLAY_DIR, 'review-skill.quick-checkpoint-protocol.md')
+const checkpointOverlay = overlayFiles.includes('review-skill.quick-checkpoint-protocol.md')
+  ? readFileSync(checkpointOverlayPath, 'utf-8')
+  : ''
+const LOAD_BEARING = [
+  'Run this protocol ONLY when the learner\'s opening message for this sitting explicitly asks for the checkpoint style',
+  'NEVER `easy`',
+  '`effectively_relearn: true`',
+  '--source quick-mc',
+  'EXCLUDED from the §3 assessor-audit stash',
+  'omit `--confidence` from the rate call',
+]
+for (const needle of LOAD_BEARING) {
+  if (checkpointOverlay && !checkpointOverlay.includes(needle)) {
+    fail(
+      'D5.overlayContent',
+      `the checkpoint overlay lost a load-bearing sentence: ${needle}`,
+      'These sentences ARE the bargain that licenses a pedagogy overlay: per-sitting opt-in, the rating cap, the recall carve-outs, the permanent source stamp, the audit exclusion, and the calibration quarantine. Any one of them missing turns a priced exception into silent doctrine erosion. If the wording must change, change the assert in the same commit and say why.',
+    )
+  }
+}
+
+// (c) The widened charter is stated where overlay authors will read it.
+const overlayReadme = readFileSync(join(ROOT, '..', 'plugin-overlays', 'README.md'), 'utf-8')
+if (!overlayReadme.includes('A pedagogy overlay is')) {
+  fail(
+    'D5.overlayCharter',
+    'plugin-overlays/README.md no longer states the widened-charter terms for pedagogy overlays.',
+    'The charter paragraph is what separates “a deliberate, documented exception” from “overlays quietly became a pedagogy editing surface.” If the charter is being re-narrowed, remove the pedagogy overlays and their pins in the same commit.',
+  )
+}
+
+// (d) The INSTALLED plugin still carries the applied markers.
+try {
+  // Same manifest shape applyPluginOverlays.ts's readInstalledPluginPath
+  // resolves: { plugins: { 'engram@engram': [{ installPath }] } }.
+  const manifest = JSON.parse(
+    readFileSync(join(process.env.HOME ?? '', '.claude', 'plugins', 'installed_plugins.json'), 'utf-8'),
+  ) as { plugins?: Record<string, { installPath?: string }[]> }
+  const installPath = manifest.plugins?.['engram@engram']?.[0]?.installPath
+  if (installPath) {
+    const EXPECTED_MARKERS: Array<[string, string]> = [
+      ['skills/review/SKILL.md', 'engram-desktop-overlay:quick-checkpoint-protocol:start'],
+      ['skills/_shared/dialogue-grammar.md', 'engram-desktop-overlay:checkpoint-exception:start'],
+    ]
+    for (const [rel, mark] of EXPECTED_MARKERS) {
+      const installed = readFileSync(join(installPath, rel), 'utf-8')
+      if (!installed.includes(mark)) {
+        fail(
+          'D5.overlayApplied',
+          `installed plugin file ${rel} is missing overlay marker ${mark} — run \`npm run apply:plugin-overlay\`.`,
+          'The checkpoint feature’s app side (picker, kickoff, receipts substrate) assumes the protocol exists in the installed skill. A plugin update installs a fresh version directory with no overlays; if the app then elects checkpoints, the tutor has a request it has never heard of. Reapply before shipping — a pedagogy feature that exists only when someone remembers a script is worse than none.',
+        )
+      }
+    }
+  } else {
+    console.log('  (D5.overlayApplied skipped — engram plugin not found in installed_plugins.json)')
+  }
+} catch {
+  console.log('  (D5.overlayApplied skipped — no plugin install manifest on this machine)')
 }
 
 // ===========================================================================
