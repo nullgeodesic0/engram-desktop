@@ -487,6 +487,11 @@ export interface AssignmentRow {
   kind: 'encode' | 'review' | 'transfer' | 'unstarted'
   outcome: 'recalled' | 'partial' | 'lapsed' | 'unstarted'
   letter: string | null
+  /** The receipt's provenance stamp, carried for DISPLAY only (the QUICK
+   * chip on checkpoint rows). Deliberately absent from every computation in
+   * this file — checkpoint receipts are full-weight by locked decision; the
+   * schedule penalty is the corrective, not the grade. */
+  source: string | null
 }
 
 const OUTCOME_LETTER: Record<'recalled' | 'partial' | 'lapsed', string> = {
@@ -536,6 +541,7 @@ export function buildTopicAssignments(
       kind: (r.kind === 'encode' || r.kind === 'transfer' ? r.kind : 'review') as 'encode' | 'transfer' | 'review',
       outcome: outcome ?? 'lapsed',
       letter: outcome ? OUTCOME_LETTER[outcome] : null,
+      source: r.source ?? null,
     }
   })
 
@@ -551,6 +557,7 @@ export function buildTopicAssignments(
         kind: 'unstarted',
         outcome: 'unstarted',
         letter: null,
+        source: null,
       })
     }
   }

@@ -42,10 +42,15 @@ export function RetentionTrend({
   weeks,
   days,
   onSelectWeek,
+  quickShare,
 }: {
   weeks: WeekRetention[]
   days: DayActivity[]
   onSelectWeek?: (weekStart: string, items: ReceiptItem[]) => void
+  /** Checkpoint share of recent reviews (shared/checkpointEvidence.ts's
+   * quickShare) — rendered as a quiet disclosure beside the avg-recall
+   * figure. Optional: callers without receipt access omit it. */
+  quickShare?: { quick: number; total: number } | null
 }) {
   const [hover, setHover] = useState<HoverState | null>(null)
 
@@ -80,6 +85,14 @@ export function RetentionTrend({
         </span>{' '}
         avg recall · <span className="text-[var(--color-text-primary)] font-medium">{totalReviewed}</span> reviewed over{' '}
         {active.length} active week{active.length === 1 ? '' : 's'}
+        {quickShare && quickShare.quick > 0 && (
+          // Modality disclosure beside the retention figure — checkpoint
+          // receipts pool into this rate with full weight (locked decision),
+          // so the figure says how much of its evidence is recognition-grade.
+          <span className="text-[var(--color-text-faint)]">
+            {' '}· {quickShare.quick} of last {quickShare.total} checkpoint style
+          </span>
+        )}
       </div>
 
       <div className="relative flex items-end gap-1 h-20">

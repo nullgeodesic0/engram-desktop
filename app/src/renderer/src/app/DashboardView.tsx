@@ -4,6 +4,7 @@ import { CoachSessionPanel } from '../components/CoachSessionPanel'
 import { SkeletonBar, SkeletonGrid } from '../components/Skeleton'
 import { StreakCalendar } from '../components/StreakCalendar'
 import { RetentionTrend } from '../components/RetentionTrend'
+import { quickShare } from '../shared/checkpointEvidence'
 import { RetentionCurve } from '../components/charts/RetentionCurve'
 import { ActivityStrip } from '../components/charts/ActivityStrip'
 import { CalibrationScatter } from '../components/charts/CalibrationScatter'
@@ -409,6 +410,7 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts, coachHomeSi
                 weeks={weeksInRange}
                 days={daysInRange}
                 onSelectWeek={(weekStart, items) => setDetail({ label: `Week of ${weekStart}`, items })}
+                quickShare={history ? quickShare(history.receipts) : null}
               />
             </div>
           </div>

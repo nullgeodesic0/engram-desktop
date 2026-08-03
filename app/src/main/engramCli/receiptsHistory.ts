@@ -16,6 +16,7 @@ interface ReceiptLine {
   interval_days?: number
   due_next?: string
   relearn?: boolean
+  source?: string
 }
 
 export interface ReceiptItem {
@@ -80,6 +81,13 @@ export interface RawReceipt {
    * (retention buckets, momentum) must filter these out; day/week activity
    * keeps them (a retry is real work done that day). */
   relearn: boolean
+  /** engram.py's free-text provenance field (`rate --source`, default
+   * "self"; the assessor writes "assessor"; checkpoint sittings write
+   * "quick-mc" — the modality stamp the whole checkpoint bargain rests on).
+   * Sparse by the node_kind precedent: old or hand-edited rows may lack it,
+   * and the engine itself never reads it back — NEVER assume, and never
+   * treat null as "self". */
+  source: string | null
 }
 
 export interface ReceiptsHistory {
@@ -172,6 +180,7 @@ export async function readReceiptsHistory(): Promise<ReceiptsHistory> {
           intervalDays: typeof entry.interval_days === 'number' ? entry.interval_days : null,
           dueNext: typeof entry.due_next === 'string' ? entry.due_next : null,
           relearn: entry.relearn === true,
+          source: typeof entry.source === 'string' ? entry.source : null,
         })
 
         const entryDate = new Date(`${entry.ts}T00:00:00Z`)
