@@ -36,6 +36,13 @@ export function topicBucket(t: TopicListEntry): TopicBucket {
  * already carries the due signal and its call sites don't ask for the due
  * chip — see TopicCard's `variant` prop). */
 export function topicChips(t: TopicListEntry): { label: string; className: string }[] {
+  // A fully archived topic (Topic Settings' close-out; every node retired)
+  // says so and nothing else — its state counts still exist but reviews
+  // never come due, and a row of live-looking chips would misread as an
+  // active topic.
+  if (t.retired != null && t.nodes > 0 && t.retired >= t.nodes) {
+    return [{ label: 'archived', className: 'text-[var(--color-text-faint)]' }]
+  }
   const chips: { label: string; className: string }[] = []
   if (t.states.review > 0) chips.push({ label: `${t.states.review} review`, className: 'text-[var(--color-ink-warm)]' })
   if (t.states.learning > 0) chips.push({ label: `${t.states.learning} encoding`, className: 'text-[var(--color-ink-cool)]' })

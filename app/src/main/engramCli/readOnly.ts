@@ -136,7 +136,15 @@ export async function engramArtifactList(): Promise<unknown[]> {
 // engram-artifact-smith assumes "misconception resolved") but that no
 // skill ever instructs — without this door, resolution is unreachable for
 // stale/duplicate rows. Action-gated below: `add` stays session-only.
-const DIRECT_MUTATION_COMMANDS = new Set(['visuals', 'focus', 'commit', 'misconception'])
+// `retire` (topic-level only) is the engine's own autonomy verb — its
+// docstring is explicit that retirement advances no mastery claim ("records
+// a decision, on the node it governs, reversibly") and that THE LEARNER
+// names what to retire. A settings-panel button the learner clicks is
+// exactly that voice; the gate below still refuses per-node args from this
+// door (the engine forbids anything that could shade into auto-retiring
+// the nodes someone keeps failing — the app offers the whole topic or
+// nothing).
+const DIRECT_MUTATION_COMMANDS = new Set(['visuals', 'focus', 'commit', 'misconception', 'retire'])
 
 export async function engramDirectMutate(command: string, args: string[]): Promise<unknown> {
   if (!DIRECT_MUTATION_COMMANDS.has(command) && command !== 'model') {
@@ -147,6 +155,19 @@ export async function engramDirectMutate(command: string, args: string[]): Promi
   // the engine itself minted.
   if (command === 'misconception' && args[0] !== 'resolve') {
     throw new Error('engramDirectMutate: only the resolve action of "misconception" is permitted')
+  }
+  // 'retire' is shape-gated to the whole topic: exactly `--topic <slug>`
+  // plus an optional `--restore` — never `--node` (see the allowlist
+  // comment above for why per-node retirement stays out of this door).
+  if (command === 'retire') {
+    const shapeOk =
+      args[0] === '--topic' &&
+      typeof args[1] === 'string' &&
+      /^[a-z0-9-]+$/.test(args[1]) &&
+      (args.length === 2 || (args.length === 3 && args[2] === '--restore'))
+    if (!shapeOk) {
+      throw new Error('engramDirectMutate: retire is permitted only as `--topic <slug> [--restore]`')
+    }
   }
   const { scriptPath } = resolveEngramPlugin()
   const { stdout } = await execFileAsync('python3', [scriptPath, command, ...args])

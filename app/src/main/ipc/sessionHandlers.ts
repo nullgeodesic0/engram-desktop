@@ -42,6 +42,13 @@ async function buildExtraInstructions(topicId: string): Promise<string | undefin
   return parts.length > 0 ? parts.join('\n\n') : undefined
 }
 
+/** True while any driven session's child process is alive — the map deletes
+ * entries on their 'closed' event, so size is liveness. Exported for
+ * topicTrash.ts's live-session refusal gate (D2.trashGate). */
+export function hasLiveSessions(): boolean {
+  return sessions.size > 0
+}
+
 export function registerSessionHandlers(win: BrowserWindow): void {
   rebindWindow(win)
 

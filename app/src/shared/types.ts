@@ -29,6 +29,10 @@ export interface TopicListEntry extends TopicSummary {
    * `getTopicsCached`'s overlay only in that case, so the settings modal
    * can still show what the engine calls this topic. */
   engineTitle?: string
+  /** Count of retired nodes (engine `topics` output, v1.3+) — equal to
+   * `nodes` when the whole topic is archived. Sparse: older engines omit
+   * it; never assume. */
+  retired?: number
 }
 
 export type NodeState = 'new' | 'learning' | 'review'
