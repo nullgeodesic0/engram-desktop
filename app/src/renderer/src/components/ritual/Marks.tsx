@@ -274,6 +274,7 @@ export function MarkView({
   onAnswerAsk,
   suppressBeatExcerpt,
   milestonePairedWithGradeCard,
+  deferAsk,
 }: {
   mark: RitualMark
   /** Only meaningful for `kind: 'ask'` marks — omit at any call site that
@@ -282,6 +283,12 @@ export function MarkView({
    * views pass this; AskCard itself only renders it as interactive when the
    * mark is BOTH `live` and still unanswered (see AskCard's own gating). */
   onAnswerAsk?: (requestId: string, chosen: string[] | null) => void
+  /** Only meaningful for `kind: 'ask'` marks — true when an EARLIER live
+   * unanswered ask exists in the same transcript, so this one must hold its
+   * options off-screen until that one resolves (one live picker at a time;
+   * see the serialization comment in the ask branch). Callers that only
+   * render history omit it. */
+  deferAsk?: boolean
   /** Only meaningful for `kind: 'beat'` marks — true when the message this
    * mark renders immediately BEFORE (`messages[mark.atIndex]`) is assistant
    * prose. Since the interleave fix (isMarkBoundaryToolUse's bubble split),
@@ -340,16 +347,36 @@ export function MarkView({
   else if (mark.kind === 'tool-failure') content = <ToolFailureCard failureKind={mark.failureKind} />
   else if (mark.kind === 'ticket') content = <TicketCard ticket={mark.ticket} />
   else if (mark.kind === 'ask') {
-    content = (
-      <AskCard
-        header={mark.header}
-        question={mark.question}
-        options={mark.options}
-        answer={mark.answer}
-        live={mark.live}
-        onAnswer={onAnswerAsk ? (chosen) => onAnswerAsk(mark.requestId, chosen) : undefined}
-      />
-    )
+    if (deferAsk && mark.live && mark.answer === null) {
+      // Serialization guard (checkpoint red-team finding): the bridge holds
+      // asks concurrently and a brisk model can batch the confidence pick
+      // with checkpoint 1 — whose options would leak structure onto the
+      // screen while sureness is still being priced. Only the FIRST live
+      // unanswered ask renders its options; later ones hold as a quiet
+      // placeholder until it resolves. The tool_use has fired either way —
+      // the leak is only ever through the screen, so the screen is where
+      // it's closed.
+      content = (
+        <div className="flex justify-start my-1.5 pl-1">
+          <div className="max-w-[92%] rounded-md border border-[var(--color-hairline)] px-4 py-2">
+            <span className="label-data text-[10px] tracking-[0.14em] text-[var(--color-text-faint)]">
+              {mark.header.toUpperCase()} — waits for the open question above
+            </span>
+          </div>
+        </div>
+      )
+    } else {
+      content = (
+        <AskCard
+          header={mark.header}
+          question={mark.question}
+          options={mark.options}
+          answer={mark.answer}
+          live={mark.live}
+          onAnswer={onAnswerAsk ? (chosen) => onAnswerAsk(mark.requestId, chosen) : undefined}
+        />
+      )
+    }
   } else content = <StashStamp />
 
   return <CheckpointAnchor id={mark.id}>{content}</CheckpointAnchor>

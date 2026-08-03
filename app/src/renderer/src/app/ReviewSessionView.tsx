@@ -57,6 +57,8 @@ import { deriveRitualMarks } from '../../../shared/ritualFromTranscript'
 import { parseAuditNotification, parseCurriculumReturn } from '../../../shared/taskNotification'
 import {
   isReviewRateCommand,
+  hasQuickSource,
+  isQuickEasyViolation,
   isAssessorAuditSpawnEvent,
   classifyEngramBashFailure,
   parseMisconceptionAdds,
@@ -535,6 +537,9 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
             : ''
           pendingRateTopic.current =
             /--topic\s+["']?([a-z0-9-]+)/.exec(cmd)?.[1] ?? queueRef.current[0]?.topic ?? null
+          // Checkpoint bookkeeping — same command-string sniff, same reason.
+          pendingRateQuickRef.current = hasQuickSource(cmd)
+          if (isQuickEasyViolation(cmd)) setSessionCapViolations((v) => v + 1)
         }
         if (isAssessorAuditSpawnEvent(event.name, event.input)) {
           // The spawn itself is a real SessionEvent, so it can push a
@@ -567,10 +572,13 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
         }
         if (event.toolUseId === pendingRateToolUseId.current) {
           pendingRateToolUseId.current = null
+          const wasQuick = pendingRateQuickRef.current
+          pendingRateQuickRef.current = false
           if (!event.isError) {
             emitPulse('recalled')
             const result = parseGradeResult(event.content)
             if (result) {
+              if (wasQuick) setSessionQuickCount((c) => c + 1)
               // A receipt just landed — the node's state (and the palette's
               // stale-cached view of it) has changed.
               invalidateSearchIndex()
@@ -741,6 +749,9 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
       setMarks([])
       setGradeBatches([])
       setRevealBatchId(null)
+      setSessionQuickCount(0)
+      setSessionCapViolations(0)
+      pendingRateQuickRef.current = false
     }
 
     // Hydrate prior chat history before spawning, same as Learn — resume continues the
@@ -887,6 +898,14 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
     setMarks((prev) => prev.map((m) => (m.kind === 'ask' && m.requestId === requestId ? { ...m, answer: chosen ?? [] } : m)))
     tutorActivity.dispatchAskAnswered()
   }
+
+  // One live picker at a time (checkpoint serialization guard — see
+  // MarkView's deferAsk doc): the first live unanswered ask in mark order
+  // is the one that renders its options; every later one holds. Plain
+  // render-time scan, deliberately not a hook (KeepMounted discipline).
+  const firstOpenAskId = marks.find((m) => m.kind === 'ask' && m.live && m.answer === null)?.id ?? null
+  const deferAskFor = (k: RitualMark): boolean =>
+    k.kind === 'ask' && k.live && k.answer === null && k.id !== firstOpenAskId
 
   // Pulls a prior answer back into the composer to revise and send as a new follow-up —
   // the original bubble stays in history untouched, so anything already rated server-side
@@ -1259,6 +1278,15 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
     startSession(false, retestRequest)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [retestRequest, phase])
+  // Checkpoint sitting bookkeeping (appended hooks, KeepMounted append rule):
+  // how many of this sitting's grades came through the checkpoint path
+  // (counted at the rate call's own tool_use/tool_result pair — the rate
+  // stdout never echoes `source`, so the command string is the live truth),
+  // and how many rate calls violated the cap (quick-mc + easy — the one
+  // drift that is machine-detectable the moment it happens).
+  const [sessionQuickCount, setSessionQuickCount] = useState(0)
+  const [sessionCapViolations, setSessionCapViolations] = useState(0)
+  const pendingRateQuickRef = useRef(false)
   // Minimap Precision fix (second report on the same bug) — jumps straight to
   // the checkpoint's OWN `CheckpointAnchor`, never the host message; see
   // shared/jumpToCheckpoint.ts's doctrine comment for the full root-cause
@@ -1660,7 +1688,7 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
                 {marks
                   .filter((k) => k.atIndex === 0 && k.kind !== 'lapse' && k.kind !== 'milestone')
                   .map((k) => (
-                    <MarkView key={k.id} mark={k} onAnswerAsk={answerAsk} suppressBeatExcerpt={messages[k.atIndex]?.role === 'assistant'} />
+                    <MarkView key={k.id} mark={k} onAnswerAsk={answerAsk} deferAsk={deferAskFor(k)} suppressBeatExcerpt={messages[k.atIndex]?.role === 'assistant'} />
                   ))}
                 {messages.map((m, i) => {
                   // Verdict Anatomy (Wave 2) — undefined for the common case
@@ -1705,7 +1733,7 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
                           k.kind !== 'milestone',
                       )
                       .map((k) => (
-                        <MarkView key={k.id} mark={k} onAnswerAsk={answerAsk} suppressBeatExcerpt={messages[k.atIndex]?.role === 'assistant'} />
+                        <MarkView key={k.id} mark={k} onAnswerAsk={answerAsk} deferAsk={deferAskFor(k)} suppressBeatExcerpt={messages[k.atIndex]?.role === 'assistant'} />
                       ))}
                   </Fragment>
                   )
@@ -1776,9 +1804,24 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
                   results={sessionGrades}
                   streakDays={streakDays}
                   commitment={null}
-                  heading="Queue clear"
+                  heading={
+                    sessionQuickCount > 0
+                      ? `Queue trimmed — ${sessionQuickCount} checkpoint, ${sessionGrades.length - sessionQuickCount} recall`
+                      : 'Queue clear'
+                  }
                   label="items"
                 />
+                {sessionCapViolations > 0 && (
+                  // The live cap lint — a checkpoint-stamped rate minted
+                  // `easy`, which the protocol forbids. Information, not
+                  // intervention: the receipt is already on disk (the app
+                  // never rewrites receipts); this line makes the drift
+                  // visible instead of silent.
+                  <div className="fig-caption text-[var(--color-ink-danger)]">
+                    {sessionCapViolations} checkpoint receipt{sessionCapViolations === 1 ? '' : 's'} exceeded the rating
+                    cap (easy) — recognition evidence should top out at good.
+                  </div>
+                )}
                 {/* Review's queue is mixed-topic, so ScheduleDelta (like IntervalLadder)
                     matches by node id alone rather than a single topic prop; it renders
                     its own panel only when at least one row (or the all-lapsed line)
