@@ -41,7 +41,7 @@ import { StatFraction } from '../components/ui/StatFraction'
 import { ErrorPanel } from '../components/ErrorPanel'
 import { recordConfidence, latestPickFor } from '../shared/calibrationStore'
 import { extractTicketFromMessages } from '../shared/ticketParser'
-import { composeReviewKickoff, capForMins } from '../shared/reviewKickoff'
+import { composeReviewKickoff, composeResumeNudge, detectResumeState, capForMins } from '../shared/reviewKickoff'
 import { loadSittingPrefs, saveSittingMins, type SittingPrefs } from '../shared/sittingPrefs'
 import { recallDueNodes, quickShare, type RecallDueEntry } from '../shared/checkpointEvidence'
 import { TicketCard } from '../components/ritual/TicketCard'
@@ -762,10 +762,15 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
 
     // Hydrate prior chat history before spawning, same as Learn — resume continues the
     // same session id, so its transcript file is the right one to replay from.
+    // `resumeState` survives to the post-spawn nudge below: a sitting that
+    // ended mid-ask needs the tutor told to re-pose (the bridge request died
+    // with the old child; without the nudge both sides wait forever).
+    let resumeState: { trailingOpenAsk: boolean; checkpoint: boolean } | null = null
     if (resume) {
       const priorId = await window.engram.lastSessionFor('review')
       if (priorId) {
         const lines = await window.engram.getTranscript(priorId)
+        resumeState = detectResumeState(lines)
         setMessages(parseTranscriptToMessages(lines))
         // Initialize the gauge from history immediately, same as Learn — otherwise it
         // stays blank until the next turn completes despite a resumed session already
@@ -874,8 +879,21 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
     setSessionId(sid)
     setSittingStartedAt(Date.now())
     // Resuming sends no kickoff turn (SessionManager skips it on --resume — the model
-    // already has full context), so there's nothing to wait on.
+    // already has full context), so there's nothing to wait on…
     setBusy(!resume)
+    // …EXCEPT when the old process died mid-ask: the bridge request is gone,
+    // the replayed card is orphaned, and the tutor is waiting on an answer
+    // that can never arrive — both sides deadlocked (observed live in the
+    // first resumed checkpoint sitting). The app breaks the tie with a
+    // pinned, kickoff-class nudge telling the tutor to pose the question
+    // again — restating the checkpoint election when the sitting had one,
+    // since the resume path never re-sends the electing kickoff.
+    if (resume && resumeState?.trailingOpenAsk) {
+      const nudge = composeResumeNudge(resumeState.checkpoint)
+      setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'user', text: nudge, timestamp: Date.now() }])
+      setBusy(true)
+      await window.engram.sendMessage(sid, nudge)
+    }
   }
 
   async function attachFiles() {

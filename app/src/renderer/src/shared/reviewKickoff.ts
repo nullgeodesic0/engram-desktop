@@ -96,3 +96,47 @@ These are filed open for this queue's nodes; "misconception resolve --id <ID>" r
 
   return '/engram:review'
 }
+
+/** Scans a raw resumed transcript for the two facts the resume flow needs:
+ * whether the tail leaves an ask unanswered (its tool_use has no
+ * tool_result — the bridge request died with the old child), and whether
+ * the sitting had elected checkpoint mode (a Checkpoint-headed ask or a
+ * quick-mc rate anywhere in it). Pure; tolerant of any line shape. */
+export function detectResumeState(lines: unknown[]): { trailingOpenAsk: boolean; checkpoint: boolean } {
+  let checkpoint = false
+  const openAsks = new Set<string>()
+  for (const raw of lines) {
+    const content = (raw as { message?: { content?: unknown } })?.message?.content
+    if (!Array.isArray(content)) continue
+    for (const b of content as Array<Record<string, unknown>>) {
+      if (b?.type === 'tool_use' && typeof b.name === 'string') {
+        if (b.name.endsWith('ask_user_question') && typeof b.id === 'string') {
+          openAsks.add(b.id)
+          const header = (b.input as Record<string, unknown> | undefined)?.header
+          if (typeof header === 'string' && header.startsWith('Checkpoint')) checkpoint = true
+        }
+        if (b.name === 'Bash') {
+          const cmd = String((b.input as Record<string, unknown> | undefined)?.command ?? '')
+          if (cmd.includes('--source quick-mc')) checkpoint = true
+        }
+      }
+      if (b?.type === 'tool_result' && typeof b.tool_use_id === 'string') openAsks.delete(b.tool_use_id)
+    }
+  }
+  return { trailingOpenAsk: openAsks.size > 0, checkpoint }
+}
+
+/** The resume re-pose nudge — sent automatically after a resume WHEN the
+ * replayed transcript's tail is an unanswered ask (the bridge request died
+ * with the old child process, so the tutor is waiting on an answer that can
+ * never arrive and the learner is staring at an orphaned card; observed
+ * live in the first resumed checkpoint sitting). Kickoff-class plumbing:
+ * app-synthesized, navigational voice, and it names the skill marker in
+ * PROSE (not as a command line) precisely so the D3 collector pins it —
+ * re-invoking the skill would restart §1's queue load mid-sitting. */
+export function composeResumeNudge(checkpoint: boolean): string {
+  if (checkpoint) {
+    return `Resuming this /engram:review sitting — the app was closed while a question was open, so your last ask never reached me. Please pose it again and continue; I still want the checkpoint style described in the review skill for eligible items.`
+  }
+  return `Resuming this /engram:review sitting — the app was closed while a question was open, so your last ask never reached me. Please pose it again and continue from where we stopped.`
+}

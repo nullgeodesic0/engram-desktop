@@ -502,7 +502,14 @@ for (const f of FILES) {
 // Both are navigational learner voice — what I want covered and in which
 // style the skill offers — saying nothing about how to teach or judge.
 // Verified captured un-truncated by the printed current-set.
-const PINNED_MESSAGE_HASH = '27970213c2843227'
+// Same-day re-pin: two resume re-pose nudges (composeResumeNudge) — sent
+// only when a resumed transcript's tail is an unanswered ask, whose bridge
+// request died with the old child process (both sides otherwise deadlock).
+// They name the skill marker in PROSE, deliberately not as a command line
+// (re-invoking the skill would restart the queue load mid-sitting), and
+// the checkpoint variant restates the sitting's own election, which the
+// resume path never re-sends. Navigational voice throughout.
+const PINNED_MESSAGE_HASH = '95fe769b20bef2ab'
 if (sha(injectedMessages.sort().join('\n')) !== PINNED_MESSAGE_HASH) {
   fail(
     'D3.kickoff',
