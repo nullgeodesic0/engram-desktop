@@ -63,6 +63,21 @@ export function isReviewRateCommand(command: string): boolean {
   return command.includes(' rate ') && command.includes('--rating') && !command.includes('--kind pretest')
 }
 
+/** A checkpoint-mode rate call — the overlay's mandated `--source quick-mc`
+ * stamp, sniffed off the command string the same way pendingRateTopic reads
+ * `--topic` (the rate stdout payload does not echo `source`; only the
+ * on-disk receipt carries it, so live counting must read the command). */
+export function hasQuickSource(command: string): boolean {
+  return /--source\s+["']?quick-mc\b/.test(command)
+}
+
+/** The one cap violation that is machine-detectable at the moment it
+ * happens: a checkpoint-stamped rate call minting `easy`. The overlay caps
+ * a flawless chain at `good`; this firing means the tutor drifted. */
+export function isQuickEasyViolation(command: string): boolean {
+  return hasQuickSource(command) && /--rating\s+["']?easy\b/.test(command)
+}
+
 /** Real signal, grep-verified against the grad-quantum-mechanics sitting of
  * 2026-07-23 (session f1cb000e-9397-49ff-8bbf-3be95b054631, ~/.claude/projects) —
  * the exact call that logged the ket-ln misconception on

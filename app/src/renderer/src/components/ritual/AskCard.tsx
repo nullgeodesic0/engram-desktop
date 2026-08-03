@@ -1,6 +1,7 @@
 import { memo, useRef, useState } from 'react'
 import { useFocusTrap } from '../useFocusTrap'
 import { MathRenderer } from '../MathRenderer'
+import { isCheckpointHeader, parseCheckpointHeader } from '../../shared/checkpointHeader'
 
 export interface AskCardOption {
   label: string
@@ -74,8 +75,15 @@ export const AskCard = memo(function AskCard({
   const [showOther, setShowOther] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const isConfidence = header === 'Confidence'
+  // A checkpoint-chain step (the overlay's mandated `Checkpoint k/n` header)
+  // — cool ink, because a pick is recognition-grade evidence, the same
+  // register as not-yet nodes. Confidence's exact match above always wins;
+  // the two sniffs are disjoint by construction (checkpointHeader.ts).
+  const checkpoint = !isConfidence ? parseCheckpointHeader(header) : null
+  const isCheckpoint = !isConfidence && isCheckpointHeader(header)
   const isOpen = live && answer === null
   const isOrphaned = !live && answer === null
+  const headerInk = isCheckpoint ? 'text-[var(--color-ink-cool)]' : 'text-[var(--color-ink-warm)]'
 
   useFocusTrap(containerRef, isOpen)
 
@@ -89,12 +97,26 @@ export const AskCard = memo(function AskCard({
         className={`tilt-card-soft max-w-[92%] flex flex-col gap-3 rounded-md border px-4 py-3 ${
           isOpen ? 'ask-card-pending' : 'ask-card-settle'
         }`}
-        style={{ borderColor: isOpen ? 'var(--color-ink-warm-dim)' : 'var(--color-hairline)' }}
+        style={{ borderColor: isOpen ? (isCheckpoint ? 'var(--color-ink-cool-dim)' : 'var(--color-ink-warm-dim)') : 'var(--color-hairline)' }}
       >
         <div className="flex flex-col gap-1">
-          <span className="label-data text-[10px] tracking-[0.14em] text-[var(--color-ink-warm)]">
-            {header.toUpperCase()}
-          </span>
+          <div className="flex items-center justify-between gap-2">
+            <span className={`label-data text-[10px] tracking-[0.14em] ${headerInk}`}>
+              {header.toUpperCase()}
+            </span>
+            {checkpoint && (
+              <span
+                className="label-data text-[9px] tracking-[0.14em] px-1.5 py-px border shrink-0"
+                style={{
+                  color: 'var(--color-ink-cool)',
+                  borderColor: 'var(--color-ink-cool-dim)',
+                  background: 'color-mix(in srgb, var(--color-ink-cool) 16%, transparent)',
+                }}
+              >
+                {checkpoint.step}/{checkpoint.total}
+              </span>
+            )}
+          </div>
           <MathRenderer text={question} inlineOnly className="text-sm text-[var(--color-text-primary)]" />
         </div>
 
