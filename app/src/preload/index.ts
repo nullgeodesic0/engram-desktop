@@ -3,6 +3,7 @@ import type {
   TopicListEntry,
   EngramStats,
   DueItem,
+  DueCappedResult,
   ArtifactEntry,
   Misconception,
   ActiveExperiment,
@@ -41,6 +42,9 @@ const engramApi = {
   topics: (): Promise<TopicListEntry[]> => ipcRenderer.invoke('engram:topics'),
   stats: (): Promise<EngramStats> => ipcRenderer.invoke('engram:stats'),
   due: (limit?: number, topic?: string): Promise<DueItem[]> => ipcRenderer.invoke('engram:due', limit, topic),
+  // Savings-ordered triage read (`due --cap`) — rejects on engines without
+  // --cap; callers catch and fall back to due(limit).
+  dueCapped: (cap: number, topic?: string): Promise<DueCappedResult> => ipcRenderer.invoke('engram:dueCapped', cap, topic),
   decay: (topic?: string, horizon?: number): Promise<DecayResult> => ipcRenderer.invoke('engram:decay', topic, horizon),
   doctor: (): Promise<DoctorResult> => ipcRenderer.invoke('engram:doctor'),
   model: (): Promise<LearnerModel> => ipcRenderer.invoke('engram:model'),
