@@ -40,14 +40,23 @@ insertion's `beforeLine` by hand.
 
 ## What NOT to put here
 
-Only genuinely additive content — a house-style appendix, a QA checklist
-item, anything that adds without changing what a skill teaches or how it
-grades. This is the exact same "additive UI/presentation is fine, pedagogy
-is not" line `app/scripts/checkDoctrine.ts` draws for the app's own
-system-prompt injections — it just isn't mechanically enforced here the way
-that one is, since this script operates on the plugin's own files, which
-checkDoctrine.ts never reads. Review any new overlay by hand against that
-standard before adding it.
+The default rule: only genuinely additive content — a house-style appendix,
+a QA checklist item, anything that adds without changing what a skill
+teaches or how it grades. This is the exact same "additive UI/presentation
+is fine, pedagogy is not" line `app/scripts/checkDoctrine.ts` draws for the
+app's own system-prompt injections. Review any new overlay by hand against
+that standard before adding it.
+
+**The narrow exception (charter widened 2026-08-03).** A pedagogy overlay is
+permitted only when it is opt-in per sitting, hash-pinned by checkDoctrine's
+D5 section, and opens with a constitutional-exception header naming exactly
+which upstream rule it contradicts and why the learner's election licenses
+it. D5 pins every file in this directory by content hash, asserts the
+load-bearing sentences of each pedagogy overlay, and verifies the INSTALLED
+plugin still carries the applied markers — so a `claude plugin update` that
+silently reverts a pedagogy overlay is a gate failure, not a shrug. The
+quick-checkpoint protocol (below) is the first and, so far, only such
+exception.
 
 ## Current overlays
 
@@ -56,3 +65,12 @@ standard before adding it.
   house visual-design-system, appended to `skills/_shared/explorable-contract.md`
   (read by the `engram-artifact-smith` subagent) so generated explorables
   match the app's own sharp-glass chrome instead of inventing their own look.
+- **`engram/review-skill.quick-checkpoint-protocol.md`** — the learner-elected
+  checkpoint review style (chains of ≤4-option choices, capped ratings,
+  `--source quick-mc` receipts), inserted into `skills/review/SKILL.md` ahead
+  of the assessor-audit section. A pedagogy overlay under the widened
+  charter above — read its constitutional-exception header before touching it.
+- **`engram/dialogue-grammar.checkpoint-exception.md`** — the one-sentence
+  companion inserted after `skills/_shared/dialogue-grammar.md`'s hard-rules
+  section, so the model is never left adjudicating a live contradiction
+  between the menus rule and the checkpoint protocol.

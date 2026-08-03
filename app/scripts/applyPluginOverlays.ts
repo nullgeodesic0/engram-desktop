@@ -15,14 +15,18 @@
  * `npm run check:plugin-overlay` on its own to detect drift without writing
  * anything (e.g. right after a plugin update, before deciding to reapply).
  *
- * This never touches the plugin's own pedagogy — every overlay here is a
- * genuinely additive section (a house-style appendix, a QA checklist item),
- * never a change to what a skill teaches or how it grades. That's the same
- * constraint checkDoctrine.ts enforces for the app's own system-prompt
- * injections; this script doesn't re-run that check (it operates on a
- * different, ungoverned-by-doctrine file set — the plugin's own skill/agent
- * markdown, which checkDoctrine.ts never reads), so any new overlay added
- * here should be reviewed with the same care by hand.
+ * The default charter: overlays don't touch the plugin's own pedagogy —
+ * a genuinely additive section (a house-style appendix, a QA checklist
+ * item), never a change to what a skill teaches or how it grades. One
+ * narrow, deliberate exception exists (charter widened 2026-08-03, see
+ * plugin-overlays/README.md): a PEDAGOGY overlay is permitted when it is
+ * opt-in per sitting, opens with a constitutional-exception header naming
+ * the upstream rule it contradicts, and is hash-pinned by checkDoctrine's
+ * D5 section — which pins every overlay content file, asserts the
+ * load-bearing sentences, and verifies the INSTALLED plugin still carries
+ * the applied markers. The quick-checkpoint review protocol is the first
+ * such exception. Everything else here remains presentation-only, and any
+ * new overlay is reviewed by hand against the README's charter.
  */
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
@@ -70,6 +74,35 @@ const OVERLAYS: Overlay[] = [
         id: 'qa-checklist-house-style',
         contentFile: 'engram/explorable-contract.qa-checklist-item.md',
         beforeLine: '- [ ] Clause 1: what is gated, and by what commitment?',
+      },
+    ],
+  },
+  {
+    plugin: 'engram',
+    targetRelativePath: 'skills/review/SKILL.md',
+    insertions: [
+      {
+        // The learner-elected checkpoint protocol — a PEDAGOGY overlay under
+        // the widened charter (see file header + plugin-overlays/README.md).
+        // Slots between the per-item protocol (§2) and the audit (§3), which
+        // is exactly where its audit-exclusion rule needs to be read.
+        id: 'quick-checkpoint-protocol',
+        contentFile: 'engram/review-skill.quick-checkpoint-protocol.md',
+        beforeLine: '## 3 · Assessor audit (keep self-grading honest)',
+      },
+    ],
+  },
+  {
+    plugin: 'engram',
+    targetRelativePath: 'skills/_shared/dialogue-grammar.md',
+    insertions: [
+      {
+        // One sentence, placed right after the hard-rules section ends, so
+        // the menus rule and the checkpoint protocol are never left as a
+        // live contradiction for the model to adjudicate mid-sitting.
+        id: 'checkpoint-exception',
+        contentFile: 'engram/dialogue-grammar.checkpoint-exception.md',
+        beforeLine: '## ⚠ The session does not end on a failed retrieval (v1.5 — retrieval to criterion)',
       },
     ],
   },
