@@ -4,12 +4,9 @@ import { humanizeNodeId } from '../../../../shared/humanizeId'
 import { InkNode } from '../ui/InkNode'
 import { Button } from '../ui/Button'
 import { PlateFigure } from '../ui/PlateFigure'
-
-/** Matches SKILL.md's own standard-mode cap (~12, most-overdue first) — the
- * "estimated length" line states this heuristic in prose rather than a
- * countdown timer, since the engine (not this view) decides how many items
- * an actual sitting covers. */
-const SITTING_CAP = 12
+import { SegmentedControl } from '../ui/SegmentedControl'
+import { capForMins, coveredCount, type SittingMins, type SittingStyle } from '../../shared/reviewKickoff'
+import type { SittingPrefs } from '../../shared/sittingPrefs'
 
 /** Same local-date discipline as ReviewSessionView's own `daysOverdueLocal`
  * (getFullYear/Month/Date, never toISOString) — duplicated here rather than
@@ -49,6 +46,9 @@ export const ReadyRoomPlate = memo(function ReadyRoomPlate({
   onResume,
   hasPriorSession,
   blocked,
+  prefs,
+  onPrefsChange,
+  quickShareStat,
   resumeLabel = 'Resume last session',
 }: {
   /** The already-fetched, capped queue (`window.engram.due(12)`) — what this
@@ -67,6 +67,14 @@ export const ReadyRoomPlate = memo(function ReadyRoomPlate({
   onResume: () => void
   hasPriorSession: boolean
   blocked: boolean
+  /** The intake picker's state, lifted to ReviewSessionView (two plate call
+   * sites share it, and startSession composes the kickoff from it). */
+  prefs: SittingPrefs
+  onPrefsChange: (p: SittingPrefs) => void
+  /** The quiet meter (shared/checkpointEvidence.ts's quickShare over the
+   * trailing 30 reviews) — null hides the line entirely (no data, or the
+   * receipts read failed; a meter never fabricates a zero). */
+  quickShareStat: { quick: number; total: number } | null
   /** Override for the ghost CTA's text — the detached-sitting page reads
    * "Return to the sitting" (its onResume just re-enters the live view, no
    * respawn) while the default stays the plain resume wording. */
@@ -137,7 +145,47 @@ export const ReadyRoomPlate = memo(function ReadyRoomPlate({
         </div>
       )}
 
-      <div className="fig-caption">a normal sitting covers about {SITTING_CAP}, most-overdue first</div>
+      {/* The intake — time and style are session LOGISTICS (the dialogue
+          grammar's own carve-out: menus for navigation, never for
+          knowledge), so pickers are the honest form here. Style resets to
+          Standard every mount (sittingPrefs.ts) — checkpoint is elected per
+          sitting, never a sticky default. Still no `.probe` dereference
+          anywhere in this file — the picker reads counts, never content. */}
+      <div className="flex flex-col gap-2 border-t border-[var(--color-hairline)] pt-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <SegmentedControl<`${SittingMins}`>
+            options={[
+              { value: '5', label: '5 min' },
+              { value: '10', label: '10 min' },
+              { value: '25', label: '25 min' },
+            ]}
+            value={`${prefs.mins}`}
+            onChange={(v) => onPrefsChange({ ...prefs, mins: Number(v) as SittingMins })}
+          />
+          <SegmentedControl<SittingStyle>
+            options={[
+              { value: 'standard', label: 'Free recall', description: 'type your answers cold — the standard sitting' },
+              {
+                value: 'checkpoint',
+                label: 'Checkpoints',
+                description: 'chains of small choices — weaker evidence, rated no higher than good, back sooner',
+              },
+            ]}
+            value={prefs.style}
+            onChange={(v) => onPrefsChange({ ...prefs, style: v })}
+          />
+        </div>
+        <div className="fig-caption">
+          covers about {coveredCount(capForMins(prefs.mins), totalDue)} of {totalDue}
+          {prefs.style === 'checkpoint' ? ' · checkpoint style where eligible' : ''}, in triage order
+        </div>
+        {quickShareStat && quickShareStat.quick > 0 && (
+          <div className="fig-caption">
+            {quickShareStat.quick} of your last {quickShareStat.total} reviews were checkpoint style — checkpoint
+            evidence is weaker than recall
+          </div>
+        )}
+      </div>
 
       <div className="flex gap-3 items-center">
         <Button variant="primary" size="lg" onClick={onStart} disabled={blocked}>
