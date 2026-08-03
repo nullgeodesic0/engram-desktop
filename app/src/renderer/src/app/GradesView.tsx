@@ -183,6 +183,20 @@ function AssignmentRowView({
   const linked = sitting !== null && onGoSitting !== undefined
   const right = (
     <div className="flex items-center gap-3 shrink-0">
+      {row.source === 'quick-mc' && (
+        // The modality stamp, displayed but never weighed — chip formula in
+        // cool ink (recognition evidence reads cool, like not-yet nodes).
+        <span
+          className="label-data text-[9px] tracking-[0.14em] px-1.5 py-px border"
+          style={{
+            color: 'var(--color-ink-cool)',
+            borderColor: 'var(--color-ink-cool-dim)',
+            background: 'color-mix(in srgb, var(--color-ink-cool) 16%, transparent)',
+          }}
+        >
+          QUICK
+        </span>
+      )}
       {row.date && <span className="label-data text-[10px] text-[var(--color-text-faint)]">{formatAssignmentDate(row.date)}</span>}
       <span className={`label-data text-sm font-medium w-4 text-right ${tone}`}>
         {row.outcome === 'unstarted' ? '—' : row.letter}

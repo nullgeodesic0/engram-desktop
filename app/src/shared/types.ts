@@ -391,6 +391,11 @@ export interface RawReceipt {
   /** engram.py's relearn-retry marker — excluded by the engine from every
    * retention-family population; ports must filter it the same way. */
   relearn: boolean
+  /** Free-text provenance (`rate --source`): "self" on ordinary tutored
+   * reviews, "assessor" on assessor receipts, "quick-mc" on checkpoint
+   * sittings. Sparse — old rows lack it; never assume, never read null as
+   * "self". */
+  source: string | null
 }
 
 export interface ReceiptsHistory {
