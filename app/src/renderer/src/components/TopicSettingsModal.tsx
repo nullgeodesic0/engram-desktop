@@ -25,6 +25,16 @@ export function TopicSettingsModal({ topicId, topicTitle, onClose }: TopicSettin
   const [engineTitle, setEngineTitle] = useState<string | null>(null)
   const [loaded, setLoaded] = useState(false)
   const [saving, setSaving] = useState(false)
+  // ── Close-out state ──────────────────────────────────────────────────────
+  // Archive rides the engine's own reversible `retire --topic` (see the
+  // D1-pinned mutation door); Delete is topicTrash.ts's custody transfer
+  // (D2.trashGate). `counts` drives which face the section shows.
+  const [counts, setCounts] = useState<{ nodes: number; retired: number } | null>(null)
+  const [archiveArmed, setArchiveArmed] = useState(false)
+  const [deleteSlug, setDeleteSlug] = useState('')
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [closingOut, setClosingOut] = useState(false)
+  const [closeOutError, setCloseOutError] = useState<string | null>(null)
 
   useEffect(() => {
     window.engram.getTopicSettings(topicId).then((s) => {
@@ -36,9 +46,44 @@ export function TopicSettingsModal({ topicId, topicTitle, onClose }: TopicSettin
     })
     window.engram.topics().then((list) => {
       const entry = list.find((t) => t.topic === topicId)
-      if (entry) setEngineTitle(entry.engineTitle ?? entry.title)
+      if (entry) {
+        setEngineTitle(entry.engineTitle ?? entry.title)
+        setCounts({ nodes: entry.nodes, retired: entry.retired ?? 0 })
+      }
     })
   }, [topicId])
+
+  const fullyArchived = counts !== null && counts.nodes > 0 && counts.retired >= counts.nodes
+
+  async function archiveOrRestore(restore: boolean) {
+    setClosingOut(true)
+    setCloseOutError(null)
+    try {
+      await window.engram.retireTopic(topicId, restore)
+      const list = await window.engram.topics()
+      const entry = list.find((t) => t.topic === topicId)
+      if (entry) setCounts({ nodes: entry.nodes, retired: entry.retired ?? 0 })
+      setArchiveArmed(false)
+    } catch (err) {
+      setCloseOutError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setClosingOut(false)
+    }
+  }
+
+  async function deleteTopic() {
+    setClosingOut(true)
+    setCloseOutError(null)
+    try {
+      await window.engram.deleteTopic(topicId)
+      // The topic no longer exists — the modal has nothing left to edit.
+      // onClose triggers the caller's topics refetch, which drops the shelf row.
+      onClose()
+    } catch (err) {
+      setCloseOutError(err instanceof Error ? err.message : String(err))
+      setClosingOut(false)
+    }
+  }
 
   async function addFiles() {
     const picked = await window.engram.pickFiles()
@@ -196,6 +241,106 @@ export function TopicSettingsModal({ topicId, topicTitle, onClose }: TopicSettin
               </button>
             )}
           </div>
+        </div>
+
+        {/* ── Close out ─────────────────────────────────────────────────── */}
+        <div className="flex flex-col gap-3 border-t border-[var(--color-hairline)] pt-4">
+          <label className="text-sm text-[var(--color-text-primary)]">Close out this topic</label>
+
+          {/* Archive — the engine's own reversible retire verb. */}
+          <div className="flex flex-col gap-1.5">
+            <p className="text-xs text-[var(--color-text-faint)]">
+              {fullyArchived
+                ? 'Archived — every node is retired: no reviews come due and the frontier is closed, but the map, grades, and history all stay browsable. Restoring puts the nodes back on their schedules.'
+                : 'Archive stops the loop without erasing anything: every node retires, reviews stop coming due, and the topic quiets — map, grades, and history stay browsable. Reversible any time.'}
+            </p>
+            {fullyArchived ? (
+              <button
+                onClick={() => archiveOrRestore(true)}
+                disabled={closingOut}
+                className="focus-ring self-start text-xs text-[var(--color-ink-warm)] px-3 py-1.5 border border-[var(--color-ink-warm-dim)] disabled:opacity-40"
+              >
+                {closingOut ? 'Working…' : 'Restore topic'}
+              </button>
+            ) : archiveArmed ? (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => archiveOrRestore(false)}
+                  disabled={closingOut}
+                  className="focus-ring text-xs text-[var(--color-ink-warm)] px-3 py-1.5 border border-[var(--color-ink-warm-dim)] bg-[color-mix(in_srgb,var(--color-ink-warm)_16%,transparent)] disabled:opacity-40"
+                >
+                  {closingOut ? 'Working…' : `Confirm — retire all ${counts?.nodes ?? ''} nodes`}
+                </button>
+                <button
+                  onClick={() => setArchiveArmed(false)}
+                  disabled={closingOut}
+                  className="focus-ring text-xs text-[var(--color-text-faint)] px-2 py-1.5"
+                >
+                  Keep it live
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setArchiveArmed(true)}
+                disabled={closingOut || counts === null}
+                className="focus-ring self-start text-xs text-[var(--color-text-dim)] hover:text-[var(--color-ink-warm)] px-3 py-1.5 border border-[var(--color-hairline)] disabled:opacity-40"
+              >
+                Archive topic…
+              </button>
+            )}
+          </div>
+
+          {/* Delete — custody transfer out of the learning home. */}
+          <div className="flex flex-col gap-1.5">
+            <p className="text-xs text-[var(--color-text-faint)]">
+              Delete removes the topic from the app entirely — graph and receipts move out of the engine’s files into
+              this app’s local storage (recoverable by hand, never destroyed). Refused while a session is live.
+            </p>
+            {!deleteOpen ? (
+              <button
+                onClick={() => setDeleteOpen(true)}
+                disabled={closingOut}
+                className="focus-ring self-start text-xs text-[var(--color-text-dim)] hover:text-[var(--color-ink-danger)] px-3 py-1.5 border border-[var(--color-hairline)] disabled:opacity-40"
+              >
+                Delete topic…
+              </button>
+            ) : (
+              <div className="flex flex-col gap-2">
+                <p className="text-xs text-[var(--color-ink-danger)]">
+                  Type the topic’s id — <span className="label-data">{topicId}</span> — to confirm.
+                </p>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={deleteSlug}
+                    onChange={(e) => setDeleteSlug(e.target.value)}
+                    placeholder={topicId}
+                    aria-label="Type the topic id to confirm deletion"
+                    className="focus-ring panel px-3 py-1.5 text-xs bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] text-[var(--color-text-primary)]"
+                  />
+                  <button
+                    onClick={deleteTopic}
+                    disabled={closingOut || deleteSlug !== topicId}
+                    className="focus-ring text-xs text-[var(--color-ink-danger)] px-3 py-1.5 border border-[var(--color-ink-danger-dim)] disabled:opacity-40"
+                  >
+                    {closingOut ? 'Working…' : 'Delete'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setDeleteOpen(false)
+                      setDeleteSlug('')
+                    }}
+                    disabled={closingOut}
+                    className="focus-ring text-xs text-[var(--color-text-faint)] px-2 py-1.5"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {closeOutError && <p className="text-xs text-[var(--color-ink-danger)]">{closeOutError}</p>}
         </div>
       </div>
     </Modal>

@@ -57,6 +57,8 @@ const engramApi = {
   receiptsHistory: (): Promise<ReceiptsHistory> => ipcRenderer.invoke('engram:receiptsHistory'),
   misconceptions: (): Promise<Misconception[]> => ipcRenderer.invoke('engram:misconceptions'),
   misconceptionResolve: (id: string): Promise<unknown> => ipcRenderer.invoke('engram:misconceptionResolve', id),
+  retireTopic: (topic: string, restore: boolean): Promise<unknown> => ipcRenderer.invoke('engram:retireTopic', topic, restore),
+  deleteTopic: (topic: string): Promise<{ trashedTo: string; moved: string[] }> => ipcRenderer.invoke('engram:deleteTopic', topic),
   misconceptionManualResolves: (): Promise<Record<string, { date: string }>> =>
     ipcRenderer.invoke('engram:misconceptionManualResolves'),
   activeExperiment: (): Promise<ActiveExperiment | null> => ipcRenderer.invoke('engram:activeExperiment'),

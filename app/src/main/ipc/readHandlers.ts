@@ -15,6 +15,8 @@ import { getMapAnnotations } from '../session/mapAnnotations'
 import { getDisplayTitles } from '../session/topicSettings'
 import { nodeProvenance } from '../session/sessionScan'
 import { recordManualResolve, getManualResolves } from '../session/misconceptionResolves'
+import { moveTopicToTrash } from '../session/topicTrash'
+import { hasLiveSessions } from './sessionHandlers'
 import type {
   TopicGraph,
   NodeProvenance,
@@ -177,4 +179,13 @@ export function registerReadHandlers(): void {
     return result
   })
   ipcMain.handle('engram:misconceptionManualResolves', () => getManualResolves())
+  // Whole-topic close-out — the engine's own reversible autonomy verb,
+  // topic-shape-gated in engramDirectMutate (never per-node from the app).
+  ipcMain.handle('engram:retireTopic', (_e, topic: string, restore: boolean) => {
+    if (!/^[a-z0-9-]+$/.test(topic)) throw new Error(`retireTopic: malformed topic "${topic}"`)
+    return engramDirectMutate('retire', restore ? ['--topic', topic, '--restore'] : ['--topic', topic])
+  })
+  // Whole-topic deletion — an app-side custody transfer into userData
+  // topic-trash (see topicTrash.ts's doctrine header + D2.trashGate).
+  ipcMain.handle('engram:deleteTopic', (_e, topic: string) => moveTopicToTrash(topic, hasLiveSessions))
 }

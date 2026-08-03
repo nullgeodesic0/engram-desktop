@@ -129,7 +129,14 @@ const PINNED_READ_ONLY_SUBCOMMANDS = ['misconception', 'list', 'experiment', 'st
 // assume (03-architecture.md's "schedule early re-test", artifact-smith's
 // "misconception resolved") but that no skill ever instructs. `add` stays
 // session-only — a fabricated observation.
-const PINNED_DIRECT_MUTATION = ['visuals', 'focus', 'commit', 'misconception']
+// 2026-08-03 re-pin: + 'retire' — the engine's own autonomy verb, whose
+// docstring states retirement advances no mastery claim and that THE
+// LEARNER names what to retire. Topic Settings' "Archive topic" button is
+// that voice; the in-function shape gate (see D1.mutationGate below)
+// restricts this door to `--topic <slug> [--restore]` — whole topic or
+// nothing, never per-node, so the app can never shade into auto-retiring
+// the nodes a learner keeps failing.
+const PINNED_DIRECT_MUTATION = ['visuals', 'focus', 'commit', 'misconception', 'retire']
 // Subcommands invoked by readOnly.ts's own bespoke helpers, which bypass
 // engramRead's allowlist because their output isn't JSON (or needs post-
 // processing). All read-only; every one of them is named here on purpose.
@@ -174,6 +181,17 @@ if (!readOnlyTs.includes("args[0] !== 'resolve'")) {
     'D1.mutationGate',
     `readOnly.ts lost the misconception action gate (args[0] !== 'resolve').`,
     'The direct-mutation allowlist admits the misconception COMMAND for the sake of its resolve action alone: resolve is a pure status flip on a row the engine itself minted, while add would fabricate a ledger entry no sitting observed. The in-function gate is what narrows the command to the action.',
+  )
+}
+// The retire mutation door must stay shape-gated to the whole topic — the
+// command-level allowlist alone would let per-node retire args through,
+// and the engine's own docstring names exactly why that door stays shut
+// ("a flattering denominator dressed as help").
+if (!readOnlyTs.includes("args[2] === '--restore'")) {
+  fail(
+    'D1.mutationGate',
+    `readOnly.ts lost the retire shape gate (--topic <slug> [--restore] only).`,
+    'The retire door exists for the whole-topic Archive action the learner clicks in Topic Settings. Without the shape gate this door would also accept per-node retire args, and a surface that can quietly retire individual nodes is one refactor away from suggesting which — the auto-retirement the engine explicitly forbids.',
   )
 }
 
@@ -249,6 +267,8 @@ const PINNED_WRITERS: Record<string, string> = {
   'main/session/exportSitting.ts': 'user-chosen export path (dialog) + os tmpdir',
   'main/session/exportMap.ts': 'user-chosen export path (dialog) + os tmpdir — the map-as-PDF sibling of exportSitting.ts, reusing its renderPrintHtmlToPdf pipeline',
   'main/session/backup.ts': 'THE blessed exception: backup archives, and restore into the learning home (see D2.backupGate)',
+  'main/session/topicTrash.ts':
+    'the second gated learning-home writer: topic deletion as a custody transfer — rename() out of the learning home into app userData topic-trash, never an erase (see D2.trashGate)',
   'main/session/crashLog.ts': 'app userData — local crash-log.jsonl, capped at 200 entries',
   'main/session/misconceptionResolves.ts':
     'app userData — manual misconception-resolve provenance (display-only; the engine status is the grade)',
@@ -328,6 +348,24 @@ for (const [needle, what] of [
       'D2.backupGate',
       `${BLESSED_LEARNING_HOME_WRITER} lost ${what} (${needle}).`,
       'Restore is the one flow allowed to overwrite the learning home, and it is allowed only because it is impossible to trigger accidentally, impossible to run while a session is live, and impossible to run without first snapshotting what it replaces. Remove a gate and it stops being an exception and becomes exactly the second writer the doctrine forbids.',
+    )
+  }
+}
+
+// The second (and last) gated learning-home writer: topic deletion is a
+// custody TRANSFER into app userData, never an erase, and keeps its gates.
+const trashTs = TEXT.get('main/session/topicTrash.ts')!
+for (const [needle, what] of [
+  ['hasLiveSessions()', 'the no-live-session gate'],
+  ["/^[a-z0-9-]+$/.test(topic)", 'the slug-shape gate'],
+  ["app.getPath('userData')", 'the userData-only destination'],
+  ['rename(', 'the move-not-delete mechanism'],
+] as const) {
+  if (!trashTs.includes(needle)) {
+    fail(
+      'D2.trashGate',
+      `main/session/topicTrash.ts lost ${what} (${needle}).`,
+      'Topic deletion is licensed as a MOVE into app storage with a live-session refusal and a validated slug — the learner ends custody, nothing is destroyed, and the engine can never race it. Swap the rename for an rm, drop the liveness gate, or derive the destination from anything but userData, and this stops being a custody transfer and becomes the destructive second writer the doctrine forbids.',
     )
   }
 }
