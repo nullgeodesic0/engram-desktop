@@ -50,10 +50,17 @@ export class SessionManager extends EventEmitter {
    * `this.sessionId` is always the id actually in effect either way, since it's what
    * bridgeServer routes bridge:ask/bridge:beat requests by.
    */
+  /** Resolves on the CLI's first stdout line — see sendUserMessageWhenReady. */
+  private ready: Promise<void>
+  private readyResolve!: () => void
+
   constructor(resumeSessionId?: string) {
     super()
     this.sessionId = resumeSessionId ?? randomUUID()
     this.isResume = Boolean(resumeSessionId)
+    this.ready = new Promise((resolve) => {
+      this.readyResolve = resolve
+    })
   }
 
   /** `extraInstructions` — per-topic system-prompt addition, see topicSettings.ts. Ignored on resume (the prior turn's system prompt already governs the conversation; --resume doesn't accept a new one). */
@@ -134,6 +141,19 @@ export class SessionManager extends EventEmitter {
     this.armStallTimer()
   }
 
+  /** `sendUserMessage`, but held until the CLI has produced its first stdout
+   * line (the init event) — a `--resume` spends its startup loading and
+   * repairing the prior transcript, and a message written into that window
+   * was observed to vanish (2026-08-03: the resume re-pose nudge never
+   * reached the model; the child then idled forever). Fresh sessions resolve
+   * readiness almost immediately, so routing ALL renderer-originated sends
+   * through this costs nothing. 10s cap so a wedged child can't hold a send
+   * hostage — after that we write anyway and let the stall watchdog judge. */
+  async sendUserMessageWhenReady(text: string): Promise<void> {
+    await Promise.race([this.ready, new Promise((r) => setTimeout(r, 10_000))])
+    this.sendUserMessage(text)
+  }
+
   abort(): void {
     this.clearStallTimer()
     this.child?.kill()
@@ -158,6 +178,7 @@ export class SessionManager extends EventEmitter {
   }
 
   private handleStdout(chunk: string): void {
+    this.readyResolve() // idempotent — first output means the CLI is consuming stdin
     this.armStallTimer()
     for (const raw of this.splitter.push(chunk)) {
       this.handleRawEvent(raw as Record<string, unknown>)

@@ -125,6 +125,26 @@ These are filed open for this queue's nodes; "misconception resolve --id <ID>" r
     expect(detectResumeState([])).toEqual({ trailingOpenAsk: false, checkpoint: false })
   })
 
+  it('detectResumeState: the CLI resume-repair synthetic rejection keeps the ask open', () => {
+    const askUse = (id: string, header: string) => ({
+      message: { content: [{ type: 'tool_use', id, name: 'mcp__engram-ui-bridge__ask_user_question', input: { header } }] },
+    })
+    // The verbatim repair pair a --resume writes over a dead ask: a
+    // rejection-shaped tool_result plus the interrupt marker text.
+    const repaired = {
+      message: {
+        content: [
+          { type: 'tool_result', tool_use_id: 'a', content: "The user doesn't want to proceed with this tool use. The tool use was rejected." },
+        ],
+      },
+    }
+    const marker = { message: { content: [{ type: 'text', text: '[Request interrupted by user for tool use]' }] } }
+    expect(detectResumeState([askUse('a', 'Checkpoint 1/3'), repaired, marker])).toEqual({ trailingOpenAsk: true, checkpoint: true })
+    // A genuinely answered ask stays closed even in a sitting that once had one.
+    const realResult = { message: { content: [{ type: 'tool_result', tool_use_id: 'a', content: '{"chosen":["Certain"]}' }] } }
+    expect(detectResumeState([askUse('a', 'Confidence'), realResult])).toEqual({ trailingOpenAsk: false, checkpoint: false })
+  })
+
   it('coverage math: cap clamps to totalDue', () => {
     expect(TIME_CAPS[5]).toBe(5)
     expect(capForMins(25)).toBe(24)
