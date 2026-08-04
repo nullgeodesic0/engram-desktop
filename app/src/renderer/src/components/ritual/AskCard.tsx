@@ -225,7 +225,20 @@ export const AskCard = memo(function AskCard({
         )}
 
         {!isOpen && answer !== null && (
-          <div className="fig-caption">{answer.length > 0 ? `chosen: ${answer.join(', ')}` : 'skipped'}</div>
+          // The chosen label is option text and option text is routinely
+          // LaTeX-laden (checkpoint distractors especially: "$\{Q,P\}$
+          // brackets preserved") — it goes through the same renderer the
+          // options themselves used, or the settled record shows raw TeX
+          // right under a typeset question.
+          <div className="fig-caption">
+            {answer.length > 0 ? (
+              <span className="inline-flex items-baseline gap-1 flex-wrap">
+                chosen: <MathRenderer text={answer.join(', ')} inlineOnly className="inline" />
+              </span>
+            ) : (
+              'skipped'
+            )}
+          </div>
         )}
         {isOrphaned && <div className="fig-caption text-[var(--color-text-faint)]">no answer was given</div>}
       </div>
