@@ -45,6 +45,18 @@ async function buildExtraInstructions(topicId: string): Promise<string | undefin
 /** True while any driven session's child process is alive — the map deletes
  * entries on their 'closed' event, so size is liveness. Exported for
  * topicTrash.ts's live-session refusal gate (D2.trashGate). */
+/** Kills every live tutor child. Called from `before-quit` — without this,
+ * an app quit (or kill) leaves the `claude -p` children orphaned: still
+ * running, still writing the session transcript, holding the session id a
+ * later `--resume` needs, and talking to a bridge whose loopback server died
+ * with this process (observed live, 2026-08-03: an orphan kept a sitting's
+ * transcript growing for minutes after the app was gone, and the learner's
+ * resume met a session still "in use"). */
+export function abortAllSessions(): void {
+  for (const manager of sessions.values()) manager.abort()
+  sessions.clear()
+}
+
 export function hasLiveSessions(): boolean {
   return sessions.size > 0
 }
