@@ -70,7 +70,7 @@ import {
 } from '../../../shared/signals/tutorSignals'
 import { QueueRail } from '../components/ritual/QueueRail'
 import { NodeCrossingDivider } from '../components/ritual/Marks'
-import { deriveReviewCrossings, latestProbeHeader, nextProbeHeaderAt, allProbeHeaders } from '../../../shared/reviewCrossing'
+import { deriveReviewCrossings, latestProbeHeader, resolveAnchorBeforeNextProbe, allProbeHeaders } from '../../../shared/reviewCrossing'
 import { endsWithBareProbeHeader, mergeAssistantText } from '../../../shared/probeHeader'
 import {
   deriveVerdictRegions,
@@ -1048,8 +1048,16 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
    * commentary that names it — live or replayed alike. See
    * shared/reviewCrossing.ts's doctrine comment for why anchoring to
    * "however many messages exist right now" was the bug. */
+  // Every probe-anchored element resolves through the shared absorption-
+  // aware resolver (see resolveAnchorBeforeNextProbe's doctrine comment in
+  // shared/reviewCrossing.ts — checkpoint sittings can merge the next
+  // item's header into a bubble BELOW the element's atIndex stamp).
   const resolvedGradeBatches = useMemo(
-    () => gradeBatches.map((b) => ({ batch: b, resolvedIndex: nextProbeHeaderAt(messages, b.atIndex) })),
+    () =>
+      gradeBatches.map((b) => ({
+        batch: b,
+        resolvedIndex: resolveAnchorBeforeNextProbe(messages, b.atIndex, new Set(b.results.map((r) => r.node))),
+      })),
     [gradeBatches, messages],
   )
   /** Carried-over fix (chat-ordering-fix-report.md's own follow-up list) —
@@ -1067,7 +1075,17 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
     () =>
       marks
         .filter((m) => m.kind === 'lapse' || m.kind === 'milestone')
-        .map((m) => ({ mark: m, resolvedIndex: nextProbeHeaderAt(messages, m.atIndex) })),
+        .map((m) => ({
+          mark: m,
+          resolvedIndex: resolveAnchorBeforeNextProbe(
+            messages,
+            m.atIndex,
+            // Both kinds carry the node they announce — same own-node guard
+            // as the grade batches, so a mark can never resolve backward
+            // onto its own item's header.
+            new Set('node' in m && typeof m.node === 'string' ? [m.node] : []),
+          ),
+        })),
     [marks, messages],
   )
   /** Verdict Anatomy (Wave 2) — the message-index range each grade batch's
