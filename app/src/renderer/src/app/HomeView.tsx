@@ -30,6 +30,7 @@ import { MainMenuView, type MainMenuNavItem } from './MainMenuView'
 import { computeTopicGrade, computeCrossTopicGPA, letterColorClass, type TopicGradeResult } from '../shared/topicGrade'
 import { allPicks } from '../shared/calibrationStore'
 import { ActivityStrip } from '../components/charts/ActivityStrip'
+import { MathRenderer } from '../components/MathRenderer'
 
 const LAST_SEEN_STREAK_KEY = 'engram-desktop:last-seen-streak-days'
 const LAST_SEEN_DUE_KEY = 'engram-desktop:last-seen-due-now'
@@ -583,7 +584,10 @@ export function HomeView({
             <span className="label-data text-[10px] uppercase tracking-wide text-[var(--color-text-faint)]">
               {flashback.daysAgo} days ago · {flashback.topicTitle}
             </span>
-            <p className="font-(family-name:--font-serif) text-sm text-[var(--color-text-dim)] leading-relaxed">{flashback.claim}</p>
+            <MathRenderer
+              text={flashback.claim}
+              className="font-(family-name:--font-serif) text-sm text-[var(--color-text-dim)] leading-relaxed"
+            />
             <div className="label-data text-[10px] text-[var(--color-text-faint)]">{humanizeNodeId(flashback.node)}</div>
           </div>
         )}
