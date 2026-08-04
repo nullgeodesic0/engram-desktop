@@ -4,7 +4,7 @@ import { cp, mkdir } from 'node:fs/promises'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { registerReadHandlers } from './ipc/readHandlers'
-import { registerSessionHandlers, rebindWindow } from './ipc/sessionHandlers'
+import { registerSessionHandlers, rebindWindow, abortAllSessions } from './ipc/sessionHandlers'
 import { resolveEngramPlugin } from './session/pluginResolver'
 import { resolveClaudeBinary } from './session/claudeResolver'
 import { engramLearningHome } from './engramCli/readOnly'
@@ -473,5 +473,37 @@ app.on('window-all-closed', () => {})
 
 app.on('before-quit', () => {
   stopReviewNotifier()
+  // Children FIRST, then the bridge: a tutor killed after its bridge is
+  // gone can race one last doomed HTTP call into the void.
+  abortAllSessions()
   bridgeServer.stop()
 })
+
+/** Launch-time orphan sweep — the belt-and-suspenders half of
+ * `abortAllSessions` above. `before-quit` never runs on a crash, a
+ * force-kill, or an installer's pkill, and a surviving tutor child keeps
+ * writing its session transcript and blocks that session's `--resume`
+ * (observed live, 2026-08-03). Our children are unambiguously identifiable:
+ * their argv carries the app's own per-instance MCP config path
+ * (`engram-desktop-mcp-<random>/mcp-config.json`, see permissionConfig.ts)
+ * — nothing else on the machine launches claude with that marker. At launch
+ * this process owns zero children, so every match is an orphan. SIGTERM,
+ * not SIGKILL: the CLI flushes its transcript on TERM. Best-effort — a
+ * failed sweep must never block startup. */
+function sweepOrphanTutors(): void {
+  execFile('ps', ['ax', '-o', 'pid=,command='], (err, stdout) => {
+    if (err) return
+    for (const line of stdout.split('\n')) {
+      if (!line.includes('engram-desktop-mcp-')) continue
+      const pid = Number(line.trim().split(/\s+/, 1)[0])
+      if (Number.isFinite(pid) && pid > 1 && pid !== process.pid) {
+        try {
+          process.kill(pid, 'SIGTERM')
+        } catch {
+          // already gone, or not ours to signal — either way, done
+        }
+      }
+    }
+  })
+}
+sweepOrphanTutors()
