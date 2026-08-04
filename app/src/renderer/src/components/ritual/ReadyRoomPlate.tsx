@@ -38,6 +38,23 @@ function daysOverdueLocal(due: string): number {
  * itself — reading it before the sitting starts IS rehearsal. Names orient;
  * probes cue. Keep that line bright: `dueItems[].probe` must never be
  * dereferenced anywhere in this file. */
+// Hoisted static option arrays (rerender-memo-with-default-value): inline
+// literals would re-create these on every plate render and defeat any
+// downstream memoization by identity.
+const MINS_OPTIONS: { value: `${SittingMins}`; label: string }[] = [
+  { value: '5', label: '5 min' },
+  { value: '10', label: '10 min' },
+  { value: '25', label: '25 min' },
+]
+const STYLE_OPTIONS: { value: SittingStyle; label: string; description?: string }[] = [
+  { value: 'standard', label: 'Free recall', description: 'type your answers cold — the standard sitting' },
+  {
+    value: 'checkpoint',
+    label: 'Checkpoints',
+    description: 'chains of small choices — weaker evidence, rated no higher than good, back sooner',
+  },
+]
+
 export const ReadyRoomPlate = memo(function ReadyRoomPlate({
   dueItems,
   totalDue,
@@ -154,23 +171,12 @@ export const ReadyRoomPlate = memo(function ReadyRoomPlate({
       <div className="flex flex-col gap-2 border-t border-[var(--color-hairline)] pt-3">
         <div className="flex items-center gap-3 flex-wrap">
           <SegmentedControl<`${SittingMins}`>
-            options={[
-              { value: '5', label: '5 min' },
-              { value: '10', label: '10 min' },
-              { value: '25', label: '25 min' },
-            ]}
+            options={MINS_OPTIONS}
             value={`${prefs.mins}`}
             onChange={(v) => onPrefsChange({ ...prefs, mins: Number(v) as SittingMins })}
           />
           <SegmentedControl<SittingStyle>
-            options={[
-              { value: 'standard', label: 'Free recall', description: 'type your answers cold — the standard sitting' },
-              {
-                value: 'checkpoint',
-                label: 'Checkpoints',
-                description: 'chains of small choices — weaker evidence, rated no higher than good, back sooner',
-              },
-            ]}
+            options={STYLE_OPTIONS}
             value={prefs.style}
             onChange={(v) => onPrefsChange({ ...prefs, style: v })}
           />
