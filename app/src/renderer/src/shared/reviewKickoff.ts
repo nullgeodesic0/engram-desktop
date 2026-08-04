@@ -105,6 +105,8 @@ These are filed open for this queue's nodes; "misconception resolve --id <ID>" r
 export function detectResumeState(lines: unknown[]): { trailingOpenAsk: boolean; checkpoint: boolean } {
   let checkpoint = false
   const openAsks = new Set<string>()
+  const askIds = new Set<string>()
+  let repairedAsk = false
   for (const raw of lines) {
     const content = (raw as { message?: { content?: unknown } })?.message?.content
     if (!Array.isArray(content)) continue
@@ -112,6 +114,7 @@ export function detectResumeState(lines: unknown[]): { trailingOpenAsk: boolean;
       if (b?.type === 'tool_use' && typeof b.name === 'string') {
         if (b.name.endsWith('ask_user_question') && typeof b.id === 'string') {
           openAsks.add(b.id)
+          askIds.add(b.id)
           const header = (b.input as Record<string, unknown> | undefined)?.header
           if (typeof header === 'string' && header.startsWith('Checkpoint')) checkpoint = true
         }
@@ -120,10 +123,28 @@ export function detectResumeState(lines: unknown[]): { trailingOpenAsk: boolean;
           if (cmd.includes('--source quick-mc')) checkpoint = true
         }
       }
-      if (b?.type === 'tool_result' && typeof b.tool_use_id === 'string') openAsks.delete(b.tool_use_id)
+      if (b?.type === 'tool_result' && typeof b.tool_use_id === 'string') {
+        openAsks.delete(b.tool_use_id)
+        // The CLI's --resume repair "answers" a dead ask with a synthetic
+        // rejection so the transcript parses — observed verbatim: content
+        // "The user doesn't want to proceed with this tool use…" followed by
+        // a user text "[Request interrupted by user for tool use]". That is
+        // NOT an answer; the learner never saw a working card. Counting it
+        // as one made the second resume skip the nudge entirely (observed
+        // live, 2026-08-03: resume pressed, nothing fired). Any rejection-
+        // shaped result on an ASK id keeps the re-pose obligation alive.
+        if (askIds.has(b.tool_use_id) && String(JSON.stringify(b.content ?? '')).includes("doesn't want to proceed")) {
+          repairedAsk = true
+        }
+      }
+      if (b?.type === 'text' && typeof b.text === 'string' && b.text.includes('[Request interrupted by user for tool use]')) {
+        // The repair's companion marker — belt-and-suspenders for a future
+        // CLI that words the synthetic result differently.
+        if (askIds.size > 0) repairedAsk = true
+      }
     }
   }
-  return { trailingOpenAsk: openAsks.size > 0, checkpoint }
+  return { trailingOpenAsk: openAsks.size > 0 || repairedAsk, checkpoint }
 }
 
 /** The resume re-pose nudge — sent automatically after a resume WHEN the

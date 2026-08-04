@@ -113,7 +113,10 @@ export function registerSessionHandlers(win: BrowserWindow): void {
   ipcMain.handle('session:anyActive', () => sessions.size > 0)
 
   ipcMain.handle('session:send', (_e, sessionId: string, text: string) => {
-    sessions.get(sessionId)?.sendUserMessage(text)
+    // Ready-gated (see sendUserMessageWhenReady): fresh sessions resolve
+    // readiness immediately; a just-resumed one holds the send until the
+    // CLI's repair pass is done consuming its own transcript.
+    return sessions.get(sessionId)?.sendUserMessageWhenReady(text)
   })
 
   ipcMain.handle('session:abort', (_e, sessionId: string) => {
