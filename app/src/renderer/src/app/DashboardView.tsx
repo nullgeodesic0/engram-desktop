@@ -156,6 +156,9 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts, coachHomeSi
   const bounds = useMemo(() => rangeBounds(rangeKey), [rangeKey])
   const rangeText = rangeCaption(rangeKey, bounds)
   const daysInRange = useMemo(() => filterDaysByRange(history?.days ?? [], bounds), [history, bounds])
+  // Sorts the full receipt history to take the trailing window — memoized so
+  // hover/detail re-renders don't re-sort thousands of rows (rerender-memo).
+  const quickShareOfHistory = useMemo(() => (history ? quickShare(history.receipts) : null), [history])
   // Weekly rollup re-derived from the (possibly range-sliced) days, through
   // the SAME function TopicDrilldownView already uses for its own weekly
   // chart — not `history.weeks` (the main process's own pre-aggregation),
@@ -410,7 +413,7 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts, coachHomeSi
                 weeks={weeksInRange}
                 days={daysInRange}
                 onSelectWeek={(weekStart, items) => setDetail({ label: `Week of ${weekStart}`, items })}
-                quickShare={history ? quickShare(history.receipts) : null}
+                quickShare={quickShareOfHistory}
               />
             </div>
           </div>
