@@ -113,3 +113,39 @@ export function nextProbeHeaderAt(messages: ChatMessage[], fromMessageIndex: num
   }
   return null
 }
+
+/** `nextProbeHeaderAt` with the absorption fallback — the one resolver every
+ * probe-anchored element (grade batch, lapse rite, milestone card) should
+ * use for live rendering.
+ *
+ * The absorption case (observed live, 2026-08-03, checkpoint sitting): an
+ * element's `atIndex` is stamped "messages.length right now" at its
+ * tool_result. The model can then stream verdict prose + the NEXT item's
+ * `[n/N]` header into the bubble that already existed BEFORE the stamp
+ * (reveal prose consumed the last ask's boundary; the rate call armed no
+ * new one) — so the header the element should anchor against lives at an
+ * index BELOW `atIndex`, the forward scan finds nothing, and the element
+ * tails the transcript underneath the next item's entire exchange.
+ *
+ * The fallback inspects exactly ONE assistant bubble back, and accepts it
+ * only when it carries a header for a node OUTSIDE `ownNodes` — the
+ * absorbed next-item header. A standard sitting can never resolve backward:
+ * the preceding bubble's header there is the element's OWN item (its node
+ * is in `ownNodes`), and the loop breaks at the first assistant bubble
+ * regardless. */
+export function resolveAnchorBeforeNextProbe(
+  messages: ChatMessage[],
+  atIndex: number,
+  ownNodes: ReadonlySet<string>,
+): number | null {
+  const direct = nextProbeHeaderAt(messages, atIndex)
+  if (direct !== null) return direct
+  for (let i = Math.min(atIndex, messages.length) - 1; i >= 0; i--) {
+    const m = messages[i]
+    if (!m || m.role !== 'assistant') continue
+    const headers = parseAllProbeHeaders(m.text)
+    if (headers.some((h) => !ownNodes.has(h.node))) return i
+    break
+  }
+  return null
+}
