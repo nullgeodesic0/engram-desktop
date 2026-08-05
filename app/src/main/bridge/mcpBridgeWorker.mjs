@@ -12,6 +12,7 @@
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
+import { request as httpRequest } from 'node:http'
 import { z } from 'zod'
 
 const PORT = process.env.ENGRAM_BRIDGE_PORT
@@ -22,14 +23,54 @@ if (!PORT || !SESSION_ID) {
   process.exit(1)
 }
 
-async function postJson(path, body) {
-  const res = await fetch(`http://127.0.0.1:${PORT}${path}`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
+/**
+ * node:http rather than fetch, and the reason is load-bearing: `/ask` holds
+ * its HTTP response open until a HUMAN clicks, which can be minutes. Node's
+ * fetch is undici, whose default `headersTimeout` is 300 s — so an ask left
+ * open for five minutes died with a bare "fetch failed", the tutor saw a
+ * tool error and re-posed the SAME question, and the learner got two cards
+ * (observed live 2026-08-05: ask posed 19:54:12, failed 19:59:13 — 301.07 s
+ * on the nose, then re-asked 5 s later). node:http applies no response
+ * timeout of its own, so thinking time is unbounded, which is the only
+ * honest setting for a question whose whole point is that a person answers
+ * it. Socket timeouts are disabled explicitly too, in case an agent default
+ * ever changes underneath this.
+ */
+function postJson(path, body) {
+  return new Promise((resolve, reject) => {
+    const payload = JSON.stringify(body)
+    const req = httpRequest(
+      {
+        host: '127.0.0.1',
+        port: PORT,
+        path,
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(payload) },
+      },
+      (res) => {
+        let raw = ''
+        res.setEncoding('utf-8')
+        res.on('data', (chunk) => {
+          raw += chunk
+        })
+        res.on('end', () => {
+          if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
+            reject(new Error(`bridge relay ${path} returned ${res.statusCode}`))
+            return
+          }
+          try {
+            resolve(raw ? JSON.parse(raw) : {})
+          } catch (err) {
+            reject(err)
+          }
+        })
+      },
+    )
+    req.setTimeout(0)
+    req.on('error', reject)
+    req.write(payload)
+    req.end()
   })
-  if (!res.ok) throw new Error(`bridge relay ${path} returned ${res.status}`)
-  return res.json()
 }
 
 function fireUi(tool, payload) {
