@@ -43,6 +43,7 @@ import { recordConfidence, latestPickFor } from '../shared/calibrationStore'
 import { extractTicketFromMessages } from '../shared/ticketParser'
 import { composeReviewKickoff, composeResumeNudge, detectResumeState, capForMins } from '../shared/reviewKickoff'
 import { loadSittingPrefs, saveSittingMins, type SittingPrefs } from '../shared/sittingPrefs'
+import { useDateRollover } from '../shared/dateRollover'
 import { recallDueNodes, quickShare, type RecallDueEntry } from '../shared/checkpointEvidence'
 import { TicketCard } from '../components/ritual/TicketCard'
 import { ReadyRoomPlate } from '../components/ritual/ReadyRoomPlate'
@@ -1389,6 +1390,21 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, detachedFromSitting, sittingPrefs.mins])
+  // The fix for "the review page doesn't refresh at midnight unless you
+  // restart": this view is KeepMounted (App.tsx) — its mount effect fetched
+  // the queue/totalDue/horizon exactly once, on first visit, and a topic
+  // that crossed into "due today" overnight stayed invisible on the
+  // pre-sitting plate until the process restarted. Re-runs the SAME three
+  // reads the mount effect does, gated to the pre-sitting phases only — a
+  // live sitting's `queue` stays exactly what the kickoff sized it to
+  // (sessionCapRef), untouched by a plate the learner isn't even looking
+  // at. Appended hook (KeepMounted append rule).
+  useDateRollover(() => {
+    if (phase !== 'ready' && phase !== 'empty' && !detachedFromSitting) return
+    refreshQueue().then((items) => setPhase(items.length > 0 ? 'ready' : 'empty'))
+    refreshHorizon()
+    window.engram.due().then((all) => setTotalDue(all.length))
+  })
   // Minimap Precision fix (second report on the same bug) — jumps straight to
   // the checkpoint's OWN `CheckpointAnchor`, never the host message; see
   // shared/jumpToCheckpoint.ts's doctrine comment for the full root-cause
