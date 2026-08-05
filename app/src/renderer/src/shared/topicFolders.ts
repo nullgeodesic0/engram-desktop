@@ -64,11 +64,25 @@ export interface FolderGroup {
  * shared sort. Folders come alphabetically and `Unfiled` always comes last —
  * a named shelf outranks the pile of things not yet put away.
  *
- * Groups with no topics are never emitted, so a folder that just lost its
- * last topic simply disappears rather than lingering as an empty heading.
+ * `alwaysShow` names folders that must appear even with nothing in them —
+ * the registry's empty folders while organizing (see folderRegistry.ts for
+ * why they have to stay on screen). Outside organize mode it's omitted, and
+ * an emptied folder simply stops being drawn.
+ *
+ * `includeEmptyUnfiled` keeps the Unfiled group present with zero topics, so
+ * "drag a topic back out of a folder" has somewhere to land even when
+ * everything is currently filed.
  */
-export function groupTopicsByFolder(topics: TopicListEntry[], sortKey: TopicSortKey): FolderGroup[] {
+export function groupTopicsByFolder(
+  topics: TopicListEntry[],
+  sortKey: TopicSortKey,
+  opts: { alwaysShow?: string[]; includeEmptyUnfiled?: boolean } = {},
+): FolderGroup[] {
   const byFolder = new Map<string, TopicListEntry[]>()
+  for (const name of opts.alwaysShow ?? []) {
+    const trimmed = name.trim()
+    if (trimmed) byFolder.set(trimmed, [])
+  }
   const unfiled: TopicListEntry[] = []
   for (const t of topics) {
     const name = t.folder?.trim()
@@ -83,7 +97,7 @@ export function groupTopicsByFolder(topics: TopicListEntry[], sortKey: TopicSort
   const groups: FolderGroup[] = [...byFolder.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([name, list]) => ({ name, unfiled: false, topics: sortTopics(list, sortKey) }))
-  if (unfiled.length > 0) {
+  if (unfiled.length > 0 || opts.includeEmptyUnfiled) {
     groups.push({ name: UNFILED, unfiled: true, topics: sortTopics(unfiled, sortKey) })
   }
   return groups

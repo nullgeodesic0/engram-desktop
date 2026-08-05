@@ -85,6 +85,14 @@ import { topicBucket } from '../shared/topicShelf'
 import { sortTopics, TOPIC_SORT_OPTIONS, type TopicSortKey } from '../shared/topicSort'
 import { loadTopicSort, saveTopicSort, loadTopicGroup, saveTopicGroup, type TopicGroupKey } from '../shared/topicSortPrefs'
 import { groupTopicsByFolder, TOPIC_GROUP_OPTIONS } from '../shared/topicFolders'
+import {
+  loadFolderRegistry,
+  saveFolderRegistry,
+  addFolderToRegistry,
+  removeFolderFromRegistry,
+  allFolderNames,
+} from '../shared/folderRegistry'
+import { FolderShelf } from '../components/FolderShelf'
 import { EnvironmentSteps } from '../components/EnvironmentSteps'
 import { extractTicketFromMessages } from '../shared/ticketParser'
 import { TicketCard } from '../components/ritual/TicketCard'
@@ -1677,6 +1685,42 @@ export function LearnSessionView({
   // How the shelf partitions before sorting: the three state buckets
   // (default, unchanged behavior) or the learner's own folders.
   const [topicGroup, setTopicGroup] = useState<TopicGroupKey>(loadTopicGroup)
+  // Organize mode + the empty-folder registry it needs (folderRegistry.ts's
+  // doc comment explains why empty folders have to be a thing at all).
+  // Organizing is deliberately NOT persisted: it's a mode you're in, not a
+  // preference you hold, and coming back to a shelf still in jiggle-mode
+  // would be a small surprise every time.
+  const [organizing, setOrganizing] = useState(false)
+  const [folderRegistry, setFolderRegistry] = useState<string[]>(loadFolderRegistry)
+  const [newFolderDraft, setNewFolderDraft] = useState<string | null>(null)
+
+  /** Writes one topic's folder, preserving every other setting — the
+   * settings record is read-modify-written rather than reconstructed, so
+   * filing can never clobber a topic's instructions or context files. */
+  async function fileTopic(topicId: string, folder: string | null) {
+    const current = await window.engram.getTopicSettings(topicId)
+    await window.engram.setTopicSettings(topicId, { ...current, folder })
+    refreshTopics()
+  }
+
+  function createFolder(raw: string) {
+    const next = addFolderToRegistry(folderRegistry, raw)
+    setFolderRegistry(next)
+    saveFolderRegistry(next)
+    setNewFolderDraft(null)
+    // A brand-new folder is only visible in folder mode — switch there
+    // rather than creating something the learner can't see.
+    if (topicGroup !== 'folder') {
+      setTopicGroup('folder')
+      saveTopicGroup('folder')
+    }
+  }
+
+  function deleteEmptyFolder(name: string) {
+    const next = removeFolderFromRegistry(folderRegistry, name)
+    setFolderRegistry(next)
+    saveFolderRegistry(next)
+  }
   // Minimap Precision fix (second report on the same bug) — jumps straight to
   // the checkpoint's OWN `CheckpointAnchor`, never the host message; see
   // shared/jumpToCheckpoint.ts's doctrine comment for the full root-cause
@@ -1915,7 +1959,55 @@ export function LearnSessionView({
                               }}
                             />
                           </div>
+                          {/* Filing affordances. "New folder" is always
+                              offered (creating one switches to folder view,
+                              since an invisible new folder would be a dead
+                              end); Organize only makes sense once you're
+                              looking at folders. */}
+                          <div className="flex items-center gap-2">
+                            <Button variant="ghost" onClick={() => setNewFolderDraft('')}>
+                              New folder
+                            </Button>
+                            {topicGroup === 'folder' && (
+                              <Button
+                                variant={organizing ? 'primary' : 'ghost'}
+                                onClick={() => setOrganizing((v) => !v)}
+                              >
+                                {organizing ? 'Done' : 'Organize'}
+                              </Button>
+                            )}
+                          </div>
                         </div>
+                      )}
+                      {newFolderDraft !== null && (
+                        <form
+                          className="flex items-center gap-2 justify-end"
+                          onSubmit={(e) => {
+                            e.preventDefault()
+                            createFolder(newFolderDraft)
+                          }}
+                        >
+                          <input
+                            autoFocus
+                            value={newFolderDraft}
+                            onChange={(e) => setNewFolderDraft(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Escape') setNewFolderDraft(null)
+                            }}
+                            placeholder="Folder name"
+                            aria-label="New folder name"
+                            className="focus-ring panel px-3 py-1.5 text-sm bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] text-[var(--color-text-primary)]"
+                          />
+                          <Button variant="primary" type="submit" disabled={newFolderDraft.trim().length === 0}>
+                            Create
+                          </Button>
+                          {/* type="button" — a bare <button> inside a form
+                              defaults to submit, so Cancel would create the
+                              folder it means to abandon. */}
+                          <Button variant="ghost" type="button" onClick={() => setNewFolderDraft(null)}>
+                            Cancel
+                          </Button>
+                        </form>
                       )}
                     </div>
                   )
@@ -2002,19 +2094,22 @@ export function LearnSessionView({
                   // one shelf read as a filing cabinet, not a shelf. Every
                   // topic still appears exactly once (groupTopicsByFolder is
                   // a partition), sorted inside its folder by the same key.
-                  groupTopicsByFolder(topics, topicSort).map((g) => (
-                    <LearnTopicGroup
-                      key={g.name}
-                      heading={g.name}
-                      caption={g.unfiled ? 'not filed in a folder yet' : undefined}
-                      hideFolderChip
-                      topics={g.topics}
-                      resumableTopics={resumableTopics}
-                      onOpen={openTopic}
-                      onSettings={setSettingsFor}
-                      onStartFresh={startFreshForTopic}
-                    />
-                  ))
+                  // While organizing, empty folders and an empty Unfiled
+                  // stay drawn so every drop target exists before the drag.
+                  <FolderShelf
+                    groups={groupTopicsByFolder(topics, topicSort, {
+                      alwaysShow: organizing ? allFolderNames(topics, folderRegistry) : undefined,
+                      includeEmptyUnfiled: organizing,
+                    })}
+                    organizing={organizing}
+                    allFolders={allFolderNames(topics, folderRegistry)}
+                    resumableTopics={resumableTopics}
+                    onOpen={openTopic}
+                    onSettings={setSettingsFor}
+                    onStartFresh={startFreshForTopic}
+                    onFile={(id, folder) => void fileTopic(id, folder)}
+                    onDeleteFolder={deleteEmptyFolder}
+                  />
                 ) : (
                   <>
                 <LearnTopicGroup

@@ -47,6 +47,16 @@ interface TopicCardProps {
   resumable?: boolean
   onSettings?: () => void
   onStartFresh?: () => void
+  /** Organize mode (Learn's shelf): the row becomes draggable and grows a
+   * folder picker. The picker is not decoration — HTML5 drag-and-drop is
+   * mouse-only, so without it organizing would be unreachable by keyboard. */
+  organizing?: boolean
+  /** The custom dataTransfer type the shelf listens for (FolderShelf owns
+   * the constant; passed in so this component has no import cycle). */
+  dragType?: string
+  folderOptions?: string[]
+  currentFolder?: string | null
+  onFile?: (folder: string | null) => void
   /** Suppresses the folder chip — set when the surrounding heading already
    * names the folder (Learn's shelf grouped by folder), so a folder group
    * doesn't repeat its own name on every row inside it. */
@@ -64,7 +74,7 @@ interface TopicCardProps {
  * (Learn's old local card omitted InkNode and the `learning` chip entirely;
  * Home's never showed a due chip since HealthRing's danger notch already
  * carries that signal here). */
-export function TopicCard({ variant, topic: t, onOpen, resumable = false, onSettings, onStartFresh, grade, hideFolderChip }: TopicCardProps) {
+export function TopicCard({ variant, topic: t, onOpen, resumable = false, onSettings, onStartFresh, grade, hideFolderChip, organizing, dragType, folderOptions, currentFolder, onFile }: TopicCardProps) {
   const total = t.states.new + t.states.learning + t.states.review
 
   if (variant === 'tile') {
@@ -108,7 +118,20 @@ export function TopicCard({ variant, topic: t, onOpen, resumable = false, onSett
     // Same `.frame-hover`/`.dogear` swap as the tile branch above — one
     // shared hover/selection vocabulary for both layouts, not a bespoke
     // border/bg toggle per variant.
-    <div className={`frame-hover tilt-card panel px-5 py-4 flex items-center justify-between gap-4${resumable ? ' dogear' : ''}`}>
+    <div
+      draggable={organizing && dragType !== undefined}
+      onDragStart={
+        organizing && dragType
+          ? (e) => {
+              e.dataTransfer.setData(dragType, t.topic)
+              e.dataTransfer.effectAllowed = 'move'
+            }
+          : undefined
+      }
+      className={`frame-hover tilt-card panel px-5 py-4 flex items-center justify-between gap-4${resumable ? ' dogear' : ''}${
+        organizing ? ' cursor-grab active:cursor-grabbing' : ''
+      }`}
+    >
       <InkNode id={t.topic} variant={t.states.review > 0 ? 'filled' : 'outlined'} size={16} />
       <HealthRing consolidated={t.states.review} total={total} due={t.due} />
       <button onClick={onOpen} className="focus-ring flex-1 min-w-0 text-left flex flex-col gap-1">
@@ -129,6 +152,26 @@ export function TopicCard({ variant, topic: t, onOpen, resumable = false, onSett
           ))}
         </div>
       </button>
+      {/* The keyboard path for filing — HTML5 drag is mouse-only, so a
+          drag-to-organize mode without this would simply be unusable
+          without a pointer. Native <select> on purpose: it is already
+          keyboard- and screen-reader-complete, and organize mode is
+          transient enough not to warrant a bespoke listbox. */}
+      {organizing && onFile && folderOptions && (
+        <select
+          value={currentFolder ?? ''}
+          aria-label={`Folder for ${t.title}`}
+          onChange={(e) => onFile(e.target.value === '' ? null : e.target.value)}
+          className="focus-ring panel px-2 py-1 text-xs shrink-0 bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] text-[var(--color-text-dim)]"
+        >
+          <option value="">Unfiled</option>
+          {folderOptions.map((f) => (
+            <option key={f} value={f}>
+              {f}
+            </option>
+          ))}
+        </select>
+      )}
       {resumable && onStartFresh && (
         <IconButton
           onClick={(e) => {
