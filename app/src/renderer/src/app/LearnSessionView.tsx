@@ -80,7 +80,10 @@ import { PinTackIcon } from '../components/ui/PinTackIcon'
 import { TopicCard } from '../components/TopicCard'
 import { SectionBanner } from '../components/ui/SectionBanner'
 import { PlateFigure } from '../components/ui/PlateFigure'
+import { SegmentedControl } from '../components/ui/SegmentedControl'
 import { topicBucket } from '../shared/topicShelf'
+import { sortTopics, TOPIC_SORT_OPTIONS, type TopicSortKey } from '../shared/topicSort'
+import { loadTopicSort, saveTopicSort } from '../shared/topicSortPrefs'
 import { EnvironmentSteps } from '../components/EnvironmentSteps'
 import { extractTicketFromMessages } from '../shared/ticketParser'
 import { TicketCard } from '../components/ritual/TicketCard'
@@ -1659,6 +1662,13 @@ export function LearnSessionView({
   )
   const summaryCtl = makePeek(summaryLeaveTimer, setSummaryPeek)
   const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null)
+  // The shelf's ordering pick (appended hook, KeepMounted append rule) —
+  // applied INSIDE each of the three buckets, never across them: the
+  // bucketing answers "what state is this topic in", the sort answers
+  // "which one first", and collapsing the two would lose the first
+  // question. Persisted (topicSortPrefs) — a list-view preference, unlike
+  // the sitting style's deliberate per-sitting reset.
+  const [topicSort, setTopicSort] = useState<TopicSortKey>(loadTopicSort)
   // Minimap Precision fix (second report on the same bug) — jumps straight to
   // the checkpoint's OWN `CheckpointAnchor`, never the host message; see
   // shared/jumpToCheckpoint.ts's doctrine comment for the full root-cause
@@ -1845,18 +1855,42 @@ export function LearnSessionView({
                 {topics !== null && topics.length > 0 && (() => {
                   const atlasDue = topics.reduce((sum, t) => sum + t.due, 0)
                   return (
-                    <PlateFigure
-                      value={topics.length}
-                      tone="primary"
-                      title={topics.length === 1 ? 'territory in the atlas' : 'territories in the atlas'}
-                      note={
-                        atlasDue > 0 ? (
-                          <span className="text-[var(--color-ink-warm)]">{atlasDue} due across the atlas</span>
-                        ) : (
-                          'nothing due across the atlas'
-                        )
-                      }
-                    />
+                    <div className="flex items-end justify-between gap-4">
+                      <PlateFigure
+                        value={topics.length}
+                        tone="primary"
+                        title={topics.length === 1 ? 'territory in the atlas' : 'territories in the atlas'}
+                        note={
+                          atlasDue > 0 ? (
+                            <span className="text-[var(--color-ink-warm)]">{atlasDue} due across the atlas</span>
+                          ) : (
+                            'nothing due across the atlas'
+                          )
+                        }
+                      />
+                      {/* Hidden below two topics — a control that cannot
+                          change anything is noise. Orders WITHIN each shelf
+                          group; the groups themselves never move. */}
+                      {topics.length > 1 && (
+                        <div className="flex items-center gap-2 shrink-0 pb-1">
+                          <span
+                            id="learn-topic-sort-label"
+                            className="label-data text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-faint)]"
+                          >
+                            sort
+                          </span>
+                          <SegmentedControl<TopicSortKey>
+                            ariaLabelledBy="learn-topic-sort-label"
+                            options={TOPIC_SORT_OPTIONS}
+                            value={topicSort}
+                            onChange={(v) => {
+                              setTopicSort(v)
+                              saveTopicSort(v)
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
                   )
                 })()}
               </header>
@@ -1876,9 +1910,12 @@ export function LearnSessionView({
         // Same three-bucket partition Home uses (topicBucket's doc comment) —
         // exhaustive, so whenever topics.length > 0 at least one group below
         // is non-empty.
-        const active = topics?.filter((t) => topicBucket(t) === 'active') ?? []
-        const consolidated = topics?.filter((t) => topicBucket(t) === 'consolidated') ?? []
-        const notStarted = topics?.filter((t) => topicBucket(t) === 'notStarted') ?? []
+        // Sorted within each bucket (see the topicSort hook's own comment for
+        // why the two layers stay separate) — one shared ordering with the
+        // map's tab strip, archived topics last, ties broken on title.
+        const active = sortTopics(topics?.filter((t) => topicBucket(t) === 'active') ?? [], topicSort)
+        const consolidated = sortTopics(topics?.filter((t) => topicBucket(t) === 'consolidated') ?? [], topicSort)
+        const notStarted = sortTopics(topics?.filter((t) => topicBucket(t) === 'notStarted') ?? [], topicSort)
         const envBroken = envCheck !== null && !(envCheck.claudeOk && envCheck.pluginOk)
         return (
           <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-3">

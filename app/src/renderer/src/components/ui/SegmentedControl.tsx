@@ -1,14 +1,31 @@
+/** A row of mutually-exclusive toggles. `aria-pressed` marks the live one
+ * (a toggle group, not a listbox — every option is visible and one click
+ * commits, so the pressed-button semantic is the honest one).
+ *
+ * `ariaLabelledBy`/`ariaLabel` name the GROUP: without one, a screen reader
+ * announces four unrelated buttons ("Due", "A–Z", …) with no clue what they
+ * order. Optional so the existing settings call sites, which sit under their
+ * own visible row labels, keep rendering exactly as before. */
 export function SegmentedControl<T extends string>({
   options,
   value,
   onChange,
+  ariaLabel,
+  ariaLabelledBy,
 }: {
   options: { value: T; label: string; description?: string }[]
   value: T
   onChange: (v: T) => void
+  ariaLabel?: string
+  ariaLabelledBy?: string
 }) {
   return (
-    <div className="inline-flex rounded-lg border border-[var(--color-hairline)] overflow-hidden">
+    <div
+      role="group"
+      aria-label={ariaLabel}
+      aria-labelledby={ariaLabelledBy}
+      className="inline-flex rounded-lg border border-[var(--color-hairline)] overflow-hidden"
+    >
       {options.map((o) => (
         <button
           key={o.value}

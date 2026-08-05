@@ -13,6 +13,9 @@ import { SkeletonBar } from '../components/Skeleton'
 import { StatBlock } from '../components/ui/StatBlock'
 import { Button } from '../components/ui/Button'
 import { PageHeader } from '../components/ui/PageHeader'
+import { SegmentedControl } from '../components/ui/SegmentedControl'
+import { sortTopics, TOPIC_SORT_OPTIONS, type TopicSortKey } from '../shared/topicSort'
+import { loadTopicSort, saveTopicSort } from '../shared/topicSortPrefs'
 import { Modal } from '../components/ui/Modal'
 import { MathRenderer } from '../components/MathRenderer'
 import { SessionHistoryDrawer } from '../components/SessionHistoryDrawer'
@@ -311,6 +314,9 @@ export function TopicMapView({
   const [topics, setTopics] = useState<TopicListEntry[]>([])
   const [topicsLoaded, setTopicsLoaded] = useState(false)
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null)
+  // Shared with Learn's shelf (shared/topicSort + its persisted pick) so the
+  // same library reads the same way on both surfaces.
+  const [topicSort, setTopicSort] = useState<TopicSortKey>(loadTopicSort)
   const [graph, setGraph] = useState<TopicGraph | null>(null)
   const [retrievability, setRetrievability] = useState<Map<string, number> | null>(null)
   // F10: `retrievability === null` is ALREADY a legitimate resolved state
@@ -438,7 +444,9 @@ export function TopicMapView({
     window.engram.topics().then((ts) => {
       setTopics(ts)
       setTopicsLoaded(true)
-      if (ts.length > 0 && !deepLinkNode && !spotlightNode) setSelectedTopic(ts[0].topic)
+      // Open on the FIRST TAB AS DRAWN, not the engine's own list order —
+      // otherwise the opening map is some topic in the middle of the strip.
+      if (ts.length > 0 && !deepLinkNode && !spotlightNode) setSelectedTopic(sortTopics(ts, topicSort)[0].topic)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -622,6 +630,9 @@ export function TopicMapView({
 
   const node = graph && selectedNode ? graph.nodes[selectedNode] : null
   const opened = graph && openNode ? graph.nodes[openNode] : null
+  // Memoized so the tab strip isn't re-sorted on every graph/hover/selection
+  // re-render this view does constantly (rerender-memo).
+  const sortedTopics = useMemo(() => sortTopics(topics, topicSort), [topics, topicSort])
   const stats = useMemo(() => (graph ? plateStats(graph, retrievability) : null), [graph, retrievability])
   // Computed once here (pure function of `graph`) and threaded to both
   // GraphView (sectors/labels/settle) and NodeTable (chip restriction) — a
@@ -691,14 +702,40 @@ export function TopicMapView({
   return (
     <div className="p-8 flex flex-col gap-4 h-full min-h-0">
       <div className="shrink-0 flex flex-col gap-3">
-        <PageHeader title="Topic Map" />
+        <PageHeader
+          title="Topic Map"
+          right={
+            // Same shared ordering the Learn shelf uses (shared/topicSort) —
+            // one mental model for the same list on both surfaces. Hidden
+            // below two topics: nothing to order.
+            topics.length > 1 ? (
+              <div className="flex items-center gap-2">
+                <span
+                  id="map-topic-sort-label"
+                  className="label-data text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-faint)]"
+                >
+                  sort
+                </span>
+                <SegmentedControl<TopicSortKey>
+                  ariaLabelledBy="map-topic-sort-label"
+                  options={TOPIC_SORT_OPTIONS}
+                  value={topicSort}
+                  onChange={(v) => {
+                    setTopicSort(v)
+                    saveTopicSort(v)
+                  }}
+                />
+              </div>
+            ) : undefined
+          }
+        />
         {/* Topic selector — the masthead command-bar idiom (tracked
             uppercase .cmd-items, hairline separators between items) instead
             of the old filled pill chips. The selected topic is warm and
             holds the cmd-item's underline open ([&::after]:scale-x-100 —
             the same 1px rule the idiom slides in on hover). */}
         <div role="group" aria-label="Topics" className="flex items-center gap-x-3 gap-y-2 flex-wrap">
-          {topics.map((t) => (
+          {sortedTopics.map((t) => (
             <button
               key={t.topic}
               onClick={() => setSelectedTopic(t.topic)}
