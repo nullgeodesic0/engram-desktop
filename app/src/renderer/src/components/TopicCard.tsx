@@ -47,6 +47,10 @@ interface TopicCardProps {
   resumable?: boolean
   onSettings?: () => void
   onStartFresh?: () => void
+  /** Suppresses the folder chip — set when the surrounding heading already
+   * names the folder (Learn's shelf grouped by folder), so a folder group
+   * doesn't repeat its own name on every row inside it. */
+  hideFolderChip?: boolean
   /** Home's tile variant only, for now — the topic's current letter grade,
    * rendered as a small chip beside HealthRing. Both are "at a glance"
    * health signals: HealthRing is the coverage/due shape, the letter is the
@@ -60,14 +64,14 @@ interface TopicCardProps {
  * (Learn's old local card omitted InkNode and the `learning` chip entirely;
  * Home's never showed a due chip since HealthRing's danger notch already
  * carries that signal here). */
-export function TopicCard({ variant, topic: t, onOpen, resumable = false, onSettings, onStartFresh, grade }: TopicCardProps) {
+export function TopicCard({ variant, topic: t, onOpen, resumable = false, onSettings, onStartFresh, grade, hideFolderChip }: TopicCardProps) {
   const total = t.states.new + t.states.learning + t.states.review
 
   if (variant === 'tile') {
     // Byte-identical to Home's original TopicTile: same markup, same
     // classes — the due-danger chip is filtered out because the tile never
     // rendered it (HealthRing's danger notch already carries that signal).
-    const chips = topicChips(t).filter((c) => !c.className.includes('ink-danger'))
+    const chips = topicChips(t, { includeFolder: !hideFolderChip }).filter((c) => !c.className.includes('ink-danger'))
     return (
       <button
         onClick={onOpen}
@@ -118,7 +122,7 @@ export function TopicCard({ variant, topic: t, onOpen, resumable = false, onSett
         </div>
         <div className="text-xs text-[var(--color-text-faint)] line-clamp-1">{t.goal}</div>
         <div className="flex gap-3 text-xs label-data mt-1">
-          {topicChips(t).map((c) => (
+          {topicChips(t, { includeFolder: !hideFolderChip }).map((c) => (
             <span key={c.label} className={c.className}>
               {c.label}
             </span>

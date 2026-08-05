@@ -2,7 +2,7 @@ import { readdir, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { engramRead } from './readOnly'
-import { getDisplayTitles } from '../session/topicSettings'
+import { getDisplayTitles, getTopicFolders } from '../session/topicSettings'
 import type { TopicListEntry } from '../../shared/types'
 
 // Matches readTopicGraph's existing convention (see readOnly.ts) — not
@@ -52,9 +52,16 @@ export async function getTopicsCached(): Promise<TopicListEntry[]> {
   // baked into it: a rename changes topic-settings.json but no graph mtime,
   // so an overlay stored in the cache would go stale invisibly. Purely
   // presentational; the engine's own title survives as `engineTitle`.
-  const renames = await getDisplayTitles()
-  if (Object.keys(renames).length === 0) return topics
-  return topics.map((t) => (renames[t.topic] ? { ...t, engineTitle: t.title, title: renames[t.topic] } : t))
+  // Folder filing rides the same per-call overlay, for the same staleness
+  // reason — and applying it HERE is what makes folders app-wide by
+  // construction: every surface that lists topics goes through this one
+  // function, so none of them needs its own settings read.
+  const [renames, folders] = await Promise.all([getDisplayTitles(), getTopicFolders()])
+  if (Object.keys(renames).length === 0 && Object.keys(folders).length === 0) return topics
+  return topics.map((t) => {
+    const renamed = renames[t.topic] ? { ...t, engineTitle: t.title, title: renames[t.topic] } : t
+    return folders[t.topic] ? { ...renamed, folder: folders[t.topic] } : renamed
+  })
 }
 
 export function invalidateTopicsCache(): void {

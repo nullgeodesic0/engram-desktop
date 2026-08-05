@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Modal } from './ui/Modal'
+import { folderNames, normalizeFolderName } from '../shared/topicFolders'
 
 interface TopicSettingsModalProps {
   topicId: string
@@ -18,6 +19,11 @@ export function TopicSettingsModal({ topicId, topicTitle, onClose }: TopicSettin
   const [contextFiles, setContextFiles] = useState<string[]>([])
   const [targetDate, setTargetDate] = useState<string | null>(null)
   const [displayTitle, setDisplayTitle] = useState('')
+  const [folder, setFolder] = useState('')
+  // Folders already in use — the datalist behind the folder input. Derived
+  // from the same topics() read below (every entry carries its filing, via
+  // getTopicsCached's overlay), so filing needs no store of its own.
+  const [knownFolders, setKnownFolders] = useState<string[]>([])
   // The engine's own generated title, for the rename field's reference line —
   // `topicTitle` (the prop) may already BE a rename, so it can't serve as
   // "what the engine calls this". getTopicsCached preserves the original as
@@ -42,9 +48,11 @@ export function TopicSettingsModal({ topicId, topicTitle, onClose }: TopicSettin
       setContextFiles(s.contextFiles)
       setTargetDate(s.targetDate ?? null)
       setDisplayTitle(s.displayTitle ?? '')
+      setFolder(s.folder ?? '')
       setLoaded(true)
     })
     window.engram.topics().then((list) => {
+      setKnownFolders(folderNames(list))
       const entry = list.find((t) => t.topic === topicId)
       if (entry) {
         setEngineTitle(entry.engineTitle ?? entry.title)
@@ -101,6 +109,7 @@ export function TopicSettingsModal({ topicId, topicTitle, onClose }: TopicSettin
       contextFiles,
       targetDate,
       displayTitle: displayTitle.trim() || null,
+      folder: normalizeFolderName(folder),
     })
     setSaving(false)
     onClose()
@@ -168,6 +177,35 @@ export function TopicSettingsModal({ topicId, topicTitle, onClose }: TopicSettin
               engine’s title: {engineTitle}
             </div>
           )}
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <label htmlFor="topic-folder" className="text-sm text-[var(--color-text-primary)]">
+            Folder
+          </label>
+          <p className="text-xs text-[var(--color-text-faint)]">
+            Groups this topic with others across Learn and the Topic Map. Display only — nothing moves on disk and the
+            engine never sees it. Type a new name or pick one you already use; leave empty to keep it unfiled.
+          </p>
+          {/* A datalist, not a select: filing into an EXISTING folder should
+              be one pick (retyping is how near-duplicate folders appear),
+              but a new folder must not need a separate "create folder" step
+              first — the folder set is exactly the names in use. */}
+          <input
+            id="topic-folder"
+            type="text"
+            list="topic-folder-options"
+            value={folder}
+            onChange={(e) => setFolder(e.target.value)}
+            disabled={!loaded}
+            placeholder="Unfiled"
+            className="focus-ring panel px-3 py-2 text-sm bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] text-[var(--color-text-primary)] disabled:opacity-50"
+          />
+          <datalist id="topic-folder-options">
+            {knownFolders.map((f) => (
+              <option key={f} value={f} />
+            ))}
+          </datalist>
         </div>
 
         <div className="flex flex-col gap-2">

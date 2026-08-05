@@ -12,6 +12,7 @@
 import { DEFAULT_TOPIC_SORT, type TopicSortKey } from './topicSort'
 
 const KEY = 'engram-topic-sort'
+const GROUP_KEY = 'engram-topic-group'
 
 const VALID: readonly TopicSortKey[] = ['due', 'title', 'progress', 'size']
 
@@ -30,5 +31,32 @@ export function saveTopicSort(key: TopicSortKey): void {
     localStorage.setItem(KEY, key)
   } catch {
     // best-effort — a failed save costs one re-pick, never a topic
+  }
+}
+
+/** How topic lists are partitioned before the sort runs inside each group.
+ * `state` is the existing three-bucket shelf grouping (and, on the map, a
+ * flat strip); `folder` is the learner's own filing (topicFolders.ts). One
+ * pick shared by every surface, so a library filed into folders reads as
+ * folders wherever it's drawn. */
+export type TopicGroupKey = 'state' | 'folder'
+
+export const DEFAULT_TOPIC_GROUP: TopicGroupKey = 'state'
+
+export function loadTopicGroup(): TopicGroupKey {
+  try {
+    const raw = localStorage.getItem(GROUP_KEY)
+    if (raw === 'state' || raw === 'folder') return raw
+  } catch {
+    // fall through to the default
+  }
+  return DEFAULT_TOPIC_GROUP
+}
+
+export function saveTopicGroup(key: TopicGroupKey): void {
+  try {
+    localStorage.setItem(GROUP_KEY, key)
+  } catch {
+    // best-effort
   }
 }
