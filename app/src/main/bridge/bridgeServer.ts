@@ -57,11 +57,26 @@ export class BridgeServer {
       const requestId = randomUUID()
       const request: BridgeAskRequest = { ...payload, sessionId, requestId }
 
+      // If the relay hangs up before the learner answers — the worker died,
+      // the session was killed, or (historically) undici's 300 s timeout
+      // guillotined a question someone was still thinking about — the
+      // promise below would never settle and the card would sit on screen
+      // looking answerable forever, resolving into nothing. Tell the
+      // renderer so it can orphan that specific card honestly, the same
+      // state a replayed unanswered ask already renders.
+      let settled = false
+      res.on('close', () => {
+        if (settled) return
+        this.pendingAsks.delete(requestId)
+        this.window?.webContents.send('bridge:ask-dropped', { sessionId, requestId })
+      })
+
       const answer = await new Promise<BridgeAskResponse>((resolve) => {
         this.pendingAsks.set(requestId, { sessionId, resolve })
         this.window?.webContents.send('bridge:ask', request)
       })
 
+      settled = true
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify(answer))
       return

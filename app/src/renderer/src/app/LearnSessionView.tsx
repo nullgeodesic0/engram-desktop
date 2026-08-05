@@ -94,7 +94,7 @@ import {
 } from '../shared/folderRegistry'
 import { FolderShelf } from '../components/FolderShelf'
 import { EnvironmentSteps } from '../components/EnvironmentSteps'
-import { extractTicketFromMessages } from '../shared/ticketParser'
+import { extractTicketFromMessages, type ParsedTicket } from '../shared/ticketParser'
 import { TicketCard } from '../components/ritual/TicketCard'
 import { InkWell } from '../components/ritual/InkWell'
 import { ExportCommand } from '../components/ui/ExportCommand'
@@ -401,6 +401,9 @@ export function LearnSessionView({
   const [exportingFormat, setExportingFormat] = useState<ExportSittingFormat | null>(null)
   const [exportStatus, setExportStatus] = useState<{ text: string; failed: boolean } | null>(null)
   const [marks, setMarks] = useState<RitualMark[]>([])
+  // The tutor's structured session ticket (render_ticket), when it sent one.
+  // Cleared per sitting alongside the other transcript state.
+  const [structuredTicket, setStructuredTicket] = useState<ParsedTicket | null>(null)
   // Chat Presence Wave D — renderer-local, live-only "what's the tutor doing
   // right now" (shared/tutorActivity.ts's doctrine comment has the full
   // rationale). Additive alongside `busy` above: nothing here replaces it.
@@ -644,6 +647,7 @@ export function LearnSessionView({
     setAttachedFiles([])
     nextCallsSeen.current = 0
     setMarks([])
+    setStructuredTicket(null)
     pendingStashToolUseIds.current.clear()
     pendingNewTopicSettings.current = null
     setLastWalk(null)
@@ -718,6 +722,16 @@ export function LearnSessionView({
         live: true,
       })
       tutorActivity.dispatchAskOpened()
+    })
+    // A relayed ask whose connection died before an answer (worker gone,
+    // session killed) can never resolve — orphan the card rather than leave
+    // it inviting a click that goes nowhere. AskCard already renders the
+    // honest "no answer was given" state for live:false + answer:null.
+    const offAskDropped = window.engram.onBridgeAskDropped((req) => {
+      if (req.sessionId !== sessionIdRef.current) return
+      setMarks((prev) =>
+        prev.map((m) => (m.kind === 'ask' && m.requestId === req.requestId ? { ...m, live: false } : m)),
+      )
     })
     // The model reliably calls the render_beat MCP tool with the real current
     // beat (confirmed against a live transcript: 21/21 calls correctly
@@ -818,7 +832,18 @@ export function LearnSessionView({
             fields.push({ key: rec.key, value: rec.value })
           }
           if (fields.length === 0) return
-          pushMark({ kind: 'ticket', ticket: { kind: payload.kind, mode: (payload.mode as string) ?? null, fields } })
+          // Held as state, NOT pushed as a transcript mark. A tutor that
+          // both calls render_ticket AND types the ticket in prose (observed
+          // live 2026-08-05 — same sitting, one structured, one fenced) used
+          // to draw TWO ticket cards: the mark inline and the prose-parsed
+          // one in the pinned slot. Feeding the structured payload into the
+          // same slot the prose parse feeds gives exactly one card, sourced
+          // from the better data when it exists. It also fixes a live/replay
+          // split that was already here: deriveRitualMarks never derived
+          // ticket marks, so a reopened sitting showed the prose card where
+          // the live one had shown a mark. Same single-card shape Review
+          // has always had.
+          setStructuredTicket({ kind: payload.kind, mode: (payload.mode as string) ?? null, fields })
           break
         }
         case 'suggest_action': {
@@ -852,6 +877,7 @@ export function LearnSessionView({
     return () => {
       offEvent()
       offAsk()
+      offAskDropped()
       offBeat()
       offUi()
     }
@@ -1598,7 +1624,12 @@ export function LearnSessionView({
 
   const rateLimitBlocking = rateLimit !== null && isBlockingRateLimitStatus(rateLimit.status)
   const lastUserMessageId = useMemo(() => [...messages].reverse().find((m) => m.role === 'user')?.id ?? null, [messages])
-  const latestTicket = useMemo(() => extractTicketFromMessages(messages), [messages])
+  // Structured (render_ticket) wins over the prose parse when both exist —
+  // see the render_ticket handler for why they must never both draw.
+  const latestTicket = useMemo(
+    () => structuredTicket ?? extractTicketFromMessages(messages),
+    [structuredTicket, messages],
+  )
   // The ticket sliding onto the table gets its paper sound — once per session,
   // live only (not on history replay hydration, hence the started gate).
   const ticketSoundPlayed = useRef(false)

@@ -439,6 +439,16 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
       ])
       tutorActivity.dispatchAskOpened()
     })
+    // A relayed ask whose connection died before an answer (worker gone,
+    // session killed) can never resolve — orphan the card rather than leave
+    // it inviting a click that goes nowhere. AskCard already renders the
+    // honest "no answer was given" state for live:false + answer:null.
+    const offAskDropped = window.engram.onBridgeAskDropped((req) => {
+      if (req.sessionId !== sessionIdRef.current) return
+      setMarks((prev) =>
+        prev.map((m) => (m.kind === 'ask' && m.requestId === req.requestId ? { ...m, live: false } : m)),
+      )
+    })
     // report_verdict (Phase 2) — Review's first onBridgeUi listener; every
     // other bridge tool (session_phase, show_figure, etc) is Learn-only
     // today (see the verdictHintsRef doctrine comment above and the
@@ -459,6 +469,7 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
     return () => {
       offEvent()
       offAsk()
+      offAskDropped()
       offUi()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

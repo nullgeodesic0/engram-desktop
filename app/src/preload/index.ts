@@ -148,6 +148,14 @@ const engramApi = {
     ipcRenderer.on('bridge:ask', handler)
     return () => ipcRenderer.removeListener('bridge:ask', handler)
   },
+  /** An ask whose relay connection died before it was answered — the card
+   * can never resolve, so the views orphan it (see bridgeServer's ask
+   * route). */
+  onBridgeAskDropped: (cb: (req: { sessionId: string; requestId: string }) => void): (() => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, req: { sessionId: string; requestId: string }) => cb(req)
+    ipcRenderer.on('bridge:ask-dropped', handler)
+    return () => ipcRenderer.removeListener('bridge:ask-dropped', handler)
+  },
   onBridgeBeat: (cb: (req: BridgeBeatRequest) => void): (() => void) => {
     const handler = (_e: Electron.IpcRendererEvent, req: BridgeBeatRequest) => cb(req)
     ipcRenderer.on('bridge:beat', handler)
