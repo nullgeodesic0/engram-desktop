@@ -15,7 +15,8 @@ import { Button } from '../components/ui/Button'
 import { PageHeader } from '../components/ui/PageHeader'
 import { SegmentedControl } from '../components/ui/SegmentedControl'
 import { sortTopics, TOPIC_SORT_OPTIONS, type TopicSortKey } from '../shared/topicSort'
-import { loadTopicSort, saveTopicSort } from '../shared/topicSortPrefs'
+import { loadTopicSort, saveTopicSort, loadTopicGroup, saveTopicGroup, type TopicGroupKey } from '../shared/topicSortPrefs'
+import { groupTopicsByFolder, TOPIC_GROUP_OPTIONS } from '../shared/topicFolders'
 import { Modal } from '../components/ui/Modal'
 import { MathRenderer } from '../components/MathRenderer'
 import { SessionHistoryDrawer } from '../components/SessionHistoryDrawer'
@@ -317,6 +318,7 @@ export function TopicMapView({
   // Shared with Learn's shelf (shared/topicSort + its persisted pick) so the
   // same library reads the same way on both surfaces.
   const [topicSort, setTopicSort] = useState<TopicSortKey>(loadTopicSort)
+  const [topicGroup, setTopicGroup] = useState<TopicGroupKey>(loadTopicGroup)
   const [graph, setGraph] = useState<TopicGraph | null>(null)
   const [retrievability, setRetrievability] = useState<Map<string, number> | null>(null)
   // F10: `retrievability === null` is ALREADY a legitimate resolved state
@@ -709,22 +711,41 @@ export function TopicMapView({
             // one mental model for the same list on both surfaces. Hidden
             // below two topics: nothing to order.
             topics.length > 1 ? (
-              <div className="flex items-center gap-2">
-                <span
-                  id="map-topic-sort-label"
-                  className="label-data text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-faint)]"
-                >
-                  sort
-                </span>
-                <SegmentedControl<TopicSortKey>
-                  ariaLabelledBy="map-topic-sort-label"
-                  options={TOPIC_SORT_OPTIONS}
-                  value={topicSort}
-                  onChange={(v) => {
-                    setTopicSort(v)
-                    saveTopicSort(v)
-                  }}
-                />
+              <div className="flex items-center gap-4 flex-wrap justify-end">
+                <div className="flex items-center gap-2">
+                  <span
+                    id="map-topic-group-label"
+                    className="label-data text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-faint)]"
+                  >
+                    group
+                  </span>
+                  <SegmentedControl<TopicGroupKey>
+                    ariaLabelledBy="map-topic-group-label"
+                    options={TOPIC_GROUP_OPTIONS}
+                    value={topicGroup}
+                    onChange={(v) => {
+                      setTopicGroup(v)
+                      saveTopicGroup(v)
+                    }}
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <span
+                    id="map-topic-sort-label"
+                    className="label-data text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-faint)]"
+                  >
+                    sort
+                  </span>
+                  <SegmentedControl<TopicSortKey>
+                    ariaLabelledBy="map-topic-sort-label"
+                    options={TOPIC_SORT_OPTIONS}
+                    value={topicSort}
+                    onChange={(v) => {
+                      setTopicSort(v)
+                      saveTopicSort(v)
+                    }}
+                  />
+                </div>
               </div>
             ) : undefined
           }
@@ -734,19 +755,53 @@ export function TopicMapView({
             of the old filled pill chips. The selected topic is warm and
             holds the cmd-item's underline open ([&::after]:scale-x-100 —
             the same 1px rule the idiom slides in on hover). */}
-        <div role="group" aria-label="Topics" className="flex items-center gap-x-3 gap-y-2 flex-wrap">
-          {sortedTopics.map((t) => (
-            <button
-              key={t.topic}
-              onClick={() => setSelectedTopic(t.topic)}
-              title={t.title}
-              aria-pressed={selectedTopic === t.topic}
-              className={`${selectedTopic === t.topic ? CTRL_FILLED : CTRL_QUIET} max-w-64 truncate text-left`}
-            >
-              {t.topic}
-            </button>
-          ))}
-        </div>
+        {/* Grouped by the learner's own filing when that's the shared
+            group-by pick (topicSortPrefs) — each folder its own labelled
+            row, so the strip reads the same way Learn's shelf does. Flat
+            otherwise, exactly as before. */}
+        {topicGroup === 'folder' ? (
+          <div className="flex flex-col gap-2">
+            {groupTopicsByFolder(topics, topicSort).map((g) => (
+              <div key={g.name} className="flex items-baseline gap-3">
+                <span
+                  className={`label-data text-[10px] uppercase tracking-[0.14em] shrink-0 w-28 truncate ${
+                    g.unfiled ? 'text-[var(--color-text-faint)]' : 'text-[var(--color-ink-warm-dim)]'
+                  }`}
+                  title={g.name}
+                >
+                  {g.name}
+                </span>
+                <div role="group" aria-label={g.name} className="flex items-center gap-x-3 gap-y-2 flex-wrap">
+                  {g.topics.map((t) => (
+                    <button
+                      key={t.topic}
+                      onClick={() => setSelectedTopic(t.topic)}
+                      title={t.title}
+                      aria-pressed={selectedTopic === t.topic}
+                      className={`${selectedTopic === t.topic ? CTRL_FILLED : CTRL_QUIET} max-w-64 truncate text-left`}
+                    >
+                      {t.topic}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div role="group" aria-label="Topics" className="flex items-center gap-x-3 gap-y-2 flex-wrap">
+            {sortedTopics.map((t) => (
+              <button
+                key={t.topic}
+                onClick={() => setSelectedTopic(t.topic)}
+                title={t.title}
+                aria-pressed={selectedTopic === t.topic}
+                className={`${selectedTopic === t.topic ? CTRL_FILLED : CTRL_QUIET} max-w-64 truncate text-left`}
+              >
+                {t.topic}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {error && (() => {

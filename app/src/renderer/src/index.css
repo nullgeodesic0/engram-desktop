@@ -299,6 +299,16 @@
   *::-webkit-scrollbar-thumb:hover {
     background-color: var(--color-ink-warm-dim);
   }
+  /* The square where a horizontal and a vertical scrollbar meet. Left
+     unstyled it keeps Chromium's own light default — a white notch in the
+     bottom-right corner of any doubly-scrolling pane (reported on Learn's
+     shelf). Transparent, matching the track above, so the corner is just
+     more of whatever surface is underneath. `-resizer` gets the same
+     treatment: it draws in that same corner on a resizable textarea. */
+  *::-webkit-scrollbar-corner,
+  *::-webkit-resizer {
+    background: transparent;
+  }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
       animation-duration: 0.01ms !important;

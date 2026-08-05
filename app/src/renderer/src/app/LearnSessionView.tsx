@@ -83,7 +83,8 @@ import { PlateFigure } from '../components/ui/PlateFigure'
 import { SegmentedControl } from '../components/ui/SegmentedControl'
 import { topicBucket } from '../shared/topicShelf'
 import { sortTopics, TOPIC_SORT_OPTIONS, type TopicSortKey } from '../shared/topicSort'
-import { loadTopicSort, saveTopicSort } from '../shared/topicSortPrefs'
+import { loadTopicSort, saveTopicSort, loadTopicGroup, saveTopicGroup, type TopicGroupKey } from '../shared/topicSortPrefs'
+import { groupTopicsByFolder, TOPIC_GROUP_OPTIONS } from '../shared/topicFolders'
 import { EnvironmentSteps } from '../components/EnvironmentSteps'
 import { extractTicketFromMessages } from '../shared/ticketParser'
 import { TicketCard } from '../components/ritual/TicketCard'
@@ -196,6 +197,7 @@ function LearnTopicGroup({
   onOpen,
   onSettings,
   onStartFresh,
+  hideFolderChip,
 }: {
   heading: string
   caption?: string
@@ -204,6 +206,8 @@ function LearnTopicGroup({
   onOpen: (t: TopicListEntry) => void
   onSettings: (t: TopicListEntry) => void
   onStartFresh: (t: TopicListEntry) => void
+  /** True when this group's own heading IS the folder name. */
+  hideFolderChip?: boolean
 }) {
   if (topics.length === 0) return null
   return (
@@ -216,6 +220,7 @@ function LearnTopicGroup({
             key={t.topic}
             variant="shelf"
             topic={t}
+            hideFolderChip={hideFolderChip}
             resumable={resumableTopics.has(t.topic)}
             onOpen={() => onOpen(t)}
             onSettings={() => onSettings(t)}
@@ -1669,6 +1674,9 @@ export function LearnSessionView({
   // question. Persisted (topicSortPrefs) — a list-view preference, unlike
   // the sitting style's deliberate per-sitting reset.
   const [topicSort, setTopicSort] = useState<TopicSortKey>(loadTopicSort)
+  // How the shelf partitions before sorting: the three state buckets
+  // (default, unchanged behavior) or the learner's own folders.
+  const [topicGroup, setTopicGroup] = useState<TopicGroupKey>(loadTopicGroup)
   // Minimap Precision fix (second report on the same bug) — jumps straight to
   // the checkpoint's OWN `CheckpointAnchor`, never the host message; see
   // shared/jumpToCheckpoint.ts's doctrine comment for the full root-cause
@@ -1872,22 +1880,41 @@ export function LearnSessionView({
                           change anything is noise. Orders WITHIN each shelf
                           group; the groups themselves never move. */}
                       {topics.length > 1 && (
-                        <div className="flex items-center gap-2 shrink-0 pb-1">
-                          <span
-                            id="learn-topic-sort-label"
-                            className="label-data text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-faint)]"
-                          >
-                            sort
-                          </span>
-                          <SegmentedControl<TopicSortKey>
-                            ariaLabelledBy="learn-topic-sort-label"
-                            options={TOPIC_SORT_OPTIONS}
-                            value={topicSort}
-                            onChange={(v) => {
-                              setTopicSort(v)
-                              saveTopicSort(v)
-                            }}
-                          />
+                        <div className="flex items-center gap-4 shrink-0 pb-1 flex-wrap justify-end">
+                          <div className="flex items-center gap-2">
+                            <span
+                              id="learn-topic-group-label"
+                              className="label-data text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-faint)]"
+                            >
+                              group
+                            </span>
+                            <SegmentedControl<TopicGroupKey>
+                              ariaLabelledBy="learn-topic-group-label"
+                              options={TOPIC_GROUP_OPTIONS}
+                              value={topicGroup}
+                              onChange={(v) => {
+                                setTopicGroup(v)
+                                saveTopicGroup(v)
+                              }}
+                            />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span
+                              id="learn-topic-sort-label"
+                              className="label-data text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-faint)]"
+                            >
+                              sort
+                            </span>
+                            <SegmentedControl<TopicSortKey>
+                              ariaLabelledBy="learn-topic-sort-label"
+                              options={TOPIC_SORT_OPTIONS}
+                              value={topicSort}
+                              onChange={(v) => {
+                                setTopicSort(v)
+                                saveTopicSort(v)
+                              }}
+                            />
+                          </div>
                         </div>
                       )}
                     </div>
@@ -1969,6 +1996,27 @@ export function LearnSessionView({
 
             {topics !== null && topics.length > 0 && (
               <div className="flex flex-col gap-6">
+                {topicGroup === 'folder' ? (
+                  // The learner's own filing replaces the state buckets —
+                  // one grouping at a time, because two nested groupings on
+                  // one shelf read as a filing cabinet, not a shelf. Every
+                  // topic still appears exactly once (groupTopicsByFolder is
+                  // a partition), sorted inside its folder by the same key.
+                  groupTopicsByFolder(topics, topicSort).map((g) => (
+                    <LearnTopicGroup
+                      key={g.name}
+                      heading={g.name}
+                      caption={g.unfiled ? 'not filed in a folder yet' : undefined}
+                      hideFolderChip
+                      topics={g.topics}
+                      resumableTopics={resumableTopics}
+                      onOpen={openTopic}
+                      onSettings={setSettingsFor}
+                      onStartFresh={startFreshForTopic}
+                    />
+                  ))
+                ) : (
+                  <>
                 <LearnTopicGroup
                   heading="Continue learning"
                   topics={active}
@@ -1994,6 +2042,8 @@ export function LearnSessionView({
                   onSettings={setSettingsFor}
                   onStartFresh={startFreshForTopic}
                 />
+                  </>
+                )}
                 {/* The shelf's last card, not a floating button below the list —
                     see AddTerritoryCard's doctrine comment. */}
                 <AddTerritoryCard

@@ -33,6 +33,11 @@ export interface TopicListEntry extends TopicSummary {
    * `nodes` when the whole topic is archived. Sparse: older engines omit
    * it; never assume. */
   retired?: number
+  /** App-local folder this topic is filed under, overlaid by
+   * `getTopicsCached` from topic-settings.json — NOT an engine field and
+   * never written to any graph. Purely presentational grouping (see
+   * TopicSettings.folder). Absent/null means unfiled. */
+  folder?: string | null
 }
 
 export type NodeState = 'new' | 'learning' | 'review'
@@ -229,6 +234,10 @@ export interface TopicSettings {
    * title — purely presentational, never written to the graph file, never
    * seen by the engine. Null/absent = use the engine's title. */
   displayTitle?: string | null
+  /** App-side folder for grouping topic lists in the UI. Same
+   * purely-presentational contract as `displayTitle`: nothing moves on disk
+   * and the engine never sees it. Null/absent = unfiled. */
+  folder?: string | null
 }
 
 export interface ArtifactEntry {

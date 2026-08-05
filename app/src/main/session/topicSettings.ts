@@ -31,9 +31,24 @@ export interface TopicSettings {
    * so renaming here can never desync anything the engine tracks. Null or
    * absent means "use the engine's own title". */
   displayTitle?: string | null
+  /** App-side folder this topic is filed under, for grouping topic lists in
+   * the UI. Same purely-presentational contract as `displayTitle` above: no
+   * file ever moves (the engine's own `graphs/<topic>.json` layout is
+   * untouched), the engine never sees it, and every session/CLI call still
+   * keys off the topic ID — so filing can never desync anything the engine
+   * tracks. The folder SET is implicit: it is exactly the distinct names in
+   * use across topics, so there is no registry to keep in sync and an
+   * emptied folder simply stops existing. Null or absent means unfiled. */
+  folder?: string | null
 }
 
-const EMPTY: TopicSettings = { systemPromptExtra: '', contextFiles: [], targetDate: null, displayTitle: null }
+const EMPTY: TopicSettings = {
+  systemPromptExtra: '',
+  contextFiles: [],
+  targetDate: null,
+  displayTitle: null,
+  folder: null,
+}
 
 function settingsPath(): string {
   return join(app.getPath('userData'), 'topic-settings.json')
@@ -69,6 +84,22 @@ export async function getDisplayTitles(): Promise<Record<string, string>> {
   for (const [id, s] of Object.entries(all)) {
     const title = s.displayTitle?.trim()
     if (title) out[id] = title
+  }
+  return out
+}
+
+/** topic id → folder, only for topics actually filed — the overlay
+ * `getTopicsCached` applies so every topic-list consumer (Learn's shelf, the
+ * map's tabs, Home, the palette) inherits filing from ONE place, exactly as
+ * `getDisplayTitles` does for renames. Read fresh per call for the same
+ * reason: filing a topic changes no graph mtime, so a settings read baked
+ * into the topics cache would go stale invisibly. */
+export async function getTopicFolders(): Promise<Record<string, string>> {
+  const all = await readAll()
+  const out: Record<string, string> = {}
+  for (const [id, s] of Object.entries(all)) {
+    const folder = s.folder?.trim()
+    if (folder) out[id] = folder
   }
   return out
 }
