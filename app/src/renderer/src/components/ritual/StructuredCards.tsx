@@ -49,13 +49,23 @@ export const ComparisonCard = memo(function ComparisonCard({
         </>
       }
     >
-      {title && <div className="font-(family-name:--font-serif) text-sm text-[var(--color-text-primary)]">{title}</div>}
+      {title && (
+        <MathRenderer
+          text={title}
+          inlineOnly
+          className="font-(family-name:--font-serif) text-sm text-[var(--color-text-primary)]"
+        />
+      )}
       {/* Stacks on a narrow window — a two-column contrast squeezed into an
         * unreadable ladder is worse than an honest single column. */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 pt-0.5">
         {[left, right].map((side, i) => (
           <div key={i} className="flex flex-col gap-1 min-w-0">
-            <span className="label-data text-[10px] tracking-[0.14em] text-[var(--color-ink-cool)]">{side.label}</span>
+            <MathRenderer
+              text={side.label}
+              inlineOnly
+              className="label-data text-[10px] tracking-[0.14em] text-[var(--color-ink-cool)]"
+            />
             <MathRenderer text={side.body} className="text-xs text-[var(--color-text-dim)] leading-relaxed" />
           </div>
         ))}
@@ -80,7 +90,13 @@ export const StepsCard = memo(function StepsCard({ title, steps }: { title: stri
         </>
       }
     >
-      {title && <div className="font-(family-name:--font-serif) text-sm text-[var(--color-text-primary)]">{title}</div>}
+      {title && (
+        <MathRenderer
+          text={title}
+          inlineOnly
+          className="font-(family-name:--font-serif) text-sm text-[var(--color-text-primary)]"
+        />
+      )}
       <ol className="flex flex-col gap-1.5 pt-0.5">
         {steps.map((step, i) => (
           <li key={i} className="flex gap-2.5 min-w-0">
@@ -137,7 +153,7 @@ export const FormulaCard = memo(function FormulaCard({
           className="text-[var(--color-text-primary)]"
         />
       </div>
-      {caption && <div className="fig-caption">{caption}</div>}
+      {caption && <MathRenderer text={caption} inlineOnly className="fig-caption" />}
       {where.length > 0 && (
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 pt-1 border-t border-[var(--color-hairline)] mt-0.5">
           {where.map((w, i) => (
@@ -178,9 +194,19 @@ export const CitationChip = memo(function CitationChip({
       >
         <span className="label-data text-[10px] tracking-[0.14em] text-[var(--color-ink-cool)] shrink-0">SOURCE</span>
         <span className="text-xs text-[var(--color-text-dim)] min-w-0">
-          {label}
-          {locator && <span className="text-[var(--color-text-faint)]"> · {locator}</span>}
-          {note && <span className="fig-caption"> — {note}</span>}
+          <MathRenderer text={label} inlineOnly className="inline" />
+          {locator && (
+            <span className="text-[var(--color-text-faint)]">
+              {' · '}
+              <MathRenderer text={locator} inlineOnly className="inline" />
+            </span>
+          )}
+          {note && (
+            <span className="fig-caption">
+              {' — '}
+              <MathRenderer text={note} inlineOnly className="inline" />
+            </span>
+          )}
         </span>
       </span>
     </div>

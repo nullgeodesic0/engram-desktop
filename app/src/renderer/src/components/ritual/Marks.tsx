@@ -253,7 +253,11 @@ export const StashStamp = memo(function StashStamp() {
 export const FigureCard = memo(function FigureCard({ title, body }: { title: string | null; body: string }) {
   return (
     <div className="tilt-card-soft panel px-4 py-3 max-w-[92%] flex flex-col gap-2">
-      {title && <div className="font-(family-name:--font-serif) text-sm text-[var(--color-text-primary)]">{title}</div>}
+      {/* Tutor-authored, so it can carry math exactly like the body does —
+        * rendered through MathRenderer rather than printed raw. */}
+      {title && (
+        <MathRenderer text={title} inlineOnly className="font-(family-name:--font-serif) text-sm text-[var(--color-text-primary)]" />
+      )}
       <MarkdownPreview source={body} />
     </div>
   )
