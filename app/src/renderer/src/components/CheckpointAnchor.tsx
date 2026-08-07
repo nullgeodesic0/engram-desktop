@@ -31,9 +31,27 @@ import type { ReactNode } from 'react'
  * carries the same chrome-clearance `scroll-margin-top` the message roots
  * still keep (for the fallback path only); it belongs on the actual
  * destination now. */
-export function CheckpointAnchor({ id, children }: { id: string; children: ReactNode }) {
+export function CheckpointAnchor({
+  id,
+  children,
+  replayed,
+}: {
+  id: string
+  children: ReactNode
+  /** True when this card was rebuilt from a saved transcript rather than
+   * arriving live. Stamps `data-mark-replayed`, which index.css uses to
+   * suppress every mark entrance animation beneath it.
+   *
+   * Without this, reopening a sitting with twenty accumulated marks played
+   * twenty simultaneous arrival animations — the whole history "landing" at
+   * once, which reads as a glitch and, worse, undermines what the animation
+   * MEANS. A mark settling in is the app saying "this just happened." A
+   * transcript being replayed is the app saying "this is what happened."
+   * Those are different claims and should not share a motion. */
+  replayed?: boolean
+}) {
   return (
-    <div data-checkpoint-id={id} className="scroll-anchor-top">
+    <div data-checkpoint-id={id} data-mark-replayed={replayed ? 'true' : undefined} className="scroll-anchor-top">
       {children}
     </div>
   )

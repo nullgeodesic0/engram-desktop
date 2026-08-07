@@ -405,7 +405,15 @@ export function MarkView({
     }
   } else content = <StashStamp />
 
-  return <CheckpointAnchor id={mark.id}>{content}</CheckpointAnchor>
+  // `dmark-` is `deriveRitualMarks`'s own id namespace (both live views mint
+  // `mark-N` instead), so the mark itself already knows whether it was
+  // replayed — no new plumbing through either view. See CheckpointAnchor's
+  // `replayed` doctrine comment for why replayed marks don't animate.
+  return (
+    <CheckpointAnchor id={mark.id} replayed={mark.id.startsWith('dmark-')}>
+      {content}
+    </CheckpointAnchor>
+  )
 }
 
 /** Shown at the transcript foot while the assessor examines the stash.
