@@ -90,8 +90,46 @@ export type BridgeUiIntent =
   | { kind: 'formula'; latex: string; caption: string | null; where: SymbolGloss[] }
   | { kind: 'citation'; label: string; locator: string | null; note: string | null }
 
+/** The five entities a model actually emits when it over-escapes prose.
+ * Ordered so `&amp;` resolves LAST — decoding it first would turn a literal
+ * `&amp;lt;` into `<` instead of `&lt;`. */
+const ENTITIES: [RegExp, string][] = [
+  [/&lt;/g, '<'],
+  [/&gt;/g, '>'],
+  [/&quot;/g, '"'],
+  [/&#0*39;|&apos;/g, "'"],
+  [/&nbsp;/g, ' '],
+  [/&amp;/g, '&'],
+]
+
+/** Undo HTML escaping in tutor-authored payload text.
+ *
+ * Observed live 2026-08-07, in a single `render_steps` call in one /learn
+ * sitting: the `title` field arrived as `for $r&lt;a$` while four of that same
+ * call's own step bodies carried a raw `for $r<a$`. Same model, same message,
+ * same tool — escaped in one field and not the others. The bytes are already
+ * escaped when Claude Code writes the transcript, so nothing between the model
+ * and this app did it.
+ *
+ * Nothing downstream can recover from it: `$r&lt;a$` reaches KaTeX as five
+ * literal characters where an inequality belongs. And it isn't confined to
+ * this channel — the assessor's `<task-notification>` payloads arrive escaped
+ * too (see shared/taskNotification.ts).
+ *
+ * So it's undone here, at the one boundary every bridge payload crosses,
+ * rather than in each card. Both live views and `deriveRitualMarks` route
+ * through this function, so a sitting can't render one way live and another
+ * on resume. The cost is that a learner-visible literal `&lt;` becomes `<` —
+ * which in physics or finance prose is what was meant every time. */
+function decodeEntities(v: string): string {
+  if (!v.includes('&')) return v
+  let out = v
+  for (const [re, ch] of ENTITIES) out = out.replace(re, ch)
+  return out
+}
+
 function str(v: unknown): string | null {
-  return typeof v === 'string' && v.trim().length > 0 ? v : null
+  return typeof v === 'string' && v.trim().length > 0 ? decodeEntities(v) : null
 }
 
 /** Optional string field: `undefined`/absent is fine and yields null; a
@@ -100,7 +138,7 @@ function str(v: unknown): string | null {
 function optStr(v: unknown): string | null | false {
   if (v === undefined || v === null) return null
   if (typeof v !== 'string') return false
-  return v.trim().length > 0 ? v : null
+  return v.trim().length > 0 ? decodeEntities(v) : null
 }
 
 function record(v: unknown): Record<string, unknown> | null {
@@ -163,7 +201,7 @@ export function bridgeUiIntent(tool: string, rawPayload: unknown): BridgeUiInten
         const rec = record(f)
         if (!rec) return null
         if (typeof rec.key !== 'string' || typeof rec.value !== 'string') return null
-        fields.push({ key: rec.key, value: rec.value })
+        fields.push({ key: decodeEntities(rec.key), value: decodeEntities(rec.value) })
       }
       if (fields.length === 0) return null
       return { kind: 'ticket', ticket: { kind, mode, fields } }
