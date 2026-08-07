@@ -65,6 +65,10 @@ import {
   hasQuickSource,
   isQuickEasyViolation,
   isAssessorAuditSpawnEvent,
+  isArtifactSmithSpawnEvent,
+  looksLikeArtifactSetCommand,
+  explorableTitleFromDescription,
+  explorableNodeFromPrompt,
   classifyEngramBashFailure,
   parseMisconceptionAdds,
   parseMisconceptionResolves,
@@ -597,6 +601,38 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
               { id: `mark-${markSeq.current++}`, atIndex: messagesRef.current.length, kind: 'misconception', text: misconception.text, node: misconception.node },
             ])
           }
+          // The smith's registration usually happens inside the background
+          // agent and never reaches this transcript at all; when the tutor
+          // runs it directly (SKILL.md's own fallback clause) it carries a
+          // real path, which is the strongest possible signal — a card with
+          // a working Open button rather than a bare title.
+          const artifactSet = looksLikeArtifactSetCommand(bashCommand)
+          if (artifactSet?.path) {
+            const path = artifactSet.path
+            const node = artifactSet.node
+            setMarks((prev) => {
+              // Fill in the pending spawn's path if one is waiting for this
+              // node, rather than drawing a second card beside it — same
+              // match-then-append discipline deriveRitualMarks uses.
+              const idx = prev.findIndex((m) => m.kind === 'explorable' && m.node === node && !m.path)
+              if (idx !== -1) {
+                const next = [...prev]
+                next[idx] = { ...next[idx], path } as RitualMark
+                return next
+              }
+              return [
+                ...prev,
+                {
+                  id: `mark-${markSeq.current++}`,
+                  atIndex: messagesRef.current.length,
+                  kind: 'explorable',
+                  title: node ? humanizeNodeId(node) : 'Explorable',
+                  path,
+                  node,
+                },
+              ]
+            })
+          }
           for (const resolvedId of parseMisconceptionResolves(bashCommand)) {
             setMarks((prev) => [
               ...prev,
@@ -620,6 +656,27 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
           // Checkpoint bookkeeping — same command-string sniff, same reason.
           pendingRateQuickRef.current = hasQuickSource(cmd)
           if (isQuickEasyViolation(cmd)) setSessionCapViolations((v) => v + 1)
+        }
+        // The re-encode path. review/SKILL.md §"second+ lapse on the same
+        // node" tells the tutor to spawn engram-artifact-smith when a card
+        // keeps dying — a frequent event for exactly the nodes a learner is
+        // struggling with most. Learn drew a card for it and `deriveRitualMarks`
+        // derived one on replay, but Review drew nothing live: the same spawn
+        // was invisible during the sitting and then appeared as a card when
+        // the sitting was reopened. Same shared signals both other surfaces
+        // use, so all three now agree.
+        if (isArtifactSmithSpawnEvent(event.name, event.input)) {
+          const input = event.input as { description?: unknown; prompt?: unknown }
+          setMarks((prev) => [
+            ...prev,
+            {
+              id: `mark-${markSeq.current++}`,
+              atIndex: messagesRef.current.length,
+              kind: 'explorable',
+              title: explorableTitleFromDescription(input.description) ?? 'Explorable',
+              node: explorableNodeFromPrompt(input.prompt),
+            },
+          ])
         }
         if (isAssessorAuditSpawnEvent(event.name, event.input)) {
           // The spawn itself is a real SessionEvent, so it can push a
