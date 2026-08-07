@@ -69,6 +69,7 @@ import { SessionMasthead } from '../components/SessionMasthead'
 import { SummaryOverlay, makePeek } from '../components/ritual/SummaryOverlay'
 import { parseGradeResults, type GradeResult } from '../../../shared/gradeResult'
 import { MarkView, type RitualMark } from '../components/ritual/Marks'
+import { bridgeUiIntent } from '../../../shared/bridgeUiIntents'
 import { ActionChips, type SuggestedAction } from '../components/ritual/ActionChips'
 import { SessionOpenPlate, SessionCeremony } from '../components/ritual/Bookends'
 import { Button } from '../components/ui/Button'
@@ -144,9 +145,6 @@ type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K>
 // The dialogue-grammar beats the app knows how to render/step through (mirrors
 // BeatStepper's STEPS keys) — beat_outcome payloads naming anything else are ignored,
 // since bridge:ui payloads are untrusted model output, not a validated internal call.
-const KNOWN_BEATS = new Set(['open_gap', 'predict', 'struggle', 'resolve', 'self_explain', 'connect', 'verify'])
-const KNOWN_OUTCOMES = new Set(['confirmed', 'partial', 'missed'])
-const KNOWN_ACTION_KINDS = new Set(['open_explorable', 'show_on_map', 'go_review', 'prefill'])
 
 /** The node id being taught isn't in the `next --topic` command itself — `next`
  * picks the node and returns it. `cmd_next` in engram.py `emit()`s
@@ -766,18 +764,20 @@ export function LearnSessionView({
       pushMark({ kind: 'beat', beat: req.beat, content: req.content })
       if (req.beat === 'resolve') emitPulse('resolve')
     })
-    // Generic tutor-driven UI signals (Task 5) — bridge:ui's payload is the MCP tool's
-    // raw (zod-validated-at-the-worker, but untrusted-here) input, so every field is
-    // typeof-checked before use and unknown tool names / malformed payloads are
-    // silently ignored rather than throwing or rendering garbage.
+    // Generic tutor-driven UI signals — the payload is the MCP tool's raw
+    // (zod-validated-at-the-worker, but untrusted-here) input, so it goes
+    // through `bridgeUiIntent`: ONE shared, unit-tested classifier both this
+    // view and ReviewSessionView call, rather than the hand-written typeof
+    // ladder that used to live here and had no counterpart in Review at all.
+    // Every guard this switch used to perform now lives there; what remains
+    // is purely "what does THIS view do about it."
     const offUi = window.engram.onBridgeUi((req) => {
       if (req.sessionId !== sessionIdRef.current) return
-      if (typeof req.payload !== 'object' || req.payload === null) return
-      const payload = req.payload
-      switch (req.tool) {
-        case 'session_phase': {
-          if (typeof payload.phase !== 'string') return
-          const nextPhase = payload.phase
+      const intent = bridgeUiIntent(req.tool, req.payload)
+      if (!intent) return
+      switch (intent.kind) {
+        case 'phase': {
+          const nextPhase = intent.phase
           const prevPhase = diagnosticGateRef.current.phase
           // Diagnostic plate first (if this transition is the one leaving
           // pretest) so it reads as "here's how pretest went" immediately
@@ -794,83 +794,60 @@ export function LearnSessionView({
           if (nextPhase === 'grading') tutorActivity.dispatchGradingPhaseEntered()
           break
         }
-        case 'beat_outcome': {
-          if (typeof payload.beat !== 'string' || !KNOWN_BEATS.has(payload.beat)) return
-          if (typeof payload.outcome !== 'string' || !KNOWN_OUTCOMES.has(payload.outcome)) return
-          const beat = payload.beat
-          const outcome = payload.outcome as BeatOutcome
-          // outcome is always one of confirmed/partial/missed here (KNOWN_OUTCOMES excludes
-          // 'visited'), so this always inks a richer signal than the plain "step taken"
-          // default onBridgeBeat sets — never the other way around.
+        case 'beat-outcome': {
+          // The intent's `outcome` is always confirmed/partial/missed (the
+          // router excludes 'visited'), so this always inks a richer signal
+          // than the plain "step taken" default onBridgeBeat sets — never the
+          // other way around.
           setBeatTrail((trail) => {
             const next = new Map(trail)
-            next.set(beat, outcome)
+            next.set(intent.beat, intent.outcome as BeatOutcome)
             return next
           })
           // The verify seal: only a confirmed verify beat earns it — partial/
           // missed outcomes get nothing, since the seal itself means
           // "confirmed" and stamping it for less would counterfeit the
           // receipt (same honesty oath as InkBurst never firing for a lapse).
-          if (beat === 'verify' && outcome === 'confirmed') pushMark({ kind: 'verify-seal' })
+          if (intent.beat === 'verify' && intent.outcome === 'confirmed') pushMark({ kind: 'verify-seal' })
           break
         }
-        case 'show_figure': {
-          if (typeof payload.body !== 'string') return
-          const title = typeof payload.title === 'string' ? payload.title : null
-          pushMark({ kind: 'figure', title, body: payload.body })
+        case 'figure':
+          pushMark({ kind: 'figure', title: intent.title, body: intent.body })
           break
-        }
-        case 'render_ticket': {
-          if (typeof payload.kind !== 'string') return
-          if (payload.mode !== undefined && typeof payload.mode !== 'string') return
-          if (!Array.isArray(payload.fields)) return
-          const fields: { key: string; value: string }[] = []
-          for (const f of payload.fields) {
-            if (typeof f !== 'object' || f === null) return
-            const rec = f as Record<string, unknown>
-            if (typeof rec.key !== 'string' || typeof rec.value !== 'string') return
-            fields.push({ key: rec.key, value: rec.value })
-          }
-          if (fields.length === 0) return
+        case 'comparison':
+          pushMark({ kind: 'comparison', title: intent.title, left: intent.left, right: intent.right })
+          break
+        case 'steps':
+          pushMark({ kind: 'steps', title: intent.title, steps: intent.steps })
+          break
+        case 'formula':
+          pushMark({ kind: 'formula', latex: intent.latex, caption: intent.caption, where: intent.where })
+          break
+        case 'citation':
+          pushMark({ kind: 'citation', label: intent.label, locator: intent.locator, note: intent.note })
+          break
+        case 'ticket':
           // Held as state, NOT pushed as a transcript mark. A tutor that
           // both calls render_ticket AND types the ticket in prose (observed
           // live 2026-08-05 — same sitting, one structured, one fenced) used
           // to draw TWO ticket cards: the mark inline and the prose-parsed
           // one in the pinned slot. Feeding the structured payload into the
           // same slot the prose parse feeds gives exactly one card, sourced
-          // from the better data when it exists. It also fixes a live/replay
-          // split that was already here: deriveRitualMarks never derived
-          // ticket marks, so a reopened sitting showed the prose card where
-          // the live one had shown a mark. Same single-card shape Review
-          // has always had.
-          setStructuredTicket({ kind: payload.kind, mode: (payload.mode as string) ?? null, fields })
+          // from the better data when it exists.
+          setStructuredTicket(intent.ticket)
           break
-        }
-        case 'suggest_action': {
-          if (!Array.isArray(payload.actions) || payload.actions.length > 3) return
-          const actions: SuggestedAction[] = []
-          for (const a of payload.actions) {
-            if (typeof a !== 'object' || a === null) return
-            const rec = a as Record<string, unknown>
-            if (typeof rec.label !== 'string') return
-            if (typeof rec.kind !== 'string' || !KNOWN_ACTION_KINDS.has(rec.kind)) return
-            if (rec.arg !== undefined && typeof rec.arg !== 'string') return
-            actions.push({ label: rec.label, kind: rec.kind as SuggestedAction['kind'], arg: rec.arg as string | undefined })
-          }
-          setSuggestedActions(actions)
+        case 'actions':
+          setSuggestedActions(intent.actions)
           break
-        }
-        case 'progress_note': {
-          if (typeof payload.text !== 'string') return
-          setProgressNote(payload.text)
+        case 'progress-note':
+          setProgressNote(intent.text)
           break
-        }
-        case 'spotlight_node': {
-          if (typeof payload.topic !== 'string' || typeof payload.node !== 'string') return
-          onSpotlight?.({ topicId: payload.topic, nodeId: payload.node })
+        case 'spotlight':
+          onSpotlight?.({ topicId: intent.topicId, nodeId: intent.nodeId })
           break
-        }
         default:
+          // `verdict-hint` (Review's own channel) and `annotate` (handled in
+          // main, not here) reach this view but have nothing to do in it.
           break
       }
     })

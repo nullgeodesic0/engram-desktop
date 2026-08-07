@@ -30,6 +30,7 @@ import {
   type StabilityMilestoneScale,
 } from './gradeResult'
 import { humanizeNodeId } from './humanizeId'
+import { bridgeUiIntent, type ComparisonSide, type LadderStep, type SymbolGloss } from './bridgeUiIntents'
 import { parseAuditNotification, parseCurriculumReturn, isTaskNotificationContent } from './taskNotification'
 import {
   isPretestRateCommand,
@@ -76,6 +77,7 @@ export const RENDER_BEAT = 'mcp__engram-ui-bridge__render_beat'
 export const BEAT_OUTCOME = 'mcp__engram-ui-bridge__beat_outcome'
 export const SESSION_PHASE = 'mcp__engram-ui-bridge__session_phase'
 export const ASK_USER_QUESTION = 'mcp__engram-ui-bridge__ask_user_question'
+const BRIDGE_PREFIX = 'mcp__engram-ui-bridge__'
 
 /** One bridge `tool_use` block, in true transcript emission order. */
 export interface BridgeToolUse {
@@ -465,6 +467,11 @@ export type DerivedRitualMark =
   | { id: string; atIndex: number; kind: 'agent-return'; topic: string; nodeCount: number }
   | { id: string; atIndex: number; kind: 'explorable'; title: string; path?: string; node?: string }
   | { id: string; atIndex: number; kind: 'verify-seal' }
+  | { id: string; atIndex: number; kind: 'figure'; title: string | null; body: string }
+  | { id: string; atIndex: number; kind: 'comparison'; title: string | null; left: ComparisonSide; right: ComparisonSide }
+  | { id: string; atIndex: number; kind: 'steps'; title: string | null; steps: LadderStep[] }
+  | { id: string; atIndex: number; kind: 'formula'; latex: string; caption: string | null; where: SymbolGloss[] }
+  | { id: string; atIndex: number; kind: 'citation'; label: string; locator: string | null; note: string | null }
   | { id: string; atIndex: number; kind: 'lapse'; node: string; returnDate: string | null }
   | {
       id: string
@@ -834,6 +841,42 @@ export function deriveRitualMarks(entries: unknown[]): DerivedRitualMark[] {
       })
       pendingAudits.push({ toolUseId: event.id, markIndex: marks.length - 1 })
       continue
+    }
+    // The content-bearing bridge tools, classified by the SAME shared router
+    // both live views use (`bridgeUiIntent`) rather than a fourth hand-rolled
+    // shape guard. `show_figure` is derived here too, correcting a long-
+    // standing live/replay split: a figure card drawn during a live sitting
+    // simply vanished when the sitting was reopened, because this walk had no
+    // branch for it. Every one of these is a plain bridge tool_use sitting in
+    // the transcript — there was never anything undurable about them.
+    if (event.name.startsWith(BRIDGE_PREFIX)) {
+      const intent = bridgeUiIntent(event.name.slice(BRIDGE_PREFIX.length), event.input)
+      if (intent) {
+        if (intent.kind === 'figure') {
+          marks.push({ id: `dmark-${seq++}`, atIndex: messageCount, kind: 'figure', title: intent.title, body: intent.body })
+          continue
+        }
+        if (intent.kind === 'comparison') {
+          marks.push({ id: `dmark-${seq++}`, atIndex: messageCount, kind: 'comparison', title: intent.title, left: intent.left, right: intent.right })
+          continue
+        }
+        if (intent.kind === 'steps') {
+          marks.push({ id: `dmark-${seq++}`, atIndex: messageCount, kind: 'steps', title: intent.title, steps: intent.steps })
+          continue
+        }
+        if (intent.kind === 'formula') {
+          marks.push({ id: `dmark-${seq++}`, atIndex: messageCount, kind: 'formula', latex: intent.latex, caption: intent.caption, where: intent.where })
+          continue
+        }
+        if (intent.kind === 'citation') {
+          marks.push({ id: `dmark-${seq++}`, atIndex: messageCount, kind: 'citation', label: intent.label, locator: intent.locator, note: intent.note })
+          continue
+        }
+      }
+      // Every other bridge tool falls through to the specific branches below,
+      // which own signals this generic pass has no business duplicating (the
+      // phase frontispiece's own change-detection, the diagnostic gate, the
+      // verify seal's confirmed-only rule).
     }
     if (event.name === SESSION_PHASE) {
       const input = event.input as { phase?: unknown }

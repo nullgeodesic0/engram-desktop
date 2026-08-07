@@ -205,5 +205,61 @@ server.registerTool('report_verdict', {
   },
 }, async (args) => fireUi('report_verdict', args))
 
+// ── Structured teaching moments ────────────────────────────────────────────
+// Four tools for the shapes the dialogue already produces constantly and the
+// transcript could only render as undifferentiated prose: the contrast case,
+// the step ladder, the set formula, and the source citation.
+//
+// None of them changes WHAT the tutor may say. Each carries content the model
+// was about to write in prose anyway — the same licence show_figure has always
+// run on — so the loop's withholding discipline (no canonical answer before
+// the confidence pick, no rubric before the production) is untouched: it
+// constrains the tutor's words, not the element that sets them. Each
+// description says so explicitly, because a tool that LOOKS like a reveal
+// channel will eventually be used as one.
+
+server.registerTool('render_comparison', {
+  title: 'Render Comparison',
+  description:
+    "Advisory, best-effort: draw a contrast case as two labelled columns instead of two paragraphs — the move you already make when a misconception needs a boundary drawn (canonical vs grand canonical, the learner's approach vs the correct one, before vs after). `left`/`right` each take a short `label` and a `body`; LaTeX is rendered. Say the same thing in your prose as you normally would; this only sets it side by side. Subject to the same timing rules as anything else you say — never use it to show a canonical answer earlier than your instructions allow.",
+  inputSchema: {
+    title: z.string().optional(),
+    left: z.object({ label: z.string(), body: z.string() }),
+    right: z.object({ label: z.string(), body: z.string() }),
+  },
+}, async (args) => fireUi('render_comparison', args))
+
+server.registerTool('render_steps', {
+  title: 'Render Steps',
+  description:
+    "Advisory, best-effort: lay a derivation or procedure out as a numbered ladder (up to 12 rungs) rather than a run-on paragraph. Each step takes `text` and an optional `note` — the 'why this step' aside you'd otherwise put in parentheses. LaTeX is rendered in both. Especially for procedure nodes, where the probe is 'walk me through it'. Subject to the same timing rules as anything else you say — this is for a method being taught or reviewed, never a worked answer shown before the learner has produced one.",
+  inputSchema: {
+    title: z.string().optional(),
+    steps: z.array(z.object({ text: z.string(), note: z.string().optional() })).min(1).max(12),
+  },
+}, async (args) => fireUi('render_steps', args))
+
+server.registerTool('render_formula', {
+  title: 'Render Formula',
+  description:
+    "Advisory, best-effort: set one display equation with a caption and a where-clause. `latex` is the bare expression (no $$ needed), `caption` names what it is, and `where` is up to 8 {symbol, meaning} pairs — the glossary that actually unblocks a learner mid-derivation. Use it for the equation a node turns on, not for every inline expression (ordinary math in your prose already renders).",
+  inputSchema: {
+    latex: z.string(),
+    caption: z.string().optional(),
+    where: z.array(z.object({ symbol: z.string(), meaning: z.string() })).max(8).optional(),
+  },
+}, async (args) => fireUi('render_formula', args))
+
+server.registerTool('cite_source', {
+  title: 'Cite Source',
+  description:
+    "Advisory, best-effort: name where the material you're teaching came from — `label` is the source (a textbook, a paper, an exam), `locator` the place in it ('ch. 13', 'problem 4b', 'p. 220'), `note` an optional one-line gloss. Pins a small provenance chip into the transcript. Use it when you're drawing on a specific source the learner gave you or the topic was built from; never invent a citation you aren't actually working from.",
+  inputSchema: {
+    label: z.string(),
+    locator: z.string().optional(),
+    note: z.string().optional(),
+  },
+}, async (args) => fireUi('cite_source', args))
+
 const transport = new StdioServerTransport()
 await server.connect(transport)

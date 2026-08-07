@@ -1672,48 +1672,47 @@
   animation: frontispiece-settle 0.5s var(--ease-out-soft) 0.15s both;
 }
 
-/* DiagnosticPlate (pretest results plate, Marks.tsx/DiagnosticPlate.tsx) —
- * a brief warm-ink wash on arrival, same family as annotation-ink-in, so the
- * plate reads as freshly set rather than always having been there. */
-@keyframes diagnostic-ink-in {
-  0% { background-color: color-mix(in srgb, var(--color-ink-warm) 14%, transparent); }
-  100% { background-color: transparent; }
+/* ── The one entrance every ritual mark card uses ───────────────────────────
+ * Four near-identical `*-ink-in` keyframes used to live here, one per card,
+ * each hard-coding its own accent and each drifting slightly (14% vs 16%
+ * wash; some cards had no entrance at all, and ToolFailureCard borrowed
+ * MisconceptionPin's danger-toned wash onto a warm card). They are now ONE
+ * keyframe reading `--ink-accent` off the element, so a card's entrance can
+ * never disagree with its own ink again, and every mark — however rare the
+ * event that produced it — arrives the same way.
+ *
+ * The motion itself: a short rise settling to rest under a wash of the card's
+ * own accent that drains as it lands. Same `--ease-out-soft` and the same
+ * "ink drying" idea the frontispiece and annotation animations already use;
+ * the rise is what makes a card read as *arriving* rather than having always
+ * been there, which is the whole job of a transcript overlay. The global
+ * `prefers-reduced-motion` kill-switch above zeroes this like everything
+ * else — no separate guard needed. */
+@keyframes mark-settle-in {
+  0% {
+    opacity: 0;
+    transform: translateY(4px);
+    background-color: color-mix(in srgb, var(--ink-accent, var(--color-ink-warm)) 15%, transparent);
+  }
+  55% { opacity: 1; }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+    background-color: transparent;
+  }
 }
-.ritual-diagnostic-in {
-  animation: diagnostic-ink-in calc(var(--dur-base) * 3) var(--ease-out-soft);
+.ritual-mark-in {
+  animation: mark-settle-in calc(var(--dur-base) * 3) var(--ease-out-soft);
 }
 
-/* MisconceptionPin (Marks.tsx/MisconceptionPin.tsx) — same ink-wash family as
- * diagnostic-ink-in, danger-toned so a freshly-pinned specimen reads as
- * caught-in-the-act rather than just another card appearing. */
-@keyframes misconception-ink-in {
-  0% { background-color: color-mix(in srgb, var(--color-ink-danger) 16%, transparent); }
-  100% { background-color: transparent; }
-}
-.ritual-misconception-in {
-  animation: misconception-ink-in calc(var(--dur-base) * 3) var(--ease-out-soft);
-}
-
-/* ExplorableForged (Marks.tsx/ExplorableForged.tsx) — same family, violet-
- * toned to match the card's own ink. */
-@keyframes explorable-ink-in {
-  0% { background-color: color-mix(in srgb, var(--color-ink-violet) 14%, transparent); }
-  100% { background-color: transparent; }
-}
-.ritual-explorable-in {
-  animation: explorable-ink-in calc(var(--dur-base) * 3) var(--ease-out-soft);
-}
-
-/* AuditCard (Marks.tsx/AuditCard.tsx) — same ink-wash family, cool-toned since
- * the card itself is neutral (agree/disagree color lives on the text/border,
- * not the entrance — the wash just marks "freshly landed"). */
-@keyframes audit-ink-in {
-  0% { background-color: color-mix(in srgb, var(--color-ink-cool) 14%, transparent); }
-  100% { background-color: transparent; }
-}
-.ritual-audit-in {
-  animation: audit-ink-in calc(var(--dur-base) * 3) var(--ease-out-soft);
-}
+/* The four legacy class names, kept as thin accent-setting aliases rather than
+ * rewritten at every call site: same single keyframe, each just declaring the
+ * ink it was always meant to wash in. Cards migrated to `MarkFrame` set
+ * `--ink-accent` themselves and use `.ritual-mark-in` directly. */
+.ritual-diagnostic-in { --ink-accent: var(--color-ink-warm); animation: mark-settle-in calc(var(--dur-base) * 3) var(--ease-out-soft); }
+.ritual-misconception-in { --ink-accent: var(--color-ink-danger); animation: mark-settle-in calc(var(--dur-base) * 3) var(--ease-out-soft); }
+.ritual-explorable-in { --ink-accent: var(--color-ink-violet); animation: mark-settle-in calc(var(--dur-base) * 3) var(--ease-out-soft); }
+.ritual-audit-in { --ink-accent: var(--color-ink-cool); animation: mark-settle-in calc(var(--dur-base) * 3) var(--ease-out-soft); }
 
 /* AskCard (ritual/AskCard.tsx) — Wave E, Task 11. An OPEN ask genuinely blocks
  * the tutor's turn (bridgeServer.ts holds the HTTP response open), so it

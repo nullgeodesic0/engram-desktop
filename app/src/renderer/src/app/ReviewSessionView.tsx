@@ -40,12 +40,14 @@ import { SectionBanner } from '../components/ui/SectionBanner'
 import { StatFraction } from '../components/ui/StatFraction'
 import { ErrorPanel } from '../components/ErrorPanel'
 import { recordConfidence, latestPickFor } from '../shared/calibrationStore'
-import { extractTicketFromMessages } from '../shared/ticketParser'
+import { extractTicketFromMessages, type ParsedTicket } from '../shared/ticketParser'
 import { composeReviewKickoff, composeResumeNudge, detectResumeState, capForMins } from '../shared/reviewKickoff'
 import { loadSittingPrefs, saveSittingMins, type SittingPrefs } from '../shared/sittingPrefs'
 import { useDateRollover } from '../shared/dateRollover'
 import { recallDueNodes, quickShare, type RecallDueEntry } from '../shared/checkpointEvidence'
 import { TicketCard } from '../components/ritual/TicketCard'
+import { ActionChips, type SuggestedAction } from '../components/ritual/ActionChips'
+import { bridgeUiIntent } from '../../../shared/bridgeUiIntents'
 import { ReadyRoomPlate } from '../components/ritual/ReadyRoomPlate'
 import { ReviewHorizon } from '../components/ReviewHorizon'
 import { InkWell } from '../components/ritual/InkWell'
@@ -54,7 +56,7 @@ import { ExportCommand } from '../components/ui/ExportCommand'
 import { trailingRecalled } from '../../../shared/gradeResult'
 import { invalidateSearchIndex } from '../shared/searchIndex'
 import { computeDueBuckets } from '../shared/dueBuckets'
-import { MarkView, type RitualMark } from '../components/ritual/Marks'
+import { MarkView, type RitualMark, type MarkPayload } from '../components/ritual/Marks'
 import type { ReviewDocketItem } from '../components/ritual/ReviewDocket'
 import { deriveRitualMarks } from '../../../shared/ritualFromTranscript'
 import { parseAuditNotification, parseCurriculumReturn } from '../../../shared/taskNotification'
@@ -77,7 +79,6 @@ import {
   deriveVerdictRegions,
   verdictRegionMessageRenders,
   shouldSuppressSchedule,
-  parseVerdictHint,
   type VerdictSegment,
   type ScheduleSegment,
   type VerdictHint,
@@ -256,19 +257,33 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
   // panel can skeleton rather than flash a false "nothing scheduled".
   const [horizonBuckets, setHorizonBuckets] = useState<number[] | null>(null)
   const [holdingCount, setHoldingCount] = useState(0)
-  // Ritual marks — Review's own minimal slice of Learn's atIndex-interleave
-  // plumbing (LearnSessionView), needed here only for the opening docket
-  // (one-time, `kind: 'docket'`) and the lapse rite (derivable, `kind:
-  // 'lapse'`) — see the doctrine comment on RitualMark in Marks.tsx. Review's
-  // one `onBridgeUi` listener (added for report_verdict, below) is scoped to
-  // exactly that tool — every OTHER bridge tool (session_phase, show_figure,
-  // render_ticket, etc) stays Learn-only for now: `render_ticket` in
-  // particular is deliberately not wired here, since Review's ticket already
-  // renders correctly through the existing text-fence path (BeatCard's
-  // `splitAroundTicket`) and adding a second generic listener for tools no
-  // installed skill calls yet isn't worth the structural change — extend if/
-  // when it's needed.
+  // Ritual marks — Review's slice of Learn's atIndex-interleave plumbing
+  // (LearnSessionView); see the doctrine comment on RitualMark in Marks.tsx.
+  //
+  // This used to be a deliberately minimal slice: the opening docket and the
+  // lapse rite only, with `onBridgeUi` scoped to `report_verdict` and every
+  // other bridge tool early-returned as "Learn-only for now." That reasoning
+  // did not survive contact with a real /review sitting. The tutor is the
+  // same model reading the same bridge tool descriptions in both views, so it
+  // calls `show_figure` and `session_phase` in a review exactly as readily as
+  // in a lesson — and those calls were being dropped on the floor here while
+  // drawing cards there. Worse, `deriveRitualMarks` DID derive some of them,
+  // so reopening a review sitting showed cards the live sitting never did.
+  //
+  // Review now handles the whole vocabulary through the same shared
+  // `bridgeUiIntent` router Learn uses. The only intents it still ignores are
+  // the ones it structurally has no surface for: `beat-outcome` (no beat
+  // trail — Review has no dialogue-grammar walk) and `spotlight` (no map
+  // callback plumbed to this view).
   const [marks, setMarks] = useState<RitualMark[]>([])
+  // The three non-mark bridge:ui surfaces, now that Review parses the whole
+  // vocabulary: a structured ticket (preferred over the prose parse when the
+  // tutor sends one), the tutor's own action chips, and its one-line plan
+  // note. All three are ephemeral session state, cleared on a fresh sitting
+  // alongside `marks` below.
+  const [structuredTicket, setStructuredTicket] = useState<ParsedTicket | null>(null)
+  const [suggestedActions, setSuggestedActions] = useState<SuggestedAction[]>([])
+  const [progressNote, setProgressNote] = useState<string | null>(null)
   // Chat Presence Wave D — renderer-local, live-only "what's the tutor doing
   // right now" (shared/tutorActivity.ts's doctrine comment has the full
   // rationale). Additive alongside `busy` above: nothing here replaces it.
@@ -449,22 +464,69 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
         prev.map((m) => (m.kind === 'ask' && m.requestId === req.requestId ? { ...m, live: false } : m)),
       )
     })
-    // report_verdict (Phase 2) — Review's first onBridgeUi listener; every
-    // other bridge tool (session_phase, show_figure, etc) is Learn-only
-    // today (see the verdictHintsRef doctrine comment above and the
-    // `marks` state's own comment for why Review never needed this
-    // generic channel before). Payload shape-guarded via the same
-    // `parseVerdictHint` replay's `buildHistoryTimeline` uses, so live and
-    // replay can never disagree about what counts as a well-formed hint.
+    // The full bridge:ui vocabulary, through the same shared `bridgeUiIntent`
+    // router LearnSessionView uses — see the `marks` state's doctrine comment
+    // above for why this is no longer scoped to `report_verdict` alone. The
+    // router owns every shape guard (including routing `report_verdict`
+    // through the very `parseVerdictHint` replay's `buildHistoryTimeline`
+    // uses, so live and replay still can never disagree about what counts as
+    // a well-formed hint).
     const offUi = window.engram.onBridgeUi((req) => {
       if (req.sessionId !== sessionIdRef.current) return
-      if (req.tool !== 'report_verdict') return
-      const hint = parseVerdictHint(req.payload)
-      if (!hint) return
-      const idx = messagesRef.current.length
-      const list = verdictHintsRef.current.get(idx) ?? []
-      list.push(hint)
-      verdictHintsRef.current.set(idx, list)
+      const intent = bridgeUiIntent(req.tool, req.payload)
+      if (!intent) return
+      const pushUiMark = (mark: MarkPayload) =>
+        setMarks((prev) => [
+          ...prev,
+          { id: `mark-${markSeq.current++}`, atIndex: messagesRef.current.length, ...mark } as RitualMark,
+        ])
+      switch (intent.kind) {
+        case 'verdict-hint': {
+          const idx = messagesRef.current.length
+          const list = verdictHintsRef.current.get(idx) ?? []
+          list.push(intent.hint)
+          verdictHintsRef.current.set(idx, list)
+          break
+        }
+        case 'phase':
+          // No diagnostic gate here — that's Learn's pretest plate, and a
+          // review sitting has no pretest. The frontispiece itself is the
+          // same divider in both views.
+          pushUiMark({ kind: 'phase', phase: intent.phase })
+          if (intent.phase === 'grading') tutorActivity.dispatchGradingPhaseEntered()
+          break
+        case 'figure':
+          pushUiMark({ kind: 'figure', title: intent.title, body: intent.body })
+          break
+        case 'comparison':
+          pushUiMark({ kind: 'comparison', title: intent.title, left: intent.left, right: intent.right })
+          break
+        case 'steps':
+          pushUiMark({ kind: 'steps', title: intent.title, steps: intent.steps })
+          break
+        case 'formula':
+          pushUiMark({ kind: 'formula', latex: intent.latex, caption: intent.caption, where: intent.where })
+          break
+        case 'citation':
+          pushUiMark({ kind: 'citation', label: intent.label, locator: intent.locator, note: intent.note })
+          break
+        case 'ticket':
+          // Same single-slot discipline Learn uses: the structured payload
+          // wins over the prose parse (`extractTicketFromMessages`) rather
+          // than drawing a second card beside it.
+          setStructuredTicket(intent.ticket)
+          break
+        case 'actions':
+          setSuggestedActions(intent.actions)
+          break
+        case 'progress-note':
+          setProgressNote(intent.text)
+          break
+        default:
+          // `beat-outcome` (no beat trail in Review), `spotlight` (no map
+          // callback plumbed here), `annotate` (handled in main).
+          break
+      }
     })
     return () => {
       offEvent()
@@ -769,6 +831,9 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
       setRevealBatchId(null)
       setSessionQuickCount(0)
       setSessionCapViolations(0)
+      setStructuredTicket(null)
+      setSuggestedActions([])
+      setProgressNote(null)
       pendingRateQuickRef.current = false
     }
 
@@ -913,9 +978,30 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
     setAttachedFiles((prev) => [...prev, ...picked.filter((p) => !prev.includes(p))])
   }
 
+  /** Review's counterpart to Learn's chip handler. Deliberately narrower:
+   * `show_on_map` is dropped (no map callback is plumbed to this view, and a
+   * chip that silently does nothing is worse than a chip that isn't offered),
+   * and `open_explorable` opens the path the tutor was handed rather than
+   * cross-checking a jobs rail Review doesn't have. `prefill` never sends —
+   * same contract as Learn's. */
+  async function handleSuggestedAction(a: SuggestedAction) {
+    setSuggestedActions([])
+    if (a.kind === 'prefill') {
+      setProduction(a.arg ?? '')
+      return
+    }
+    if (a.kind === 'open_explorable' && a.arg) {
+      window.engram.openArtifact(a.arg)
+    }
+  }
+
   async function submitProduction() {
     if (!sessionId || !production.trim() || busy) return
     const text = production.trim()
+    // Chips are the tutor's offer about the state of play BEFORE this turn —
+    // stale the instant the learner says something. Same clearing rule Learn
+    // uses.
+    setSuggestedActions([])
     const files = attachedFiles
     setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'user', text, attachments: files, timestamp: Date.now() }])
     setBusy(true)
@@ -1227,7 +1313,13 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
   /** Same tail case for the re-anchored lapse/milestone marks below. */
   const tailOtherMarks = resolvedOtherMarks.filter((g) => g.resolvedIndex === null)
   const lastUserMessageId = useMemo(() => [...messages].reverse().find((m) => m.role === 'user')?.id ?? null, [messages])
-  const latestTicket = useMemo(() => extractTicketFromMessages(messages), [messages])
+  // Structured payload wins when the tutor sent one (render_ticket); the
+  // prose fence stays the fallback, so a tutor that only prints the block —
+  // and every historical transcript — renders exactly as it always did.
+  const latestTicket = useMemo(
+    () => structuredTicket ?? extractTicketFromMessages(messages),
+    [structuredTicket, messages],
+  )
 
   // Chat Instruments Wave A — wired at the whole session pane's own root
   // below (not just the transcript's ChatScrollRegion), so it also covers
@@ -1531,6 +1623,9 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
                   comment for why a resumed sitting is labeled "this sitting",
                   never a recovered original start time. */}
               <div className="ml-auto flex items-center gap-4 shrink-0 min-w-0">
+                {/* The tutor's own one-line plan status (progress_note) —
+                    same slot and same treatment Learn gives it. */}
+                {progressNote && <MathRenderer text={progressNote} inlineOnly className="fig-caption truncate min-w-0" />}
                 {sittingStartedAt !== null && (
                   <SittingClock startedAt={sittingStartedAt} running={phase === 'in-session'} label="this sitting" />
                 )}
@@ -1995,6 +2090,13 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
               happened and where the record lives). */}
           {tutorActivity.activity.kind === 'ended' && (
             <div className="shrink-0 fig-caption px-1">this sitting has closed · session history holds the record</div>
+          )}
+
+          {/* The tutor's suggested next steps (suggest_action) — chips, never
+              auto-sent; cleared the moment the learner sends anything, same
+              contract Learn's chips run on. */}
+          {suggestedActions.length > 0 && phase !== 'done' && (
+            <ActionChips actions={suggestedActions} onAct={handleSuggestedAction} />
           )}
 
           {/* Chat Presence Wave E, Task 11 — stays mounted (disabled via
