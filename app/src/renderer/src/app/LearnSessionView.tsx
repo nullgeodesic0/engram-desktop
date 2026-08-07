@@ -826,6 +826,9 @@ export function LearnSessionView({
         case 'citation':
           pushMark({ kind: 'citation', label: intent.label, locator: intent.locator, note: intent.note })
           break
+        case 'plot':
+          pushMark({ kind: 'plot', title: intent.title, xLabel: intent.xLabel, yLabel: intent.yLabel, series: intent.series, markers: intent.markers })
+          break
         case 'ticket':
           // Held as state, NOT pushed as a transcript mark. A tutor that
           // both calls render_ticket AND types the ticket in prose (observed

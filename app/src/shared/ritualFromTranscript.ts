@@ -30,7 +30,7 @@ import {
   type StabilityMilestoneScale,
 } from './gradeResult'
 import { humanizeNodeId } from './humanizeId'
-import { bridgeUiIntent, type ComparisonSide, type LadderStep, type SymbolGloss } from './bridgeUiIntents'
+import { bridgeUiIntent, type ComparisonSide, type LadderStep, type SymbolGloss, type PlotSeries, type PlotMarker } from './bridgeUiIntents'
 import { parseAuditNotification, parseCurriculumReturn, isTaskNotificationContent } from './taskNotification'
 import {
   isPretestRateCommand,
@@ -472,6 +472,16 @@ export type DerivedRitualMark =
   | { id: string; atIndex: number; kind: 'steps'; title: string | null; steps: LadderStep[] }
   | { id: string; atIndex: number; kind: 'formula'; latex: string; caption: string | null; where: SymbolGloss[] }
   | { id: string; atIndex: number; kind: 'citation'; label: string; locator: string | null; note: string | null }
+  | {
+      id: string
+      atIndex: number
+      kind: 'plot'
+      title: string | null
+      xLabel: string | null
+      yLabel: string | null
+      series: PlotSeries[]
+      markers: PlotMarker[]
+    }
   | { id: string; atIndex: number; kind: 'lapse'; node: string; returnDate: string | null }
   | {
       id: string
@@ -870,6 +880,19 @@ export function deriveRitualMarks(entries: unknown[]): DerivedRitualMark[] {
         }
         if (intent.kind === 'citation') {
           marks.push({ id: `dmark-${seq++}`, atIndex: messageCount, kind: 'citation', label: intent.label, locator: intent.locator, note: intent.note })
+          continue
+        }
+        if (intent.kind === 'plot') {
+          marks.push({
+            id: `dmark-${seq++}`,
+            atIndex: messageCount,
+            kind: 'plot',
+            title: intent.title,
+            xLabel: intent.xLabel,
+            yLabel: intent.yLabel,
+            series: intent.series,
+            markers: intent.markers,
+          })
           continue
         }
       }

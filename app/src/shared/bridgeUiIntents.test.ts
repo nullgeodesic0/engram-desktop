@@ -187,3 +187,57 @@ describe('bridgeUiIntent — HTML-escaped payloads', () => {
     expect(r && r.kind === 'progress-note' && r.text).toBe('node 2 of 3 — $r<a$')
   })
 })
+
+describe('bridgeUiIntent — render_plot', () => {
+  const line = [[0, 0], [1, 1], [2, 2]]
+
+  it('accepts [x,y] pairs and {x,y} objects alike', () => {
+    const a = bridgeUiIntent('render_plot', { series: [{ label: '$E(r)$', points: line }] })
+    const b = bridgeUiIntent('render_plot', {
+      series: [{ label: '$E(r)$', points: line.map(([x, y]) => ({ x, y })) }],
+    })
+    expect(a).toEqual(b)
+    expect(a && a.kind === 'plot' && a.series[0].points).toEqual(line)
+    expect(a && a.kind === 'plot' && a.series[0].dashed).toBe(false)
+  })
+
+  it('carries labels, markers, and the dashed flag', () => {
+    const r = bridgeUiIntent('render_plot', {
+      title: 'Field of a uniformly charged sphere',
+      x_label: '$r$',
+      y_label: '$E(r)$',
+      series: [
+        { label: 'inside', points: line },
+        { label: 'the common wrong shape', points: line, dashed: true },
+      ],
+      markers: [{ x: 1, label: '$r=a$' }, { x: 2 }],
+    })
+    expect(r && r.kind === 'plot' && r.title).toBe('Field of a uniformly charged sphere')
+    expect(r && r.kind === 'plot' && r.series[1].dashed).toBe(true)
+    expect(r && r.kind === 'plot' && r.markers).toEqual([{ x: 1, label: '$r=a$' }, { x: 2, label: null }])
+  })
+
+  it('rejects non-finite coordinates rather than poisoning the axis fit', () => {
+    for (const bad of [NaN, Infinity, -Infinity, null, '3']) {
+      expect(bridgeUiIntent('render_plot', { series: [{ label: 'x', points: [[0, 0], [1, bad]] }] })).toBeNull()
+    }
+  })
+
+  it('enforces its caps and minima', () => {
+    // A single point is not a shape.
+    expect(bridgeUiIntent('render_plot', { series: [{ label: 'x', points: [[0, 0]] }] })).toBeNull()
+    expect(bridgeUiIntent('render_plot', { series: [] })).toBeNull()
+    const four = Array.from({ length: 4 }, () => ({ label: 'x', points: line }))
+    expect(bridgeUiIntent('render_plot', { series: four })).toBeNull()
+    const many = Array.from({ length: 97 }, (_, i) => [i, i])
+    expect(bridgeUiIntent('render_plot', { series: [{ label: 'x', points: many }] })).toBeNull()
+    const fiveMarkers = Array.from({ length: 5 }, (_, i) => ({ x: i }))
+    expect(bridgeUiIntent('render_plot', { series: [{ label: 'x', points: line }], markers: fiveMarkers })).toBeNull()
+  })
+
+  it('requires a series label, and decodes entities in it', () => {
+    expect(bridgeUiIntent('render_plot', { series: [{ points: line }] })).toBeNull()
+    const r = bridgeUiIntent('render_plot', { series: [{ label: '$r&lt;a$', points: line }] })
+    expect(r && r.kind === 'plot' && r.series[0].label).toBe('$r<a$')
+  })
+})
