@@ -321,7 +321,17 @@ export function isMarkBoundaryToolUse(name: string, input: Record<string, unknow
       tool === 'ask_user_question' ||
       tool === 'show_figure' ||
       tool === 'render_ticket' ||
-      tool === 'report_verdict'
+      tool === 'report_verdict' ||
+      // The structured-teaching vocabulary: each draws a card between two
+      // stretches of prose, so each ends the assistant bubble exactly the way
+      // show_figure always has. Missing one here would leave its mark's
+      // atIndex disagreeing with the rendered message list about where
+      // "between the preceding and following prose" is — the interleave bug
+      // this predicate exists to prevent.
+      tool === 'render_comparison' ||
+      tool === 'render_steps' ||
+      tool === 'render_formula' ||
+      tool === 'cite_source'
     ) {
       return true
     }

@@ -1,4 +1,5 @@
 import { memo } from 'react'
+import { MarkFrame } from './MarkFrame'
 import type { ToolFailureKind } from '../../../../shared/signals/tutorSignals'
 
 /** Headline per failure kind — names what was actually being attempted rather
@@ -30,12 +31,26 @@ const FAILURE_HEADLINE: Record<ToolFailureKind, string> = {
  * shared/ritualFromTranscript.ts, which rebuilds this mark from the same
  * failed tool_result a resumed sitting's transcript already carries. */
 export const ToolFailureCard = memo(function ToolFailureCard({ failureKind }: { failureKind: ToolFailureKind }) {
+  // The frame carries the warm ink through to the ENTRANCE too. This card
+  // previously wore `.ritual-misconception-in` — a danger-toned wash on a
+  // warm-bordered card, which briefly read as an alarm every time an ordinary
+  // retryable call hiccuped. Exactly the accent/entrance mismatch MarkFrame
+  // exists to make impossible.
   return (
-    <div className="flex justify-start my-1.5 pl-1">
-      <div className="tilt-card-soft max-w-[92%] flex flex-col gap-1 rounded-md border border-[var(--color-ink-warm-dim)] px-3 py-2.5 ritual-misconception-in">
-        <span className="text-xs text-[var(--color-ink-warm)]">{FAILURE_HEADLINE[failureKind]}</span>
-        <span className="fig-caption">the tutor usually follows up and retries.</span>
-      </div>
-    </div>
+    <MarkFrame
+      accent="warm"
+      label="CALL DIDN’T LAND"
+      gap="tight"
+      glyph={
+        <>
+          <circle cx="7" cy="7" r="5.3" stroke="currentColor" strokeWidth="1.1" />
+          <path d="M7 4.2 V7.6" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+          <circle cx="7" cy="9.8" r="0.7" fill="currentColor" />
+        </>
+      }
+    >
+      <span className="text-xs text-[var(--color-text-primary)]">{FAILURE_HEADLINE[failureKind]}</span>
+      <span className="fig-caption">the tutor usually follows up and retries.</span>
+    </MarkFrame>
   )
 })

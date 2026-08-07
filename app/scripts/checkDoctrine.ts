@@ -382,7 +382,14 @@ const permissionTs = read('main/session/permissionConfig.ts')
 const injectedStrings = [...permissionTs.matchAll(/`([^`]{40,})`|'([^']{40,})'/g)]
   .map((m) => m[1] ?? m[2])
   .join('\n---\n')
-const PINNED_PROMPT_HASH = 'ee089ccf9cf232cd'
+// 2026-08-07 — re-pinned for the four structured-teaching bridge tools
+// (render_comparison / render_steps / render_formula / cite_source). Whole
+// prompt re-read before re-pinning: the added sentences describe UI plumbing
+// only, each defers explicitly to the skill's own timing rules rather than
+// relaxing them ("never license you to say something earlier than your
+// instructions allow"), and the prompt still closes by deferring wholesale to
+// the installed skill and dialogue-grammar files.
+const PINNED_PROMPT_HASH = '20521f5779bc5f8b'
 if (sha(injectedStrings) !== PINNED_PROMPT_HASH) {
   fail(
     'D3.systemPrompt',
@@ -412,12 +419,31 @@ if (!eq(disallowed, PINNED_DISALLOWED)) {
 }
 
 // (c) The bridge: registered tools, allowlisted tools, and disclosed tools
-// must be the same nine. Adding a tool is how the app would grow a channel
+// must be the same set. Adding a tool is how the app would grow a channel
 // the loop never sanctioned.
+//
+// 2026-08-07 — four added: render_comparison, render_steps, render_formula,
+// cite_source. Each was checked against this rule's own test ("does it expose
+// anything the loop withholds until after grading — a claim, a rubric, an
+// expected answer; does it hand any subagent a path to the learner") before
+// being pinned:
+//   · All four are FORMATTING channels for prose the tutor was going to write
+//     anyway. None reads engine state, none accepts a rubric or a claim from
+//     the engine, none returns anything to the model but 'ok'. A tutor that
+//     would leak a canonical answer through render_steps would leak the same
+//     answer through the paragraph it writes either way — the withholding
+//     rule constrains the words, and the words are unchanged.
+//   · Each tool's own description states that timing rule explicitly, so the
+//     constraint travels with the tool rather than living only here.
+//   · None is reachable by a subagent: the bridge MCP config is attached to
+//     the driven session, and the assessor is spawned blind exactly as before.
+// The one genuinely new capability is cite_source, which prints a source name
+// the tutor supplies. That is learner-visible provenance, not engine state.
 const PINNED_BRIDGE_TOOLS = [
   'ask_user_question', 'render_beat', 'session_phase', 'beat_outcome',
   'spotlight_node', 'show_figure', 'suggest_action', 'annotate_node', 'progress_note',
   'render_ticket', 'report_verdict',
+  'render_comparison', 'render_steps', 'render_formula', 'cite_source',
 ]
 const workerMjs = read('main/bridge/mcpBridgeWorker.mjs')
 const registered = [...workerMjs.matchAll(/registerTool\(\s*'([a-z_]+)'/g)].map((m) => m[1])

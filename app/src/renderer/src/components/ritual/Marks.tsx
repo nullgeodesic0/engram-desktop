@@ -16,6 +16,8 @@ import { ToolFailureCard } from './ToolFailureCard'
 import { AskCard, type AskCardOption } from './AskCard'
 import { CheckpointAnchor } from '../CheckpointAnchor'
 import { TicketCard } from './TicketCard'
+import { ComparisonCard, StepsCard, FormulaCard, CitationChip } from './StructuredCards'
+import type { ComparisonSide, LadderStep, SymbolGloss } from '../../../../shared/bridgeUiIntents'
 import type { ToolFailureKind } from '../../../../shared/signals/tutorSignals'
 import type { StabilityMilestoneScale } from '../../../../shared/gradeResult'
 import type { ParsedTicket } from '../../shared/ticketParser'
@@ -133,6 +135,16 @@ export type RitualMark = { id: string; atIndex: number } & (
   | { kind: 'milestone'; node: string; scale: StabilityMilestoneScale; sBefore: number; sAfter: number }
   | { kind: 'tool-failure'; failureKind: ToolFailureKind }
   | { kind: 'ticket'; ticket: ParsedTicket }
+  // The expanded bridge vocabulary (render_comparison / render_steps /
+  // render_formula / cite_source). All four are derivable — their bridge
+  // tool_use lands in the transcript like every other, so `deriveRitualMarks`
+  // rebuilds them on resume. That is deliberate and is the whole point: a
+  // contrast case that vanishes when you reopen the sitting is exactly the
+  // inconsistency this vocabulary exists to remove.
+  | { kind: 'comparison'; title: string | null; left: ComparisonSide; right: ComparisonSide }
+  | { kind: 'steps'; title: string | null; steps: LadderStep[] }
+  | { kind: 'formula'; latex: string; caption: string | null; where: SymbolGloss[] }
+  | { kind: 'citation'; label: string; locator: string | null; note: string | null }
   | {
       kind: 'ask'
       requestId: string
@@ -269,6 +281,16 @@ export const VerifySeal = memo(function VerifySeal() {
   )
 })
 
+/** A mark minus the two fields every caller stamps itself (`id` from the
+ * view's own sequence, `atIndex` from the live message count). Plain
+ * `Omit<RitualMark, ...>` collapses the union to its common fields — Pick over
+ * a union's keyof rather than a per-member distribution — so this distributes
+ * first, keeping `kind: 'beat'` requiring `beat` while `kind: 'stamp'` needs
+ * nothing. Lives here rather than in either view because BOTH views push
+ * marks and must agree on the shape. */
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never
+export type MarkPayload = DistributiveOmit<RitualMark, 'id' | 'atIndex'>
+
 export function MarkView({
   mark,
   onAnswerAsk,
@@ -346,6 +368,10 @@ export function MarkView({
     )
   else if (mark.kind === 'tool-failure') content = <ToolFailureCard failureKind={mark.failureKind} />
   else if (mark.kind === 'ticket') content = <TicketCard ticket={mark.ticket} />
+  else if (mark.kind === 'comparison') content = <ComparisonCard title={mark.title} left={mark.left} right={mark.right} />
+  else if (mark.kind === 'steps') content = <StepsCard title={mark.title} steps={mark.steps} />
+  else if (mark.kind === 'formula') content = <FormulaCard latex={mark.latex} caption={mark.caption} where={mark.where} />
+  else if (mark.kind === 'citation') content = <CitationChip label={mark.label} locator={mark.locator} note={mark.note} />
   else if (mark.kind === 'ask') {
     if (deferAsk && mark.live && mark.answer === null) {
       // Serialization guard (checkpoint red-team finding): the bridge holds
