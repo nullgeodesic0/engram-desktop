@@ -1714,6 +1714,26 @@
 .ritual-explorable-in { --ink-accent: var(--color-ink-violet); animation: mark-settle-in calc(var(--dur-base) * 3) var(--ease-out-soft); }
 .ritual-audit-in { --ink-accent: var(--color-ink-cool); animation: mark-settle-in calc(var(--dur-base) * 3) var(--ease-out-soft); }
 
+/* A replayed transcript is not a sequence of things happening — it is a
+ * record of things that happened. Every mark card beneath a replayed anchor
+ * renders in its settled state, no arrival motion. See CheckpointAnchor's
+ * `replayed` doctrine comment. Covers the pulse on an orphaned ask too: a
+ * question nothing will ever answer must not breathe as though it might. */
+[data-mark-replayed='true'] .ritual-mark-in,
+[data-mark-replayed='true'] .ritual-diagnostic-in,
+[data-mark-replayed='true'] .ritual-misconception-in,
+[data-mark-replayed='true'] .ritual-explorable-in,
+[data-mark-replayed='true'] .ritual-audit-in,
+[data-mark-replayed='true'] .ritual-verify-seal-in,
+[data-mark-replayed='true'] .ritual-crossing-line,
+[data-mark-replayed='true'] .ritual-frontispiece-line,
+[data-mark-replayed='true'] .ritual-frontispiece-glyph,
+[data-mark-replayed='true'] .ritual-stamp,
+[data-mark-replayed='true'] .ask-card-pending,
+[data-mark-replayed='true'] .ask-card-settle {
+  animation: none;
+}
+
 /* AskCard (ritual/AskCard.tsx) — Wave E, Task 11. An OPEN ask genuinely blocks
  * the tutor's turn (bridgeServer.ts holds the HTTP response open), so it
  * should read as a held breath rather than an ordinary card: a slow,
