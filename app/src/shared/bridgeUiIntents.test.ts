@@ -152,3 +152,38 @@ describe('bridgeUiIntent — expanded vocabulary', () => {
     expect(bridgeUiIntent('cite_source', { label: 'x', locator: 12 })).toBeNull()
   })
 })
+
+describe('bridgeUiIntent — HTML-escaped payloads', () => {
+  it('decodes the real over-escaped title observed 2026-08-07', () => {
+    const r = bridgeUiIntent('render_steps', {
+      title: 'sphere radius $a$, $\\rho(r) = A r$ for $r&lt;a$ (SI)',
+      steps: ['find $A$ in terms of $Q$ and $a$'],
+    })
+    expect(r && r.kind === 'steps' && r.title).toBe('sphere radius $a$, $\\rho(r) = A r$ for $r<a$ (SI)')
+  })
+
+  it('decodes across every string-bearing field, not just titles', () => {
+    const c = bridgeUiIntent('render_comparison', {
+      left: { label: 'r&lt;a', body: 'inside' },
+      right: { label: 'r&gt;a', body: 'outside' },
+    })
+    expect(c && c.kind === 'comparison' && [c.left.label, c.right.label]).toEqual(['r<a', 'r>a'])
+
+    const f = bridgeUiIntent('render_formula', { latex: 'E &lt; E_0', where: [{ symbol: 'E', meaning: 'a &amp; b' }] })
+    expect(f && f.kind === 'formula' && f.latex).toBe('E < E_0')
+    expect(f && f.kind === 'formula' && f.where[0].meaning).toBe('a & b')
+
+    const t = bridgeUiIntent('render_ticket', { kind: 'review', fields: [{ key: 'span', value: 'r&lt;a' }] })
+    expect(t && t.kind === 'ticket' && t.ticket.fields[0].value).toBe('r<a')
+  })
+
+  it('resolves &amp; last, so a doubly-escaped entity survives as one entity', () => {
+    const r = bridgeUiIntent('progress_note', { text: 'literal &amp;lt; here' })
+    expect(r && r.kind === 'progress-note' && r.text).toBe('literal &lt; here')
+  })
+
+  it('leaves text without an ampersand untouched', () => {
+    const r = bridgeUiIntent('progress_note', { text: 'node 2 of 3 — $r<a$' })
+    expect(r && r.kind === 'progress-note' && r.text).toBe('node 2 of 3 — $r<a$')
+  })
+})
