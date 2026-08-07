@@ -17,7 +17,8 @@ import { AskCard, type AskCardOption } from './AskCard'
 import { CheckpointAnchor } from '../CheckpointAnchor'
 import { TicketCard } from './TicketCard'
 import { ComparisonCard, StepsCard, FormulaCard, CitationChip } from './StructuredCards'
-import type { ComparisonSide, LadderStep, SymbolGloss } from '../../../../shared/bridgeUiIntents'
+import { PlotCard } from './PlotCard'
+import type { ComparisonSide, LadderStep, SymbolGloss, PlotSeries, PlotMarker } from '../../../../shared/bridgeUiIntents'
 import type { ToolFailureKind } from '../../../../shared/signals/tutorSignals'
 import type { StabilityMilestoneScale } from '../../../../shared/gradeResult'
 import type { ParsedTicket } from '../../shared/ticketParser'
@@ -145,6 +146,14 @@ export type RitualMark = { id: string; atIndex: number } & (
   | { kind: 'steps'; title: string | null; steps: LadderStep[] }
   | { kind: 'formula'; latex: string; caption: string | null; where: SymbolGloss[] }
   | { kind: 'citation'; label: string; locator: string | null; note: string | null }
+  | {
+      kind: 'plot'
+      title: string | null
+      xLabel: string | null
+      yLabel: string | null
+      series: PlotSeries[]
+      markers: PlotMarker[]
+    }
   | {
       kind: 'ask'
       requestId: string
@@ -376,6 +385,10 @@ export function MarkView({
   else if (mark.kind === 'steps') content = <StepsCard title={mark.title} steps={mark.steps} />
   else if (mark.kind === 'formula') content = <FormulaCard latex={mark.latex} caption={mark.caption} where={mark.where} />
   else if (mark.kind === 'citation') content = <CitationChip label={mark.label} locator={mark.locator} note={mark.note} />
+  else if (mark.kind === 'plot')
+    content = (
+      <PlotCard title={mark.title} xLabel={mark.xLabel} yLabel={mark.yLabel} series={mark.series} markers={mark.markers} />
+    )
   else if (mark.kind === 'ask') {
     if (deferAsk && mark.live && mark.answer === null) {
       // Serialization guard (checkpoint red-team finding): the bridge holds

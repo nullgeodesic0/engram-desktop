@@ -331,7 +331,8 @@ export function isMarkBoundaryToolUse(name: string, input: Record<string, unknow
       tool === 'render_comparison' ||
       tool === 'render_steps' ||
       tool === 'render_formula' ||
-      tool === 'cite_source'
+      tool === 'cite_source' ||
+      tool === 'render_plot'
     ) {
       return true
     }

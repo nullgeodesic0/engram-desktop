@@ -389,7 +389,14 @@ const injectedStrings = [...permissionTs.matchAll(/`([^`]{40,})`|'([^']{40,})'/g
 // relaxing them ("never license you to say something earlier than your
 // instructions allow"), and the prompt still closes by deferring wholesale to
 // the installed skill and dialogue-grammar files.
-const PINNED_PROMPT_HASH = '20521f5779bc5f8b'
+// 2026-08-07 (2) — re-pinned for render_plot. Whole prompt re-read again:
+// the added clause is one parenthetical describing what the card draws and
+// stating that it plots only the points sent. It sits inside the same
+// sentence whose opening already says these tools "never license you to say
+// something earlier than your instructions allow", and the prompt still
+// closes by deferring wholesale to the installed skill and dialogue-grammar
+// files. No pedagogy added, softened, or overridden.
+const PINNED_PROMPT_HASH = '6d182e15874c8432'
 if (sha(injectedStrings) !== PINNED_PROMPT_HASH) {
   fail(
     'D3.systemPrompt',
@@ -444,6 +451,13 @@ const PINNED_BRIDGE_TOOLS = [
   'spotlight_node', 'show_figure', 'suggest_action', 'annotate_node', 'progress_note',
   'render_ticket', 'report_verdict',
   'render_comparison', 'render_steps', 'render_formula', 'cite_source',
+  // 2026-08-07 — render_plot added, same test applied: it takes points the
+  // tutor supplies and draws them. It reads no engine state, evaluates no
+  // function, and can assert nothing the tutor's own prose could not; its
+  // description carries the same timing rule as the other four. A sketch of
+  // the answer is a reveal exactly to the degree a sentence describing that
+  // answer is, and no more — the rule governs the moment, not the medium.
+  'render_plot',
 ]
 const workerMjs = read('main/bridge/mcpBridgeWorker.mjs')
 const registered = [...workerMjs.matchAll(/registerTool\(\s*'([a-z_]+)'/g)].map((m) => m[1])

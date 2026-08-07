@@ -261,5 +261,22 @@ server.registerTool('cite_source', {
   },
 }, async (args) => fireUi('cite_source', args))
 
+server.registerTool('render_plot', {
+  title: 'Render Plot',
+  description:
+    "Advisory, best-effort: sketch the SHAPE of a function inline. Supply sampled points and the app draws the axes, fits the range, and traces the curve — it never evaluates or extrapolates, so what appears is exactly what you sent. Each series takes a `label` (LaTeX rendered) and `points` as [x, y] pairs (2–96 of them; sample densely enough that the shape is honest, and put a point exactly at each boundary so a piecewise curve meets itself). Up to 3 series, `dashed` for a comparison or a wrong-shape contrast. `markers` place labelled vertical guides at boundaries like r = a or T = T_c. Use it when the shape is the thing being taught or tested — a field inside vs outside a sphere, a payoff diagram, a decay. Subject to the same timing rules as anything else you say: never sketch the answer before the learner has produced one.",
+  inputSchema: {
+    title: z.string().optional(),
+    x_label: z.string().optional(),
+    y_label: z.string().optional(),
+    series: z.array(z.object({
+      label: z.string(),
+      points: z.array(z.tuple([z.number(), z.number()])).min(2).max(96),
+      dashed: z.boolean().optional(),
+    })).min(1).max(3),
+    markers: z.array(z.object({ x: z.number(), label: z.string().optional() })).max(4).optional(),
+  },
+}, async (args) => fireUi('render_plot', args))
+
 const transport = new StdioServerTransport()
 await server.connect(transport)

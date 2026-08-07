@@ -69,6 +69,21 @@ export interface LadderStep {
   note?: string
 }
 
+/** One curve of a `render_plot` sketch. `points` are in the tutor's own data
+ * units — this module never rescales them; the card does its own fit. */
+export interface PlotSeries {
+  label: string
+  points: [number, number][]
+  dashed: boolean
+}
+
+/** A vertical guide on a plot — the boundary a piecewise function turns on
+ * (`r = a`, `T = T_c`, expiry). */
+export interface PlotMarker {
+  x: number
+  label: string | null
+}
+
 /** One entry of a `render_formula` where-clause. */
 export interface SymbolGloss {
   symbol: string
@@ -89,6 +104,14 @@ export type BridgeUiIntent =
   | { kind: 'steps'; title: string | null; steps: LadderStep[] }
   | { kind: 'formula'; latex: string; caption: string | null; where: SymbolGloss[] }
   | { kind: 'citation'; label: string; locator: string | null; note: string | null }
+  | {
+      kind: 'plot'
+      title: string | null
+      xLabel: string | null
+      yLabel: string | null
+      series: PlotSeries[]
+      markers: PlotMarker[]
+    }
 
 /** The five entities a model actually emits when it over-escapes prose.
  * Ordered so `&amp;` resolves LAST — decoding it first would turn a literal
@@ -163,6 +186,44 @@ function comparisonSide(v: unknown): ComparisonSide | null {
 const MAX_STEPS = 12
 const MAX_GLOSS = 8
 const MAX_ACTIONS = 3
+const MAX_SERIES = 3
+const MAX_POINTS = 96
+const MAX_MARKERS = 4
+
+/** Finite numbers only. `NaN`/`Infinity` survive JSON round-trips as `null`
+ * or as strings depending on the producer, and either one would silently
+ * poison a min/max fit into an empty plot — so they're rejected at the door
+ * rather than debugged at the axis. */
+function num(v: unknown): number | null {
+  return typeof v === 'number' && Number.isFinite(v) ? v : null
+}
+
+function plotSeries(v: unknown): PlotSeries | null {
+  const rec = record(v)
+  if (!rec) return null
+  const label = str(rec.label)
+  if (!label) return null
+  if (!Array.isArray(rec.points)) return null
+  if (rec.points.length < 2 || rec.points.length > MAX_POINTS) return null
+  const points: [number, number][] = []
+  for (const raw of rec.points) {
+    // Both shapes a model reaches for: [x, y] and {x, y}.
+    if (Array.isArray(raw)) {
+      const x = num(raw[0])
+      const y = num(raw[1])
+      if (x === null || y === null) return null
+      points.push([x, y])
+      continue
+    }
+    const pr = record(raw)
+    if (!pr) return null
+    const x = num(pr.x)
+    const y = num(pr.y)
+    if (x === null || y === null) return null
+    points.push([x, y])
+  }
+  return { label, points, dashed: rec.dashed === true }
+}
 
 export function bridgeUiIntent(tool: string, rawPayload: unknown): BridgeUiIntent | null {
   const payload = record(rawPayload)
@@ -314,6 +375,35 @@ export function bridgeUiIntent(tool: string, rawPayload: unknown): BridgeUiInten
       const note = optStr(payload.note)
       if (locator === false || note === false) return null
       return { kind: 'citation', label, locator, note }
+    }
+
+    case 'render_plot': {
+      if (!Array.isArray(payload.series)) return null
+      if (payload.series.length === 0 || payload.series.length > MAX_SERIES) return null
+      const series: PlotSeries[] = []
+      for (const raw of payload.series) {
+        const parsed = plotSeries(raw)
+        if (!parsed) return null
+        series.push(parsed)
+      }
+      const markers: PlotMarker[] = []
+      if (payload.markers !== undefined) {
+        if (!Array.isArray(payload.markers) || payload.markers.length > MAX_MARKERS) return null
+        for (const raw of payload.markers) {
+          const rec = record(raw)
+          if (!rec) return null
+          const x = num(rec.x)
+          if (x === null) return null
+          const label = optStr(rec.label)
+          if (label === false) return null
+          markers.push({ x, label })
+        }
+      }
+      const title = optStr(payload.title)
+      const xLabel = optStr(payload.x_label)
+      const yLabel = optStr(payload.y_label)
+      if (title === false || xLabel === false || yLabel === false) return null
+      return { kind: 'plot', title, xLabel, yLabel, series, markers }
     }
 
     default:

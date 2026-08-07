@@ -514,6 +514,9 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
         case 'citation':
           pushUiMark({ kind: 'citation', label: intent.label, locator: intent.locator, note: intent.note })
           break
+        case 'plot':
+          pushUiMark({ kind: 'plot', title: intent.title, xLabel: intent.xLabel, yLabel: intent.yLabel, series: intent.series, markers: intent.markers })
+          break
         case 'ticket':
           // Same single-slot discipline Learn uses: the structured payload
           // wins over the prose parse (`extractTicketFromMessages`) rather
