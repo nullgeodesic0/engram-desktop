@@ -396,7 +396,13 @@ const injectedStrings = [...permissionTs.matchAll(/`([^`]{40,})`|'([^']{40,})'/g
 // something earlier than your instructions allow", and the prompt still
 // closes by deferring wholesale to the installed skill and dialogue-grammar
 // files. No pedagogy added, softened, or overridden.
-const PINNED_PROMPT_HASH = '6d182e15874c8432'
+// 2026-08-08 — re-pinned for render_checks / render_timeline / define_term.
+// Whole prompt re-read: the addition extends the same §3 sentence whose
+// opening already states these tools "never license you to say something
+// earlier than your instructions allow", describes only what each card draws,
+// and the prompt still closes by deferring wholesale to the installed skill
+// and dialogue-grammar files.
+const PINNED_PROMPT_HASH = 'ca6b3e7777b40b60'
 if (sha(injectedStrings) !== PINNED_PROMPT_HASH) {
   fail(
     'D3.systemPrompt',
@@ -458,6 +464,15 @@ const PINNED_BRIDGE_TOOLS = [
   // the answer is a reveal exactly to the degree a sentence describing that
   // answer is, and no more — the rule governs the moment, not the medium.
   'render_plot',
+  // 2026-08-08 — three more, same test, same answer. render_checks and
+  // define_term format prose the tutor writes anyway; render_timeline is the
+  // first card in this family aimed at the non-STEM curricula (history,
+  // political theory) the app also teaches. None reads engine state, none
+  // accepts a rubric or claim, none is reachable by the blind assessor.
+  // define_term deserved the closest look, since a definition can be a
+  // reveal — but so can a sentence defining the same term, and the timing
+  // rule its description carries is the same one governing that sentence.
+  'render_checks', 'render_timeline', 'define_term',
 ]
 const workerMjs = read('main/bridge/mcpBridgeWorker.mjs')
 const registered = [...workerMjs.matchAll(/registerTool\(\s*'([a-z_]+)'/g)].map((m) => m[1])

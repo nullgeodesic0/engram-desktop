@@ -16,9 +16,9 @@ import { ToolFailureCard } from './ToolFailureCard'
 import { AskCard, type AskCardOption } from './AskCard'
 import { CheckpointAnchor } from '../CheckpointAnchor'
 import { TicketCard } from './TicketCard'
-import { ComparisonCard, StepsCard, FormulaCard, CitationChip } from './StructuredCards'
+import { ComparisonCard, StepsCard, FormulaCard, CitationChip, ChecksCard, TimelineCard, DefinitionCard } from './StructuredCards'
 import { PlotCard } from './PlotCard'
-import type { ComparisonSide, LadderStep, SymbolGloss, PlotSeries, PlotMarker } from '../../../../shared/bridgeUiIntents'
+import type { ComparisonSide, LadderStep, SymbolGloss, PlotSeries, PlotMarker, SanityCheck, TimelineEvent } from '../../../../shared/bridgeUiIntents'
 import type { ToolFailureKind } from '../../../../shared/signals/tutorSignals'
 import type { StabilityMilestoneScale } from '../../../../shared/gradeResult'
 import type { ParsedTicket } from '../../shared/ticketParser'
@@ -146,6 +146,15 @@ export type RitualMark = { id: string; atIndex: number } & (
   | { kind: 'steps'; title: string | null; steps: LadderStep[] }
   | { kind: 'formula'; latex: string; caption: string | null; where: SymbolGloss[] }
   | { kind: 'citation'; label: string; locator: string | null; note: string | null }
+  | { kind: 'checks'; title: string | null; checks: SanityCheck[] }
+  | { kind: 'timeline'; title: string | null; events: TimelineEvent[] }
+  | {
+      kind: 'definition'
+      term: string
+      definition: string
+      aka: string | null
+      notToBeConfusedWith: string | null
+    }
   | {
       kind: 'plot'
       title: string | null
@@ -385,6 +394,17 @@ export function MarkView({
   else if (mark.kind === 'steps') content = <StepsCard title={mark.title} steps={mark.steps} />
   else if (mark.kind === 'formula') content = <FormulaCard latex={mark.latex} caption={mark.caption} where={mark.where} />
   else if (mark.kind === 'citation') content = <CitationChip label={mark.label} locator={mark.locator} note={mark.note} />
+  else if (mark.kind === 'checks') content = <ChecksCard title={mark.title} checks={mark.checks} />
+  else if (mark.kind === 'timeline') content = <TimelineCard title={mark.title} events={mark.events} />
+  else if (mark.kind === 'definition')
+    content = (
+      <DefinitionCard
+        term={mark.term}
+        definition={mark.definition}
+        aka={mark.aka}
+        notToBeConfusedWith={mark.notToBeConfusedWith}
+      />
+    )
   else if (mark.kind === 'plot')
     content = (
       <PlotCard title={mark.title} xLabel={mark.xLabel} yLabel={mark.yLabel} series={mark.series} markers={mark.markers} />

@@ -332,7 +332,10 @@ export function isMarkBoundaryToolUse(name: string, input: Record<string, unknow
       tool === 'render_steps' ||
       tool === 'render_formula' ||
       tool === 'cite_source' ||
-      tool === 'render_plot'
+      tool === 'render_plot' ||
+      tool === 'render_checks' ||
+      tool === 'render_timeline' ||
+      tool === 'define_term'
     ) {
       return true
     }

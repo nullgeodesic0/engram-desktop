@@ -73,8 +73,33 @@ function occurrenceRe(symbol: string): RegExp | null {
  *
  * `color` must be a KaTeX-acceptable colour — a `#rgb`/`#rrggbb` literal. A
  * CSS variable would not work: KaTeX resolves the colour at parse time into
- * its own inline style, so the caller reads the computed token first. */
-export function highlightLatexSymbol(latex: string, symbol: string, color: string): string {
+ * its own inline style, so the caller reads the computed token first.
+ *
+ * `isValid` is the safety net, and it is why this function can be trusted at
+ * all. Two independent defences, because token-awareness alone was not enough
+ * (observed live: equations rendering in KaTeX's error red):
+ *
+ *   1. The replacement is BRACE-WRAPPED — `{\textcolor{c}{N}}`, not
+ *      `\textcolor{c}{N}`. Bare `x^N` becomes `x^{...}`; without the braces it
+ *      becomes `x^\textcolor{...}`, and `^` takes a single token or group, so
+ *      KaTeX reports "Got function '\textcolor' with no arguments". Same for
+ *      `a_N`. This was the most common failure by far — sub- and superscripts
+ *      are exactly where single-letter symbols live.
+ *
+ *   2. The result is then PARSE-CHECKED, and the original returned if it
+ *      fails. Some positions cannot be fixed by bracing at all:
+ *      `\begin{array}{c}`'s column spec takes a literal alignment character,
+ *      so ANY wrapper there is a parse error. Enumerating every such context
+ *      is a losing game against a TeX parser; verifying the output is not.
+ *
+ * Callers that pass no `isValid` get defence 1 only — deliberate for pure
+ * unit tests. Every real call site passes one. */
+export function highlightLatexSymbol(
+  latex: string,
+  symbol: string,
+  color: string,
+  isValid?: (tex: string) => boolean,
+): string {
   if (!/^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(color)) return latex
   let re: RegExp | null
   try {
@@ -89,5 +114,16 @@ export function highlightLatexSymbol(latex: string, symbol: string, color: strin
   if (!matches || matches.length === 0 || matches.length > 12) return latex
 
   re.lastIndex = 0
-  return latex.replace(re, (m) => `\\textcolor{${color}}{${m}}`)
+  const rewritten = latex.replace(re, (m) => `{\\textcolor{${color}}{${m}}}`)
+
+  if (isValid) {
+    let ok = false
+    try {
+      ok = isValid(rewritten)
+    } catch {
+      ok = false
+    }
+    if (!ok) return latex
+  }
+  return rewritten
 }

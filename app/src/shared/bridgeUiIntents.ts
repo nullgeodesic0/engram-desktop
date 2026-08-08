@@ -84,6 +84,23 @@ export interface PlotMarker {
   label: string | null
 }
 
+/** One row of a `render_checks` ledger — a limiting case and what it must
+ * give. `note` is the "and if it doesn't, here's what broke" line. */
+export interface SanityCheck {
+  check: string
+  expect: string
+  note?: string
+}
+
+/** One dated event on a `render_timeline` spine. `when` is the tutor's own
+ * label — a year, a reign, a maturity date — never parsed or normalized
+ * here, because a curriculum's chronology is not always a calendar. */
+export interface TimelineEvent {
+  when: string
+  what: string
+  note?: string
+}
+
 /** One entry of a `render_formula` where-clause. */
 export interface SymbolGloss {
   symbol: string
@@ -104,6 +121,15 @@ export type BridgeUiIntent =
   | { kind: 'steps'; title: string | null; steps: LadderStep[] }
   | { kind: 'formula'; latex: string; caption: string | null; where: SymbolGloss[] }
   | { kind: 'citation'; label: string; locator: string | null; note: string | null }
+  | { kind: 'checks'; title: string | null; checks: SanityCheck[] }
+  | { kind: 'timeline'; title: string | null; events: TimelineEvent[] }
+  | {
+      kind: 'definition'
+      term: string
+      definition: string
+      aka: string | null
+      notToBeConfusedWith: string | null
+    }
   | {
       kind: 'plot'
       title: string | null
@@ -189,6 +215,8 @@ const MAX_ACTIONS = 3
 const MAX_SERIES = 3
 const MAX_POINTS = 96
 const MAX_MARKERS = 4
+const MAX_CHECKS = 8
+const MAX_EVENTS = 10
 
 /** Finite numbers only. `NaN`/`Infinity` survive JSON round-trips as `null`
  * or as strings depending on the producer, and either one would silently
@@ -375,6 +403,56 @@ export function bridgeUiIntent(tool: string, rawPayload: unknown): BridgeUiInten
       const note = optStr(payload.note)
       if (locator === false || note === false) return null
       return { kind: 'citation', label, locator, note }
+    }
+
+    case 'render_checks': {
+      if (!Array.isArray(payload.checks)) return null
+      if (payload.checks.length === 0 || payload.checks.length > MAX_CHECKS) return null
+      const checks: SanityCheck[] = []
+      for (const raw of payload.checks) {
+        const rec = record(raw)
+        if (!rec) return null
+        const check = str(rec.check)
+        const expected = str(rec.expect)
+        // Both halves or nothing: a check with no expected result is not a
+        // check, it's a prompt, and the card would render a dangling row.
+        if (!check || !expected) return null
+        const note = optStr(rec.note)
+        if (note === false) return null
+        checks.push(note ? { check, expect: expected, note } : { check, expect: expected })
+      }
+      const title = optStr(payload.title)
+      if (title === false) return null
+      return { kind: 'checks', title, checks }
+    }
+
+    case 'render_timeline': {
+      if (!Array.isArray(payload.events)) return null
+      if (payload.events.length === 0 || payload.events.length > MAX_EVENTS) return null
+      const events: TimelineEvent[] = []
+      for (const raw of payload.events) {
+        const rec = record(raw)
+        if (!rec) return null
+        const when = str(rec.when)
+        const what = str(rec.what)
+        if (!when || !what) return null
+        const note = optStr(rec.note)
+        if (note === false) return null
+        events.push(note ? { when, what, note } : { when, what })
+      }
+      const title = optStr(payload.title)
+      if (title === false) return null
+      return { kind: 'timeline', title, events }
+    }
+
+    case 'define_term': {
+      const term = str(payload.term)
+      const definition = str(payload.definition)
+      if (!term || !definition) return null
+      const aka = optStr(payload.aka)
+      const notToBeConfusedWith = optStr(payload.not_to_be_confused_with)
+      if (aka === false || notToBeConfusedWith === false) return null
+      return { kind: 'definition', term, definition, aka, notToBeConfusedWith }
     }
 
     case 'render_plot': {

@@ -241,3 +241,70 @@ describe('bridgeUiIntent — render_plot', () => {
     expect(r && r.kind === 'plot' && r.series[0].label).toBe('$r<a$')
   })
 })
+
+describe('bridgeUiIntent — checks / timeline / definition', () => {
+  it('render_checks needs both halves of every row', () => {
+    expect(
+      bridgeUiIntent('render_checks', {
+        title: 'Before you trust it',
+        checks: [
+          { check: 'let $r\\to\\infty$', expect: '$E\\to 0$', note: 'else the far field is wrong' },
+          { check: 'set $r=a$', expect: 'both branches agree' },
+        ],
+      }),
+    ).toEqual({
+      kind: 'checks',
+      title: 'Before you trust it',
+      checks: [
+        { check: 'let $r\\to\\infty$', expect: '$E\\to 0$', note: 'else the far field is wrong' },
+        { check: 'set $r=a$', expect: 'both branches agree' },
+      ],
+    })
+    // A check with no expected result is a prompt, not a check.
+    expect(bridgeUiIntent('render_checks', { checks: [{ check: 'try it' }] })).toBeNull()
+    expect(bridgeUiIntent('render_checks', { checks: [{ expect: '0' }] })).toBeNull()
+    expect(bridgeUiIntent('render_checks', { checks: [] })).toBeNull()
+    expect(bridgeUiIntent('render_checks', { checks: Array.from({ length: 9 }, () => ({ check: 'a', expect: 'b' })) })).toBeNull()
+  })
+
+  it('render_timeline keeps `when` verbatim and in order', () => {
+    const r = bridgeUiIntent('render_timeline', {
+      events: [
+        { when: '1898', what: 'RSDLP founded' },
+        { when: 'the Second Congress', what: 'the split', note: 'Bolshevik / Menshevik' },
+        { when: 'at expiry', what: 'a non-calendar position is still legitimate' },
+      ],
+    })
+    expect(r && r.kind === 'timeline' && r.events.map((e) => e.when)).toEqual([
+      '1898', 'the Second Congress', 'at expiry',
+    ])
+    expect(bridgeUiIntent('render_timeline', { events: [{ when: '1898' }] })).toBeNull()
+    expect(bridgeUiIntent('render_timeline', { events: [] })).toBeNull()
+    expect(bridgeUiIntent('render_timeline', { events: Array.from({ length: 11 }, () => ({ when: 'x', what: 'y' })) })).toBeNull()
+  })
+
+  it('define_term requires a term and a definition; the rest is optional', () => {
+    expect(bridgeUiIntent('define_term', { term: 'canonical ensemble', definition: 'fixed $N$, $V$, $T$' })).toEqual({
+      kind: 'definition',
+      term: 'canonical ensemble',
+      definition: 'fixed $N$, $V$, $T$',
+      aka: null,
+      notToBeConfusedWith: null,
+    })
+    const full = bridgeUiIntent('define_term', {
+      term: 'canonical ensemble',
+      definition: 'fixed $N$, $V$, $T$',
+      aka: 'NVT ensemble',
+      not_to_be_confused_with: 'the grand canonical ensemble, which fixes $\\mu$ instead of $N$',
+    })
+    expect(full && full.kind === 'definition' && full.notToBeConfusedWith).toContain('grand canonical')
+    expect(bridgeUiIntent('define_term', { term: 'x' })).toBeNull()
+    expect(bridgeUiIntent('define_term', { definition: 'y' })).toBeNull()
+    expect(bridgeUiIntent('define_term', { term: 'x', definition: 'y', aka: 7 })).toBeNull()
+  })
+
+  it('decodes entities in the new fields too', () => {
+    const r = bridgeUiIntent('render_checks', { checks: [{ check: '$r&lt;a$', expect: 'linear' }] })
+    expect(r && r.kind === 'checks' && r.checks[0].check).toBe('$r<a$')
+  })
+})
