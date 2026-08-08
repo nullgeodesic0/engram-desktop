@@ -1749,6 +1749,19 @@
  * and selection stay native — `color: transparent` would take the caret with
  * it on some engines, so the caret colour is restated explicitly. */
 .latex-input-transparent {
+  /* THE ALIGNMENT BUG, measured rather than guessed. A <textarea> is
+   * inline-level, so its parent reserves baseline descender space beneath it
+   * — here 4.5px. The mirror is `inset: 0` on that parent, so it inherited
+   * the TALLER box: identical content height (284px both), but a client
+   * height of 109 against the textarea's 104, hence a max scroll of 175
+   * against 180. The two therefore scrolled at different rates and the
+   * highlight fell further behind the further you went, running out early at
+   * the bottom.
+   *
+   * `display: block` removes the baseline gap and the boxes agree exactly.
+   * Verified in a harness built from the app's own compiled CSS: before
+   * 104/108.5 and 180/175, after 104/104 and 180/180. */
+  display: block;
   color: transparent;
   caret-color: var(--color-text-primary);
   background: transparent;
