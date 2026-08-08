@@ -30,7 +30,7 @@ import {
   type StabilityMilestoneScale,
 } from './gradeResult'
 import { humanizeNodeId } from './humanizeId'
-import { bridgeUiIntent, type ComparisonSide, type LadderStep, type SymbolGloss, type PlotSeries, type PlotMarker, type SanityCheck, type TimelineEvent } from './bridgeUiIntents'
+import { bridgeUiIntent, type ComparisonSide, type LadderStep, type SymbolGloss, type PlotSeries, type PlotMarker, type SanityCheck, type TimelineEvent , type TranscriptionPage } from './bridgeUiIntents'
 import { parseAuditNotification, parseCurriculumReturn, isTaskNotificationContent } from './taskNotification'
 import {
   isPretestRateCommand,
@@ -472,6 +472,16 @@ export type DerivedRitualMark =
   | { id: string; atIndex: number; kind: 'steps'; title: string | null; steps: LadderStep[] }
   | { id: string; atIndex: number; kind: 'formula'; latex: string; caption: string | null; where: SymbolGloss[] }
   | { id: string; atIndex: number; kind: 'citation'; label: string; locator: string | null; note: string | null }
+  | {
+      id: string
+      atIndex: number
+      kind: 'transcription'
+      latex: string
+      pages: TranscriptionPage[]
+      note: string | null
+      blind: boolean
+      live: false
+    }
   | { id: string; atIndex: number; kind: 'checks'; title: string | null; checks: SanityCheck[] }
   | { id: string; atIndex: number; kind: 'timeline'; title: string | null; events: TimelineEvent[] }
   | {
@@ -887,6 +897,23 @@ export function deriveRitualMarks(entries: unknown[]): DerivedRitualMark[] {
         }
         if (intent.kind === 'formula') {
           marks.push({ id: `dmark-${seq++}`, atIndex: messageCount, kind: 'formula', latex: intent.latex, caption: intent.caption, where: intent.where })
+          continue
+        }
+        if (intent.kind === 'transcription') {
+          // `blind` is unknowable on replay without re-walking for the spawn,
+          // and the card only uses it to LABEL provenance — a resumed sitting
+          // says "transcribed by the tutor" rather than claiming blindness it
+          // did not observe. Never the more flattering guess.
+          marks.push({
+            id: `dmark-${seq++}`,
+            atIndex: messageCount,
+            kind: 'transcription',
+            latex: intent.latex,
+            pages: intent.pages,
+            note: intent.note,
+            blind: false,
+            live: false,
+          })
           continue
         }
         if (intent.kind === 'citation') {

@@ -402,7 +402,12 @@ const injectedStrings = [...permissionTs.matchAll(/`([^`]{40,})`|'([^']{40,})'/g
 // earlier than your instructions allow", describes only what each card draws,
 // and the prompt still closes by deferring wholesale to the installed skill
 // and dialogue-grammar files.
-const PINNED_PROMPT_HASH = 'ca6b3e7777b40b60'
+// 2026-08-08 (3) — re-pinned for propose_transcription. Prompt re-read in
+// full: the added sentence describes a return channel and states the gate
+// ("they approve it before it becomes their answer"). It grants no new
+// latitude about what may be said or when, and the prompt still closes by
+// deferring wholesale to the installed skills.
+const PINNED_PROMPT_HASH = 'd08bbc6275fbf8f7'
 if (sha(injectedStrings) !== PINNED_PROMPT_HASH) {
   fail(
     'D3.systemPrompt',
@@ -473,6 +478,20 @@ const PINNED_BRIDGE_TOOLS = [
   // reveal — but so can a sentence defining the same term, and the timing
   // rule its description carries is the same one governing that sentence.
   'render_checks', 'render_timeline', 'define_term',
+  // 2026-08-08 — propose_transcription, the only bridge tool that is not a
+  // display channel: it carries a transcription of the learner's OWN
+  // handwriting back for them to confirm. Same test as the others:
+  //   · it reads no engine state — its whole input is text the model produced
+  //     from an image the learner chose, at a path the learner picked;
+  //   · it cannot reveal a claim or rubric, because it carries the learner's
+  //     work rather than the answer;
+  //   · nothing it returns becomes a production until the LEARNER confirms it
+  //     in the app. That gate is why this is a tool at all, rather than the
+  //     tutor stashing a transcription directly.
+  // Its description carries the verbatim rule, which is what stops a tutor
+  // that already knows the answer from repairing a sign on the way past and
+  // having the assessor certify a grade the learner did not earn.
+  'propose_transcription',
 ]
 const workerMjs = read('main/bridge/mcpBridgeWorker.mjs')
 const registered = [...workerMjs.matchAll(/registerTool\(\s*'([a-z_]+)'/g)].map((m) => m[1])
@@ -564,7 +583,17 @@ for (const f of FILES) {
 // (re-invoking the skill would restart the queue load mid-sitting), and
 // the checkpoint variant restates the sitting's own election, which the
 // resume path never re-sends. Navigational voice throughout.
-const PINNED_MESSAGE_HASH = '95fe769b20bef2ab'
+// 2026-08-08 re-pin: the handwriting request joins the collected set
+// (renderer/src/shared/handwritingRequest.ts). It is a user turn with the
+// app's words in the learner's mouth, so it says only three things, all
+// plumbing: which files in which order (navigation the learner performed by
+// picking them), transcribe verbatim INCLUDING ERRORS via a subagent given
+// nothing but the paths, and that the learner will check it before it counts.
+// It names no node, claim or rubric and says nothing about how to teach or
+// grade. "including any errors" is the load-bearing clause — without it a
+// tutor that knows the answer could quietly repair a sign on the way past and
+// the assessor would certify a grade the learner did not earn.
+const PINNED_MESSAGE_HASH = '62ce34253ce283e8'
 if (sha(injectedMessages.sort().join('\n')) !== PINNED_MESSAGE_HASH) {
   fail(
     'D3.kickoff',

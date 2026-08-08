@@ -48,6 +48,7 @@ import { recallDueNodes, quickShare, type RecallDueEntry } from '../shared/check
 import { TicketCard } from '../components/ritual/TicketCard'
 import { ActionChips, type SuggestedAction } from '../components/ritual/ActionChips'
 import { bridgeUiIntent } from '../../../shared/bridgeUiIntents'
+import { handwritingRequestMessage } from '../shared/handwritingRequest'
 import { ReadyRoomPlate } from '../components/ritual/ReadyRoomPlate'
 import { ReviewHorizon } from '../components/ReviewHorizon'
 import { InkWell } from '../components/ritual/InkWell'
@@ -65,6 +66,7 @@ import {
   hasQuickSource,
   isQuickEasyViolation,
   isAssessorAuditSpawnEvent,
+  isSubagentSpawnTool,
   isArtifactSmithSpawnEvent,
   looksLikeArtifactSetCommand,
   explorableTitleFromDescription,
@@ -532,6 +534,16 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
         case 'plot':
           pushUiMark({ kind: 'plot', title: intent.title, xLabel: intent.xLabel, yLabel: intent.yLabel, series: intent.series, markers: intent.markers })
           break
+        case 'transcription':
+          pushUiMark({
+            kind: 'transcription',
+            latex: intent.latex,
+            pages: intent.pages,
+            note: intent.note,
+            blind: blindSinceRequest.current,
+            live: true,
+          })
+          break
         case 'ticket':
           // Same single-slot discipline Learn uses: the structured payload
           // wins over the prose parse (`extractTicketFromMessages`) rather
@@ -596,6 +608,7 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
         break
       }
       case 'tool_use':
+        if (isSubagentSpawnTool(event.name)) blindSinceRequest.current = true
         appendLog(`→ ${event.name}(${JSON.stringify(event.input).slice(0, 80)})`)
         // The interleave fix — flag the bubble split FIRST, before any of the
         // specific-signal branches below; same shared predicate replay uses.
@@ -1068,6 +1081,24 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
     if (a.kind === 'open_explorable' && a.arg) {
       window.engram.openArtifact(a.arg)
     }
+  }
+
+  /** Provenance the app OBSERVES rather than trusts — see the same ref in
+   * LearnSessionView. "Transcribed blind" is claimed only when a subagent
+   * spawn was actually seen between the request and the proposal. */
+  const blindSinceRequest = useRef(false)
+
+  async function attachHandwriting() {
+    const picked = await window.engram.pickHandwriting()
+    const message = handwritingRequestMessage({ pages: picked })
+    if (!message || !sessionId) return
+    blindSinceRequest.current = false
+    setMessages((prev) => [
+      ...prev,
+      { id: crypto.randomUUID(), role: 'user', text: message, attachments: picked, timestamp: Date.now() },
+    ])
+    setBusy(true)
+    await window.engram.sendMessage(sessionId, message)
   }
 
   async function submitProduction() {
@@ -2007,7 +2038,7 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
                 {marks
                   .filter((k) => k.atIndex === 0 && k.kind !== 'lapse' && k.kind !== 'milestone')
                   .map((k) => (
-                    <MarkView key={k.id} mark={k} onAnswerAsk={answerAsk} deferAsk={deferAskFor(k)} suppressBeatExcerpt={messages[k.atIndex]?.role === 'assistant'} />
+                    <MarkView key={k.id} mark={k} onAnswerAsk={answerAsk} onConfirmTranscription={(latex) => setProduction(latex)} deferAsk={deferAskFor(k)} suppressBeatExcerpt={messages[k.atIndex]?.role === 'assistant'} />
                   ))}
                 {messages.map((m, i) => {
                   // Verdict Anatomy (Wave 2) — undefined for the common case
@@ -2052,7 +2083,7 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
                           k.kind !== 'milestone',
                       )
                       .map((k) => (
-                        <MarkView key={k.id} mark={k} onAnswerAsk={answerAsk} deferAsk={deferAskFor(k)} suppressBeatExcerpt={messages[k.atIndex]?.role === 'assistant'} />
+                        <MarkView key={k.id} mark={k} onAnswerAsk={answerAsk} onConfirmTranscription={(latex) => setProduction(latex)} deferAsk={deferAskFor(k)} suppressBeatExcerpt={messages[k.atIndex]?.role === 'assistant'} />
                       ))}
                   </Fragment>
                   )
@@ -2184,6 +2215,7 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
               attachedFiles={attachedFiles}
               onRemoveAttachment={(path) => setAttachedFiles((prev) => prev.filter((p) => p !== path))}
               onAttach={attachFiles}
+              onAttachHandwriting={attachHandwriting}
               markdownPreview={markdownPreview}
               onToggleMarkdownPreview={() => setMarkdownPreview((v) => !v)}
               onSubmit={submitProduction}

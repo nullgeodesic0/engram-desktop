@@ -87,6 +87,22 @@ export function isQuickEasyViolation(command: string): boolean {
  * invocations into one multi-line Bash call — each description is bounded by
  * the next newline (or end of string) rather than end-of-string alone, so
  * multiple invocations in one command are each captured, in order. */
+/** Is this description nothing but a shell variable reference?
+ *
+ * The sibling of the `$(…)` case above, and reported from a live sitting: the
+ * tutor wrote `DESC="…"` on one line and `--description "$DESC"` on the next,
+ * so the pin rendered the literal text `$DESC` as if that were the
+ * misconception. The wording is real but it is not in the command, exactly
+ * like the file-mediated form, so it gets the same honest fallback.
+ *
+ * Deliberately narrow: it matches ONLY a lone `$VAR` or `${VAR}` filling the
+ * whole field. A description very often contains `$` legitimately — every
+ * LaTeX misconception in this app does — and `$E=mc^2$` or `$x$` must survive
+ * untouched. */
+function isShellVariableOnly(raw: string): boolean {
+  return /^\$\{?[A-Za-z_][A-Za-z0-9_]*\}?$/.test(raw.trim())
+}
+
 export function parseMisconceptionAdds(command: string): Array<{ node: string | undefined; text: string }> {
   if (!command.includes('misconception add')) return []
   const out: Array<{ node: string | undefined; text: string }> = []
@@ -101,7 +117,7 @@ export function parseMisconceptionAdds(command: string): Array<{ node: string | 
     // fragments through the trailing quotes ("(cat …)" > /dev/null && …,
     // seen rendered live 2026-07-31). Push an EMPTY text: the pin renders
     // its filed-to-the-ledger fallback instead of garbled shell.
-    if (raw.includes('$(')) {
+    if (raw.includes('$(') || isShellVariableOnly(raw)) {
       out.push({ node: nodeMatch ? nodeMatch[1] : undefined, text: '' })
       continue
     }
@@ -333,6 +349,7 @@ export function isMarkBoundaryToolUse(name: string, input: Record<string, unknow
       tool === 'render_formula' ||
       tool === 'cite_source' ||
       tool === 'render_plot' ||
+      tool === 'propose_transcription' ||
       tool === 'render_checks' ||
       tool === 'render_timeline' ||
       tool === 'define_term'

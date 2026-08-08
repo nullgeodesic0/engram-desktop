@@ -12,6 +12,14 @@ interface MessageComposerProps {
   attachedFiles: string[]
   onRemoveAttachment: (path: string) => void
   onAttach: () => void
+  /** The handwriting flow — deliberately its OWN control rather than a file
+   * type the generic paperclip happens to accept. The two do different things:
+   * the paperclip hands the tutor a document to read for context, while this
+   * asks for the learner's own work to be transcribed and returned for their
+   * confirmation. Collapsing them into one button would hide a gate behind a
+   * file extension. Omitted (and the button hidden) where there is no session
+   * to ask. */
+  onAttachHandwriting?: () => void
   markdownPreview: boolean
   onToggleMarkdownPreview: () => void
   onSubmit: () => void
@@ -60,6 +68,7 @@ export function MessageComposer({
   attachedFiles,
   onRemoveAttachment,
   onAttach,
+  onAttachHandwriting,
   markdownPreview,
   onToggleMarkdownPreview,
   onSubmit,
@@ -168,9 +177,18 @@ export function MessageComposer({
       )}
       <div className="detail-footer pt-2">
         <div className="flex items-center gap-1.5 flex-wrap">
-          <button onClick={onAttach} title="Attach files" className={CTRL_QUIET}>
+          <button onClick={onAttach} title="Attach files for the tutor to read for context" className={CTRL_QUIET}>
             📎 Attach
           </button>
+          {onAttachHandwriting && (
+            <button
+              onClick={onAttachHandwriting}
+              title="Photograph your handwritten work — it comes back as LaTeX for you to check before it counts"
+              className={CTRL_QUIET}
+            >
+              ✍️ Handwriting
+            </button>
+          )}
           <button
             onClick={onToggleMarkdownPreview}
             title="Toggle a live rendered preview of your answer (Markdown + LaTeX) alongside the input"

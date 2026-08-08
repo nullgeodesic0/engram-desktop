@@ -18,7 +18,8 @@ import { CheckpointAnchor } from '../CheckpointAnchor'
 import { TicketCard } from './TicketCard'
 import { ComparisonCard, StepsCard, FormulaCard, CitationChip, ChecksCard, TimelineCard, DefinitionCard } from './StructuredCards'
 import { PlotCard } from './PlotCard'
-import type { ComparisonSide, LadderStep, SymbolGloss, PlotSeries, PlotMarker, SanityCheck, TimelineEvent } from '../../../../shared/bridgeUiIntents'
+import { TranscriptionCard } from './TranscriptionCard'
+import type { ComparisonSide, LadderStep, SymbolGloss, PlotSeries, PlotMarker, SanityCheck, TimelineEvent , TranscriptionPage } from '../../../../shared/bridgeUiIntents'
 import type { ToolFailureKind } from '../../../../shared/signals/tutorSignals'
 import type { StabilityMilestoneScale } from '../../../../shared/gradeResult'
 import type { ParsedTicket } from '../../shared/ticketParser'
@@ -146,6 +147,16 @@ export type RitualMark = { id: string; atIndex: number } & (
   | { kind: 'steps'; title: string | null; steps: LadderStep[] }
   | { kind: 'formula'; latex: string; caption: string | null; where: SymbolGloss[] }
   | { kind: 'citation'; label: string; locator: string | null; note: string | null }
+  | {
+      kind: 'transcription'
+      latex: string
+      pages: TranscriptionPage[]
+      note: string | null
+      /** Observed by the app, never asserted by the tutor — true only when a
+       * subagent spawn was seen between the request and this proposal. */
+      blind: boolean
+      live: boolean
+    }
   | { kind: 'checks'; title: string | null; checks: SanityCheck[] }
   | { kind: 'timeline'; title: string | null; events: TimelineEvent[] }
   | {
@@ -319,6 +330,7 @@ export function MarkView({
   suppressBeatExcerpt,
   milestonePairedWithGradeCard,
   deferAsk,
+  onConfirmTranscription,
 }: {
   mark: RitualMark
   /** Only meaningful for `kind: 'ask'` marks — omit at any call site that
@@ -354,6 +366,10 @@ export function MarkView({
    * which `MilestoneCard` treats as `false` — its original, numbers-shown
    * behavior, byte-identical to before this fix. */
   milestonePairedWithGradeCard?: boolean
+  /** Only meaningful for `kind: 'transcription'` — fills the composer with the
+   * text the learner attested to. Omitted by history/replay call sites, which
+   * must never be able to refill a composer in a different session. */
+  onConfirmTranscription?: (latex: string) => void
 }) {
   // Minimap Precision fix — every mark kind wraps in the SAME
   // `CheckpointAnchor` (id = `mark.id`, the exact id `deriveInstrumentMoments`
@@ -394,6 +410,17 @@ export function MarkView({
   else if (mark.kind === 'steps') content = <StepsCard title={mark.title} steps={mark.steps} />
   else if (mark.kind === 'formula') content = <FormulaCard latex={mark.latex} caption={mark.caption} where={mark.where} />
   else if (mark.kind === 'citation') content = <CitationChip label={mark.label} locator={mark.locator} note={mark.note} />
+  else if (mark.kind === 'transcription')
+    content = (
+      <TranscriptionCard
+        latex={mark.latex}
+        pages={mark.pages}
+        note={mark.note}
+        blind={mark.blind}
+        live={mark.live}
+        onConfirm={onConfirmTranscription}
+      />
+    )
   else if (mark.kind === 'checks') content = <ChecksCard title={mark.title} checks={mark.checks} />
   else if (mark.kind === 'timeline') content = <TimelineCard title={mark.title} events={mark.events} />
   else if (mark.kind === 'definition')

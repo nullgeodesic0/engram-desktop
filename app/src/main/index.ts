@@ -351,6 +351,22 @@ app.whenReady().then(() => {
     return result.canceled ? [] : result.filePaths
   })
 
+  // The handwriting picker. Separate from the generic one because the two
+  // flows differ in kind: this one's files become the learner's own graded
+  // production (via a transcription they confirm), so it is filtered to
+  // images and titled to say what will happen to them. Multi-select is
+  // ordered by the dialog, which is the page order the transcription uses.
+  ipcMain.handle('dialog:pickHandwriting', async () => {
+    if (!mainWindow) return []
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openFile', 'multiSelections'],
+      title: 'Photograph pages of your handwritten work, in order',
+      buttonLabel: 'Transcribe',
+      filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'heic', 'heif', 'webp', 'gif', 'tif', 'tiff'] }],
+    })
+    return result.canceled ? [] : result.filePaths
+  })
+
   // A plain filesystem copy of the Engram plugin's own storage (topics, receipts,
   // artifacts, learner-model.json) to a folder the user picks — this is now a real
   // personal record with no other in-app backup path, so a one-click snapshot matters.

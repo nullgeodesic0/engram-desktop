@@ -70,6 +70,7 @@ import { SummaryOverlay, makePeek } from '../components/ritual/SummaryOverlay'
 import { parseGradeResults, type GradeResult } from '../../../shared/gradeResult'
 import { MarkView, type RitualMark } from '../components/ritual/Marks'
 import { bridgeUiIntent } from '../../../shared/bridgeUiIntents'
+import { handwritingRequestMessage } from '../shared/handwritingRequest'
 import { ActionChips, type SuggestedAction } from '../components/ritual/ActionChips'
 import { SessionOpenPlate, SessionCeremony } from '../components/ritual/Bookends'
 import { Button } from '../components/ui/Button'
@@ -844,6 +845,16 @@ export function LearnSessionView({
         case 'plot':
           pushMark({ kind: 'plot', title: intent.title, xLabel: intent.xLabel, yLabel: intent.yLabel, series: intent.series, markers: intent.markers })
           break
+        case 'transcription':
+          pushMark({
+            kind: 'transcription',
+            latex: intent.latex,
+            pages: intent.pages,
+            note: intent.note,
+            blind: blindSinceRequest.current,
+            live: true,
+          })
+          break
         case 'ticket':
           // Held as state, NOT pushed as a transcript mark. A tutor that
           // both calls render_ticket AND types the ticket in prose (observed
@@ -1026,6 +1037,7 @@ export function LearnSessionView({
         break
       }
       case 'tool_use':
+        if (isSubagentSpawnTool(event.name)) blindSinceRequest.current = true
         // The interleave fix — flag the bubble split FIRST, before any of the
         // specific-signal branches (see assistantBoundaryRef's doctrine
         // comment above). Same shared predicate replay uses, applied at the
@@ -1503,6 +1515,31 @@ export function LearnSessionView({
   async function attachFiles() {
     const picked = await window.engram.pickFiles()
     setAttachedFiles((prev) => [...prev, ...picked.filter((p) => !prev.includes(p))])
+  }
+
+  /** Did a SUBAGENT spawn happen since the handwriting request went out?
+   *
+   * Provenance the app OBSERVES rather than takes on trust. The system prompt
+   * asks the tutor to transcribe through a subagent told nothing but the
+   * image paths, precisely so a reader that knows the expected answer cannot
+   * see what it expects on a smudged character. That is an instruction, and
+   * an instruction can be skipped — so the card says "transcribed blind" only
+   * when a spawn was actually observed between the request and the proposal.
+   * Either way the learner still confirms; this only decides how loudly to
+   * suggest they look. */
+  const blindSinceRequest = useRef(false)
+
+  async function attachHandwriting() {
+    const picked = await window.engram.pickHandwriting()
+    const message = handwritingRequestMessage({ pages: picked })
+    if (!message || !sessionId) return
+    blindSinceRequest.current = false
+    setMessages((prev) => [
+      ...prev,
+      { id: crypto.randomUUID(), role: 'user', text: message, attachments: picked, timestamp: Date.now() },
+    ])
+    setBusy(true)
+    await window.engram.sendMessage(sessionId, message)
   }
 
   async function submitProduction() {
@@ -2254,7 +2291,7 @@ export function LearnSessionView({
                   <SessionOpenPlate walkNumber={walkNumber} date={new Date()} recap={lastWalk} />
                 )}
                 {marks.filter((k) => k.atIndex === 0).map((k) => (
-                  <MarkView key={k.id} mark={k} onAnswerAsk={answerAsk} suppressBeatExcerpt={messages[k.atIndex]?.role === 'assistant'} />
+                  <MarkView key={k.id} mark={k} onAnswerAsk={answerAsk} onConfirmTranscription={(latex) => setProduction(latex)} suppressBeatExcerpt={messages[k.atIndex]?.role === 'assistant'} />
                 ))}
                 {messages.map((m, i) => (
                   <Fragment key={m.id}>
@@ -2279,7 +2316,7 @@ export function LearnSessionView({
                         // it's assistant prose (the beat's own full text, since
                         // the interleave fix), the marker drops its redundant
                         // excerpt; a tail mark (atIndex past the end) keeps it.
-                        <MarkView key={k.id} mark={k} onAnswerAsk={answerAsk} suppressBeatExcerpt={messages[k.atIndex]?.role === 'assistant'} />
+                        <MarkView key={k.id} mark={k} onAnswerAsk={answerAsk} onConfirmTranscription={(latex) => setProduction(latex)} suppressBeatExcerpt={messages[k.atIndex]?.role === 'assistant'} />
                       ))}
                   </Fragment>
                 ))}
@@ -2364,6 +2401,7 @@ export function LearnSessionView({
               attachedFiles={attachedFiles}
               onRemoveAttachment={(path) => setAttachedFiles((prev) => prev.filter((p) => p !== path))}
               onAttach={attachFiles}
+              onAttachHandwriting={attachHandwriting}
               markdownPreview={markdownPreview}
               onToggleMarkdownPreview={() => setMarkdownPreview((v) => !v)}
               onSubmit={submitProduction}

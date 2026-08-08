@@ -318,5 +318,16 @@ server.registerTool('define_term', {
   },
 }, async (args) => fireUi('define_term', args))
 
+server.registerTool('propose_transcription', {
+  title: 'Propose Transcription',
+  description:
+    "When the learner attaches handwritten work, return the transcription HERE rather than in prose. `latex` is the transcription exactly as written — including any errors, which you must not correct: the learner is shown this and confirms it before it becomes their answer, and a silently repaired mistake would be graded as if they had made none. `pages` echoes the image paths in order, each with an optional `note` for anything genuinely illegible (say so rather than guessing). Produce the transcription with a subagent given only the image paths and the verbatim instruction, so whatever you already know about the expected answer cannot colour what you read.",
+  inputSchema: {
+    latex: z.string(),
+    pages: z.array(z.object({ path: z.string(), note: z.string().optional() })).min(1).max(12),
+    note: z.string().optional(),
+  },
+}, async (args) => fireUi('propose_transcription', args))
+
 const transport = new StdioServerTransport()
 await server.connect(transport)

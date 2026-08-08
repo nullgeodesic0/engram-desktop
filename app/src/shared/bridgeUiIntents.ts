@@ -101,6 +101,13 @@ export interface TimelineEvent {
   note?: string
 }
 
+/** One page of a handwriting transcription — the image it came from, and
+ * optionally what the transcriber could not read on it. */
+export interface TranscriptionPage {
+  path: string
+  note: string | null
+}
+
 /** One entry of a `render_formula` where-clause. */
 export interface SymbolGloss {
   symbol: string
@@ -121,6 +128,7 @@ export type BridgeUiIntent =
   | { kind: 'steps'; title: string | null; steps: LadderStep[] }
   | { kind: 'formula'; latex: string; caption: string | null; where: SymbolGloss[] }
   | { kind: 'citation'; label: string; locator: string | null; note: string | null }
+  | { kind: 'transcription'; latex: string; pages: TranscriptionPage[]; note: string | null }
   | { kind: 'checks'; title: string | null; checks: SanityCheck[] }
   | { kind: 'timeline'; title: string | null; events: TimelineEvent[] }
   | {
@@ -403,6 +411,32 @@ export function bridgeUiIntent(tool: string, rawPayload: unknown): BridgeUiInten
       const note = optStr(payload.note)
       if (locator === false || note === false) return null
       return { kind: 'citation', label, locator, note }
+    }
+
+    case 'propose_transcription': {
+      const latex = str(payload.latex)
+      if (!latex) return null
+      if (!Array.isArray(payload.pages) || payload.pages.length === 0 || payload.pages.length > 12) return null
+      const pages: TranscriptionPage[] = []
+      for (const raw of payload.pages) {
+        // Accept a bare path string as well as {path, note}.
+        if (typeof raw === 'string') {
+          const path = str(raw)
+          if (!path) return null
+          pages.push({ path, note: null })
+          continue
+        }
+        const rec = record(raw)
+        if (!rec) return null
+        const path = str(rec.path)
+        if (!path) return null
+        const note = optStr(rec.note)
+        if (note === false) return null
+        pages.push({ path, note })
+      }
+      const note = optStr(payload.note)
+      if (note === false) return null
+      return { kind: 'transcription', latex, pages, note }
     }
 
     case 'render_checks': {
