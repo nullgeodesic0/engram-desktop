@@ -88,8 +88,14 @@ export const LatexHighlightOverlay = memo(function LatexHighlightOverlay({
       at = t.end
     })
     if (at < text.length) out.push(text.slice(at))
-    // See the trailing-newline note in the file comment.
-    out.push('\n ')
+    // Trailing-newline guard, applied ONLY when the text actually ends in a
+    // newline: a `<pre>` drops that last empty line and a textarea keeps it,
+    // so without this the mirror is one line short exactly when you press
+    // Enter at the end. Appending it unconditionally was its own hazard — on
+    // a final line that happens to be exactly full, the extra character wraps
+    // in the mirror and not in the textarea, making the mirror taller and its
+    // scroll range longer.
+    if (text.endsWith('\n')) out.push(' ')
     return out
   }, [text, tokens, focused])
 

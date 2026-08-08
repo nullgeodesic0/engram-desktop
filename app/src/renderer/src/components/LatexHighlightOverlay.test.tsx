@@ -17,6 +17,28 @@ describe('LatexHighlightOverlay', () => {
     expect(text.trimEnd()).toBe(src.trimEnd())
   })
 
+  it('reproduces a real derivation byte for byte, including long unbroken runs', () => {
+    // The text that surfaced the wrap-contract bug: ~90-character runs with
+    // no space to break at. If the mirror ever drops or adds a character the
+    // highlight cannot line up, whatever the CSS says.
+    const src = '$$= \\frac{A^{N}}{h^{2N}N!}\\frac{\\pi^{N}}{\\Gamma{\\left(N+1 \\right)}}\\left(2mE \\right)^{N}$$'
+    const text = render(src)
+      .replace(/<[^>]*>/g, '')
+      .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
+      .replace(/&quot;/g, '"').replace(/&#x27;/g, "'")
+    expect(text).toBe(src)
+  })
+
+  it('adds the trailing-line guard only when the text ends in a newline', () => {
+    const inner = (src: string) => render(src).replace(/^<pre[^>]*>/, '').replace(/<\/pre>$/, '').replace(/<[^>]*>/g, '')
+    // No guard on ordinary text — an unconditional one can wrap on a final
+    // line that is exactly full, making the mirror taller than the textarea.
+    expect(inner('$x$')).toBe('$x$')
+    // With a trailing newline the guard is required: <pre> drops that empty
+    // last line, a textarea keeps it.
+    expect(inner('$x$\n')).toBe('$x$\n ')
+  })
+
   it('colours nested delimiters by depth', () => {
     const html = render('$\\frac{a}{b(c)}$')
     expect(html).toContain('var(--color-ink-warm)')

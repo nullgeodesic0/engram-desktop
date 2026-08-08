@@ -1723,9 +1723,15 @@
   padding: 0.75rem 1rem; /* matches the textarea's px-4 py-3 */
   font: inherit;
   letter-spacing: inherit;
+  /* WRAP CONTRACT — restated identically on the textarea below. Stating it
+   * on only one side was a real bug: for text with spaces the two agree by
+   * accident, but a 90-character unbroken run (`\frac{A^{N}}{h^{2N}N!}…`, the
+   * shape of every real derivation) can break at a different column in each,
+   * which both misaligns the highlight and lets a line run past the edge. */
   white-space: pre-wrap;
   overflow-wrap: break-word;
   word-break: normal;
+  max-width: 100%;
   overflow: hidden;
   pointer-events: none;
   color: var(--color-text-primary);
@@ -1757,6 +1763,11 @@
   letter-spacing: inherit;
   box-sizing: border-box;
   scrollbar-gutter: stable;
+  /* The other half of the wrap contract — see `.latex-mirror`. */
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: normal;
+  max-width: 100%;
 }
 .latex-input-transparent::selection {
   /* Selection must stay legible against transparent glyphs — the mirror's
