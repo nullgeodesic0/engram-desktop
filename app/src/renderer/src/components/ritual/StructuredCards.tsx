@@ -1,6 +1,7 @@
-import { memo } from 'react'
+import { memo, useCallback, useRef, useState } from 'react'
 import { MathRenderer } from '../MathRenderer'
 import { MarkFrame } from './MarkFrame'
+import { highlightLatexSymbol } from '../../shared/latexHighlight'
 import type { ComparisonSide, LadderStep, SymbolGloss } from '../../../../shared/bridgeUiIntents'
 
 /** The four cards behind the expanded bridge vocabulary (`render_comparison`,
@@ -132,6 +133,31 @@ export const FormulaCard = memo(function FormulaCard({
   caption: string | null
   where: SymbolGloss[]
 }) {
+  // Which gloss row the learner is pointing at, and the resolved hex for the
+  // accent ink. KaTeX bakes a colour into its output at parse time, so a CSS
+  // variable can't be handed to `\\textcolor` — the computed value is read off
+  // the live card instead, which keeps the tint correct in both themes and
+  // through a theme switch (the read happens per hover, not once at mount).
+  const [active, setActive] = useState<number | null>(null)
+  const rootRef = useRef<HTMLDListElement | null>(null)
+  const inkRef = useRef<string>('#e8a857')
+
+  const point = useCallback((i: number | null) => {
+    if (i !== null && rootRef.current) {
+      const raw = getComputedStyle(rootRef.current).getPropertyValue('--color-ink-warm').trim()
+      // Only a hex literal is usable; anything else leaves the last good value
+      // in place and `highlightLatexSymbol` will reject it if it isn't one.
+      if (/^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(raw)) inkRef.current = raw
+    }
+    setActive(i)
+  }, [])
+
+  const wrapped = /^\s*\$\$|^\s*\\\[/.test(latex) ? latex : `$$${latex}$$`
+  const shown =
+    active !== null && where[active]
+      ? highlightLatexSymbol(wrapped, where[active].symbol.replace(/^\$+|\$+$/g, ''), inkRef.current)
+      : wrapped
+
   return (
     <MarkFrame
       accent="warm"
@@ -143,21 +169,34 @@ export const FormulaCard = memo(function FormulaCard({
         </>
       }
     >
-      {/* The tutor sends bare LaTeX (no delimiters) — wrap it as display math
+      {/* The tutor sends bare LaTeX (no delimiters) — wrapped as display math
         * so the card always sets it the same way, whether or not the model
         * remembered its own $$. A payload that DID arrive wrapped is left
         * alone rather than double-wrapped into a parse error. */}
       <div className="overflow-x-auto py-1">
-        <MathRenderer
-          text={/^\s*\$\$|^\s*\\\[/.test(latex) ? latex : `$$${latex}$$`}
-          className="text-[var(--color-text-primary)]"
-        />
+        <MathRenderer text={shown} className="text-[var(--color-text-primary)]" />
       </div>
       {caption && <MathRenderer text={caption} inlineOnly className="fig-caption" />}
       {where.length > 0 && (
-        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 pt-1 border-t border-[var(--color-hairline)] mt-0.5">
+        <dl ref={rootRef} className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 pt-1 border-t border-[var(--color-hairline)] mt-0.5">
           {where.map((w, i) => (
-            <div key={i} className="contents">
+            // The whole row is the target, not just the symbol — a 6px glyph
+            // is not a hit area. Focusable so the same pointing gesture works
+            // from the keyboard, and `onFocus`/`onBlur` mirror the hover
+            // exactly rather than being a lesser path.
+            <div
+              key={i}
+              tabIndex={0}
+              role="button"
+              aria-label={`highlight ${w.symbol} in the equation`}
+              className={`focus-ring grid grid-cols-subgrid col-span-2 gap-x-3 rounded-sm cursor-default transition-colors ${
+                active === i ? 'bg-[color-mix(in_srgb,var(--color-ink-warm)_10%,transparent)]' : ''
+              }`}
+              onMouseEnter={() => point(i)}
+              onMouseLeave={() => point(null)}
+              onFocus={() => point(i)}
+              onBlur={() => point(null)}
+            >
               <dt className="min-w-0">
                 <MathRenderer text={`$${w.symbol.replace(/^\$+|\$+$/g, '')}$`} inlineOnly className="text-xs text-[var(--color-ink-warm)]" />
               </dt>
