@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from 'react'
 import { scanLatex, pairAtCaret } from '../shared/latexSyntax'
 import { onInsert, onBackspace, onCompletion } from '../shared/latexEditing'
 import { nextStop, prevStop, matchingDelimiter, expandSelection } from '../shared/latexNavigation'
+import { createHistory, record, undo as undoHistory, redo as redoHistory, current as currentSnapshot, type EditHistory, type EditKind } from '../shared/editHistory'
 import {
   readText,
   getCaretOffset,
@@ -76,6 +77,10 @@ export function LatexEditor({
    * every keystroke's `onChange` would come back as a prop and repaint on top
    * of a caret we just placed. */
   const painted = useRef<string>('')
+  /** Undo history. Ours, because intercepting `beforeinput` means Chromium's
+   * native stack never records anything — ⌘Z did nothing at all before this.
+   * A ref, not state: history is not something the view renders. */
+  const history = useRef<EditHistory>(createHistory({ text: value, caret: value.length }))
 
   /** Repaint, restoring the FULL selection — both ends, not just the caret.
    *
@@ -95,9 +100,20 @@ export function LatexEditor({
 
   /** Commit a (text, caret) pair: paint it, place the caret, tell the parent. */
   const commit = useCallback(
-    (text: string, caret: number) => {
+    (text: string, caret: number, kind: EditKind = 'other') => {
+      record(history.current, { text, caret }, kind, Date.now())
       repaint(text, caret)
       onChange(text)
+    },
+    [onChange, repaint],
+  )
+
+  /** Apply a history step. Deliberately does NOT go through `commit`, which
+   * would record the step as a new edit and make undo unreachable. */
+  const applyStep = useCallback(
+    (snap: { text: string; caret: number }) => {
+      repaint(snap.text, snap.caret)
+      onChange(snap.text)
     },
     [onChange, repaint],
   )
@@ -109,7 +125,13 @@ export function LatexEditor({
     if (!el) return
     if (value === painted.current) return
     const focused = el.ownerDocument.activeElement === el
-    repaint(value, focused ? Math.min(getCaretOffset(el) ?? value.length, value.length) : null)
+    const caret = focused ? Math.min(getCaretOffset(el) ?? value.length, value.length) : value.length
+    // A prefill or the unicode conversion arrives from outside; it should be
+    // undoable, and it must never coalesce with typing around it.
+    if (currentSnapshot(history.current).text !== value) {
+      record(history.current, { text: value, caret }, 'other', Date.now())
+    }
+    repaint(value, focused ? caret : null)
   }, [value, repaint])
 
   /** Native `beforeinput`, attached by hand.
@@ -137,7 +159,9 @@ export function LatexEditor({
             const aided = onInsert(state, data)
             if (aided) {
               e.preventDefault()
-              commit(aided.text, aided.selStart)
+              // A structural aid (pairing, `$` growth) is its own undo step,
+              // never merged into surrounding typing.
+              commit(aided.text, aided.selStart, 'other')
               return
             }
             const plain = applyBeforeInput(sel.text, sel.a, sel.b, inputType, data)
@@ -145,8 +169,8 @@ export function LatexEditor({
             e.preventDefault()
             // Completions read the text as it will be after this key.
             const done = onCompletion({ text: plain.text, selStart: plain.caret, selEnd: plain.caret }, data)
-            if (done) commit(done.text, done.selStart)
-            else commit(plain.text, plain.caret)
+            if (done) commit(done.text, done.selStart, 'other')
+            else commit(plain.text, plain.caret, 'insert')
             return
           }
 
@@ -154,7 +178,7 @@ export function LatexEditor({
             const aided = onBackspace({ text: sel.text, selStart: sel.a, selEnd: sel.b })
             if (aided) {
               e.preventDefault()
-              commit(aided.text, aided.selStart)
+              commit(aided.text, aided.selStart, 'other')
               return
             }
           }
@@ -162,7 +186,7 @@ export function LatexEditor({
           const applied = applyBeforeInput(sel.text, sel.a, sel.b, inputType, data)
           if (!applied) return
           e.preventDefault()
-          commit(applied.text, applied.caret)
+          commit(applied.text, applied.caret, inputType.startsWith('delete') ? 'delete' : 'insert')
     }
     el.addEventListener('beforeinput', handler as EventListener)
     return () => el.removeEventListener('beforeinput', handler as EventListener)
@@ -198,6 +222,16 @@ export function LatexEditor({
         }
         if (e.key === 'Escape') {
           ;(e.currentTarget as HTMLElement).blur()
+          return
+        }
+        if ((e.metaKey || e.ctrlKey) && (e.key === 'z' || e.key === 'Z' || e.key === 'y')) {
+          const wantsRedo = e.key === 'y' || e.shiftKey
+          const snap = wantsRedo ? redoHistory(history.current) : undoHistory(history.current)
+          // Always preventDefault, even at the ends of the history: letting
+          // ⌘Z through would hand it to Chromium's own (empty) stack, which
+          // can clear the element outright.
+          e.preventDefault()
+          if (snap) applyStep(snap)
           return
         }
         const sel = currentSelection()
