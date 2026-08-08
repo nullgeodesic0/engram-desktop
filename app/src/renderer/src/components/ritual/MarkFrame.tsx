@@ -58,6 +58,7 @@ export const MarkFrame = memo(function MarkFrame({
   children,
   align = 'start',
   gap = 'normal',
+  fill = false,
 }: {
   accent: MarkAccent
   /** The margin-language caption, e.g. `EXPLORABLE FORGED`. Upper-cased by
@@ -71,6 +72,16 @@ export const MarkFrame = memo(function MarkFrame({
   /** `end` right-aligns the card — used by the few marks that read as the
    * tutor's own stamp rather than an entry in the transcript. */
   align?: 'start' | 'end'
+  /** Take the full 92% instead of shrinking to fit the content.
+   *
+   * The frame is shrink-to-fit by default, which is right for a pin or a
+   * caption — a two-word card should not draw a full-width box. It is wrong
+   * for a card whose content CHANGES SIZE while the learner interacts with
+   * it: PlotCard's crosshair readout adds numbers to the legend, which widened
+   * the card, which rescaled the `w-full` SVG inside it, so the plot visibly
+   * resized under the cursor. A card holding a drawing needs a width that
+   * doesn't depend on what its caption currently says. */
+  fill?: boolean
   /** `tight` for label-plus-one-caption cards; `normal` when the body has
    * real content that needs breathing room. */
   gap?: 'tight' | 'normal'
@@ -81,7 +92,7 @@ export const MarkFrame = memo(function MarkFrame({
       <div
         className={`tilt-card-soft ritual-mark-in max-w-[92%] flex flex-col rounded-md border px-3 py-2.5 ${
           gap === 'tight' ? 'gap-1' : 'gap-1.5'
-        }`}
+        } ${fill ? 'w-full' : ''}`}
         style={
           {
             borderColor: ACCENT_INK_DIM[accent],
