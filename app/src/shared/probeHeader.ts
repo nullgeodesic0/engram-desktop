@@ -182,7 +182,29 @@ export function endsWithBareProbeHeader(text: string): boolean {
  * break. Inserting a paragraph break here is what the model's own fresh-turn
  * boundary already implied; it changes zero words, only restores the break
  * a raw string concatenation silently erased. */
-export function mergeAssistantText(existingText: string, breakBubble: boolean, newText: string): string {
-  const viaBareHeaderException = breakBubble && endsWithBareProbeHeader(existingText)
-  return existingText + (viaBareHeaderException ? '\n\n' : '') + newText
+export function mergeAssistantText(existingText: string, _breakBubble: boolean, newText: string): string {
+  // `_breakBubble` is retained in the signature (both call sites pass it, and
+  // `endsWithBareProbeHeader` still governs the caller's own bubble-split
+  // decision) but no longer changes the join: the separator is unconditional
+  // now, so the bare-header case it used to special-case is simply the
+  // general case.
+  if (existingText.length === 0) return newText
+  // Already at a line boundary — don't add a second one.
+  if (/\n[ \t]*$/.test(existingText)) return existingText + newText
+  // A PARAGRAPH BREAK, always. These are whole content blocks, never partial
+  // words: SessionManager emits one `text` event per assistant content block
+  // (see its `assistant` branch), and the replay walk merges one complete
+  // block at a time. Two blocks are two paragraphs.
+  //
+  // Concatenating them bare cost a real sitting three symptoms at once
+  // (2026-08-08). The tutor closed one item with "…the blind audit at the
+  // close." and opened the next in a fresh block starting "**[2/5] ·
+  // interaction-picture**". Merged with no separator that became
+  // "close.**[2/5] · …" — the marker no longer began a line, so
+  // `parseProbeHeader` could not see it. Everything anchored to probe headers
+  // then failed together: no node crossing fired, the header stayed on the
+  // previous node, and the grade card — pinned "immediately before the next
+  // probe header" — found no later header and tailed the transcript, landing
+  // BELOW the next item's question. One missing newline, three bugs.
+  return existingText + '\n\n' + newText
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { splitAroundProbeHeader, endsWithBareProbeHeader, mergeAssistantText } from './probeHeader'
+import { splitAroundProbeHeader, endsWithBareProbeHeader, mergeAssistantText, parseAllProbeHeaders } from './probeHeader'
 
 describe('splitAroundProbeHeader', () => {
   it('parses a real Review header with a threshold dagger and no topic', () => {
@@ -45,13 +45,51 @@ describe('mergeAssistantText', () => {
     expect(split!.header.body).toBe(question)
   })
 
-  it('never inserts a separator for ordinary mid-stream continuation (breakBubble false)', () => {
-    const merged = mergeAssistantText('The answer starts here', false, ' and continues here.')
-    expect(merged).toBe('The answer starts here and continues here.')
+  // These two previously asserted the OPPOSITE — that merging never inserts a
+  // separator — on the premise that a merge joins mid-stream continuations of
+  // one sentence. That premise was wrong, and it cost a real sitting three
+  // bugs at once (see mergeAssistantText's own comment). SessionManager emits
+  // one `text` event per assistant content BLOCK, never per token or partial
+  // word, and the replay walk likewise merges whole blocks — so a merge always
+  // joins two complete pieces of prose, and a paragraph break is what belongs
+  // between them.
+  it('separates two ordinary blocks with a paragraph break', () => {
+    expect(mergeAssistantText('The answer starts here.', false, 'A second block.')).toBe(
+      'The answer starts here.\n\nA second block.',
+    )
   })
 
-  it('never inserts a separator when breakBubble is true but the previous text is not a bare header', () => {
-    const merged = mergeAssistantText('Some ordinary prose.', true, ' More prose.')
-    expect(merged).toBe('Some ordinary prose. More prose.')
+  it('separates regardless of breakBubble', () => {
+    expect(mergeAssistantText('Some ordinary prose.', true, 'More prose.')).toBe(
+      'Some ordinary prose.\n\nMore prose.',
+    )
+  })
+})
+
+describe('mergeAssistantText — blocks are paragraphs', () => {
+  it('separates two blocks so a header keeps its line start', () => {
+    // The 2026-08-08 regression, verbatim: bare concatenation produced
+    // "close.**[2/5] · …", which parseProbeHeader cannot see.
+    const merged = mergeAssistantText(
+      'Back tomorrow. Stashed for the blind audit at the close.',
+      false,
+      '**[2/5] · interaction-picture** *(grad-quantum-mechanics)*\n\nWhy is it constructed that way?',
+    )
+    expect(merged).toContain('close.\n\n**[2/5]')
+    expect(parseAllProbeHeaders(merged).map((h) => h.node)).toEqual(['interaction-picture'])
+  })
+
+  it('does not double up when the text already ends at a boundary', () => {
+    expect(mergeAssistantText('a\n\n', false, 'b')).toBe('a\n\nb')
+    expect(mergeAssistantText('a\n', false, 'b')).toBe('a\nb')
+  })
+
+  it('returns the new text unchanged when there is nothing to merge into', () => {
+    expect(mergeAssistantText('', false, 'first')).toBe('first')
+  })
+
+  it('still separates after a bare probe header', () => {
+    const merged = mergeAssistantText('**[1/3] · some-node**', true, 'The question body.')
+    expect(merged).toBe('**[1/3] · some-node**\n\nThe question body.')
   })
 })
