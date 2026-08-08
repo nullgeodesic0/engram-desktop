@@ -77,11 +77,19 @@ export function LatexEditor({
    * of a caret we just placed. */
   const painted = useRef<string>('')
 
-  const repaint = useCallback((text: string, caret: number | null) => {
+  /** Repaint, restoring the FULL selection — both ends, not just the caret.
+   *
+   * `paint` calls `replaceChildren`, which destroys the selection outright.
+   * Restoring a single offset therefore COLLAPSED every selection: finishing a
+   * mouse drag repainted and dropped you back to a caret, so text could not be
+   * selected in the composer at all. `end` defaults to `start`, which is the
+   * right behaviour after an edit (an insertion does collapse the selection)
+   * but was wrong for every pure selection change. */
+  const repaint = useCallback((text: string, start: number | null, end?: number) => {
     const el = ref.current
     if (!el) return
-    paint(el, text, spansFor(text, caret), caret === null)
-    if (caret !== null) setCaretOffset(el, caret)
+    paint(el, text, spansFor(text, start), start === null)
+    if (start !== null) setCaretOffset(el, start, end ?? start)
     painted.current = text
   }, [])
 
@@ -226,12 +234,21 @@ export function LatexEditor({
         if (!e.key.startsWith('Arrow') && e.key !== 'Home' && e.key !== 'End') return
         const el = ref.current
         if (!el) return
-        repaint(readText(el), getCaretOffset(el))
+        // Both ends: ⇧← extends a selection, and collapsing it here would
+        // make keyboard selection impossible in exactly the way the mouse
+        // path was broken.
+        repaint(readText(el), getCaretOffset(el, 'start'), getCaretOffset(el, 'end') ?? undefined)
       }}
       onMouseUp={() => {
         const el = ref.current
         if (!el) return
-        repaint(readText(el), getCaretOffset(el))
+        const a = getCaretOffset(el, 'start')
+        const b = getCaretOffset(el, 'end')
+        // A drag that selected something needs no repaint at all — the
+        // matched-pair emphasis is a caret affordance, and repainting mid-
+        // selection is pure risk for no gain.
+        if (a !== null && b !== null && a !== b) return
+        repaint(readText(el), a)
       }}
       onBlur={() => {
         const el = ref.current
