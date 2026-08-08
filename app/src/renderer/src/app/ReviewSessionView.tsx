@@ -514,6 +514,21 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
         case 'citation':
           pushUiMark({ kind: 'citation', label: intent.label, locator: intent.locator, note: intent.note })
           break
+        case 'checks':
+          pushUiMark({ kind: 'checks', title: intent.title, checks: intent.checks })
+          break
+        case 'timeline':
+          pushUiMark({ kind: 'timeline', title: intent.title, events: intent.events })
+          break
+        case 'definition':
+          pushUiMark({
+            kind: 'definition',
+            term: intent.term,
+            definition: intent.definition,
+            aka: intent.aka,
+            notToBeConfusedWith: intent.notToBeConfusedWith,
+          })
+          break
         case 'plot':
           pushUiMark({ kind: 'plot', title: intent.title, xLabel: intent.xLabel, yLabel: intent.yLabel, series: intent.series, markers: intent.markers })
           break

@@ -1,8 +1,8 @@
 import { memo, useCallback, useRef, useState } from 'react'
-import { MathRenderer } from '../MathRenderer'
+import { MathRenderer, isRenderableTex } from '../MathRenderer'
 import { MarkFrame } from './MarkFrame'
 import { highlightLatexSymbol } from '../../shared/latexHighlight'
-import type { ComparisonSide, LadderStep, SymbolGloss } from '../../../../shared/bridgeUiIntents'
+import type { ComparisonSide, LadderStep, SymbolGloss, SanityCheck, TimelineEvent } from '../../../../shared/bridgeUiIntents'
 
 /** The four cards behind the expanded bridge vocabulary (`render_comparison`,
  * `render_steps`, `render_formula`, `cite_source`).
@@ -152,11 +152,15 @@ export const FormulaCard = memo(function FormulaCard({
     setActive(i)
   }, [])
 
-  const wrapped = /^\s*\$\$|^\s*\\\[/.test(latex) ? latex : `$$${latex}$$`
-  const shown =
+  // Highlight the BARE expression, then wrap — never the other way round. The
+  // parse check has to see the same tex KaTeX will, and `$$…$$` is delimiter
+  // syntax the tokenizer strips, not part of the expression.
+  const bare = latex.replace(/^\s*\$\$|\$\$\s*$/g, '').replace(/^\s*\\\[|\\\]\s*$/g, '')
+  const tinted =
     active !== null && where[active]
-      ? highlightLatexSymbol(wrapped, where[active].symbol.replace(/^\$+|\$+$/g, ''), inkRef.current)
-      : wrapped
+      ? highlightLatexSymbol(bare, where[active].symbol.replace(/^\$+|\$+$/g, ''), inkRef.current, isRenderableTex)
+      : bare
+  const shown = `$$${tinted}$$`
 
   return (
     <MarkFrame
@@ -249,5 +253,159 @@ export const CitationChip = memo(function CitationChip({
         </span>
       </span>
     </div>
+  )
+})
+
+/** A ledger of limiting cases — "check r→∞, check r=a, check the dimensions."
+ *
+ * This is how a physicist actually knows an answer is right, and it is the
+ * move a struggling learner never makes on their own: they solve, they stop.
+ * Written as prose it reads as an afterthought paragraph; written as a ledger
+ * with each check paired to what it MUST give, it reads as a procedure — and
+ * a procedure is a thing you can learn to run. The tutor's own probe in a
+ * real grad-EM sitting ended "evaluate both expressions at r=a and say what
+ * you find", which is exactly one row of this card.
+ *
+ * Cool ink: a check is an instrument reading. It is not a verdict on the
+ * learner, and it must not be dressed as one — a failed check is information,
+ * and the card stays neutral about who it belongs to. */
+export const ChecksCard = memo(function ChecksCard({ title, checks }: { title: string | null; checks: SanityCheck[] }) {
+  return (
+    <MarkFrame
+      accent="cool"
+      label="SANITY CHECKS"
+      glyph={
+        <>
+          <path d="M2 7.5 L5 10.5 L12 3.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+        </>
+      }
+    >
+      {title && (
+        <MathRenderer text={title} inlineOnly className="font-(family-name:--font-serif) text-sm text-[var(--color-text-primary)]" />
+      )}
+      <ul className="flex flex-col gap-1.5 pt-0.5">
+        {checks.map((c, i) => (
+          <li key={i} className="flex flex-col gap-0.5 min-w-0">
+            <span className="flex items-baseline gap-2 min-w-0 flex-wrap">
+              <MathRenderer text={c.check} inlineOnly className="text-xs text-[var(--color-text-primary)]" />
+              {/* An arrow, not a colon: the row asserts an implication, and
+                  the glyph should say so at a glance. */}
+              <span aria-hidden="true" className="fig-caption shrink-0">
+                →
+              </span>
+              <MathRenderer text={c.expect} inlineOnly className="text-xs text-[var(--color-ink-cool)]" />
+            </span>
+            {c.note && <MathRenderer text={c.note} inlineOnly className="fig-caption" />}
+          </li>
+        ))}
+      </ul>
+    </MarkFrame>
+  )
+})
+
+/** A dated spine — the chronology a topic turns on.
+ *
+ * Deliberately the least mathematical card in the vocabulary, and added for
+ * that reason: everything else here grew out of physics sittings, and the
+ * same app teaches history and political theory, where "what happened, in
+ * what order, and what did it change" IS the material. A chronology written
+ * as a paragraph is the single hardest prose form to hold in memory.
+ *
+ * `when` is rendered exactly as the tutor wrote it and never parsed as a
+ * date — "1902", "the Second Congress", "T+30d", and "at expiry" are all
+ * legitimate positions on a curriculum's timeline, and a card that insisted
+ * on a calendar would quietly refuse three of them. */
+export const TimelineCard = memo(function TimelineCard({ title, events }: { title: string | null; events: TimelineEvent[] }) {
+  return (
+    <MarkFrame
+      accent="warm"
+      label="SEQUENCE"
+      glyph={
+        <>
+          <path d="M7 1.5 V12.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+          <circle cx="7" cy="4" r="1.4" fill="currentColor" />
+          <circle cx="7" cy="10" r="1.4" fill="currentColor" />
+        </>
+      }
+    >
+      {title && (
+        <MathRenderer text={title} inlineOnly className="font-(family-name:--font-serif) text-sm text-[var(--color-text-primary)]" />
+      )}
+      <ol className="flex flex-col pt-0.5">
+        {events.map((e, i) => (
+          <li key={i} className="flex gap-3 min-w-0">
+            {/* The spine: a hairline through the whole column with a node per
+                event, drawn in the row rather than as a background so it can
+                never drift out of register with the text beside it. The first
+                and last rows clip their half so the line starts and stops at
+                the outermost nodes instead of floating past them. */}
+            <span aria-hidden="true" className="relative shrink-0 w-2 flex justify-center">
+              <span
+                className="absolute w-px bg-[var(--color-ink-warm-dim)]"
+                style={{
+                  top: i === 0 ? '0.45rem' : 0,
+                  bottom: i === events.length - 1 ? 'calc(100% - 0.45rem)' : 0,
+                }}
+              />
+              <span className="absolute top-[0.3rem] w-[5px] h-[5px] rounded-full bg-[var(--color-ink-warm)]" />
+            </span>
+            <span className="flex flex-col gap-0.5 min-w-0 pb-2">
+              <span className="label-data text-[10px] tracking-[0.14em] text-[var(--color-ink-warm)]">{e.when}</span>
+              <MathRenderer text={e.what} inlineOnly className="text-xs text-[var(--color-text-primary)] leading-relaxed" />
+              {e.note && <MathRenderer text={e.note} inlineOnly className="fig-caption" />}
+            </span>
+          </li>
+        ))}
+      </ol>
+    </MarkFrame>
+  )
+})
+
+/** A term, pinned with its definition — and, when it earns one, the thing it
+ * is most often confused with.
+ *
+ * That last field is the whole reason this exists rather than being a line of
+ * prose. "X, not to be confused with Y" is a boundary the learner will need
+ * again at review time, and it is the same shape the misconception ledger
+ * records after the fact — this is the tutor drawing the boundary BEFORE the
+ * learner walks over it. Distinct from `render_comparison`, which gives two
+ * ideas equal columns; here one term is the subject and the other is a
+ * hazard beside it. */
+export const DefinitionCard = memo(function DefinitionCard({
+  term,
+  definition,
+  aka,
+  notToBeConfusedWith,
+}: {
+  term: string
+  definition: string
+  aka: string | null
+  notToBeConfusedWith: string | null
+}) {
+  return (
+    <MarkFrame
+      accent="cool"
+      label="DEFINITION"
+      glyph={
+        <>
+          <path d="M3.5 2.5 H10.5 V11.5 H3.5 Z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" />
+          <path d="M5.5 5.5 H8.5 M5.5 8 H8.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+        </>
+      }
+    >
+      <div className="flex items-baseline gap-2 flex-wrap min-w-0">
+        <MathRenderer text={term} inlineOnly className="font-(family-name:--font-serif) text-sm text-[var(--color-text-primary)]" />
+        {aka && <MathRenderer text={`also: ${aka}`} inlineOnly className="fig-caption" />}
+      </div>
+      <MathRenderer text={definition} className="text-xs text-[var(--color-text-dim)] leading-relaxed" />
+      {notToBeConfusedWith && (
+        // Danger ink on this line alone, not on the card: the definition is
+        // ordinary teaching; only the boundary is a hazard worth flagging.
+        <div className="flex items-baseline gap-2 pt-0.5 border-t border-[var(--color-hairline)] mt-0.5 min-w-0">
+          <span className="label-data text-[10px] tracking-[0.14em] text-[var(--color-ink-danger)] shrink-0">NOT</span>
+          <MathRenderer text={notToBeConfusedWith} inlineOnly className="fig-caption" />
+        </div>
+      )}
+    </MarkFrame>
   )
 })

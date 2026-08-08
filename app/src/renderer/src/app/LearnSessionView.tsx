@@ -826,6 +826,21 @@ export function LearnSessionView({
         case 'citation':
           pushMark({ kind: 'citation', label: intent.label, locator: intent.locator, note: intent.note })
           break
+        case 'checks':
+          pushMark({ kind: 'checks', title: intent.title, checks: intent.checks })
+          break
+        case 'timeline':
+          pushMark({ kind: 'timeline', title: intent.title, events: intent.events })
+          break
+        case 'definition':
+          pushMark({
+            kind: 'definition',
+            term: intent.term,
+            definition: intent.definition,
+            aka: intent.aka,
+            notToBeConfusedWith: intent.notToBeConfusedWith,
+          })
+          break
         case 'plot':
           pushMark({ kind: 'plot', title: intent.title, xLabel: intent.xLabel, yLabel: intent.yLabel, series: intent.series, markers: intent.markers })
           break

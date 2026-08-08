@@ -278,5 +278,45 @@ server.registerTool('render_plot', {
   },
 }, async (args) => fireUi('render_plot', args))
 
+server.registerTool('render_checks', {
+  title: 'Render Checks',
+  description:
+    "Advisory, best-effort: lay out the sanity checks an answer must survive — limiting cases, boundary agreement, dimensions, symmetry. Each row is a `check` (what to try: 'let $r\\to\\infty$', 'set $T=0$', 'compare dimensions') and an `expect` (what it must give), plus an optional `note` saying what a failure would mean. Up to 8. This is the verification habit a struggling learner never builds on their own — they solve, then stop. Same timing rules as anything else you say: after their attempt, not instead of it.",
+  inputSchema: {
+    title: z.string().optional(),
+    checks: z.array(z.object({
+      check: z.string(),
+      expect: z.string(),
+      note: z.string().optional(),
+    })).min(1).max(8),
+  },
+}, async (args) => fireUi('render_checks', args))
+
+server.registerTool('render_timeline', {
+  title: 'Render Timeline',
+  description:
+    "Advisory, best-effort: lay a chronology out as a dated spine instead of a paragraph — the order of events a historical, political, or process-based topic turns on, or the stages of a lifecycle. Each event takes `when` (rendered exactly as you write it: a year, a congress, 'at expiry', 'T+30d' — never parsed as a calendar date), `what`, and an optional `note`. Up to 10, in the order you want them read.",
+  inputSchema: {
+    title: z.string().optional(),
+    events: z.array(z.object({
+      when: z.string(),
+      what: z.string(),
+      note: z.string().optional(),
+    })).min(1).max(10),
+  },
+}, async (args) => fireUi('render_timeline', args))
+
+server.registerTool('define_term', {
+  title: 'Define Term',
+  description:
+    "Advisory, best-effort: pin a term with its definition, and — when it earns one — the thing it is most often confused with (`not_to_be_confused_with`). That last field is the point: naming the boundary BEFORE the learner crosses it is worth more than correcting them after. `aka` carries an alternative name the literature uses. Use it for a term the learner will meet again, not for every noun.",
+  inputSchema: {
+    term: z.string(),
+    definition: z.string(),
+    aka: z.string().optional(),
+    not_to_be_confused_with: z.string().optional(),
+  },
+}, async (args) => fireUi('define_term', args))
+
 const transport = new StdioServerTransport()
 await server.connect(transport)

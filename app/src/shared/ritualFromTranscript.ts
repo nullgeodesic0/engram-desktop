@@ -30,7 +30,7 @@ import {
   type StabilityMilestoneScale,
 } from './gradeResult'
 import { humanizeNodeId } from './humanizeId'
-import { bridgeUiIntent, type ComparisonSide, type LadderStep, type SymbolGloss, type PlotSeries, type PlotMarker } from './bridgeUiIntents'
+import { bridgeUiIntent, type ComparisonSide, type LadderStep, type SymbolGloss, type PlotSeries, type PlotMarker, type SanityCheck, type TimelineEvent } from './bridgeUiIntents'
 import { parseAuditNotification, parseCurriculumReturn, isTaskNotificationContent } from './taskNotification'
 import {
   isPretestRateCommand,
@@ -472,6 +472,17 @@ export type DerivedRitualMark =
   | { id: string; atIndex: number; kind: 'steps'; title: string | null; steps: LadderStep[] }
   | { id: string; atIndex: number; kind: 'formula'; latex: string; caption: string | null; where: SymbolGloss[] }
   | { id: string; atIndex: number; kind: 'citation'; label: string; locator: string | null; note: string | null }
+  | { id: string; atIndex: number; kind: 'checks'; title: string | null; checks: SanityCheck[] }
+  | { id: string; atIndex: number; kind: 'timeline'; title: string | null; events: TimelineEvent[] }
+  | {
+      id: string
+      atIndex: number
+      kind: 'definition'
+      term: string
+      definition: string
+      aka: string | null
+      notToBeConfusedWith: string | null
+    }
   | {
       id: string
       atIndex: number
@@ -880,6 +891,26 @@ export function deriveRitualMarks(entries: unknown[]): DerivedRitualMark[] {
         }
         if (intent.kind === 'citation') {
           marks.push({ id: `dmark-${seq++}`, atIndex: messageCount, kind: 'citation', label: intent.label, locator: intent.locator, note: intent.note })
+          continue
+        }
+        if (intent.kind === 'checks') {
+          marks.push({ id: `dmark-${seq++}`, atIndex: messageCount, kind: 'checks', title: intent.title, checks: intent.checks })
+          continue
+        }
+        if (intent.kind === 'timeline') {
+          marks.push({ id: `dmark-${seq++}`, atIndex: messageCount, kind: 'timeline', title: intent.title, events: intent.events })
+          continue
+        }
+        if (intent.kind === 'definition') {
+          marks.push({
+            id: `dmark-${seq++}`,
+            atIndex: messageCount,
+            kind: 'definition',
+            term: intent.term,
+            definition: intent.definition,
+            aka: intent.aka,
+            notToBeConfusedWith: intent.notToBeConfusedWith,
+          })
           continue
         }
         if (intent.kind === 'plot') {

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { highlightLatexSymbol } from './latexHighlight'
 
 const C = '#e8a857'
-const wrap = (s: string) => `\\textcolor{${C}}{${s}}`
+const wrap = (s: string) => `{\\textcolor{${C}}{${s}}}`
 
 describe('highlightLatexSymbol — control sequences', () => {
   it('tints every occurrence of a command', () => {
@@ -76,5 +76,60 @@ describe('highlightLatexSymbol — declines rather than guesses', () => {
     for (const s of nasty) for (const sym of nasty) {
       expect(() => highlightLatexSymbol(s, sym, C)).not.toThrow()
     }
+  })
+})
+
+describe('highlightLatexSymbol — the KaTeX-red regressions', () => {
+  // The real renderer, so these assert against the same parser the card uses.
+  const katexValid = (tex: string) => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const katex = require('katex')
+    try {
+      katex.renderToString(tex, { throwOnError: true, displayMode: true })
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  it('braces the replacement so a superscript position still parses', () => {
+    // `x^\textcolor{..}{N}` is "Got function '\textcolor' with no arguments".
+    const out = highlightLatexSymbol('x^N + y', 'N', C, katexValid)
+    expect(out).toBe(`x^${wrap('N')} + y`)
+    expect(katexValid(out)).toBe(true)
+  })
+
+  it('same for a subscript position', () => {
+    const out = highlightLatexSymbol('a_N', 'N', C, katexValid)
+    expect(out).toBe(`a_${wrap('N')}`)
+    expect(katexValid(out)).toBe(true)
+  })
+
+  it('declines entirely where no wrapper can be legal', () => {
+    // An array column spec takes a literal alignment char — braces don't help.
+    const src = '\\begin{array}{c} a \\\\ b \\end{array}'
+    expect(highlightLatexSymbol(src, 'c', C, katexValid)).toBe(src)
+  })
+
+  it('every rewrite it DOES return parses', () => {
+    const cases: [string, string][] = [
+      ['x^N + y', 'N'],
+      ['a_N', 'N'],
+      ['e^{-\\beta E}', 'E'],
+      ['\\sqrt[N]{x}', 'N'],
+      ['\\frac{Q}{4\\pi\\epsilon_0 r^2}', 'Q'],
+      ['\\begin{array}{c} a \\\\ b \\end{array}', 'c'],
+      ['\\oint \\vec E\\cdot d\\vec a = 4\\pi r^2 E(r)', 'E'],
+      ['\\Omega(E) = \\frac{1}{h^{3N}N!}', 'N'],
+    ]
+    for (const [tex, sym] of cases) {
+      const out = highlightLatexSymbol(tex, sym, C, katexValid)
+      expect(katexValid(out), `${sym} in ${tex} -> ${out}`).toBe(true)
+    }
+  })
+
+  it('falls back to the source when the validator throws', () => {
+    const src = 'E = mc^2'
+    expect(highlightLatexSymbol(src, 'E', C, () => { throw new Error('boom') })).toBe(src)
   })
 })

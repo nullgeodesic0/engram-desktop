@@ -84,6 +84,27 @@ function renderMath(tex: string, displayMode: boolean): string {
   }
 }
 
+/** Would KaTeX render this expression, or fall back to its error node?
+ *
+ * Runs the SAME normalization + parse the real render runs, just with
+ * `throwOnError` flipped on so a failure is reportable instead of being
+ * silently painted red. Exists for `highlightLatexSymbol` (shared/
+ * latexHighlight.ts), which rewrites an expression to tint one symbol and
+ * needs to know whether its rewrite survived — checking against this renderer
+ * rather than a private katex call is what guarantees the answer matches what
+ * the card is about to draw.
+ *
+ * Deliberately cheap to call repeatedly: KaTeX parses in microseconds at
+ * these expression sizes, and the caller only invokes it on a hover change. */
+export function isRenderableTex(tex: string): boolean {
+  try {
+    katex.renderToString(normalizeOverEscaped(tex), { throwOnError: true, displayMode: true })
+    return true
+  } catch {
+    return false
+  }
+}
+
 function escapeHtml(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
