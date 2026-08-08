@@ -5,6 +5,7 @@ import { fileName } from './ChatMessageView'
 import { CTRL_QUIET, ctrlFilled, type EnvAccent } from '../shared/controlChrome'
 import { scanLatex, describeScan } from '../shared/latexSyntax'
 import { onInsert, onBackspace, onCompletion, countUnicodeMath, unicodeToLatex } from '../shared/latexEditing'
+import { nextStop, prevStop, matchingDelimiter, expandSelection } from '../shared/latexNavigation'
 
 interface MessageComposerProps {
   production: string
@@ -102,6 +103,16 @@ export function MessageComposer({
     })
   }
 
+  /** Move the caret without touching the text. Separate from `applyEdit`
+   * because no re-render is needed — setting the DOM selection directly keeps
+   * navigation instant and avoids a value round-trip that could fight typing. */
+  function moveCaret(to: number, toEnd = to) {
+    const el = textareaRef.current
+    if (!el) return
+    el.setSelectionRange(to, toEnd)
+    setCaret(to)
+  }
+
   function syncCaret() {
     const el = textareaRef.current
     if (el) setCaret(el.selectionStart)
@@ -165,12 +176,16 @@ export function MessageComposer({
             onFocus={syncCaret}
             onBlur={() => setCaret(null)}
             onScroll={(e) => {
-              // Keep the mirror pinned to the textarea's scroll — it has
-              // `overflow: hidden`, so this is the only thing moving it.
+              // ONE mechanism, deliberately. This set `scrollTop` AND a
+              // `translateY` transform, on the assumption that `overflow:
+              // hidden` made the former a no-op. It does not — Chromium still
+              // honours PROGRAMMATIC scrolling on a hidden-overflow box — so
+              // both applied and the mirror moved twice as far as the text,
+              // drifting further the further you scrolled.
               const pre = e.currentTarget.previousElementSibling as HTMLElement | null
               if (pre?.classList.contains('latex-mirror')) {
                 pre.scrollTop = e.currentTarget.scrollTop
-                pre.style.transform = `translateY(${-e.currentTarget.scrollTop}px)`
+                pre.scrollLeft = e.currentTarget.scrollLeft
               }
             }}
             onKeyDown={(e) => {
@@ -183,8 +198,45 @@ export function MessageComposer({
                 ;(e.target as HTMLTextAreaElement).blur()
                 return
               }
-              // Editing aids never fight a modifier chord — ⌘V, ⌘A, ⌥←
-              // must all behave exactly as they always have.
+
+              const el0 = e.currentTarget
+              // ── Navigation ────────────────────────────────────────────────
+              // Tab escapes the current group, or hops to the next empty slot
+              // (`\frac{a}{|}`). Crucially it only fires INSIDE maths — in
+              // prose the helpers return null, Tab is left alone, and focus
+              // moves out of the composer as it always has. A navigation aid
+              // that traps keyboard focus is not an aid.
+              if (e.key === 'Tab') {
+                const to = e.shiftKey ? prevStop(production, el0.selectionStart) : nextStop(production, el0.selectionStart)
+                if (to !== null) {
+                  e.preventDefault()
+                  moveCaret(to)
+                }
+                return
+              }
+              // ⌘\ — jump to the matching delimiter, an editor staple.
+              if ((e.metaKey || e.ctrlKey) && e.key === '\\') {
+                const to = matchingDelimiter(production, el0.selectionStart)
+                if (to !== null) {
+                  e.preventDefault()
+                  moveCaret(to)
+                }
+                return
+              }
+              // ⌥↑ — grow the selection to the enclosing group, then to that
+              // group with its delimiters, then outward. Pairs with the
+              // wrap-selection rule: expand, then `(`, and the subterm is
+              // parenthesised without touching either end by hand.
+              if (e.altKey && e.key === 'ArrowUp') {
+                const r = expandSelection(production, el0.selectionStart, el0.selectionEnd)
+                if (r) {
+                  e.preventDefault()
+                  moveCaret(r.selStart, r.selEnd)
+                }
+                return
+              }
+              // Everything below is insertion. Modifier chords not claimed by
+              // the navigation block above (⌘V, ⌘A, ⌥←) pass straight through.
               if (e.metaKey || e.ctrlKey || e.altKey) return
               const el = e.currentTarget
               const state = { text: production, selStart: el.selectionStart, selEnd: el.selectionEnd }
@@ -243,6 +295,9 @@ export function MessageComposer({
             </span>
           ) : (
             <span />
+          )}
+          {mathMode && scan.problems.length === 0 && (
+            <span className="fig-caption hidden sm:inline">⇥ out of group · ⌘\\ match · ⌥↑ expand</span>
           )}
           {unicodeCount > 0 && (
             <button

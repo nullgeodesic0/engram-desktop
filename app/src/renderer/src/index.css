@@ -1731,6 +1731,12 @@
   color: var(--color-text-primary);
   border: 0;
   background: transparent;
+  box-sizing: border-box;
+  /* Both boxes must reserve the same gutter. If the textarea's scrollbar ever
+   * took layout width and the mirror's did not, the two would wrap at
+   * different columns — which reads as the highlighting being "off" on long
+   * input specifically. */
+  scrollbar-gutter: stable;
 }
 
 /* The textarea sitting over the mirror. Its glyphs are invisible; its caret
@@ -1749,6 +1755,8 @@
   font: inherit;
   line-height: inherit;
   letter-spacing: inherit;
+  box-sizing: border-box;
+  scrollbar-gutter: stable;
 }
 .latex-input-transparent::selection {
   /* Selection must stay legible against transparent glyphs — the mirror's
