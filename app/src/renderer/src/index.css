@@ -1705,6 +1705,57 @@
   animation: mark-settle-in calc(var(--dur-base) * 3) var(--ease-out-soft);
 }
 
+/* ── LaTeX mirror (components/LatexHighlightOverlay.tsx) ────────────────────
+ * The half of the mirror contract that lives in CSS. A <textarea> can't
+ * colour its own text, so a <pre> renders the same string underneath it with
+ * IDENTICAL metrics and the textarea's own text is made transparent (its
+ * caret and selection are not). Every property here must match the textarea's
+ * — change one, change both, or the text drifts out of register with its own
+ * highlighting.
+ *
+ * `font: inherit` does the heavy lifting: both elements sit inside the same
+ * styled wrapper, so family, size, weight and line-height come from one
+ * place rather than being restated twice and drifting. */
+.latex-mirror {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0.75rem 1rem; /* matches the textarea's px-4 py-3 */
+  font: inherit;
+  letter-spacing: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: normal;
+  overflow: hidden;
+  pointer-events: none;
+  color: var(--color-text-primary);
+  border: 0;
+  background: transparent;
+}
+
+/* The textarea sitting over the mirror. Its glyphs are invisible; its caret
+ * and selection stay native — `color: transparent` would take the caret with
+ * it on some engines, so the caret colour is restated explicitly. */
+.latex-input-transparent {
+  color: transparent;
+  caret-color: var(--color-text-primary);
+  background: transparent;
+  position: relative;
+  z-index: 1;
+  /* Restated rather than relied upon. Form elements do not inherit typography
+   * by default in every engine, and a textarea that falls back to its UA font
+   * would render every glyph a fraction of a pixel off its own highlight —
+   * the failure mode that makes this whole technique look broken. */
+  font: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+}
+.latex-input-transparent::selection {
+  /* Selection must stay legible against transparent glyphs — the mirror's
+   * text shows through it, so this tints rather than fills. */
+  background: color-mix(in srgb, var(--color-ink-warm) 30%, transparent);
+}
+
 /* The four legacy class names, kept as thin accent-setting aliases rather than
  * rewritten at every call site: same single keyframe, each just declaring the
  * ink it was always meant to wash in. Cards migrated to `MarkFrame` set
