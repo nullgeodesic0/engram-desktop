@@ -1,4 +1,4 @@
-import { memo, useLayoutEffect, useMemo, useRef } from 'react'
+import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { MathRenderer } from '../MathRenderer'
 import { MarkFrame } from './MarkFrame'
 import type { PlotSeries, PlotMarker } from '../../../../shared/bridgeUiIntents'
@@ -34,6 +34,20 @@ const PAD_B = 30
  * transcript's "the loop teaching" ink. Cool and violet follow for contrast
  * curves, in the same meanings MarkFrame's taxonomy assigns them. */
 const SERIES_INK = ['var(--color-ink-warm)', 'var(--color-ink-cool)', 'var(--color-ink-violet)']
+
+/** Readout formatting. A plotted quantity spans anything from 1e-12 to 1e9,
+ * so a fixed decimal count is wrong everywhere; this picks a form by
+ * magnitude and keeps the digit count constant so the readout doesn't jitter
+ * in width as the cursor moves — a number that reflows while you're reading
+ * it is worse than one decimal too few. */
+function fmt(v: number): string {
+  if (v === 0) return '0'
+  const abs = Math.abs(v)
+  if (abs >= 1e5 || abs < 1e-3) return v.toExponential(2)
+  if (abs >= 100) return v.toFixed(0)
+  if (abs >= 1) return v.toFixed(2)
+  return v.toFixed(3)
+}
 
 interface Fit {
   x0: number
@@ -117,6 +131,61 @@ export const PlotCard = memo(function PlotCard({
 
   const zeroY = fit.y0 < 0 && fit.y1 > 0 ? sy(0) : null
 
+  // ── Interrogation ────────────────────────────────────────────────────────
+  // A sketch answers "what shape"; a learner's very next question is "what
+  // value at the boundary" — which, for a piecewise field, is the entire
+  // point (both branches must agree at r = a). The readout answers it without
+  // the tutor having to be asked, and without the card asserting anything
+  // extra: it reports the SAMPLED points the tutor sent, snapping to the
+  // nearest one rather than interpolating a value nobody supplied.
+  const svgRef = useRef<SVGSVGElement | null>(null)
+  const [cursor, setCursor] = useState<number | null>(null)
+
+  // Longest series drives the index space; each series is read at the same
+  // fractional position, so curves sampled at different densities still line
+  // up under one crosshair.
+  const spineLen = Math.max(...series.map((s) => s.points.length))
+
+  const moveTo = useCallback(
+    (clientX: number) => {
+      const el = svgRef.current
+      if (!el) return
+      const box = el.getBoundingClientRect()
+      if (box.width === 0) return
+      // Client pixels → viewBox units → data x → nearest index on the spine.
+      const vx = ((clientX - box.left) / box.width) * W
+      const dataX = fit.x0 + ((vx - PAD_L) / (W - PAD_L - PAD_R)) * (fit.x1 - fit.x0)
+      const spine = series.reduce((a, b) => (b.points.length >= a.points.length ? b : a))
+      let best = 0
+      let bestD = Infinity
+      for (let i = 0; i < spine.points.length; i++) {
+        const d = Math.abs(spine.points[i][0] - dataX)
+        if (d < bestD) {
+          bestD = d
+          best = i
+        }
+      }
+      setCursor(best)
+    },
+    [fit, series],
+  )
+
+  const readout = useMemo(() => {
+    if (cursor === null) return null
+    const spine = series.reduce((a, b) => (b.points.length >= a.points.length ? b : a))
+    const at = spine.points[Math.min(cursor, spine.points.length - 1)]
+    if (!at) return null
+    const frac = spine.points.length > 1 ? cursor / (spine.points.length - 1) : 0
+    return {
+      x: at[0],
+      values: series.map((s) => {
+        // Same fractional position on each curve — never an interpolation.
+        const i = Math.round(frac * (s.points.length - 1))
+        return s.points[Math.max(0, Math.min(i, s.points.length - 1))]
+      }),
+    }
+  }, [cursor, series])
+
   return (
     <MarkFrame
       accent="cool"
@@ -136,7 +205,28 @@ export const PlotCard = memo(function PlotCard({
         <MathRenderer text={yLabel} inlineOnly className="fig-caption text-[var(--color-ink-cool)]" />
       )}
 
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" role="img" aria-label={title ?? 'sketch'}>
+      <svg
+        ref={svgRef}
+        viewBox={`0 0 ${W} ${H}`}
+        className="w-full h-auto focus-ring rounded-sm touch-none"
+        role="img"
+        aria-label={title ?? 'sketch'}
+        tabIndex={0}
+        onPointerMove={(e) => moveTo(e.clientX)}
+        onPointerLeave={() => setCursor(null)}
+        onFocus={() => setCursor((c) => c ?? Math.floor(spineLen / 2))}
+        onBlur={() => setCursor(null)}
+        onKeyDown={(e) => {
+          // Arrow keys scrub the same crosshair — the readout is not a
+          // mouse-only affordance.
+          if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+          e.preventDefault()
+          setCursor((c) => {
+            const base = c ?? Math.floor(spineLen / 2)
+            return Math.max(0, Math.min(spineLen - 1, base + (e.key === 'ArrowRight' ? 1 : -1)))
+          })
+        }}
+      >
         {/* Frame: two hairlines, not a box — the transcript's own grammar. */}
         <path
           d={`M${PAD_L} ${PAD_T} V${H - PAD_B} H${W - PAD_R}`}
@@ -187,6 +277,28 @@ export const PlotCard = memo(function PlotCard({
             fill="none"
           />
         ))}
+
+        {readout && (
+          <g pointerEvents="none">
+            <path
+              d={`M${sx(readout.x)} ${PAD_T} V${H - PAD_B}`}
+              stroke="var(--color-ink-warm-dim)"
+              strokeWidth="1"
+              fill="none"
+            />
+            {readout.values.map((pt, i) => (
+              <circle
+                key={`c${i}`}
+                cx={sx(pt[0])}
+                cy={sy(pt[1])}
+                r="2.8"
+                fill="var(--color-surface)"
+                stroke={SERIES_INK[i % SERIES_INK.length]}
+                strokeWidth="1.6"
+              />
+            ))}
+          </g>
+        )}
       </svg>
 
       <div className="flex items-baseline justify-between gap-3 flex-wrap">
@@ -206,10 +318,20 @@ export const PlotCard = memo(function PlotCard({
                 }}
               />
               <MathRenderer text={s.label} inlineOnly className="fig-caption" />
+              {readout && (
+                <span className="fig-caption tabular-nums text-[var(--color-text-primary)]">
+                  {fmt(readout.values[i][1])}
+                </span>
+              )}
             </span>
           ))}
         </div>
-        {xLabel && <MathRenderer text={xLabel} inlineOnly className="fig-caption text-[var(--color-ink-cool)] shrink-0" />}
+        <span className="flex items-baseline gap-1.5 shrink-0">
+          {xLabel && <MathRenderer text={xLabel} inlineOnly className="fig-caption text-[var(--color-ink-cool)]" />}
+          {readout && (
+            <span className="fig-caption tabular-nums text-[var(--color-text-primary)]">= {fmt(readout.x)}</span>
+          )}
+        </span>
       </div>
     </MarkFrame>
   )
