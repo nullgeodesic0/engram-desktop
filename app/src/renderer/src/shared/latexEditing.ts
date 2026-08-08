@@ -106,6 +106,40 @@ export function onInsert(state: EditState, ch: string): EditResult | null {
     }
   }
 
+  // ── `$` — its own case, because it closes with itself ───────────────────
+  // A self-closing delimiter can't be handled by the opener/closer rules
+  // below: the same keystroke both opens and closes, so "am I opening or
+  // closing" has to be answered from context before anything else runs.
+  //
+  // The bug this replaces: typing `$` inside the freshly-paired `$|$` fell
+  // through to the parity check, which correctly said "already inside a
+  // span, don't pair" and returned null — so the browser inserted a THIRD
+  // dollar, giving `$$$`. Typing again made the parity even, auto-close
+  // fired, and it became `$$$$$`.
+  if (!hasSelection && ch === '$') {
+    const prev = text[selStart - 1]
+    const next = text[selStart]
+
+    // Sitting inside an empty inline pair `$|$` — the second `$` means
+    // "actually, make this display maths", so grow it to `$$|$$` rather than
+    // inserting a stray third delimiter. Guarded to a pair of EXACTLY one
+    // dollar a side, so it can't run away on repeated presses.
+    if (prev === '$' && next === '$' && text[selStart - 2] !== '$' && text[selStart + 1] !== '$') {
+      return {
+        text: text.slice(0, selStart) + '$$' + text.slice(selStart),
+        selStart: selStart + 1,
+        selEnd: selStart + 1,
+      }
+    }
+
+    // Closing by hand, with the closer already sitting there — step over it.
+    // This is what made "move to the far right and type the last $" the only
+    // reliable way to finish a span.
+    if (next === '$') {
+      return { text, selStart: selStart + 1, selEnd: selStart + 1 }
+    }
+  }
+
   // ── Type-over a closer ──────────────────────────────────────────────────
   // Caret sits right before the `)` we auto-inserted and you type `)` — step
   // over it rather than producing `))`. Without this, auto-closing is a net
@@ -174,6 +208,11 @@ export function onBackspace(state: EditState): EditResult | null {
   // generic branch would otherwise match it and leave a dangling `^`.
   if (before === '{' && after === '}' && selStart >= 2 && (text[selStart - 2] === '^' || text[selStart - 2] === '_')) {
     return { text: text.slice(0, selStart - 2) + text.slice(selStart + 1), selStart: selStart - 2, selEnd: selStart - 2 }
+  }
+  // `$$|$$` — undo the display upgrade one step, back to `$|$`, so the growth
+  // path and the shrink path are symmetric.
+  if (before === '$' && after === '$' && text[selStart - 2] === '$' && text[selStart + 1] === '$') {
+    return { text: text.slice(0, selStart - 1) + text.slice(selStart + 1), selStart: selStart - 1, selEnd: selStart - 1 }
   }
   // An escaped `\{` is not half of a pair — deleting "both halves" of `\{}`
   // would leave a dangling backslash.

@@ -163,3 +163,42 @@ describe('\\left takes its delimiter as an argument', () => {
     expect(show(onInsert(parse('$f|'), '('))).toBe('$f(|)')
   })
 })
+
+describe('$ is self-closing — the $$$ / $$$$$ regression', () => {
+  it('opens an inline pair from nothing', () => {
+    expect(show(onInsert(parse('|'), '$'))).toBe('$|$')
+    expect(show(onInsert(parse('prose |'), '$'))).toBe('prose $|$')
+  })
+
+  it('a second $ inside the pair grows it to display, never to $$$', () => {
+    // The exact reported sequence: `$` then `$`.
+    const first = onInsert(parse('|'), '$')!
+    expect(show(first)).toBe('$|$')
+    const second = onInsert(first, '$')!
+    expect(show(second)).toBe('$$|$$')
+    expect(second.text).toBe('$$$$')
+  })
+
+  it('a third press steps over instead of running to $$$$$', () => {
+    const third = onInsert(parse('$$|$$'), '$')!
+    // No new delimiters — the run stays four dollars.
+    expect((third.text.match(/\$/g) ?? []).length).toBe(4)
+  })
+
+  it('types over the closer instead of adding one', () => {
+    // Previously the only reliable finish was moving to the far right.
+    expect(show(onInsert(parse('$x = 1|$'), '$'))).toBe('$x = 1$|')
+    expect(show(onInsert(parse('$$y|$$'), '$'))).toBe('$$y$|$')
+  })
+
+  it('still closes an unpaired span by inserting', () => {
+    // No closer present — the browser's own insert is correct here.
+    expect(onInsert(parse('$x = 1|'), '$')).toBeNull()
+  })
+
+  it('backspace shrinks display back to inline, then to nothing', () => {
+    const toInline = onBackspace(parse('$$|$$'))!
+    expect(show(toInline)).toBe('$|$')
+    expect(show(onBackspace(toInline))).toBe('|')
+  })
+})
