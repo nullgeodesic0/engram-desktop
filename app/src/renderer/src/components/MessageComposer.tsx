@@ -1,11 +1,10 @@
-import { useMemo, useRef, useState } from 'react'
+import { useMemo } from 'react'
 import { MarkdownPreview } from './MarkdownPreview'
-import { LatexHighlightOverlay } from './LatexHighlightOverlay'
+import { LatexEditor } from './LatexEditor'
 import { fileName } from './ChatMessageView'
 import { CTRL_QUIET, ctrlFilled, type EnvAccent } from '../shared/controlChrome'
 import { scanLatex, describeScan } from '../shared/latexSyntax'
-import { onInsert, onBackspace, onCompletion, countUnicodeMath, unicodeToLatex } from '../shared/latexEditing'
-import { nextStop, prevStop, matchingDelimiter, expandSelection } from '../shared/latexNavigation'
+import { countUnicodeMath, unicodeToLatex } from '../shared/latexEditing'
 
 interface MessageComposerProps {
   production: string
@@ -72,51 +71,7 @@ export function MessageComposer({
   disabledReason,
   accent = 'warm',
 }: MessageComposerProps) {
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
   const filled = ctrlFilled(accent)
-
-  // ── LaTeX editing surface ────────────────────────────────────────────────
-  // `caret` drives only the match emphasis, so it is state rather than a ref;
-  // null while unfocused, because an unfocused box glowing at a pair nobody
-  // is looking at is just noise.
-  const [caret, setCaret] = useState<number | null>(null)
-  const scan = useMemo(() => scanLatex(production), [production])
-  const status = useMemo(() => describeScan(scan), [scan])
-  const unicodeCount = useMemo(() => countUnicodeMath(production), [production])
-  // The highlighter only earns its keep once there IS math — before that it
-  // would paint an ordinary sentence's parens, and the whole point of the
-  // colour is that it means "you are inside an expression."
-  const mathMode = scan.tokens.length > 0
-
-  /** Apply a pure edit from shared/latexEditing.ts and restore the selection
-   * the rule asked for. React controls the value, so the DOM selection has to
-   * be set after the commit — `requestAnimationFrame` rather than a
-   * `useEffect` keyed on the value, which would also fire for ordinary typing
-   * and fight the caret. */
-  function applyEdit(result: { text: string; selStart: number; selEnd: number }) {
-    onProductionChange(result.text)
-    requestAnimationFrame(() => {
-      const el = textareaRef.current
-      if (!el) return
-      el.setSelectionRange(result.selStart, result.selEnd)
-      setCaret(result.selStart)
-    })
-  }
-
-  /** Move the caret without touching the text. Separate from `applyEdit`
-   * because no re-render is needed — setting the DOM selection directly keeps
-   * navigation instant and avoids a value round-trip that could fight typing. */
-  function moveCaret(to: number, toEnd = to) {
-    const el = textareaRef.current
-    if (!el) return
-    el.setSelectionRange(to, toEnd)
-    setCaret(to)
-  }
-
-  function syncCaret() {
-    const el = textareaRef.current
-    if (el) setCaret(el.selectionStart)
-  }
 
   function submit() {
     onSubmit()
@@ -126,10 +81,14 @@ export function MessageComposer({
   function useAssist() {
     if (!assist) return
     assist.onUse()
-    // Prefill lands via the parent's state update; focus right away rather than
-    // waiting on it — the value is already what onUse just set.
-    textareaRef.current?.focus()
   }
+
+  // The delimiter scan still drives the composer's own status row and the
+  // unicode offer; the caret model itself now lives inside LatexEditor.
+  const scan = useMemo(() => scanLatex(production), [production])
+  const status = useMemo(() => describeScan(scan), [scan])
+  const unicodeCount = useMemo(() => countUnicodeMath(production), [production])
+  const mathMode = scan.tokens.length > 0
 
   return (
     <div className="shrink-0 flex flex-col gap-2 border border-[var(--color-edge)] p-3">
@@ -160,120 +119,17 @@ export function MessageComposer({
         </div>
       )}
       <div className={markdownPreview ? 'grid grid-cols-2 gap-3 w-full' : 'w-full'}>
-        {/* The mirror and the textarea are siblings in one positioned box so
-            they share a font context — see LatexHighlightOverlay's contract. */}
         <div className="relative w-full panel text-sm">
-          {mathMode && <LatexHighlightOverlay text={production} caret={caret} />}
-          <textarea
-            ref={textareaRef}
+          <LatexEditor
             value={production}
-            onChange={(e) => {
-              onProductionChange(e.target.value)
-              setCaret(e.target.selectionStart)
-            }}
-            onSelect={syncCaret}
-            onClick={syncCaret}
-            onFocus={syncCaret}
-            onBlur={() => setCaret(null)}
-            onScroll={(e) => {
-              // ONE mechanism, deliberately. This set `scrollTop` AND a
-              // `translateY` transform, on the assumption that `overflow:
-              // hidden` made the former a no-op. It does not — Chromium still
-              // honours PROGRAMMATIC scrolling on a hidden-overflow box — so
-              // both applied and the mirror moved twice as far as the text,
-              // drifting further the further you scrolled.
-              const pre = e.currentTarget.previousElementSibling as HTMLElement | null
-              if (pre?.classList.contains('latex-mirror')) {
-                pre.scrollTop = e.currentTarget.scrollTop
-                pre.scrollLeft = e.currentTarget.scrollLeft
-              }
-            }}
-            onKeyDown={(e) => {
-              if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-                e.preventDefault()
-                if (production.trim()) submit()
-                return
-              }
-              if (e.key === 'Escape') {
-                ;(e.target as HTMLTextAreaElement).blur()
-                return
-              }
-
-              const el0 = e.currentTarget
-              // ── Navigation ────────────────────────────────────────────────
-              // Tab escapes the current group, or hops to the next empty slot
-              // (`\frac{a}{|}`). Crucially it only fires INSIDE maths — in
-              // prose the helpers return null, Tab is left alone, and focus
-              // moves out of the composer as it always has. A navigation aid
-              // that traps keyboard focus is not an aid.
-              if (e.key === 'Tab') {
-                const to = e.shiftKey ? prevStop(production, el0.selectionStart) : nextStop(production, el0.selectionStart)
-                if (to !== null) {
-                  e.preventDefault()
-                  moveCaret(to)
-                }
-                return
-              }
-              // ⌘\ — jump to the matching delimiter, an editor staple.
-              if ((e.metaKey || e.ctrlKey) && e.key === '\\') {
-                const to = matchingDelimiter(production, el0.selectionStart)
-                if (to !== null) {
-                  e.preventDefault()
-                  moveCaret(to)
-                }
-                return
-              }
-              // ⌥↑ — grow the selection to the enclosing group, then to that
-              // group with its delimiters, then outward. Pairs with the
-              // wrap-selection rule: expand, then `(`, and the subterm is
-              // parenthesised without touching either end by hand.
-              if (e.altKey && e.key === 'ArrowUp') {
-                const r = expandSelection(production, el0.selectionStart, el0.selectionEnd)
-                if (r) {
-                  e.preventDefault()
-                  moveCaret(r.selStart, r.selEnd)
-                }
-                return
-              }
-              // Everything below is insertion. Modifier chords not claimed by
-              // the navigation block above (⌘V, ⌘A, ⌥←) pass straight through.
-              if (e.metaKey || e.ctrlKey || e.altKey) return
-              const el = e.currentTarget
-              const state = { text: production, selStart: el.selectionStart, selEnd: el.selectionEnd }
-              if (e.key === 'Backspace') {
-                const r = onBackspace(state)
-                if (r) {
-                  e.preventDefault()
-                  applyEdit(r)
-                }
-                return
-              }
-              if (e.key.length !== 1) return
-              const r = onInsert(state, e.key)
-              if (r) {
-                e.preventDefault()
-                applyEdit(r)
-                return
-              }
-              // Completions read the text as it will be AFTER this key, so
-              // they run on the projected state rather than the current one.
-              const projected = {
-                text: state.text.slice(0, state.selStart) + e.key + state.text.slice(state.selEnd),
-                selStart: state.selStart + 1,
-                selEnd: state.selStart + 1,
-              }
-              const c = onCompletion(projected, e.key)
-              if (c) {
-                e.preventDefault()
-                applyEdit(c)
-              }
+            onChange={onProductionChange}
+            onSubmit={() => {
+              if (production.trim()) submit()
             }}
             placeholder={placeholder}
-            aria-label={placeholder}
-            rows={chamber ? 12 : markdownPreview ? 8 : 4}
-            className={`focus-ring px-4 py-3 text-sm resize-none w-full bg-transparent ${
-              mathMode ? 'latex-input-transparent' : 'text-[var(--color-text-primary)]'
-            }`}
+            ariaLabel={placeholder}
+            minRows={chamber ? 12 : markdownPreview ? 8 : 4}
+            className="focus-ring px-4 py-3"
           />
         </div>
         {markdownPreview && (
@@ -301,7 +157,7 @@ export function MessageComposer({
           )}
           {unicodeCount > 0 && (
             <button
-              onClick={() => applyEdit({ text: unicodeToLatex(production), selStart: production.length, selEnd: production.length })}
+              onClick={() => onProductionChange(unicodeToLatex(production))}
               title="Rewrite pasted unicode maths (ħ, ∂, ≥) as LaTeX so it sets as real math"
               className={CTRL_QUIET}
             >

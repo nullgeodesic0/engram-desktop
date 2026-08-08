@@ -29,6 +29,44 @@
  * enough that a false fire is rare. Nothing reformats text you already typed,
  * nothing runs on a timer, and nothing rewrites on blur. */
 
+import { scanLatex } from './latexSyntax'
+
+/** Is the caret inside a math span?
+ *
+ * THE SCOPE RULE. Every aid below except `$` itself applies only inside
+ * maths, for the same reason the highlighting does: outside a span these are
+ * ordinary characters. `^` is a caret, `(` is a parenthesis. Missing this
+ * turned the sentence "E = mc^2 with no math" into
+ * "E = mc^{2 with no math}" — auto-bracing prose, which is far worse than any
+ * highlighting fault because it silently corrupts what the learner wrote. */
+function inMath(text: string, at: number): boolean {
+  const { tokens } = scanLatex(text)
+  for (const t of tokens) {
+    if (!t.open || t.family !== 'math' || t.partner === null) continue
+    if (t.end <= at && at <= tokens[t.partner].start) return true
+  }
+  // An unterminated span still counts — you are inside it while typing it.
+  const last = [...tokens].reverse().find((t) => t.family === 'math' && t.partner === null)
+  return last ? last.end <= at : false
+}
+
+/** The caret sits between the two halves of an EMPTY inline span, `$|$`.
+ * Character peeking cannot answer this — in `$$\frac{a}{b}$|$` the character
+ * either side is also `$`, but those are a CLOSING pair, and treating them as
+ * an empty span grew `$$\frac{a}{b}$$` into `$$\frac{a}{b}$$$$`. Only the
+ * scanner knows which `$` opens. */
+function inEmptyInlineSpan(text: string, at: number): boolean {
+  // Scanned on the PREFIX, not the whole string. `$|$` is literally `"$$"`,
+  // which the scanner reads as one display-math token — so the pair can never
+  // be found by looking at the full text. What actually distinguishes the two
+  // cases is whether the `$` before the caret OPENED a span:
+  //   `$|$`                  prefix `$`               → an unclosed opener
+  //   `$$\frac{a}{b}$|$`     prefix `$$\frac{a}{b}$`  → that `$` closed one
+  const { tokens } = scanLatex(text.slice(0, at))
+  const last = tokens[tokens.length - 1]
+  return !!last && last.open && last.family === 'math' && last.text === '$' && last.partner === null && last.end === at
+}
+
 export interface EditState {
   text: string
   selStart: number
@@ -96,7 +134,7 @@ export function onInsert(state: EditState, ch: string): EditResult | null {
   // Select `x+1`, press `(` → `(x+1)` with the selection preserved inside, so
   // you can immediately wrap again. This is the single highest-value rule:
   // the alternative is caret gymnastics at both ends.
-  if (hasSelection && PAIRS[ch]) {
+  if (hasSelection && PAIRS[ch] && (ch === '$' || inMath(text, selStart))) {
     const inner = text.slice(selStart, selEnd)
     const close = PAIRS[ch]
     return {
@@ -122,9 +160,9 @@ export function onInsert(state: EditState, ch: string): EditResult | null {
 
     // Sitting inside an empty inline pair `$|$` — the second `$` means
     // "actually, make this display maths", so grow it to `$$|$$` rather than
-    // inserting a stray third delimiter. Guarded to a pair of EXACTLY one
-    // dollar a side, so it can't run away on repeated presses.
-    if (prev === '$' && next === '$' && text[selStart - 2] !== '$' && text[selStart + 1] !== '$') {
+    // inserting a stray third delimiter. Asked of the SCANNER, not of the
+    // neighbouring characters: see `inEmptyInlineSpan`.
+    if (prev === '$' && next === '$' && inEmptyInlineSpan(text, selStart)) {
       return {
         text: text.slice(0, selStart) + '$$' + text.slice(selStart),
         selStart: selStart + 1,
@@ -138,7 +176,35 @@ export function onInsert(state: EditState, ch: string): EditResult | null {
     if (next === '$') {
       return { text, selStart: selStart + 1, selEnd: selStart + 1 }
     }
+
+    // …and step over any closers standing between the caret and that `$`.
+    // Typing `$x^2$` straight through leaves the caret inside the `^{}` group
+    // when the final `$` arrives, because auto-pairing already supplied both
+    // the `}` and the `$`. Without this the keystroke lands INSIDE the group:
+    // `$x^{2$}$`. Only closing delimiters are skipped, so this can never jump
+    // over content the learner still meant to type into.
+    let j = selStart
+    while (j < text.length && (text[j] === '}' || text[j] === ')' || text[j] === ']')) j++
+    if (text[j] === '$') {
+      return { text, selStart: j + 1, selEnd: j + 1 }
+    }
+
+    // Opening a span. This lives HERE, above the maths-scope gate below,
+    // because `$` is how you get INTO maths — gating it on already being
+    // there would make it impossible to start.
+    if (!inMath(text, selStart) && atClosableBoundary(text, selStart)) {
+      return {
+        text: text.slice(0, selStart) + '$$' + text.slice(selEnd),
+        selStart: selStart + 1,
+        selEnd: selStart + 1,
+      }
+    }
+    return null
   }
+
+  // Everything past this point is a MATHS aid — see `inMath`. In prose these
+  // characters mean themselves and the browser's own behaviour is correct.
+  if (!inMath(text, selStart)) return null
 
   // ── Type-over a closer ──────────────────────────────────────────────────
   // Caret sits right before the `)` we auto-inserted and you type `)` — step
@@ -176,15 +242,6 @@ export function onInsert(state: EditState, ch: string): EditResult | null {
   if (!hasSelection && PAIRS[ch] && awaitingSizedTarget(text, selStart)) return null
   if (!hasSelection && ch === '{' && isEscaped(text, selStart)) return null
   if (!hasSelection && PAIRS[ch] && atClosableBoundary(text, selStart)) {
-    // `$` is special: only auto-pair when opening a span, never when the
-    // caret is already inside one — otherwise closing a span by hand gives
-    // you `$$`. Cheap parity check on the dollars before the caret, ignoring
-    // escaped ones.
-    if (ch === '$') {
-      const before = text.slice(0, selStart).replace(/\\\$/g, '')
-      const open = (before.match(/\$/g) ?? []).length % 2 === 1
-      if (open) return null
-    }
     return {
       text: text.slice(0, selStart) + ch + PAIRS[ch] + text.slice(selEnd),
       selStart: selStart + 1,
@@ -204,6 +261,9 @@ export function onBackspace(state: EditState): EditResult | null {
   const before = text[selStart - 1]
   const after = text[selStart]
   if (!before || !after) return null
+  // `$$|$$` and `$|$` are handled below and are maths by definition; every
+  // other pair rule is scoped like the insertion aids.
+  if (before !== '$' && !inMath(text, selStart)) return null
   // `x^{}` FIRST — it is a special case of the empty-pair rule below, and the
   // generic branch would otherwise match it and leave a dangling `^`.
   if (before === '{' && after === '}' && selStart >= 2 && (text[selStart - 2] === '^' || text[selStart - 2] === '_')) {

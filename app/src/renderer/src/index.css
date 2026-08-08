@@ -1705,86 +1705,32 @@
   animation: mark-settle-in calc(var(--dur-base) * 3) var(--ease-out-soft);
 }
 
-/* ── LaTeX mirror (components/LatexHighlightOverlay.tsx) ────────────────────
- * The half of the mirror contract that lives in CSS. A <textarea> can't
- * colour its own text, so a <pre> renders the same string underneath it with
- * IDENTICAL metrics and the textarea's own text is made transparent (its
- * caret and selection are not). Every property here must match the textarea's
- * — change one, change both, or the text drifts out of register with its own
- * highlighting.
+/* ── LaTeX editor (components/LatexEditor.tsx) ──────────────────────────────
+ * One element. The coloured spans ARE the editable content, so there is no
+ * second box to keep aligned — which is the whole reason this replaced a
+ * transparent-textarea-over-a-<pre> mirror. See editableSurface.ts for why
+ * that technique was abandoned after four separate alignment fixes.
  *
- * `font: inherit` does the heavy lifting: both elements sit inside the same
- * styled wrapper, so family, size, weight and line-height come from one
- * place rather than being restated twice and drifting. */
-.latex-mirror {
-  position: absolute;
-  inset: 0;
-  margin: 0;
-  padding: 0.75rem 1rem; /* matches the textarea's px-4 py-3 */
-  font: inherit;
-  letter-spacing: inherit;
-  /* WRAP CONTRACT — restated identically on the textarea below. Stating it
-   * on only one side was a real bug: for text with spaces the two agree by
-   * accident, but a 90-character unbroken run (`\frac{A^{N}}{h^{2N}N!}…`, the
-   * shape of every real derivation) can break at a different column in each,
-   * which both misaligns the highlight and lets a line run past the edge. */
+ * Consequently there is no metrics contract here at all: whatever this
+ * element's font and wrapping are, the text and its highlighting are the same
+ * nodes and cannot disagree. */
+.latex-editor {
   white-space: pre-wrap;
   overflow-wrap: break-word;
   word-break: normal;
-  max-width: 100%;
-  overflow: hidden;
-  pointer-events: none;
+  overflow-y: auto;
+  max-height: 13rem;
+  outline: none;
   color: var(--color-text-primary);
-  border: 0;
-  background: transparent;
-  box-sizing: border-box;
-  /* Both boxes must reserve the same gutter. If the textarea's scrollbar ever
-   * took layout width and the mirror's did not, the two would wrap at
-   * different columns — which reads as the highlighting being "off" on long
-   * input specifically. */
-  scrollbar-gutter: stable;
 }
-
-/* The textarea sitting over the mirror. Its glyphs are invisible; its caret
- * and selection stay native — `color: transparent` would take the caret with
- * it on some engines, so the caret colour is restated explicitly. */
-.latex-input-transparent {
-  /* THE ALIGNMENT BUG, measured rather than guessed. A <textarea> is
-   * inline-level, so its parent reserves baseline descender space beneath it
-   * — here 4.5px. The mirror is `inset: 0` on that parent, so it inherited
-   * the TALLER box: identical content height (284px both), but a client
-   * height of 109 against the textarea's 104, hence a max scroll of 175
-   * against 180. The two therefore scrolled at different rates and the
-   * highlight fell further behind the further you went, running out early at
-   * the bottom.
-   *
-   * `display: block` removes the baseline gap and the boxes agree exactly.
-   * Verified in a harness built from the app's own compiled CSS: before
-   * 104/108.5 and 180/175, after 104/104 and 180/180. */
-  display: block;
-  color: transparent;
-  caret-color: var(--color-text-primary);
-  background: transparent;
-  position: relative;
-  z-index: 1;
-  /* Restated rather than relied upon. Form elements do not inherit typography
-   * by default in every engine, and a textarea that falls back to its UA font
-   * would render every glyph a fraction of a pixel off its own highlight —
-   * the failure mode that makes this whole technique look broken. */
-  font: inherit;
-  line-height: inherit;
-  letter-spacing: inherit;
-  box-sizing: border-box;
-  scrollbar-gutter: stable;
-  /* The other half of the wrap contract — see `.latex-mirror`. */
-  white-space: pre-wrap;
-  overflow-wrap: break-word;
-  word-break: normal;
-  max-width: 100%;
+/* Placeholder for a contenteditable, which has no `placeholder` attribute. */
+.latex-editor.is-empty::before {
+  content: attr(data-placeholder);
+  color: var(--color-text-faint);
+  pointer-events: none;
 }
-.latex-input-transparent::selection {
-  /* Selection must stay legible against transparent glyphs — the mirror's
-   * text shows through it, so this tints rather than fills. */
+.latex-editor::selection,
+.latex-editor *::selection {
   background: color-mix(in srgb, var(--color-ink-warm) 30%, transparent);
 }
 

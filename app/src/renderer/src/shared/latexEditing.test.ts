@@ -25,15 +25,15 @@ function show(r: { text: string; selStart: number; selEnd: number } | null): str
 
 describe('onInsert — wrapping a selection', () => {
   it('wraps in each pair and keeps the selection inside', () => {
-    expect(show(onInsert(parse('a [x+1] b'), '('))).toBe('a ([x+1]) b')
-    expect(show(onInsert(parse('a [x+1] b'), '['))).toBe('a [[x+1]] b')
-    expect(show(onInsert(parse('a [x+1] b'), '{'))).toBe('a {[x+1]} b')
+    expect(show(onInsert(parse('$a [x+1] b$'), '('))).toBe('$a ([x+1]) b$')
+    expect(show(onInsert(parse('$a [x+1] b$'), '['))).toBe('$a [[x+1]] b$')
+    expect(show(onInsert(parse('$a [x+1] b$'), '{'))).toBe('$a {[x+1]} b$')
     expect(show(onInsert(parse('a [x+1] b'), '$'))).toBe('a $[x+1]$ b')
   })
 
   it('wraps a selection in a group for ^ and _', () => {
-    expect(show(onInsert(parse('x[10]'), '^'))).toBe('x^{[10]}')
-    expect(show(onInsert(parse('k[B]'), '_'))).toBe('k_{[B]}')
+    expect(show(onInsert(parse('$x[10]$'), '^'))).toBe('$x^{[10]}$')
+    expect(show(onInsert(parse('$k[B]$'), '_'))).toBe('$k_{[B]}$')
   })
 })
 
@@ -200,5 +200,65 @@ describe('$ is self-closing — the $$$ / $$$$$ regression', () => {
     const toInline = onBackspace(parse('$$|$$'))!
     expect(show(toInline)).toBe('$|$')
     expect(show(onBackspace(toInline))).toBe('|')
+  })
+})
+
+describe('typing a span closed straight through', () => {
+  it('steps over intervening closers to finish the span', () => {
+    // Surfaced in the browser harness: typing `$x^2$` produced `$x^{2$}$`,
+    // because auto-pairing had already supplied the `}` and the `$`, leaving
+    // the caret inside the group when the final `$` arrived.
+    expect(show(onInsert(parse('$x^{2|}$'), '$'))).toBe('$x^{2}$|')
+  })
+
+  it('handles several nested closers', () => {
+    expect(show(onInsert(parse('$\\frac{a}{b(c|)}$'), '$'))).toBe('$\\frac{a}{b(c)}$|')
+  })
+
+  it('never skips over real content', () => {
+    // `x` is not a closer, so nothing is jumped and the `$` inserts normally.
+    expect(onInsert(parse('$a|x$'), '$')).toBeNull()
+  })
+})
+
+describe('the aids are maths-scoped', () => {
+  it('does not brace ^ in prose', () => {
+    // The regression: "E = mc^2 with no math" became "E = mc^{2 with no math}".
+    expect(onInsert(parse('E = mc|'), '^')).toBeNull()
+    expect(onInsert(parse('a caret ^ in text|'), '^')).toBeNull()
+  })
+
+  it('still braces ^ inside maths', () => {
+    expect(show(onInsert(parse('$x|$'), '^'))).toBe('$x^{|}$')
+    // Inside a span still being typed, before its closer exists — the input
+    // has no trailing `$`, so neither does the result.
+    expect(show(onInsert(parse('$x|'), '^'))).toBe('$x^{|}')
+  })
+
+  it('does not auto-pair brackets in prose', () => {
+    expect(onInsert(parse('an aside |'), '(')).toBeNull()
+    expect(onInsert(parse('a list |'), '[')).toBeNull()
+  })
+
+  it('always lets $ open maths from prose', () => {
+    expect(show(onInsert(parse('prose |'), '$'))).toBe('prose $|$')
+  })
+
+  it('does not collapse a prose pair on backspace', () => {
+    expect(onBackspace(parse('text (|) more'))).toBeNull()
+    expect(show(onBackspace(parse('$f(|)$')))).toBe('$f|$')
+  })
+})
+
+describe('display growth asks the scanner, not the neighbours', () => {
+  it('does not grow when the surrounding $ are a CLOSING pair', () => {
+    // `$$\\frac{a}{b}$$` gained a trailing `$$` because both neighbours were
+    // `$` and a character peek could not tell opener from closer.
+    const r = onInsert(parse('$$\\frac{a}{b}$|$'), '$')
+    expect(r && r.text).not.toContain('$$$$')
+  })
+
+  it('still grows a genuinely empty inline span', () => {
+    expect(show(onInsert(parse('$|$'), '$'))).toBe('$$|$$')
   })
 })
