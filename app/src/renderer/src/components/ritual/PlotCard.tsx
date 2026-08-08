@@ -190,6 +190,7 @@ export const PlotCard = memo(function PlotCard({
     <MarkFrame
       accent="cool"
       label="SKETCH"
+      fill
       glyph={
         <>
           <path d="M2 12 V2 M2 12 H12.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
@@ -205,6 +206,7 @@ export const PlotCard = memo(function PlotCard({
         <MathRenderer text={yLabel} inlineOnly className="fig-caption text-[var(--color-ink-cool)]" />
       )}
 
+      <div className="relative w-full">
       <svg
         ref={svgRef}
         viewBox={`0 0 ${W} ${H}`}
@@ -238,28 +240,21 @@ export const PlotCard = memo(function PlotCard({
           <path d={`M${PAD_L} ${zeroY} H${W - PAD_R}`} stroke="var(--color-hairline)" strokeWidth="1" strokeDasharray="2 4" fill="none" />
         )}
 
+        {/* The guide line only. Its LABEL is drawn as HTML over the plot,
+            not as an SVG <text> node — a marker label is routinely LaTeX
+            ($r=a$, $T_c$), and KaTeX renders HTML+CSS, so text inside the
+            SVG could only ever print the dollar signs literally. Overlaying
+            costs one positioned span and buys the same math the rest of the
+            card sets. */}
         {markers.map((m, i) => (
-          <g key={`m${i}`}>
-            <path
-              d={`M${sx(m.x)} ${PAD_T} V${H - PAD_B}`}
-              stroke="var(--color-ink-warm-dim)"
-              strokeWidth="1"
-              strokeDasharray="3 3"
-              fill="none"
-            />
-            {m.label && (
-              <text
-                x={sx(m.x) + 4}
-                y={PAD_T + 9}
-                className="label-data"
-                fontSize="9"
-                letterSpacing="0.08em"
-                fill="var(--color-ink-warm)"
-              >
-                {m.label}
-              </text>
-            )}
-          </g>
+          <path
+            key={`m${i}`}
+            d={`M${sx(m.x)} ${PAD_T} V${H - PAD_B}`}
+            stroke="var(--color-ink-warm-dim)"
+            strokeWidth="1"
+            strokeDasharray="3 3"
+            fill="none"
+          />
         ))}
 
         {series.map((s, i) => (
@@ -300,12 +295,36 @@ export const PlotCard = memo(function PlotCard({
           </g>
         )}
       </svg>
+        {markers.map(
+          (m, i) =>
+            m.label && (
+              <span
+                key={`ml${i}`}
+                className="absolute pointer-events-none whitespace-nowrap"
+                style={{
+                  // Percent of the container's width, since the viewBox spans
+                  // it exactly — so the label tracks the line through every
+                  // resize without a measurement pass.
+                  left: `${(sx(m.x) / W) * 100}%`,
+                  top: `${(PAD_T / H) * 100}%`,
+                  transform: 'translateX(3px)',
+                }}
+              >
+                <MathRenderer
+                  text={m.label}
+                  inlineOnly
+                  className="label-data text-[9px] tracking-[0.08em] text-[var(--color-ink-warm)]"
+                />
+              </span>
+            ),
+        )}
+      </div>
 
-      <div className="flex items-baseline justify-between gap-3 flex-wrap">
+      <div className="flex items-baseline justify-between gap-3">
         {/* Legend suppressed for a lone unlabeled-by-context curve? No — the
             tutor always names its series, and on a single-curve plot that name
             IS the y-axis quantity, which is worth stating. */}
-        <div className="flex items-center gap-3 flex-wrap min-w-0">
+        <div className="flex items-center gap-3 min-w-0 overflow-x-auto">
           {series.map((s, i) => (
             <span key={i} className="inline-flex items-center gap-1.5 min-w-0">
               <span
@@ -318,19 +337,33 @@ export const PlotCard = memo(function PlotCard({
                 }}
               />
               <MathRenderer text={s.label} inlineOnly className="fig-caption" />
-              {readout && (
-                <span className="fig-caption tabular-nums text-[var(--color-text-primary)]">
-                  {fmt(readout.values[i][1])}
-                </span>
-              )}
+              {/* Always mounted, faded when idle. Mounting it only on hover
+                  made the legend reflow — and on a narrow card, wrap to a
+                  second line — every time the cursor entered the plot. A
+                  reserved slot of fixed width keeps the row's geometry
+                  identical whether or not a value is being shown, so the only
+                  thing that changes under the cursor is the number itself. */}
+              <span
+                aria-hidden={readout ? undefined : true}
+                className={`fig-caption tabular-nums text-right shrink-0 inline-block min-w-[3.5rem] text-[var(--color-text-primary)] transition-opacity ${
+                  readout ? 'opacity-100' : 'opacity-0'
+                }`}
+              >
+                {readout ? fmt(readout.values[i][1]) : '\u00a0'}
+              </span>
             </span>
           ))}
         </div>
         <span className="flex items-baseline gap-1.5 shrink-0">
           {xLabel && <MathRenderer text={xLabel} inlineOnly className="fig-caption text-[var(--color-ink-cool)]" />}
-          {readout && (
-            <span className="fig-caption tabular-nums text-[var(--color-text-primary)]">= {fmt(readout.x)}</span>
-          )}
+          <span
+            aria-hidden={readout ? undefined : true}
+            className={`fig-caption tabular-nums shrink-0 inline-block min-w-[4.25rem] text-[var(--color-text-primary)] transition-opacity ${
+              readout ? 'opacity-100' : 'opacity-0'
+            }`}
+          >
+            {readout ? `= ${fmt(readout.x)}` : '\u00a0'}
+          </span>
         </span>
       </div>
     </MarkFrame>
