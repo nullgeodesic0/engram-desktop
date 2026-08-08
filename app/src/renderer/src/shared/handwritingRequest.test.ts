@@ -16,16 +16,21 @@ describe('handwritingRequestMessage', () => {
     const m = handwritingRequestMessage({ pages: ['/x.png'] })!
     // Verbatim, errors included — the clause that stops a tutor which knows
     // the answer from quietly repairing a sign on its way past.
-    expect(m).toContain('exactly as written, including any errors')
+    expect(m).toContain('exactly as written, errors included')
     // Through a subagent given only the paths.
-    expect(m).toContain('subagent given only the image paths')
+    expect(m).toContain('subagent given only these paths')
     // And the attestation gate.
-    expect(m).toContain('before it counts as my answer')
+    // Delimiters, so the result renders as maths rather than prose.
+    expect(m).toContain('$...$')
+    expect(m).toContain('$$...$$')
+    // And the tutor withholds judgement — a "you may have written this wrong"
+    // is a correctness signal ahead of grading.
+    expect(m).toContain('Say nothing about whether any of it is right')
   })
 
   it('never mentions the node, the claim or how to grade', () => {
     const m = handwritingRequestMessage({ pages: ['/x.png'] })!.toLowerCase()
-    for (const forbidden of ['rubric', 'claim', 'grade', 'rate', 'correct answer', 'node']) {
+    for (const forbidden of ['rubric', 'claim', 'grade', 'correct answer', 'node']) {
       expect(m, forbidden).not.toContain(forbidden)
     }
   })

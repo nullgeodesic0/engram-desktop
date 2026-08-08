@@ -101,13 +101,6 @@ export interface TimelineEvent {
   note?: string
 }
 
-/** One page of a handwriting transcription — the image it came from, and
- * optionally what the transcriber could not read on it. */
-export interface TranscriptionPage {
-  path: string
-  note: string | null
-}
-
 /** One entry of a `render_formula` where-clause. */
 export interface SymbolGloss {
   symbol: string
@@ -128,7 +121,7 @@ export type BridgeUiIntent =
   | { kind: 'steps'; title: string | null; steps: LadderStep[] }
   | { kind: 'formula'; latex: string; caption: string | null; where: SymbolGloss[] }
   | { kind: 'citation'; label: string; locator: string | null; note: string | null }
-  | { kind: 'transcription'; latex: string; pages: TranscriptionPage[]; note: string | null }
+  | { kind: 'transcription'; latex: string; pages: string[] }
   | { kind: 'checks'; title: string | null; checks: SanityCheck[] }
   | { kind: 'timeline'; title: string | null; events: TimelineEvent[] }
   | {
@@ -417,26 +410,27 @@ export function bridgeUiIntent(tool: string, rawPayload: unknown): BridgeUiInten
       const latex = str(payload.latex)
       if (!latex) return null
       if (!Array.isArray(payload.pages) || payload.pages.length === 0 || payload.pages.length > 12) return null
-      const pages: TranscriptionPage[] = []
+      const pages: string[] = []
       for (const raw of payload.pages) {
-        // Accept a bare path string as well as {path, note}.
+        // Paths only. There is deliberately NO note field: a free-text slot
+        // beside a transcription becomes a commentary channel, and observed
+        // output used it to tell the learner which parts of their answer were
+        // missing — a completeness verdict ahead of grading. A `{path, note}`
+        // object is still accepted so an older/looser call does not break, but
+        // the note is dropped rather than shown.
         if (typeof raw === 'string') {
           const path = str(raw)
           if (!path) return null
-          pages.push({ path, note: null })
+          pages.push(path)
           continue
         }
         const rec = record(raw)
         if (!rec) return null
         const path = str(rec.path)
         if (!path) return null
-        const note = optStr(rec.note)
-        if (note === false) return null
-        pages.push({ path, note })
+        pages.push(path)
       }
-      const note = optStr(payload.note)
-      if (note === false) return null
-      return { kind: 'transcription', latex, pages, note }
+      return { kind: 'transcription', latex, pages }
     }
 
     case 'render_checks': {

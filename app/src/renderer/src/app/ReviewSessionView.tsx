@@ -539,7 +539,6 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
             kind: 'transcription',
             latex: intent.latex,
             pages: intent.pages,
-            note: intent.note,
             blind: blindSinceRequest.current,
             live: true,
           })

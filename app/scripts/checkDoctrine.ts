@@ -407,7 +407,14 @@ const injectedStrings = [...permissionTs.matchAll(/`([^`]{40,})`|'([^']{40,})'/g
 // ("they approve it before it becomes their answer"). It grants no new
 // latitude about what may be said or when, and the prompt still closes by
 // deferring wholesale to the installed skills.
-const PINNED_PROMPT_HASH = 'd08bbc6275fbf8f7'
+// 2026-08-08 (4) — re-pinned after a live transcription came back with a
+// paragraph of commentary attached, including which parts of the learner's
+// answer were missing. The added clauses REMOVE latitude rather than granting
+// it: transcribe and stop, wrap expressions so they render, and say nothing
+// about whether the work is right, whether a step looks wrong, or what is
+// absent. That is a correctness signal ahead of grading, which is precisely
+// what the loop withholds.
+const PINNED_PROMPT_HASH = '0ae178b0a5381e36'
 if (sha(injectedStrings) !== PINNED_PROMPT_HASH) {
   fail(
     'D3.systemPrompt',
@@ -593,7 +600,13 @@ for (const f of FILES) {
 // grade. "including any errors" is the load-bearing clause — without it a
 // tutor that knows the answer could quietly repair a sign on the way past and
 // the assessor would certify a grade the learner did not earn.
-const PINNED_MESSAGE_HASH = '62ce34253ce283e8'
+// 2026-08-08 (2) — the handwriting request gains two clauses, both
+// restrictive: wrap expressions in $...$/$$...$$ so the result renders as
+// maths rather than prose, and "Say nothing about whether any of it is right
+// — that is mine to judge." Still 362 source chars, inside the 400-char cap
+// this collector's own regex imposes; a longer literal would not match at all
+// and would drop out of the pinned set silently.
+const PINNED_MESSAGE_HASH = 'ac0c0ff860ff82e7'
 if (sha(injectedMessages.sort().join('\n')) !== PINNED_MESSAGE_HASH) {
   fail(
     'D3.kickoff',

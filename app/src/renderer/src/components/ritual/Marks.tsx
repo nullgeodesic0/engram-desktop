@@ -19,7 +19,7 @@ import { TicketCard } from './TicketCard'
 import { ComparisonCard, StepsCard, FormulaCard, CitationChip, ChecksCard, TimelineCard, DefinitionCard } from './StructuredCards'
 import { PlotCard } from './PlotCard'
 import { TranscriptionCard } from './TranscriptionCard'
-import type { ComparisonSide, LadderStep, SymbolGloss, PlotSeries, PlotMarker, SanityCheck, TimelineEvent , TranscriptionPage } from '../../../../shared/bridgeUiIntents'
+import type { ComparisonSide, LadderStep, SymbolGloss, PlotSeries, PlotMarker, SanityCheck, TimelineEvent  } from '../../../../shared/bridgeUiIntents'
 import type { ToolFailureKind } from '../../../../shared/signals/tutorSignals'
 import type { StabilityMilestoneScale } from '../../../../shared/gradeResult'
 import type { ParsedTicket } from '../../shared/ticketParser'
@@ -150,8 +150,7 @@ export type RitualMark = { id: string; atIndex: number } & (
   | {
       kind: 'transcription'
       latex: string
-      pages: TranscriptionPage[]
-      note: string | null
+      pages: string[]
       /** Observed by the app, never asserted by the tutor — true only when a
        * subagent spawn was seen between the request and this proposal. */
       blind: boolean
@@ -415,7 +414,6 @@ export function MarkView({
       <TranscriptionCard
         latex={mark.latex}
         pages={mark.pages}
-        note={mark.note}
         blind={mark.blind}
         live={mark.live}
         onConfirm={onConfirmTranscription}

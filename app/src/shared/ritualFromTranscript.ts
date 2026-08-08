@@ -30,7 +30,7 @@ import {
   type StabilityMilestoneScale,
 } from './gradeResult'
 import { humanizeNodeId } from './humanizeId'
-import { bridgeUiIntent, type ComparisonSide, type LadderStep, type SymbolGloss, type PlotSeries, type PlotMarker, type SanityCheck, type TimelineEvent , type TranscriptionPage } from './bridgeUiIntents'
+import { bridgeUiIntent, type ComparisonSide, type LadderStep, type SymbolGloss, type PlotSeries, type PlotMarker, type SanityCheck, type TimelineEvent  } from './bridgeUiIntents'
 import { parseAuditNotification, parseCurriculumReturn, isTaskNotificationContent } from './taskNotification'
 import {
   isPretestRateCommand,
@@ -477,8 +477,7 @@ export type DerivedRitualMark =
       atIndex: number
       kind: 'transcription'
       latex: string
-      pages: TranscriptionPage[]
-      note: string | null
+      pages: string[]
       blind: boolean
       live: false
     }
@@ -910,7 +909,6 @@ export function deriveRitualMarks(entries: unknown[]): DerivedRitualMark[] {
             kind: 'transcription',
             latex: intent.latex,
             pages: intent.pages,
-            note: intent.note,
             blind: false,
             live: false,
           })

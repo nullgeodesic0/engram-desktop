@@ -2,7 +2,6 @@ import { memo, useState } from 'react'
 import { MathRenderer } from '../MathRenderer'
 import { MarkFrame } from './MarkFrame'
 import { Button } from '../ui/Button'
-import type { TranscriptionPage } from '../../../../shared/bridgeUiIntents'
 
 /** The attestation gate: a transcription of the learner's handwriting, shown
  * for confirmation before it can become their answer.
@@ -20,9 +19,12 @@ import type { TranscriptionPage } from '../../../../shared/bridgeUiIntents'
  *     is the entire point and a read-only preview would make you retype;
  *   · the source pages are listed and openable, so you can compare against
  *     what you actually wrote;
- *   · anything the transcriber could not read is surfaced per page rather
- *     than smoothed over — a guess presented as a reading is the failure mode
- *     this whole design exists to prevent;
+ *   · there is NO commentary slot, by design. A free-text field beside a
+ *     transcription becomes a channel for exactly what it must not carry:
+ *     observed output used it to list which parts of the learner's answer
+ *     were missing, which is a completeness verdict delivered before grading.
+ *     The learner has the page in front of them; the reading is theirs to
+ *     check and the judgement theirs to make;
  *   · confirming does NOT send. It fills the composer, and you still press
  *     send, so there is a second look and room to add "I got stuck at (c)".
  *
@@ -32,14 +34,12 @@ import type { TranscriptionPage } from '../../../../shared/bridgeUiIntents'
 export const TranscriptionCard = memo(function TranscriptionCard({
   latex,
   pages,
-  note,
   blind,
   live,
   onConfirm,
 }: {
   latex: string
-  pages: TranscriptionPage[]
-  note: string | null
+  pages: string[]
   /** Did a blind subagent produce this, as observed by the app? */
   blind: boolean
   /** False on replay — a transcription from a reopened sitting is a record,
@@ -51,6 +51,11 @@ export const TranscriptionCard = memo(function TranscriptionCard({
   const [draft, setDraft] = useState(latex)
   const [accepted, setAccepted] = useState(false)
   const edited = draft !== latex
+  // A transcription with no delimiters renders as prose, not maths. The tool
+  // asks for them; this is the fallback when they don't arrive — offered as a
+  // button rather than applied, because rewriting what someone is about to
+  // attest to is precisely the thing this card exists not to do.
+  const undelimited = !draft.includes('$') && /\\[a-zA-Z]/.test(draft)
 
   return (
     <MarkFrame
@@ -69,21 +74,6 @@ export const TranscriptionCard = memo(function TranscriptionCard({
         {' · '}
         {pages.length === 1 ? '1 page' : `${pages.length} pages`}
       </div>
-
-      {note && <div className="fig-caption text-[var(--color-ink-warm)]">{note}</div>}
-
-      {/* Anything unreadable, per page — surfaced, never smoothed over. */}
-      {pages.some((p) => p.note) && (
-        <ul className="flex flex-col gap-0.5">
-          {pages.map((p, i) =>
-            p.note ? (
-              <li key={i} className="fig-caption text-[var(--color-ink-warm)]">
-                page {i + 1}: {p.note}
-              </li>
-            ) : null,
-          )}
-        </ul>
-      )}
 
       {accepted ? (
         <MathRenderer text={draft} className="text-xs text-[var(--color-text-dim)] leading-relaxed" />
@@ -106,14 +96,30 @@ export const TranscriptionCard = memo(function TranscriptionCard({
         {pages.map((p, i) => (
           <button
             key={i}
-            onClick={() => window.engram.openArtifact(p.path)}
-            title={p.path}
+            onClick={() => window.engram.openArtifact(p)}
+            title={p}
             className="focus-ring label-data text-[10px] tracking-[0.14em] px-1.5 py-0.5 border border-[var(--color-ink-cool-dim)] text-[var(--color-ink-cool)] hover:text-[var(--color-text-primary)]"
           >
             page {i + 1} ↗
           </button>
         ))}
         <span className="flex-1" />
+        {!accepted && undelimited && (
+          <button
+            onClick={() =>
+              setDraft(
+                draft
+                  .split('\n')
+                  .map((line) => (line.trim() ? `$$${line.trim()}$$` : line))
+                  .join('\n'),
+              )
+            }
+            title="Wrap each line in $$ so it renders as maths — you can still edit after"
+            className="focus-ring label-data text-[10px] tracking-[0.14em] px-1.5 py-0.5 border border-[var(--color-ink-warm-dim)] text-[var(--color-ink-warm)] hover:text-[var(--color-text-primary)]"
+          >
+            wrap lines in $$
+          </button>
+        )}
         {!accepted && live && onConfirm && (
           <>
             {edited && <span className="fig-caption">edited</span>}

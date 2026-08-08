@@ -321,11 +321,10 @@ server.registerTool('define_term', {
 server.registerTool('propose_transcription', {
   title: 'Propose Transcription',
   description:
-    "When the learner attaches handwritten work, return the transcription HERE rather than in prose. `latex` is the transcription exactly as written — including any errors, which you must not correct: the learner is shown this and confirms it before it becomes their answer, and a silently repaired mistake would be graded as if they had made none. `pages` echoes the image paths in order, each with an optional `note` for anything genuinely illegible (say so rather than guessing). Produce the transcription with a subagent given only the image paths and the verbatim instruction, so whatever you already know about the expected answer cannot colour what you read.",
+    "When the learner attaches handwritten work, return the transcription HERE rather than in prose. `latex` is what is on the page, exactly as written — wrap each expression in $...$, or $$...$$ on its own line, so it renders as maths. `pages` echoes the image paths in order. TRANSCRIBE AND STOP. Reproduce errors exactly as they appear. Do not say — here, or in the message around this call, or anywhere before they submit — whether the work is right, whether a step looks wrong, what is missing or incomplete, which characters you found hard to read, or how confident you are. There is nowhere in this call to put such a remark, and that is deliberate: the learner has the page in front of them and it is their judgement to make, not yours until they hand it in. Produce the transcription with a subagent given only the image paths and the verbatim instruction, so what you already expect the answer to be cannot colour what you read.",
   inputSchema: {
     latex: z.string(),
-    pages: z.array(z.object({ path: z.string(), note: z.string().optional() })).min(1).max(12),
-    note: z.string().optional(),
+    pages: z.array(z.string()).min(1).max(12),
   },
 }, async (args) => fireUi('propose_transcription', args))
 

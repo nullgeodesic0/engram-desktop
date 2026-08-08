@@ -34,5 +34,5 @@ export function handwritingRequestMessage(req: HandwritingRequest): string | nul
   if (req.pages.length === 0) return null
   const list = req.pages.join(', ')
   const count = req.pages.length === 1 ? '1 page' : `${req.pages.length} pages`
-  return `[Attached files — my handwritten work, ${count} in order: ${list}] Transcribe this to LaTeX exactly as written, including any errors, using a subagent given only the image paths and that instruction. Then call propose_transcription with the result. I will check the transcription before it counts as my answer.`
+  return `[Attached files — my handwritten work, ${count} in order: ${list}] Transcribe to LaTeX exactly as written, errors included, using a subagent given only these paths and that instruction. Wrap each expression in $...$, or $$...$$ on its own line, so it renders. Say nothing about whether any of it is right — that is mine to judge. Then call propose_transcription.`
 }
