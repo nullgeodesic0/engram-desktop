@@ -114,27 +114,20 @@ export function scanLatex(src: string): ScanResult {
     if (c === '\\') {
       const next = src[i + 1]
 
-      // `\$` and friends — an escaped literal is never a delimiter.
-      if (next === '$' || next === '%' || next === '&' || next === '#' || next === '_') {
-        i += 2
-        continue
-      }
-
-      // `\{` / `\}` — a literal brace in the OUTPUT, but still a paired
-      // construction the learner has to balance, so it's tokenised as one.
-      if (inMath() && (next === '{' || next === '}')) {
-        const open = next === '{'
-        if (open) {
-          groupStack.push(push({ start: i, end: i + 2, text: '\\{', open: true, family: 'brace', depth: groupStack.length + 1, sized: false }))
-        } else {
-          const openIdx = groupStack.pop()
-          const idx = push({ start: i, end: i + 2, text: '\\}', open: false, family: 'brace', depth: openIdx !== undefined ? tokens[openIdx].depth : groupStack.length + 1, sized: false })
-          if (openIdx === undefined) problems.push({ at: i, message: 'a `\\}` with nothing open' })
-          else {
-            tokens[openIdx].partner = idx
-            tokens[idx].partner = openIdx
-          }
-        }
+      // Escaped literals are never delimiters — INCLUDING `\{` and `\}`.
+      //
+      // This was modelled wrongly at first, and one wrong premise produced
+      // bugs everywhere at once. In TeX, `\{` is an escaped literal that
+      // prints a brace GLYPH; it does not open a group. Treating it as a
+      // paired construction meant the scanner would cheerfully match a real
+      // `{` against a `\}` — which is not a pair, it's an unclosed group
+      // next to a literal character — and the editing aids inherited the same
+      // error, auto-closing `\{` into `\{}` and backspacing it down to a
+      // dangling `\`.
+      //
+      // `\left\{ … \right\}` IS a real delimiter pair, and it still works:
+      // it is read by `readSized` below off the `\left`, never off the `\{`.
+      if (next === '$' || next === '%' || next === '&' || next === '#' || next === '_' || next === '{' || next === '}') {
         i += 2
         continue
       }

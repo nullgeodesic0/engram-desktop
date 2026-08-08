@@ -31,8 +31,26 @@ describe('LatexHighlightOverlay', () => {
 
   it('emphasises the pair at the caret, and only when focused', () => {
     // caret just after the '(' in `$f(x)$`
-    expect(render('$f(x)$', 3)).toContain('font-weight:700')
-    expect(render('$f(x)$', null)).not.toContain('font-weight:700')
+    expect(render('$f(x)$', 3)).toContain('box-shadow')
+    expect(render('$f(x)$', null)).not.toContain('box-shadow')
+  })
+
+  it('NEVER emits a style that changes glyph metrics', () => {
+    // The mirror aligns with the textarea only while every character takes the
+    // same advance in both. Bold emphasis broke this: wider glyphs pushed
+    // everything after them and the caret drifted off its own highlight.
+    // Any property here that affects advance width is the same bug again.
+    const samples = [
+      render('$\\left( x \\right)$', 7),
+      render('$\\frac{a}{b(c)}$', 8),
+      render('$a(b$'),
+      render('plain prose'),
+    ]
+    for (const html of samples) {
+      for (const banned of ['font-weight', 'font-size', 'font-family', 'letter-spacing', 'font-style', 'text-transform', 'word-spacing']) {
+        expect(html, banned).not.toContain(banned)
+      }
+    }
   })
 
   it('colours \\left and \\right including the word', () => {

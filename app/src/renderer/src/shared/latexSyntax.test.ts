@@ -115,11 +115,25 @@ describe('scanLatex — control sequences are opaque', () => {
     expect(r.tokens.map((t) => t.text)).toEqual(['$', '$'])
   })
 
-  it('treats \\{ and \\} as a real pair', () => {
+  it('treats \\{ and \\} as escaped literals, not a pair', () => {
+    // In TeX these print brace GLYPHS; they do not open or close a group.
     const r = scanLatex('$\\{ a \\}$')
-    const braces = r.tokens.filter((t) => t.family === 'brace')
-    expect(braces.map((t) => t.text)).toEqual(['\\{', '\\}'])
-    expect(braces[0].partner).not.toBeNull()
+    expect(r.tokens.filter((t) => t.family === 'brace')).toEqual([])
+    expect(r.problems).toEqual([])
+  })
+
+  it('never pairs a real group opener with a literal \\}', () => {
+    // `${a\}$` is an unclosed group NEXT TO a literal brace — not a match.
+    const r = scanLatex('${a\\}$')
+    expect(r.problems.some((p) => p.message.includes('never closed'))).toBe(true)
+  })
+
+  it('still pairs \\left\\{ with \\right\\}', () => {
+    // The carve-out: sized delimiters are read off `\left`, never off `\{`.
+    const r = scanLatex('$\\left\\{ a \\right\\}$')
+    const sized = r.tokens.filter((t) => t.sized)
+    expect(sized.map((t) => t.text)).toEqual(['\\left\\{', '\\right\\}'])
+    expect(sized[0].partner).not.toBeNull()
     expect(r.problems).toEqual([])
   })
 })

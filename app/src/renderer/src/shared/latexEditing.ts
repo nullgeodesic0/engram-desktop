@@ -51,6 +51,33 @@ const PAIRS: Record<string, string> = {
   '$': '$',
 }
 
+/** Is the character at `at` escaped by a backslash? Counts the run, so `\\{`
+ * (an escaped backslash then a real group opener) is correctly NOT escaped
+ * while `\{` is.
+ *
+ * Needed because `\{` is a literal brace GLYPH in TeX, not a group opener —
+ * see the same correction in latexSyntax.ts. Auto-closing it produced `\{}`,
+ * and the smart backspace then took both halves and left a dangling `\`. */
+function isEscaped(text: string, at: number): boolean {
+  let n = 0
+  let i = at - 1
+  while (i >= 0 && text[i] === '\\') {
+    n++
+    i--
+  }
+  return n % 2 === 1
+}
+
+/** True when the caret sits directly after `\left` (or `\right`), where the
+ * NEXT character is that command's delimiter argument rather than an opener
+ * in its own right. `onInsert` declines here so `onCompletion` gets the
+ * keystroke and can insert the matching `\right` — otherwise auto-close fires
+ * first, returns early, and the completion is unreachable. That is exactly
+ * why `\left(` stopped auto-wrapping. */
+function awaitingSizedTarget(text: string, at: number): boolean {
+  return /\\(left|right)\s*$/.test(text.slice(0, at))
+}
+
 /** Characters that, when they follow the caret, mean "we're at a boundary" —
  * auto-closing before a letter would produce `(x)yz` when you meant `(xyz)`.
  * Standard editor heuristic: only auto-close at end of line or before
@@ -107,6 +134,13 @@ export function onInsert(state: EditState, ch: string): EditResult | null {
   }
 
   // ── Auto-close an opener ────────────────────────────────────────────────
+  // Two declines first, both of which hand the keystroke to `onCompletion`
+  // or to the browser rather than pairing it:
+  //   · directly after `\left`/`\right`, where the character is that
+  //     command's argument — pairing here shadowed the `\right)` completion
+  //   · an escaped `\{`, which is a literal glyph and has no partner
+  if (!hasSelection && PAIRS[ch] && awaitingSizedTarget(text, selStart)) return null
+  if (!hasSelection && ch === '{' && isEscaped(text, selStart)) return null
   if (!hasSelection && PAIRS[ch] && atClosableBoundary(text, selStart)) {
     // `$` is special: only auto-pair when opening a span, never when the
     // caret is already inside one — otherwise closing a span by hand gives
@@ -141,6 +175,9 @@ export function onBackspace(state: EditState): EditResult | null {
   if (before === '{' && after === '}' && selStart >= 2 && (text[selStart - 2] === '^' || text[selStart - 2] === '_')) {
     return { text: text.slice(0, selStart - 2) + text.slice(selStart + 1), selStart: selStart - 2, selEnd: selStart - 2 }
   }
+  // An escaped `\{` is not half of a pair — deleting "both halves" of `\{}`
+  // would leave a dangling backslash.
+  if (before === '{' && isEscaped(text, selStart - 1)) return null
   if (PAIRS[before] === after) {
     return { text: text.slice(0, selStart - 1) + text.slice(selStart + 1), selStart: selStart - 1, selEnd: selStart - 1 }
   }

@@ -62,16 +62,23 @@ export const LatexHighlightOverlay = memo(function LatexHighlightOverlay({
     tokens.forEach((t, i) => {
       if (t.start > at) out.push(text.slice(at, t.start))
       const emphasised = focused.has(i)
+      // NOTHING HERE MAY CHANGE GLYPH METRICS. The mirror only lines up with
+      // the textarea while every character occupies exactly the same advance
+      // in both, and the textarea renders at the inherited weight. An earlier
+      // version set `fontWeight: 700` on the matched pair (and 500 on every
+      // delimiter): bold glyphs are wider, so everything after an emphasised
+      // token shifted and the caret drifted off its own highlight —
+      // most visibly on multi-character `\left(`/`\right)`. Emphasis is
+      // therefore colour, background and an inset ring, all of which paint
+      // without occupying space. `latexSyntax.test`'s metrics guard keeps it
+      // that way.
       out.push(
         <span
           key={i}
           style={{
             color: inkFor(t),
-            fontWeight: emphasised ? 700 : 500,
-            // A background box, not an underline: an underline on a `$` is
-            // invisible at this size, and the box reads as "these two, right
-            // now" without shifting a single glyph's position.
-            background: emphasised ? 'color-mix(in srgb, currentColor 22%, transparent)' : undefined,
+            background: emphasised ? 'color-mix(in srgb, currentColor 24%, transparent)' : undefined,
+            boxShadow: emphasised ? 'inset 0 0 0 1px currentColor' : undefined,
             borderRadius: emphasised ? '2px' : undefined,
           }}
         >

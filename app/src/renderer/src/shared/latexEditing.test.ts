@@ -125,3 +125,41 @@ describe('unicode → LaTeX', () => {
     expect(unicodeToLatex(src)).toBe(src)
   })
 })
+
+describe('escaped braces are literals, not pairs', () => {
+  it('does not auto-close an escaped brace', () => {
+    // `\{` prints a brace glyph; pairing it produced `\{}`.
+    expect(onInsert(parse('$a\\|'), '{')).toBeNull()
+  })
+
+  it('still auto-closes a real group opener after an escaped backslash', () => {
+    // `\\{` is an escaped BACKSLASH followed by a genuine opener.
+    expect(show(onInsert(parse('$a\\\\|'), '{'))).toBe('$a\\\\{|}')
+  })
+
+  it('does not delete both halves of \\{}', () => {
+    expect(onBackspace(parse('$\\{|}$'))).toBeNull()
+  })
+
+  it('still deletes both halves of a real empty group', () => {
+    expect(show(onBackspace(parse('$x{|}$')))).toBe('$x|$')
+  })
+})
+
+describe('\\left takes its delimiter as an argument', () => {
+  it('declines to auto-close, so the \\right completion can fire', () => {
+    // The regression: auto-close matched `(` first and returned early, so
+    // onCompletion never ran and `\left(` never wrapped.
+    expect(onInsert(parse('$\\left|'), '(')).toBeNull()
+    expect(onInsert(parse('$\\left|'), '[')).toBeNull()
+    expect(onInsert(parse('$\\left |'), '(')).toBeNull()
+  })
+
+  it('and the completion then supplies the matching \\right', () => {
+    expect(show(onCompletion(parse('$\\left(|'), '('))).toBe('$\\left(| \\right)')
+  })
+
+  it('leaves a plain ( auto-closing as before', () => {
+    expect(show(onInsert(parse('$f|'), '('))).toBe('$f(|)')
+  })
+})
