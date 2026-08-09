@@ -37,8 +37,9 @@ import { useCallback, useRef } from 'react'
  *     past the cap stay planted but remain fully pointer-responsive.
  *   - The rAF loop halts outright when nothing is driven, when the document
  *     is hidden, and when the window blurs.
- *   - `will-change: transform` is promoted ONLY on the actively hovered card
- *     and demoted once it settles — never sprayed across the surface.
+ *   - `will-change: transform` is promoted only on the hovered CHAIN (a card
+ *     plus the plates it nests in — two, occasionally three) and demoted once
+ *     each settles — never sprayed across the surface.
  *   - Style writes are skipped below a delta epsilon, and a settled card has
  *     its inline properties REMOVED (falling back to the `@property` initial
  *     of 0deg) so a resting card carries no inline style at all.
@@ -68,6 +69,36 @@ import { useCallback, useRef } from 'react'
  * than the single-card "breathing" the effect is meant to read as. Same
  * multiplier mechanism as `SOFT_SCALE`, one tier quieter (`RAIL_SCALE`
  * below) — not a parallel tuning, still scales the same base numbers.
+ *
+ * EDGE THROW IS THE TUNED QUANTITY (2026-08-09, superseding the per-tier
+ * angle multipliers above). A rotation's felt strength is how far it throws
+ * the edge it pivots about — `(extent / 2) * sin(angle)` — so a fixed angle
+ * makes a card's motion grow with the card. Measured across real surfaces
+ * that was a 7x spread: a short transcript card moved 3px under the pointer
+ * while a tall explorable in the same column moved 21px, and a 1400px nav row
+ * threw its ends 131px. Response that inconsistent does not read as
+ * responsiveness; it reads as the large surfaces being unstable, and 20px of
+ * travel under the cursor while you are reading is the effect obstructing the
+ * work it decorates.
+ *
+ * So `POINTER_THROW_PX` and `IDLE_THROW_PX` hold throw roughly constant and
+ * the angle is solved per axis from the element's measured size
+ * (`scaleForThrow`). The class multipliers survive as CEILINGS: below the cap
+ * a card keeps every degree it had, so small elements are untouched and only
+ * large ones settle. Idle drift carries a much tighter budget than pointer
+ * tilt, because a card that moves because you moved is feedback while a card
+ * that moves on its own as you read is interference.
+ *
+ * Nesting (2026-08-09): tilt cards nest — rows inside plates — and hover
+ * applies to the whole ANCESTOR CHAIN, not just the innermost card. Hovering
+ * only the innermost made a plate shudder: with the pointer on a row the
+ * plate read as unhovered and fell to idle drift, while the few-px gap
+ * between two rows read as the plate and snapped it to pointer-tilt, so
+ * scanning a list swung the plate's target between a half-minute sinusoid
+ * and the cursor several times a second. The chain keeps a background card
+ * continuously pointer-driven for as long as the pointer is anywhere inside
+ * it, which removes the discontinuity and is also the more honest physical
+ * model: a card underneath still feels the pointer through what sits on it.
  *
  * Contract: the `.tilt-card`/`.tilt-card-soft`/`.tilt-card-rail` class must
  * be present from the element's mount (every current host bakes it into a
@@ -103,8 +134,75 @@ const SOFT_SCALE = 1 // one scale by user decision (2026-07-28): the chat-bubble
  * per-element phase keeps the row from moving in lockstep even at this
  * amplitude. */
 const RAIL_SCALE = 4
-/** Critically-damped-feel exponential smoothing time constant. */
+/** Edge-excursion targets, in CSS pixels — the quantity this file actually
+ * tunes. Angle is only how it gets there.
+ *
+ * A rotation's felt strength is not its angle but how far it throws the edge
+ * it pivots about: `(extent / 2) * sin(angle)`. A fixed angle therefore means
+ * a card's motion grows with the card, and measured on real surfaces that was
+ * a 7x spread — a short transcript card moved 3px under the pointer while a
+ * tall explorable in the same column moved 21px. Response that inconsistent
+ * does not read as responsiveness, it reads as the big cards being unstable,
+ * and 21px of travel under the cursor while you are READING the thing is the
+ * effect getting in the way of the work.
+ *
+ * Holding throw roughly constant instead means every surface answers the
+ * pointer by about the same amount, whatever its size — small cards keep a
+ * wide, lively angle because they need one to move at all, and large cards
+ * settle. The tiers differ only in how much answer they owe:
+ *
+ *   rail  — small chrome. Most angle, because a short lever needs it.
+ *   soft  — transcript cards. TIGHTEST throw of the three: this is the
+ *           surface being read, and a paragraph that shifts under the eye is
+ *           worse than one that sits still.
+ *   full  — plates and dashboards. Chrome you look AT rather than read, so it
+ *           may move a little further.
+ */
+const POINTER_THROW_PX: Record<'full' | 'soft' | 'rail', number> = {
+  rail: 12,
+  soft: 10,
+  full: 14,
+}
+
+/** Idle drift gets its own, far tighter budget.
+ *
+ * Autonomous motion is a different thing from response, and it is judged more
+ * harshly: a card that moves because you moved is feedback, a card that moves
+ * on its own while you read is interference. Under the old fixed angle a
+ * 900px card breathed ~6px with nobody touching it. Three pixels is present
+ * at the edge of notice and absent everywhere else, which is what "the
+ * surface breathes" was always supposed to mean. */
+const IDLE_THROW_PX = 3
+
+/** The angle that puts this extent's edge at `throwPx`, expressed as a
+ * multiplier on `baseAngleDeg` and capped at the tier's own ceiling. Returns
+ * the ceiling when the cap is out of reach, so small elements are unaffected
+ * and keep every degree they had. */
+function scaleForThrow(extentPx: number, maxScale: number, throwPx: number, baseAngleDeg: number): number {
+  if (!(extentPx > 0)) return maxScale
+  const half = extentPx / 2
+  if (half <= throwPx) return maxScale
+  const maxDeg = (Math.asin(Math.min(1, throwPx / half)) * 180) / Math.PI
+  return Math.min(maxScale, maxDeg / baseAngleDeg)
+}
+
 const SMOOTH_TAU_MS = 150
+
+/** How long after the last scroll event the surface stays still.
+ *
+ * The pointer-follow target is recomputed from the card's rect every frame, so
+ * SCROLLING moved it even with the pointer completely stationary: the card
+ * under the cursor rolled continuously for as long as you were scrolling, and
+ * the thing you were scrolling in order to READ was the thing that would not
+ * hold still. Tilt is meant to answer the pointer, and during a scroll the
+ * pointer is not saying anything.
+ *
+ * So a scroll stills the surface — cards drain to idle drift and pick the
+ * pointer back up once the view settles. Long enough to bridge the gaps
+ * between wheel events inside one gesture, short enough that it reads as the
+ * card waiting rather than the effect having died. */
+const SCROLL_STILL_MS = 200
+let lastScrollAt = 0
 /** Idle-drift concurrency cap — hover responsiveness is never capped. Bumped
  * 18 → 24 for the coach-panel sweep: a tall Dashboard/Topic-drilldown scroll
  * position can now have noticeably more `.tilt-card` surfaces simultaneously
@@ -141,12 +239,24 @@ interface TiltState {
   phaseY: number
   /** True while this card holds a `will-change: transform` promotion. */
   promoted: boolean
-  /** `.tilt-card-rail` → `RAIL_SCALE`, `.tilt-card-soft` → `SOFT_SCALE`,
-   * `.tilt-card` → 1. Computed once at registration from the element's own
-   * class and applied to both idle amplitude (baked into `ampX`/`ampY`
-   * below) and the pointer-tilt target (applied live in `tick`) — one
-   * multiplier per class, not a second constant set. */
+  /** Base tier multiplier from the element's class: `.tilt-card-rail` →
+   * `RAIL_SCALE`, `.tilt-card-soft` → `SOFT_SCALE`, `.tilt-card` → 1.
+   * Computed once at registration. */
   scale: number
+  /** Which tier this card belongs to — selects its throw budget. */
+  tier: 'full' | 'soft' | 'rail'
+  /** Live per-axis multipliers, refreshed from whatever measurement the loop
+   * already had to take. `X` governs rotateX and is derived from HEIGHT (the
+   * extent that axis pivots about); `Y` governs rotateY and comes from WIDTH.
+   * Pointer and idle are tuned SEPARATELY — a card that moves because you
+   * moved is feedback, a card that moves on its own while you read is
+   * interference, and they do not deserve the same budget. Applied at use
+   * rather than baked into `ampX`/`ampY`, so a resize re-tunes a card instead
+   * of stranding it at its mount-time size. */
+  pointerX: number
+  pointerY: number
+  idleX: number
+  idleY: number
 }
 
 const states = new WeakMap<HTMLElement, TiltState>()
@@ -214,6 +324,9 @@ const io = new IntersectionObserver(
       const st = states.get(el)
       if (!st) continue
       st.visible = entry.isIntersecting
+      // The entry carries the rect, so idle drift gets correctly-scaled axes
+      // without this file ever forcing its own layout read.
+      measure(st, entry.boundingClientRect)
       if (entry.isIntersecting) visibleSet.add(el)
       else {
         visibleSet.delete(el)
@@ -235,7 +348,12 @@ const io = new IntersectionObserver(
 function register(el: HTMLElement): void {
   if (registered.has(el)) return
   registered.add(el)
-  const scale = el.matches(RAIL_SELECTOR) ? RAIL_SCALE : el.matches(SOFT_SELECTOR) ? SOFT_SCALE : 1
+  const tier: 'full' | 'soft' | 'rail' = el.matches(RAIL_SELECTOR)
+    ? 'rail'
+    : el.matches(SOFT_SELECTOR)
+      ? 'soft'
+      : 'full'
+  const scale = tier === 'rail' ? RAIL_SCALE : tier === 'soft' ? SOFT_SCALE : 1
   states.set(el, {
     visible: false,
     hovered: false,
@@ -245,20 +363,48 @@ function register(el: HTMLElement): void {
     ry: 0,
     wrx: 0,
     wry: 0,
-    ampX: rand(IDLE_AMP_MIN_DEG, IDLE_AMP_MAX_DEG) * scale,
-    ampY: rand(IDLE_AMP_MIN_DEG, IDLE_AMP_MAX_DEG) * scale,
+    // Unscaled — the per-axis multiplier is applied in `tick`, not baked in.
+    ampX: rand(IDLE_AMP_MIN_DEG, IDLE_AMP_MAX_DEG),
+    ampY: rand(IDLE_AMP_MIN_DEG, IDLE_AMP_MAX_DEG),
     omegaX: (2 * Math.PI) / rand(IDLE_PERIOD_MIN_S, IDLE_PERIOD_MAX_S),
     omegaY: (2 * Math.PI) / rand(IDLE_PERIOD_MIN_S, IDLE_PERIOD_MAX_S),
     phaseX: rand(0, 2 * Math.PI),
     phaseY: rand(0, 2 * Math.PI),
     promoted: false,
     scale,
+    tier,
+    // Until the first measurement lands, behave exactly as the flat tier did.
+    pointerX: scale,
+    pointerY: scale,
+    idleX: scale,
+    idleY: scale,
   })
   io.observe(el)
 }
 
+/** Refresh a card's per-axis multipliers from a rect we already have. Free —
+ * every call site was already measuring for another reason. Applies to EVERY
+ * tier now, not just rail: the transcript's own cards were the ones most in
+ * need of it, being both the largest and the ones actually being read. */
+function measure(st: TiltState, rect: { width: number; height: number }): void {
+  const throwPx = POINTER_THROW_PX[st.tier]
+  st.pointerX = scaleForThrow(rect.height, st.scale, throwPx, POINTER_MAX_DEG)
+  st.pointerY = scaleForThrow(rect.width, st.scale, throwPx, POINTER_MAX_DEG)
+  st.idleX = scaleForThrow(rect.height, st.scale, IDLE_THROW_PX, IDLE_AMP_MAX_DEG)
+  st.idleY = scaleForThrow(rect.width, st.scale, IDLE_THROW_PX, IDLE_AMP_MAX_DEG)
+}
+
+/** Each live `attach` registers an evictor here, so `unregister` can drop a
+ * card that is torn out of the DOM while hovered — otherwise it would sit in
+ * that container's hover chain forever, and `onPointerOut`'s containment test
+ * would consult a detached node. A SET, not one slot: `attach` supports more
+ * than one container (each keeps its own `mine`), and a single slot would let
+ * a second container silently clobber the first's evictor. */
+const hoverEvictors = new Set<(el: HTMLElement) => void>()
+
 function unregister(el: HTMLElement): void {
   if (!registered.delete(el)) return
+  for (const evict of hoverEvictors) evict(el)
   io.unobserve(el)
   visibleSet.delete(el)
   driven.delete(el)
@@ -273,6 +419,8 @@ function tick(now: number): void {
   lastNow = now
   const k = 1 - Math.exp(-dtMs / SMOOTH_TAU_MS)
   const tSec = now / 1000
+  // Treat everything as unhovered while the view is moving under the pointer.
+  const settling = now - lastScrollAt < SCROLL_STILL_MS
   let idleBudget = MAX_IDLE_DRIVEN
 
   for (const el of driven) {
@@ -284,24 +432,33 @@ function tick(now: number): void {
     let tx = 0
     let ty = 0
     let wantsDrive = false
-    if (st.hovered && st.visible) {
-      // One layout READ for one element, and nothing in this loop writes
-      // anything layout-affecting (custom-property → transform only), so
-      // this can never thrash. Pressing INTO the plate: cursor near the top
+    if (st.hovered && st.visible && !settling) {
+      // One layout READ per hovered element — at most a card and the plates
+      // it nests in, since hover applies to the whole chain — and nothing in
+      // this loop writes anything layout-affecting (custom-property →
+      // transform only), so this can never thrash. Each element resolves the
+      // pointer against ITS OWN rect, so a plate tilts toward where the
+      // cursor is within the plate while the row on top of it tilts toward
+      // where the cursor is within the row. Pressing INTO the plate: cursor near the top
       // edge → +rotateX (top recedes); near the right edge → +rotateY
       // (right recedes).
       const rect = el.getBoundingClientRect()
       if (rect.width > 0 && rect.height > 0) {
+        measure(st, rect)
         const nx = clamp01((st.px - rect.left) / rect.width)
         const ny = clamp01((st.py - rect.top) / rect.height)
-        tx = (0.5 - ny) * 2 * POINTER_MAX_DEG * st.scale
-        ty = (nx - 0.5) * 2 * POINTER_MAX_DEG * st.scale
+        // rotateX pivots about the horizontal axis, so its cap comes from
+        // HEIGHT; rotateY from WIDTH. On a long thin row that damps the sweep
+        // across the length hard and leaves the dip across the depth alone —
+        // the asymmetry a single scalar could not express.
+        tx = (0.5 - ny) * 2 * POINTER_MAX_DEG * st.pointerX
+        ty = (nx - 0.5) * 2 * POINTER_MAX_DEG * st.pointerY
       }
       wantsDrive = true
     } else if (st.visible && idleBudget > 0) {
       idleBudget--
-      tx = st.ampX * Math.sin(st.omegaX * tSec + st.phaseX)
-      ty = st.ampY * Math.sin(st.omegaY * tSec + st.phaseY)
+      tx = st.ampX * st.idleX * Math.sin(st.omegaX * tSec + st.phaseX)
+      ty = st.ampY * st.idleY * Math.sin(st.omegaY * tSec + st.phaseY)
       wantsDrive = true
     }
 
@@ -397,7 +554,41 @@ function attach(container: HTMLElement): () => void {
   })
   mo.observe(container, { childList: true, subtree: true })
 
-  let hoverEl: HTMLElement | null = null
+  /** Every registered tilt card under the pointer, innermost first. Cards
+   * NEST — nav rows and topic rows are `.tilt-card-rail` inside a
+   * `.tilt-card-soft` plate — and the whole chain is hovered at once, not
+   * just the innermost.
+   *
+   * Hovering only the innermost is what made a plate sway. `closest()`
+   * returns one element, so with the pointer on a row the plate counted as
+   * unhovered and fell back to idle drift; the 4px gap between two rows
+   * counted as the plate itself and snapped it to pointer-tilt. Scanning a
+   * list therefore drove the plate's TARGET back and forth between a
+   * half-minute sinusoid and the cursor several times a second — a
+   * discontinuity the damped lerp faithfully reproduced as a shudder.
+   *
+   * With the chain hovered, the plate is pointer-driven continuously for as
+   * long as the pointer is anywhere inside it, gaps included, and the row on
+   * top adds its own tilt over that. A background card keeps feeling the
+   * pointer through the cards stacked on it, which is also just truer to the
+   * physical model these surfaces claim. */
+  let hoverChain: HTMLElement[] = []
+  const evict = (el: HTMLElement): void => {
+    if (hoverChain.includes(el)) hoverChain = hoverChain.filter((x) => x !== el)
+  }
+  hoverEvictors.add(evict)
+
+  function chainFor(target: Element | null): HTMLElement[] {
+    const out: HTMLElement[] = []
+    let node: Element | null = target
+    while (node) {
+      const card = (node.closest?.(TILT_SELECTOR) ?? null) as HTMLElement | null
+      if (!card) break
+      if (registered.has(card)) out.push(card)
+      node = card.parentElement
+    }
+    return out
+  }
 
   function endHover(el: HTMLElement): void {
     const st = states.get(el)
@@ -408,43 +599,74 @@ function attach(container: HTMLElement): () => void {
     ensureLoop()
   }
 
-  function onPointerOver(e: PointerEvent): void {
-    const target = e.target as Element | null
-    const card = (target?.closest?.(TILT_SELECTOR) ?? null) as HTMLElement | null
-    if (card === hoverEl) return
-    if (hoverEl) endHover(hoverEl)
-    hoverEl = null
-    if (!card || !registered.has(card) || reduceMotion.matches) return
-    const st = states.get(card)
-    if (!st) return
-    hoverEl = card
-    st.hovered = true
-    st.px = e.clientX
-    st.py = e.clientY
-    if (!st.promoted) {
-      // The ONE card allowed a compositor promotion — demoted on settle.
-      st.promoted = true
-      card.style.willChange = 'transform'
+  function setChain(next: HTMLElement[], clientX: number, clientY: number): void {
+    // Release only what actually left — a card that stays in the chain must
+    // never be un-hovered and re-hovered, or it would take the same target
+    // discontinuity this whole mechanism exists to remove.
+    for (const el of hoverChain) {
+      if (!next.includes(el)) endHover(el)
     }
-    driven.add(card)
-    ensureLoop()
+    for (const el of next) {
+      const st = states.get(el)
+      if (!st) continue
+      st.hovered = true
+      st.px = clientX
+      st.py = clientY
+      if (!st.promoted) {
+        // Promotion follows the hovered chain — at most a card and the plates
+        // it sits in (two, occasionally three), never sprayed wider. Each is
+        // demoted on settle exactly as before.
+        st.promoted = true
+        el.style.willChange = 'transform'
+      }
+      driven.add(el)
+    }
+    hoverChain = next
+    if (next.length > 0) ensureLoop()
+  }
+
+  function onPointerOver(e: PointerEvent): void {
+    if (reduceMotion.matches) {
+      if (hoverChain.length > 0) setChain([], e.clientX, e.clientY)
+      return
+    }
+    const next = chainFor(e.target as Element | null)
+    // Cheap identity check — the common case is moving within one card.
+    if (next.length === hoverChain.length && next.every((el, i) => el === hoverChain[i])) return
+    setChain(next, e.clientX, e.clientY)
   }
 
   function onPointerOut(e: PointerEvent): void {
-    if (!hoverEl) return
+    if (hoverChain.length === 0) return
     const to = e.relatedTarget as Element | null
-    if (to && hoverEl.contains(to)) return
-    endHover(hoverEl)
-    hoverEl = null
+    // Outermost card in the chain: while the pointer is still inside it, any
+    // change is a chain edit that `pointerover` will make, not an exit.
+    const outer = hoverChain[hoverChain.length - 1]
+    if (to && outer.contains(to)) return
+    setChain([], e.clientX, e.clientY)
   }
 
   function onPointerMove(e: PointerEvent): void {
-    if (!hoverEl) return
-    const st = states.get(hoverEl)
-    if (!st) return
-    st.px = e.clientX
-    st.py = e.clientY
+    for (const el of hoverChain) {
+      const st = states.get(el)
+      if (st) {
+        st.px = e.clientX
+        st.py = e.clientY
+      }
+    }
   }
+
+  // Capture: scroll does not bubble, and the surfaces that actually scroll
+  // here are nested (the transcript region, the shelf, a drilldown), so a
+  // listener on the container alone would never hear them.
+  const onAnyScroll = (): void => {
+    lastScrollAt = performance.now()
+    // Keep the loop awake so hovered cards can drain to idle rather than
+    // freezing mid-tilt until the next pointer event.
+    for (const el of hoverChain) driven.add(el)
+    ensureLoop()
+  }
+  container.addEventListener('scroll', onAnyScroll, { capture: true, passive: true })
 
   container.addEventListener('pointerover', onPointerOver, { passive: true })
   container.addEventListener('pointerout', onPointerOut, { passive: true })
@@ -452,10 +674,12 @@ function attach(container: HTMLElement): () => void {
 
   return () => {
     mo.disconnect()
+    container.removeEventListener('scroll', onAnyScroll, { capture: true })
     container.removeEventListener('pointerover', onPointerOver)
     container.removeEventListener('pointerout', onPointerOut)
     container.removeEventListener('pointermove', onPointerMove)
-    hoverEl = null
+    hoverEvictors.delete(evict)
+    hoverChain = []
     for (const el of mine) unregister(el)
     mine.clear()
   }
