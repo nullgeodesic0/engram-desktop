@@ -1491,6 +1491,97 @@
     margin: 0.75em 0;
   }
 
+  /* ── The equation plate ───────────────────────────────────────────────
+     Display math is usually the most important object in a physics answer,
+     and it rendered as an unframed KaTeX block carrying exactly the visual
+     weight of a sentence. This promotes it to the anchor of the paragraph it
+     belongs to: hairline frame, a wash a half-step off the surface, and room
+     to breathe. Right angles and 1px rules, like every other instrument in
+     this world — a plate, not a card.
+
+     Scoped to `.md-prose` so it lands on tutor and learner prose only. Math
+     in the Topic Map drawer, the misconception ledger and the composer
+     preview keeps KaTeX's plain setting. */
+  .md-prose .katex-display {
+    position: relative;
+    margin: 1.15em 0;
+    /* Asymmetric right padding leaves the equation number a lane of its own
+       (see the collision note below). */
+    padding: 0.95em 2.6em 0.95em 1.15em;
+    border: 1px solid var(--color-hairline);
+    background: color-mix(in srgb, var(--color-surface-2) 45%, transparent);
+    counter-increment: eq;
+  }
+  .md-prose { counter-reset: eq; }
+
+  /* Numbered only when numbering MEANS something. A lone "(1)" beside the
+     only equation in a reply is noise pretending to be rigor, so the number
+     appears just when a sibling display equation exists to distinguish it
+     from — which is precisely what `:has(.katex-display ~ .katex-display)`
+     asks. Positional and presentational: it counts what the tutor wrote and
+     asserts nothing the tutor did not.
+
+     BOTTOM-right, not centre-right, and that is load-bearing rather than
+     taste. The equation-copy affordance above pins its ⧉ glyph to the TOP of
+     the `.katex` box at `right: -1.15em`; on an equation wide enough to fill
+     the plate that glyph lands inside this number's lane. Splitting them
+     vertically means the two can never occupy the same point no matter how
+     wide the math runs. */
+  .md-prose:has(.katex-display ~ .katex-display) .katex-display::after {
+    content: '(' counter(eq) ')';
+    position: absolute;
+    right: 0.9em;
+    bottom: 0.55em;
+    font-family: var(--font-data);
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    /* `text-dim`, NOT `text-faint`. Faint is tuned against the dark void and
+       measured 1.24:1 on the light theme's plate — invisible. An equation
+       number is not decoration: it is the handle you cite the equation by
+       ("as in (2)"), so it has to be readable in both themes. Dim measures
+       4.92 dark / 4.53 light against the plate. */
+    color: var(--color-text-dim);
+    pointer-events: none;
+  }
+
+  /* ── The develop ──────────────────────────────────────────────────────
+     The one authored moment on this surface. Prose arrives already set —
+     animating text a learner is about to read costs comprehension and buys
+     nothing — so the motion lands only on the plate, which is the thing worth
+     waiting a beat for. Grain resolving into glyphs, the darkroom metaphor
+     the rest of this world already runs on.
+
+     Fires once by construction: `.md-develop` is applied only when the beat
+     has finished streaming (see BeatCard's `trailingCaret` gate), so the
+     class arrives with the final, complete render of the KaTeX nodes. During
+     streaming the class is absent and the mid-flight re-renders that recreate
+     those nodes each chunk stay perfectly still. */
+  @keyframes plate-develop {
+    from {
+      opacity: 0;
+      filter: blur(7px);
+      transform: translateY(3px);
+    }
+    to {
+      opacity: 1;
+      filter: blur(0);
+      transform: none;
+    }
+  }
+  /* The frame draws in just behind the glyphs — shorter duration on the same
+     ease — so the plate reads as assembling rather than as a box that faded. */
+  @keyframes plate-frame-in {
+    from { border-color: transparent; background-color: transparent; }
+  }
+  .md-develop .katex-display {
+    animation:
+      plate-develop 520ms var(--ease-out-soft) both,
+      plate-frame-in 420ms var(--ease-out-soft) both;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .md-develop .katex-display { animation: none; }
+  }
+
   /* Chat Instruments Wave A — equation copy. Scoped under `.katex-copy-scope`
    * (added by useEquationCopy.ts to whichever container it's attached to)
    * rather than bare `.katex`, so the hover affordance never lies: it only
@@ -1591,23 +1682,93 @@
    * inside the card the way MathRenderer's margin-free spans never did. */
   :is(.md-preview, .md-prose) > :first-child { margin-top: 0; }
   :is(.md-preview, .md-prose) > :last-child { margin-bottom: 0; }
+  /* THE RAMP. The old one was 20 / 17.6 / 16px above a 15px body — an `h3`
+     at 1.07× the paragraph it introduces. Three heading levels that all
+     landed within 5px of the text meant a long answer had no landmarks: the
+     eye had nothing to catch on and a 900-word reply read as one gray slab.
+     That, not the paragraphs themselves, was the dullness.
+
+     Fixed by giving each level a different KIND of prominence rather than
+     stacking four sizes into a 5px range — size for h1, size plus a section
+     rule for h2, and a tracked-out uppercase run for h3. Distinguishable
+     even where the size steps are small, and it keeps the ramp from
+     out-shouting the chrome around the transcript. */
   :is(.md-preview, .md-prose) h1, :is(.md-preview, .md-prose) h2, :is(.md-preview, .md-prose) h3 {
     font-family: var(--font-display);
     color: var(--color-text-primary);
-    margin: 0.75em 0 0.35em;
-    line-height: 1.3;
+    line-height: 1.25;
+    /* More space above than below — a heading belongs to what follows it. */
+    margin: 1.5em 0 0.45em;
   }
-  :is(.md-preview, .md-prose) h1 { font-size: 1.25rem; }
-  :is(.md-preview, .md-prose) h2 { font-size: 1.1rem; }
-  :is(.md-preview, .md-prose) h3 { font-size: 1rem; }
-  :is(.md-preview, .md-prose) p { margin: 0.5em 0; }
+  :is(.md-preview, .md-prose) > :first-child:is(h1, h2, h3) { margin-top: 0; }
+  :is(.md-preview, .md-prose) h1 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  :is(.md-preview, .md-prose) h2 {
+    font-size: 1.1875rem;
+    font-weight: 600;
+    /* The section rule. A hairline under the heading, not a box around the
+       section — the same instrument grammar the plates and charts use. */
+    padding-bottom: 0.3em;
+    border-bottom: 1px solid var(--color-hairline);
+  }
+  :is(.md-preview, .md-prose) h3 {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--color-text-dim);
+  }
+
+  /* Paragraph rhythm. At `margin: 0.5em` against `line-height: 1.65` the gap
+     BETWEEN paragraphs (7.5px) was smaller than the gap between lines inside
+     one (9.8px) — so paragraph breaks, the only structure most replies have,
+     were invisible. 0.85em puts the break back above the line gap. */
+  :is(.md-preview, .md-prose) p { margin: 0.85em 0; }
+
+  /* The lede. A classical opening-paragraph step, gated so it only applies
+     where there IS a second paragraph — a one-line answer is never inflated
+     into a pronouncement.
+
+     `~` and not `+`: sibling, not ADJACENT sibling. Most long replies put a
+     heading, a list or an equation plate between their paragraphs, so an
+     adjacency test would have quietly dropped the lede on exactly the long
+     answers it exists for. */
+  :is(.md-preview, .md-prose):has(> p ~ p) > p:first-of-type {
+    font-size: 1.06em;
+    line-height: 1.6;
+  }
+
   :is(.md-preview, .md-prose) ul, :is(.md-preview, .md-prose) ol {
-    margin: 0.5em 0;
-    padding-left: 1.4em;
+    margin: 0.85em 0;
+    padding-left: 1.5em;
   }
-  :is(.md-preview, .md-prose) ul { list-style: disc; }
+  /* Drawn markers, not glyphs. A short warm rule per item — the same hairline
+     vocabulary as the section rule and the equation plate — instead of the
+     browser's default disc, which was the one piece of unstyled chrome left
+     in the transcript. */
+  :is(.md-preview, .md-prose) ul { list-style: none; }
+  :is(.md-preview, .md-prose) ul > li { position: relative; }
+  :is(.md-preview, .md-prose) ul > li::before {
+    content: '';
+    position: absolute;
+    left: -1.15em;
+    /* 0.5lh centres the rule on the item's FIRST line, so it stays put when
+       an item wraps to three lines. */
+    top: 0.5lh;
+    width: 0.5em;
+    height: 1px;
+    background: var(--color-ink-warm-dim);
+  }
   :is(.md-preview, .md-prose) ol { list-style: decimal; }
-  :is(.md-preview, .md-prose) li { margin: 0.15em 0; }
+  :is(.md-preview, .md-prose) ol > li::marker {
+    font-family: var(--font-data);
+    font-size: 0.85em;
+    color: var(--color-ink-warm-dim);
+  }
+  :is(.md-preview, .md-prose) li { margin: 0.3em 0; }
   :is(.md-preview, .md-prose) code {
     font-family: var(--font-data);
     font-size: 0.85em;
@@ -1631,10 +1792,18 @@
     background: none;
     padding: 0;
   }
+  /* Pull-quote, not a callout bar. The 2px warm border was doing the work of
+     a highlight, which is exactly the authority a formatting channel must not
+     claim — a quoted line got read as an emphasized one. Now the quote is set
+     apart by FORM (indent, larger serif, italic) and the rule is a 1px
+     hairline that marks the edge without shouting. */
   :is(.md-preview, .md-prose) blockquote {
-    border-left: 2px solid var(--color-ink-warm-dim);
-    padding-left: 0.8em;
-    margin: 0.5em 0;
+    border-left: 1px solid var(--color-ink-warm-dim);
+    padding-left: 1.1em;
+    margin: 1.1em 0;
+    font-size: 1.06em;
+    font-style: italic;
+    line-height: 1.55;
     color: var(--color-text-dim);
   }
   :is(.md-preview, .md-prose) a {

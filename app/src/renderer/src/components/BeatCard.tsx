@@ -56,7 +56,13 @@ export const BeatCard = memo(function BeatCard({
         </div>
         <CopyButton text={text} />
       </div>
-      <ProseMarkdown text={text} className="voice-serif text-[var(--color-text-primary)]" nodeIds={nodeIds} nodeChipTopic={nodeChipTopic} />
+      <ProseMarkdown
+        text={text}
+        className="voice-serif text-[var(--color-text-primary)]"
+        nodeIds={nodeIds}
+        nodeChipTopic={nodeChipTopic}
+        develop={!trailingCaret}
+      />
       {trailingCaret && <span className="streaming-caret" aria-hidden="true" />}
     </div>
   )
@@ -145,6 +151,7 @@ export const PlainDialogueBlock = memo(function PlainDialogueBlock({
         className="voice-serif text-[var(--color-text-primary)] pr-5"
         nodeIds={nodeIds}
         nodeChipTopic={nodeChipTopic}
+        develop={!trailingCaret}
       />
       {trailingCaret && <span className="streaming-caret" aria-hidden="true" />}
     </div>

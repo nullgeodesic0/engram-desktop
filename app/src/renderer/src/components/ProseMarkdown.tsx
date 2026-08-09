@@ -22,6 +22,7 @@ export const ProseMarkdown = memo(function ProseMarkdown({
   className = '',
   nodeIds,
   nodeChipTopic,
+  develop = false,
 }: {
   text: string
   className?: string
@@ -33,10 +34,26 @@ export const ProseMarkdown = memo(function ProseMarkdown({
    * surface with no graph in scope) and renders byte-identically. */
   nodeIds?: Set<string>
   nodeChipTopic?: string
+  /** Let display math play its one-shot develop animation (see the `.md-develop`
+   * block in index.css).
+   *
+   * MUST be false while text is still streaming. Every chunk changes `text`,
+   * which re-renders this `dangerouslySetInnerHTML` and destroys and recreates
+   * every KaTeX node inside it — so a develop animation left on during a
+   * stream would restart from full blur on each chunk and read as flicker,
+   * not as developing. Callers pass the negation of whatever streaming signal
+   * they already hold (`trailingCaret` in the beat components); the class then
+   * arrives exactly once, with the final complete render. */
+  develop?: boolean
 }) {
   const html = useMemo(
     () => renderMarkdownWithMath(text, nodeIds && nodeChipTopic ? { nodeIds, topicId: nodeChipTopic } : undefined),
     [text, nodeIds, nodeChipTopic],
   )
-  return <div className={`md-prose ${className}`.trim()} dangerouslySetInnerHTML={{ __html: html }} />
+  return (
+    <div
+      className={`md-prose ${develop ? 'md-develop ' : ''}${className}`.trim()}
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  )
 })
