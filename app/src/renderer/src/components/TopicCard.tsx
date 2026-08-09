@@ -1,6 +1,7 @@
 import type { TopicListEntry } from '../../../shared/types'
 import { TopicTitle } from '../components/TopicTitle'
 import { InkNode } from './ui/InkNode'
+import { TopicConstellation } from './TopicConstellation'
 import { HealthRing } from './ui/HealthRing'
 import { IconButton } from './ui/IconButton'
 import { topicChips } from '../shared/topicShelf'
@@ -42,6 +43,17 @@ interface TopicCardProps {
    * (adds the `continuing` chip, goal line, and settings/start-fresh
    * affordances). */
   variant: 'tile' | 'shelf'
+  /** Shelf only: draw the topic's real concept graph in the row's middle.
+   * Defaults ON because both current shelf call sites ARE the Learn page,
+   * which is where the figure was designed to live — but it costs one lazy
+   * graph read per visible row, so a future shelf somewhere that cannot
+   * afford that (or has no room) can decline it. */
+  showConstellation?: boolean
+  /** True for the single row currently opening into a session. Stamps the
+   * shared `view-transition-name` so the title travels to the masthead rather
+   * than cross-fading. Exactly one element may hold a given name at a time,
+   * which is why this is a per-row flag and not a class. */
+  morphing?: boolean
   topic: TopicListEntry
   onOpen: () => void
   /** Shelf-only: an in-progress session exists for this topic. */
@@ -75,7 +87,7 @@ interface TopicCardProps {
  * (Learn's old local card omitted InkNode and the `learning` chip entirely;
  * Home's never showed a due chip since HealthRing's danger notch already
  * carries that signal here). */
-export function TopicCard({ variant, topic: t, onOpen, resumable = false, onSettings, onStartFresh, grade, hideFolderChip, organizing, dragType, folderOptions, currentFolder, onFile }: TopicCardProps) {
+export function TopicCard({ variant, topic: t, onOpen, resumable = false, onSettings, onStartFresh, grade, hideFolderChip, organizing, dragType, folderOptions, currentFolder, onFile, showConstellation = true, morphing = false }: TopicCardProps) {
   const total = t.states.new + t.states.learning + t.states.review
 
   if (variant === 'tile') {
@@ -137,7 +149,11 @@ export function TopicCard({ variant, topic: t, onOpen, resumable = false, onSett
       <HealthRing consolidated={t.states.review} total={total} due={t.due} />
       <button onClick={onOpen} className="focus-ring flex-1 min-w-0 text-left flex flex-col gap-1">
         <div className="text-sm text-[var(--color-text-primary)] flex items-center gap-2">
-          <TopicTitle title={t.title} className="truncate" />
+          <TopicTitle
+            title={t.title}
+            className="truncate"
+            style={morphing ? { viewTransitionName: 'learn-morph-title' } : undefined}
+          />
           {resumable && (
             <span className="label-data text-[10px] px-1.5 py-0.5 rounded text-[var(--color-ink-cool)] bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] shrink-0">
               continuing
@@ -153,6 +169,15 @@ export function TopicCard({ variant, topic: t, onOpen, resumable = false, onSett
           ))}
         </div>
       </button>
+      {/* The topic's real graph, in the space the row was already wasting.
+          Bounding the shelf's measure put a row's content and its actions in
+          one grasp and left the middle empty; this is the most meaningful
+          thing that could go there — the actual shape of the body of
+          knowledge the row names. Shelf variant only: the tile has no such
+          gap, and the drilldown shows the full map. */}
+      {showConstellation && (
+        <TopicConstellation topic={t.topic} className="hidden lg:block w-[16rem] opacity-90" />
+      )}
       {/* The keyboard path for filing — HTML5 drag is mouse-only, so a
           drag-to-organize mode without this would simply be unusable
           without a pointer. Native <select> on purpose: it is already

@@ -1,4 +1,4 @@
-import { memo } from 'react'
+import { memo, type CSSProperties } from 'react'
 import { MathRenderer } from './MathRenderer'
 
 /** A topic's title, with maths set as maths.
@@ -32,12 +32,19 @@ export function titleHasMath(title: string): boolean {
 export const TopicTitle = memo(function TopicTitle({
   title,
   className,
+  style,
 }: {
   title: string
   className?: string
+  /** Passed through to whichever element this ends up being. Exists for the
+   * shelf→session morph, which stamps a `view-transition-name` on the one
+   * title that is travelling; it has to land on the real title element, and
+   * wrapping this in a span instead would put a non-truncating box between
+   * the title and the flex row that sizes it. */
+  style?: CSSProperties
 }) {
-  if (!titleHasMath(title)) return <span className={className}>{title}</span>
+  if (!titleHasMath(title)) return <span className={className} style={style}>{title}</span>
   // `inline` so the renderer's own div sits in the text flow rather than
   // breaking the row it was placed in.
-  return <MathRenderer text={title} inlineOnly className={`inline ${className ?? ''}`} />
+  return <MathRenderer text={title} inlineOnly className={`inline ${className ?? ''}`} style={style} />
 })

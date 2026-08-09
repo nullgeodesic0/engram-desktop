@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { TopicTitle } from '../components/TopicTitle'
 import type { SessionEvent } from '../../../shared/sessionEvents'
 import type {
@@ -80,12 +81,13 @@ import { ErrorPanel } from '../components/ErrorPanel'
 import { Card } from '../components/ui/Card'
 import { SkeletonBar } from '../components/Skeleton'
 import { InkNode } from '../components/ui/InkNode'
+import { HealthRing } from '../components/ui/HealthRing'
 import { PinTackIcon } from '../components/ui/PinTackIcon'
 import { TopicCard } from '../components/TopicCard'
 import { SectionBanner } from '../components/ui/SectionBanner'
 import { PlateFigure } from '../components/ui/PlateFigure'
 import { SegmentedControl } from '../components/ui/SegmentedControl'
-import { topicBucket } from '../shared/topicShelf'
+import { topicBucket, topicChips } from '../shared/topicShelf'
 import { sortTopics, TOPIC_SORT_OPTIONS, type TopicSortKey } from '../shared/topicSort'
 import { loadTopicSort, saveTopicSort, loadTopicGroup, saveTopicGroup, type TopicGroupKey } from '../shared/topicSortPrefs'
 import { groupTopicsByFolder, TOPIC_GROUP_OPTIONS } from '../shared/topicFolders'
@@ -203,6 +205,7 @@ function LearnTopicGroup({
   caption,
   topics,
   resumableTopics,
+  morphingTopic,
   onOpen,
   onSettings,
   onStartFresh,
@@ -212,6 +215,8 @@ function LearnTopicGroup({
   caption?: string
   topics: TopicListEntry[]
   resumableTopics: Set<string>
+  /** The single row mid-morph into the session, if any. */
+  morphingTopic: string | null
   onOpen: (t: TopicListEntry) => void
   onSettings: (t: TopicListEntry) => void
   onStartFresh: (t: TopicListEntry) => void
@@ -221,8 +226,12 @@ function LearnTopicGroup({
   if (topics.length === 0) return null
   return (
     <div className="flex flex-col gap-2">
+      {/* The caption belongs to the banner, so it sits AT it (-mt-1) rather
+          than at the group's own interval — at gap-2 it read as a third
+          sibling floating between the banner and the cards, giving the group
+          four evenly-spaced steps and therefore no rhythm at all. */}
       <SectionBanner label={heading} count={topics.length} />
-      {caption && <span className="text-xs text-[var(--color-text-faint)]">{caption}</span>}
+      {caption && <span className="text-xs text-[var(--color-text-faint)] -mt-1">{caption}</span>}
       <div className="flex flex-col gap-3">
         {topics.map((t) => (
           <TopicCard
@@ -231,12 +240,76 @@ function LearnTopicGroup({
             topic={t}
             hideFolderChip={hideFolderChip}
             resumable={resumableTopics.has(t.topic)}
+            morphing={morphingTopic === t.topic}
             onOpen={() => onOpen(t)}
             onSettings={() => onSettings(t)}
             onStartFresh={() => onStartFresh(t)}
           />
         ))}
       </div>
+    </div>
+  )
+}
+
+/** The page's peak: the topic you are in the middle of.
+ *
+ * `resumableTopics` already knows this — it is the set with a live Learn
+ * session on disk — and the shelf spent that fact on a 9px dogear and a
+ * `continuing` chip, on a row identical to every other row. So a page whose
+ * entire job is "get back to work" opened as a uniform ladder with no answer
+ * to "which one", and the largest thing on it was the territory count.
+ *
+ * Rendered ONLY when a resumable topic exists. There is no runner-up and no
+ * "featured" fallback: with nothing in progress the honest state is the
+ * ladder, and inventing a peak would be the app claiming something it does
+ * not know (PRODUCT.md: honest or absent).
+ *
+ * A SHORTCUT, not a relocation. The topic stays in the list below — in its
+ * state bucket, and crucially in whatever FOLDER the learner filed it under.
+ * An earlier version lifted it out to avoid "duplication", which instead
+ * silently edited the learner's own filing: folder counts went wrong, a
+ * folder holding only that topic disappeared, and in organize mode the topic
+ * became undraggable because it was no longer on the shelf. Pointing at a
+ * library entry is not duplicating it.
+ *
+ * `panel-plate` — the warm full-frame inset, index.css's engraved specimen
+ * label, the register the app reserves for a stated answer — and full-scale
+ * `tilt-card` rather than the rows' rail tier, because this is page chrome
+ * that leads rather than one item in a list. It carries the `.dogear` for the
+ * same reason its row does: both mark the one topic you are in, and one topic
+ * marked twice is not the wallpaper the scarcity decree guards against.
+ *
+ * Not rendered during organize mode — see the call site.
+ */
+function ContinueHero({ topic: t, onOpen, morphing }: { topic: TopicListEntry; onOpen: () => void; morphing: boolean }) {
+  const total = t.states.new + t.states.learning + t.states.review
+  const chips = topicChips(t).map((c) => c.label)
+  return (
+    <div className="tilt-card panel-plate dogear px-6 py-5 flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
+      <div className="flex flex-col gap-2 min-w-0 flex-1">
+        <span className="label-data text-[10px] uppercase tracking-[0.28em] text-[var(--color-ink-warm)]">
+          Pick up where you left off
+        </span>
+        <div className="flex items-center gap-3 min-w-0">
+          <InkNode id={t.topic} variant="filled" size={18} />
+          <HealthRing consolidated={t.states.review} total={total} due={t.due} size={22} />
+          <TopicTitle
+            title={t.title}
+            className="font-(family-name:--font-display) text-[length:var(--text-heading)] leading-none text-[var(--color-text-primary)] truncate"
+            style={morphing ? { viewTransitionName: 'learn-morph-title' } : undefined}
+          />
+        </div>
+        {/* The goal at readable size and on the text ramp. In the row it is
+            `text-faint`, one-line-clamped — the most human thing on the page
+            (what this topic is FOR) set as the faintest. */}
+        {t.goal && <p className="text-sm text-[var(--color-text-dim)] leading-relaxed line-clamp-2">{t.goal}</p>}
+        {chips.length > 0 && (
+          <div className="label-data text-[10px] text-[var(--color-text-faint)]">{chips.join(' · ')}</div>
+        )}
+      </div>
+      <Button variant="primary" size="lg" onClick={onOpen} className="shrink-0">
+        Continue
+      </Button>
     </div>
   )
 }
@@ -368,6 +441,10 @@ export function LearnSessionView({
   // Which topics have a resumable session — shown as a hint on each TopicCard so opening
   // a topic's "continue vs. fresh start" behavior (see openTopic) isn't a surprise.
   const [resumableTopics, setResumableTopics] = useState<Set<string>>(new Set())
+  /** The topic mid-morph, if any. Exactly one element may carry a given
+   * `view-transition-name` at a time, so this names the single row whose title
+   * is travelling into the masthead. Cleared when the transition settles. */
+  const [morphingTopic, setMorphingTopic] = useState<string | null>(null)
 
   // Session state
   const [activeTopic, setActiveTopic] = useState<TopicListEntry | null>(null)
@@ -1365,9 +1442,38 @@ export function LearnSessionView({
   // if not. The message is safe to resend either way — the skill's own re-anchor
   // discipline always re-checks state from disk rather than trusting prior turns.
   async function openTopic(topic: TopicListEntry) {
-    setActiveTopic(topic)
-    setStarted(true)
-    resetSessionEphemera()
+    // Opening a topic is a continuous motion, not a cut: the row's title is
+    // the SAME element as the session masthead's title as far as the browser
+    // is concerned, so it travels between the two positions instead of one
+    // disappearing and another appearing.
+    //
+    // Only the synchronous flip goes inside the transition. Everything after
+    // it here is async (history hydration, banner prefetch, the spawn), and
+    // holding the transition open across an await would freeze the old
+    // snapshot on screen for as long as the disk took — which is the exact
+    // opposite of the intended effect. `flushSync` is required: the API
+    // snapshots the DOM when the callback returns, and React's default
+    // batching would not have applied the state change by then.
+    const flip = (): void => {
+      setActiveTopic(topic)
+      setStarted(true)
+      resetSessionEphemera()
+    }
+    const startViewTransition = (
+      document as Document & { startViewTransition?: (cb: () => void) => { finished: Promise<void> } }
+    ).startViewTransition
+    if (typeof startViewTransition === 'function' && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setMorphingTopic(topic.topic)
+      const t = startViewTransition.call(document, () => {
+        flushSync(flip)
+      })
+      // Release the shared name whether it finished or was interrupted by
+      // another navigation — a stale `view-transition-name` left on a hidden
+      // row would collide with the next transition and silently kill it.
+      void t.finished.catch(() => {}).finally(() => setMorphingTopic(null))
+    } else {
+      flip()
+    }
     prefetchBanner(topic.topic)
     fetchTopicGraphCache(topic.topic)
     window.engram
@@ -1863,7 +1969,13 @@ export function LearnSessionView({
                 onFocusPeek={peekMasthead}
                 // In a session, the topic IS the page — one serif title, no
                 // static "Learn" h1, no repeated title on the opening plate.
-                title={activeTopic ? <TopicTitle title={activeTopic.title} /> : 'New topic'}
+                title={
+                  activeTopic ? (
+                    <TopicTitle title={activeTopic.title} style={{ viewTransitionName: 'learn-morph-title' }} />
+                  ) : (
+                    'New topic'
+                  )
+                }
                 // The identity sub-line: current node · position · walk, in
                 // one compact mono lockup under the title. The why-chain
                 // disclosure rides here, attached to the node it explains.
@@ -1986,7 +2098,13 @@ export function LearnSessionView({
               /* The shelf header — not a session masthead: the static Learn
                  h1 with its briefing figure, under the same full-width
                  hairline command-bar band as before the plate extraction. */
-              <header className="shrink-0 -mx-8 px-8 pb-2 border-b border-[var(--color-hairline)] flex flex-col gap-2">
+              // The hairline stays full-bleed — it is a page edge, not a
+              // content edge — while everything inside it takes the shelf's
+              // measure, so the header's left figure and right controls sit
+              // in the same column the rows below do instead of being flung
+              // to opposite ends of the window.
+              <header className="shrink-0 -mx-8 px-8 pb-2 border-b border-[var(--color-hairline)]">
+                <div className="page-measure flex flex-col gap-2">
                 <h1 className="font-(family-name:--font-serif) text-[length:var(--text-display)] text-[var(--color-text-primary)]">Learn</h1>
                 {/* The shelf's briefing figure (ui/PlateFigure — the ready-room
                     grammar): territory count as the headline, the atlas-wide due
@@ -2103,6 +2221,7 @@ export function LearnSessionView({
                     </div>
                   )
                 })()}
+                </div>
               </header>
             )}
           </>
@@ -2123,12 +2242,39 @@ export function LearnSessionView({
         // Sorted within each bucket (see the topicSort hook's own comment for
         // why the two layers stay separate) — one shared ordering with the
         // map's tab strip, archived topics last, ties broken on title.
-        const active = sortTopics(topics?.filter((t) => topicBucket(t) === 'active') ?? [], topicSort)
-        const consolidated = sortTopics(topics?.filter((t) => topicBucket(t) === 'consolidated') ?? [], topicSort)
-        const notStarted = sortTopics(topics?.filter((t) => topicBucket(t) === 'notStarted') ?? [], topicSort)
+        // The page's peak, if there is one — the first resumable topic in the
+        // learner's own current sort, so the pick is deterministic and follows
+        // the ordering they chose rather than a hidden second rule. Null when
+        // nothing is in progress; see ContinueHero on why there is no runner-up.
+        const allSorted = sortTopics(topics ?? [], topicSort)
+        const hero = allSorted.find((t) => topicBucket(t) === 'active' && resumableTopics.has(t.topic)) ?? null
+        // The list below is ALWAYS the complete atlas — the hero does not
+        // remove its topic from it.
+        //
+        // It used to. That was wrong, and the folder view is what proved it:
+        // lifting a topic out of the shelf also lifted it out of the FOLDER
+        // the learner had filed it into, so a folder's count went wrong, a
+        // folder holding only that topic vanished entirely, and in organize
+        // mode the one topic you were actively working on became the one
+        // topic you could not drag or re-file — it was not on the shelf to
+        // grab. The filing is the learner's own structure; a presentation
+        // decision must not quietly edit it.
+        //
+        // The mistake was treating the hero as a RELOCATION. It is a
+        // shortcut: "pick up where you left off" points AT a library entry,
+        // it does not replace one. A continue affordance sitting above a
+        // complete list is how the thing is supposed to read, and the row it
+        // points at keeps its own dogear and `continuing` chip because the
+        // library should describe every topic honestly whether or not
+        // something above it is pointing at one.
+        const allTopics = topics ?? []
+        const active = sortTopics(allTopics.filter((t) => topicBucket(t) === 'active'), topicSort)
+        const consolidated = sortTopics(allTopics.filter((t) => topicBucket(t) === 'consolidated'), topicSort)
+        const notStarted = sortTopics(allTopics.filter((t) => topicBucket(t) === 'notStarted'), topicSort)
         const envBroken = envCheck !== null && !(envCheck.claudeOk && envCheck.pluginOk)
         return (
-          <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-3">
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            <div className="page-measure flex flex-col gap-3">
             {topics === null && (
               <>
                 <div className="fig-caption">reading your topics…</div>
@@ -2177,6 +2323,20 @@ export function LearnSessionView({
               </Card>
             )}
 
+            {/* Extra air below, not just the list's own gap — the hero is a
+                different register from the ladder, and at the same interval
+                it read as simply the first, largest row. */}
+            {/* Hidden while organizing. Filing is a focused, whole-shelf task
+                — every row becomes a drag handle with a folder picker — and a
+                large card that is deliberately NOT draggable sitting on top of
+                that reads as a bug rather than a shortcut. The topic is still
+                right there in its folder, which is the point. */}
+            {hero && !organizing && (
+              <div className="pb-3">
+                <ContinueHero topic={hero} morphing={morphingTopic === hero.topic} onOpen={() => openTopic(hero)} />
+              </div>
+            )}
+
             {topics !== null && topics.length > 0 && (
               <div className="flex flex-col gap-6">
                 {topicGroup === 'folder' ? (
@@ -2195,6 +2355,7 @@ export function LearnSessionView({
                     organizing={organizing}
                     allFolders={allFolderNames(topics, folderRegistry)}
                     resumableTopics={resumableTopics}
+                    morphingTopic={morphingTopic}
                     onOpen={openTopic}
                     onSettings={setSettingsFor}
                     onStartFresh={startFreshForTopic}
@@ -2207,6 +2368,7 @@ export function LearnSessionView({
                   heading="Continue learning"
                   topics={active}
                   resumableTopics={resumableTopics}
+                  morphingTopic={morphingTopic}
                   onOpen={openTopic}
                   onSettings={setSettingsFor}
                   onStartFresh={startFreshForTopic}
@@ -2216,6 +2378,7 @@ export function LearnSessionView({
                   caption="fully encoded — held by review alone"
                   topics={consolidated}
                   resumableTopics={resumableTopics}
+                  morphingTopic={morphingTopic}
                   onOpen={openTopic}
                   onSettings={setSettingsFor}
                   onStartFresh={startFreshForTopic}
@@ -2224,6 +2387,7 @@ export function LearnSessionView({
                   heading="Not started"
                   topics={notStarted}
                   resumableTopics={resumableTopics}
+                  morphingTopic={morphingTopic}
                   onOpen={openTopic}
                   onSettings={setSettingsFor}
                   onStartFresh={startFreshForTopic}
@@ -2242,6 +2406,7 @@ export function LearnSessionView({
                 />
               </div>
             )}
+            </div>
           </div>
         )
       })()}

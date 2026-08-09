@@ -30,6 +30,7 @@ function FolderGroupView({
   group,
   organizing,
   resumableTopics,
+  morphingTopic,
   allFolders,
   onOpen,
   onSettings,
@@ -40,6 +41,7 @@ function FolderGroupView({
   group: FolderGroup
   organizing: boolean
   resumableTopics: Set<string>
+  morphingTopic?: string | null
   allFolders: string[]
   onOpen: (t: TopicListEntry) => void
   onSettings: (t: TopicListEntry) => void
@@ -120,6 +122,7 @@ function FolderGroupView({
               topic={t}
               hideFolderChip
               resumable={resumableTopics.has(t.topic)}
+              morphing={morphingTopic === t.topic}
               onOpen={() => onOpen(t)}
               onSettings={() => onSettings(t)}
               onStartFresh={() => onStartFresh(t)}
@@ -143,6 +146,7 @@ export function FolderShelf({
   groups,
   organizing,
   resumableTopics,
+  morphingTopic,
   allFolders,
   onOpen,
   onSettings,
@@ -153,6 +157,7 @@ export function FolderShelf({
   groups: FolderGroup[]
   organizing: boolean
   resumableTopics: Set<string>
+  morphingTopic?: string | null
   allFolders: string[]
   onOpen: (t: TopicListEntry) => void
   onSettings: (t: TopicListEntry) => void
@@ -168,6 +173,7 @@ export function FolderShelf({
           group={g}
           organizing={organizing}
           resumableTopics={resumableTopics}
+          morphingTopic={morphingTopic}
           allFolders={allFolders}
           onOpen={onOpen}
           onSettings={onSettings}

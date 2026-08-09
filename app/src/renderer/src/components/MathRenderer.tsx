@@ -141,9 +141,14 @@ export const MathRenderer = memo(function MathRenderer({
   text,
   className = '',
   inlineOnly = false,
+  style,
 }: {
   text: string
   className?: string
+  /** Passed through to the root element. Added for the shelf→session title
+   * morph, which must stamp its `view-transition-name` on a maths title's
+   * real root too, not only the plain-span fast path. */
+  style?: React.CSSProperties
   /** Force display math to render inline. For one-line contexts (the beat
    * markers' single-row excerpt), a KaTeX display block would break the row
    * and swallow the ellipsis — the marker is a glance, not a worked figure. */
@@ -163,5 +168,5 @@ export const MathRenderer = memo(function MathRenderer({
     [tokens, inlineOnly],
   )
 
-  return <div className={className}>{rendered}</div>
+  return <div className={className} style={style}>{rendered}</div>
 })
