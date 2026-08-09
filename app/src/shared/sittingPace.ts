@@ -140,3 +140,34 @@ export function humanMinutes(seconds: number): string {
   if (mins < 10) return `${Math.round(mins)} min`
   return `${Math.round(mins / 5) * 5} min`
 }
+
+
+/** The three budgets to offer, derived from what THIS queue actually costs.
+ *
+ * Fixed 5/10/25 answered a question nobody asked. With 18 items due at ~4
+ * minutes each, the real quantity is 70-odd minutes, and none of the three
+ * options related to it: the largest cleared a third of the queue while
+ * claiming to be the long one, and there was no "finish this" at all.
+ *
+ * So the options are a quarter, a half, and the whole thing — rounded to
+ * five-minute steps, because nobody plans in 37s, and deduplicated so a short
+ * queue offers two options or one rather than three that mean the same.
+ * Ascending, always at least one.
+ *
+ * The largest is always the FULL clear. That is the number a learner most
+ * needs and never had: what it would actually take to be done. */
+export function sittingOptions(totalSeconds: number): number[] {
+  const round5 = (mins: number): number => Math.max(5, Math.round(mins / 5) * 5)
+  if (!Number.isFinite(totalSeconds) || totalSeconds <= 0) return [5, 10, 25]
+  const full = round5(totalSeconds / 60)
+  const opts = [round5(full / 4), round5(full / 2), full]
+  return [...new Set(opts)].sort((a, b) => a - b)
+}
+
+/** Snap a remembered choice onto the offered set, so a budget stored before
+ * the queue changed still shows as selected instead of silently selecting
+ * nothing. */
+export function nearestOption(mins: number, options: number[]): number {
+  if (options.length === 0) return mins
+  return options.reduce((a, b) => (Math.abs(b - mins) < Math.abs(a - mins) ? b : a))
+}

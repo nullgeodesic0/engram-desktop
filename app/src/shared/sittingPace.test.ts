@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   buildPaceModel, secondsForTopic, planSitting, humanMinutes, DEFAULT_SECONDS_PER_ITEM,
+  sittingOptions, nearestOption,
 } from './sittingPace'
 
 const s = (topic: string, ...secs: number[]) => secs.map((seconds) => ({ topic, seconds }))
@@ -92,5 +93,38 @@ describe('humanMinutes', () => {
     expect(humanMinutes(30)).toBe('under a minute')
     expect(humanMinutes(300)).toBe('5 min')
     expect(humanMinutes(1524)).toBe('25 min')
+  })
+})
+
+describe('sittingOptions — budgets that mean something', () => {
+  it('offers a quarter, a half, and the whole queue', () => {
+    // 18 items at ~4 min = ~72 min, the case from a real screenshot.
+    expect(sittingOptions(72 * 60)).toEqual([20, 35, 70])
+  })
+
+  it('always makes the largest option a FULL clear', () => {
+    const o = sittingOptions(50 * 60)
+    expect(o[o.length - 1]).toBe(50)
+  })
+
+  it('collapses duplicates rather than offering the same budget twice', () => {
+    // A tiny queue: quarter, half and full all round to 5.
+    expect(sittingOptions(4 * 60)).toEqual([5])
+  })
+
+  it('falls back to the old fixed set when nothing is known', () => {
+    expect(sittingOptions(0)).toEqual([5, 10, 25])
+    expect(sittingOptions(NaN)).toEqual([5, 10, 25])
+  })
+
+  it('never offers less than five minutes', () => {
+    expect(Math.min(...sittingOptions(30))).toBeGreaterThanOrEqual(5)
+  })
+})
+
+describe('nearestOption', () => {
+  it('snaps a remembered budget onto the current set', () => {
+    expect(nearestOption(25, [20, 35, 70])).toBe(20)
+    expect(nearestOption(40, [20, 35, 70])).toBe(35)
   })
 })

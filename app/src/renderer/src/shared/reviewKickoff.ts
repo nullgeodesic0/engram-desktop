@@ -22,16 +22,24 @@
  * recall, which the digest exists to invite. */
 
 export type SittingStyle = 'standard' | 'checkpoint'
-export type SittingMins = 5 | 10 | 25
+/** Minutes for one sitting. Formerly the literal union 5|10|25; now any
+ * number, because the offered budgets are DERIVED from what the queue
+ * actually costs (see sittingOptions in shared/sittingPace.ts) rather than
+ * enumerated in advance. */
+export type SittingMins = number
 
 /** Time → item cap, in the skill's own cap vocabulary (SKILL.md §1: quick=5,
  * Standard≈12, "longer catch-up" ≈ 2× the mode cap). Deliberately NOT a
  * minutes-per-item pace — the skill forbids the app quoting invented time
  * math; these are the three cap sizes the skill already names. */
-export const TIME_CAPS: Record<SittingMins, number> = { 5: 5, 10: 12, 25: 24 }
+/** The pre-measurement fallback, kept only for the case where no pace has
+ * been measured at all. It was a table because the minutes were a fixed set;
+ * with arbitrary minutes it is the same assumption as a formula — about a
+ * minute an item, which is what {5:5, 10:12, 25:24} encoded. */
+const FALLBACK_SECONDS_PER_ITEM = 60
 
 export function capForMins(mins: SittingMins): number {
-  return TIME_CAPS[mins]
+  return Math.max(1, Math.round((mins * 60) / FALLBACK_SECONDS_PER_ITEM))
 }
 
 export function coveredCount(cap: number, totalDue: number): number {

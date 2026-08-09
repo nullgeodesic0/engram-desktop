@@ -1,4 +1,4 @@
-import { memo } from 'react'
+import { memo, useEffect } from 'react'
 import { TopicTitle } from '../TopicTitle'
 import type { DueItem } from '../../../../shared/types'
 import { humanizeNodeId } from '../../../../shared/humanizeId'
@@ -6,7 +6,7 @@ import { InkNode } from '../ui/InkNode'
 import { Button } from '../ui/Button'
 import { PlateFigure } from '../ui/PlateFigure'
 import { SegmentedControl } from '../ui/SegmentedControl'
-import { planSitting, secondsForTopic, humanMinutes, type PaceModel } from '../../../../shared/sittingPace'
+import { planSitting, secondsForTopic, humanMinutes, sittingOptions, nearestOption, type PaceModel } from '../../../../shared/sittingPace'
 import { loadSittingOutcome, describeAccuracy } from '../../shared/lastSitting'
 import { capForMins, coveredCount, type SittingMins, type SittingStyle } from '../../shared/reviewKickoff'
 import type { SittingPrefs } from '../../shared/sittingPrefs'
@@ -44,11 +44,6 @@ function daysOverdueLocal(due: string): number {
 // Hoisted static option arrays (rerender-memo-with-default-value): inline
 // literals would re-create these on every plate render and defeat any
 // downstream memoization by identity.
-const MINS_OPTIONS: { value: `${SittingMins}`; label: string }[] = [
-  { value: '5', label: '5 min' },
-  { value: '10', label: '10 min' },
-  { value: '25', label: '25 min' },
-]
 const STYLE_OPTIONS: { value: SittingStyle; label: string; description?: string }[] = [
   { value: 'standard', label: 'Free recall', description: 'type your answers cold — the standard sitting' },
   {
@@ -121,7 +116,34 @@ export const ReadyRoomPlate = memo(function ReadyRoomPlate({
   const queueTopics = dueItems
     .filter((d) => !prefs.focusTopic || d.topic === prefs.focusTopic)
     .map((d) => d.topic)
-  const plan = pace ? planSitting(prefs.mins, queueTopics, pace) : null
+  // The offered budgets, from what this queue actually costs. Fixed 5/10/25
+  // answered a question nobody asked: with 18 items at ~4 min each the real
+  // quantity is 70-odd minutes, so the "long" option cleared a third of the
+  // queue and there was no finish-it option at all.
+  const queueTotalSeconds = pace
+    ? queueTopics.reduce((sum, t) => sum + secondsForTopic(pace, t).seconds, 0)
+    : 0
+  const options = sittingOptions(queueTotalSeconds)
+  // A budget remembered from a different queue must still read as selected.
+  const activeMins = nearestOption(prefs.mins, options)
+  // The largest option always clears the queue, and says so — that is the
+  // number a learner most needs and never had.
+  // Persist the snap. The plate showing one budget while the sitting starts
+  // from another would be the worst of both: the view reads `prefs.mins`
+  // directly, so display and behaviour have to agree on one number.
+  useEffect(() => {
+    if (options.length > 0 && activeMins !== prefs.mins) {
+      onPrefsChange({ ...prefs, mins: activeMins })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeMins])
+
+  const minsOptions = options.map((m, i) => ({
+    value: `${m}` as `${SittingMins}`,
+    label: i === options.length - 1 && options.length > 1 ? `${m} min · all` : `${m} min`,
+  }))
+
+  const plan = pace ? planSitting(activeMins, queueTopics, pace) : null
 
   // ITEM 4 — what the FIRST item costs, when that alone is a sitting. A
   // 14-minute stat-mech item inside a "5 min" budget is an ambush; saying so
@@ -231,8 +253,8 @@ export const ReadyRoomPlate = memo(function ReadyRoomPlate({
             }}
           />
           <SegmentedControl<`${SittingMins}`>
-            options={MINS_OPTIONS}
-            value={`${prefs.mins}`}
+            options={minsOptions}
+            value={`${activeMins}`}
             onChange={(v) => onPrefsChange({ ...prefs, mins: Number(v) as SittingMins })}
           />
           <SegmentedControl<SittingStyle>
@@ -242,7 +264,7 @@ export const ReadyRoomPlate = memo(function ReadyRoomPlate({
           />
         </div>
         <div className="fig-caption">
-          covers about {coveredCount(capForMins(prefs.mins), totalDue)} of {totalDue}
+          covers about {coveredCount(capForMins(activeMins), totalDue)} of {totalDue}
           {prefs.style === 'checkpoint' ? ' · checkpoint style where eligible' : ''}, in triage order
         </div>
         {quickShareStat && quickShareStat.quick > 0 && (
@@ -279,7 +301,7 @@ export const ReadyRoomPlate = memo(function ReadyRoomPlate({
 
         {plan && plan.items > 0 && (
           <div className="fig-caption">
-            {`${prefs.mins} min covers about ${plan.items} ${plan.items === 1 ? 'item' : 'items'} — ${humanMinutes(plan.predictedSeconds)} at your pace`}
+            {`${activeMins} min covers about ${plan.items} ${plan.items === 1 ? 'item' : 'items'} — ${humanMinutes(plan.predictedSeconds)} at your pace`}
             {paceBasis?.basis === 'topic' && ` (~${humanMinutes(paceBasis.seconds)} each here)`}
             {paceBasis?.basis === 'overall' && ' (from your overall pace — this topic has little history yet)'}
             {plan.overruns && ' · one item already runs past this'}
@@ -303,7 +325,7 @@ export const ReadyRoomPlate = memo(function ReadyRoomPlate({
                     : 'border-[var(--color-hairline)] text-[var(--color-text-faint)] hover:text-[var(--color-text-dim)]'
                 }`}
               >
-                {t === null ? 'ALL' : (topicTitles?.[t] ?? t)}
+                {t === null ? 'ALL' : <TopicTitle title={topicTitles?.[t] ?? t} />}
               </button>
             ))}
           </div>

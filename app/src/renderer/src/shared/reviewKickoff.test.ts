@@ -5,7 +5,6 @@ import {
   detectResumeState,
   capForMins,
   coveredCount,
-  TIME_CAPS,
   type SittingMins,
   type SittingStyle,
 } from './reviewKickoff'
@@ -80,7 +79,10 @@ It is filed open; "misconception resolve --id ${RETEST.id}" records a demonstrat
 
   it('time-adjusted standard names the cap in the skill vocabulary and suppresses the digest', () => {
     const kickoff = composeReviewKickoff({ style: 'standard', mins: 25, totalDue: 43, recallDueNodes: [], retest: null, digestLines: DIGEST })
-    expect(kickoff).toContain('due --cap 24')
+    // 25, not the old table's 24: with budgets now derived from the queue,
+    // the no-measured-pace fallback is a flat ~1 item/minute rather than a
+    // hand-tuned row. A real sitting passes `plannedItems` and overrides this.
+    expect(kickoff).toContain('due --cap 25')
     expect(kickoff).not.toContain('Open misconceptions')
   })
 
@@ -146,9 +148,15 @@ These are filed open for this queue's nodes; "misconception resolve --id <ID>" r
   })
 
   it('coverage math: cap clamps to totalDue', () => {
-    expect(TIME_CAPS[5]).toBe(5)
-    expect(capForMins(25)).toBe(24)
-    expect(coveredCount(24, 7)).toBe(7)
+    // `capForMins` is now the FALLBACK for a learner with no measured pace —
+    // the same ~1 item/minute the old {5:5, 10:12, 25:24} table encoded, but
+    // defined for any budget, since the offered budgets are derived from the
+    // queue rather than enumerated. Real sittings pass `plannedItems` from
+    // measured pace and never reach this.
+    expect(capForMins(5)).toBe(5)
+    expect(capForMins(25)).toBe(25)
+    expect(capForMins(70)).toBe(70)
+    expect(coveredCount(25, 7)).toBe(7)
     const kickoff = composeReviewKickoff({ style: 'checkpoint', mins: 25, totalDue: 7, recallDueNodes: [], retest: null, digestLines: [] })
     expect(kickoff).toContain('roughly 7 items')
   })
