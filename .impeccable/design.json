@@ -1,0 +1,489 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-09T00:00:00.000Z",
+  "title": "Design System: Engram Desktop",
+  "extensions": {
+    "colorMeta": {
+      "void": {
+        "role": "neutral",
+        "displayName": "Warmed Void",
+        "canonical": "#0d0e12",
+        "tonalRamp": [
+          "#0d0e12",
+          "#14151c",
+          "#1c1e28",
+          "#262937"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Base Surface",
+        "canonical": "#14151c"
+      },
+      "surface-2": {
+        "role": "neutral",
+        "displayName": "Raised Surface",
+        "canonical": "#1c1e28"
+      },
+      "surface-3": {
+        "role": "neutral",
+        "displayName": "Third Surface",
+        "canonical": "#262937"
+      },
+      "hairline": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "#262a36"
+      },
+      "ink-warm": {
+        "role": "primary",
+        "displayName": "Surviving Amber",
+        "canonical": "#e8a857",
+        "tonalRamp": [
+          "#8a6533",
+          "#e8a857",
+          "#f0c24b"
+        ]
+      },
+      "ink-hot": {
+        "role": "primary",
+        "displayName": "Hot Filament",
+        "canonical": "#f0c24b"
+      },
+      "ink-warm-dim": {
+        "role": "primary",
+        "displayName": "Warm Ink Shadow",
+        "canonical": "#8a6533"
+      },
+      "ink-cool": {
+        "role": "secondary",
+        "displayName": "Unconsolidated Cool",
+        "canonical": "#5b8fa8",
+        "tonalRamp": [
+          "#3a5a6b",
+          "#5b8fa8"
+        ]
+      },
+      "ink-cool-dim": {
+        "role": "secondary",
+        "displayName": "Cool Shadow",
+        "canonical": "#3a5a6b"
+      },
+      "ink-violet": {
+        "role": "tertiary",
+        "displayName": "Synthesis Violet",
+        "canonical": "#a78bda",
+        "tonalRamp": [
+          "#6b5490",
+          "#a78bda"
+        ]
+      },
+      "ink-violet-dim": {
+        "role": "tertiary",
+        "displayName": "Violet Shadow",
+        "canonical": "#6b5490"
+      },
+      "ink-danger": {
+        "role": "tertiary",
+        "displayName": "Lapse Rust",
+        "canonical": "#c4685a",
+        "tonalRamp": [
+          "#6b3d36",
+          "#c4685a"
+        ]
+      },
+      "ink-danger-dim": {
+        "role": "tertiary",
+        "displayName": "Rust Shadow",
+        "canonical": "#6b3d36"
+      },
+      "ink-lavender": {
+        "role": "tertiary",
+        "displayName": "Nocturne Lavender",
+        "canonical": "#a99ef0",
+        "tonalRamp": [
+          "#7d73b8",
+          "#a99ef0"
+        ]
+      },
+      "nocturne-hi": {
+        "role": "neutral",
+        "displayName": "Nocturne High",
+        "canonical": "#121020"
+      },
+      "nocturne-lo": {
+        "role": "neutral",
+        "displayName": "Nocturne Low",
+        "canonical": "#0c0b16"
+      },
+      "ink-paper": {
+        "role": "neutral",
+        "displayName": "Paper Ink",
+        "canonical": "#e6dfd0"
+      },
+      "text-primary": {
+        "role": "neutral",
+        "displayName": "Paper Ink",
+        "canonical": "#e6dfd0"
+      },
+      "text-dim": {
+        "role": "neutral",
+        "displayName": "Sepia Dim",
+        "canonical": "#8b8878"
+      },
+      "text-faint": {
+        "role": "neutral",
+        "displayName": "Sepia Faint",
+        "canonical": "#545248"
+      },
+      "accent-cta": {
+        "role": "primary",
+        "displayName": "CTA Accent",
+        "canonical": "#e8a857",
+        "tonalRamp": [
+          "#e8a857",
+          "#f0c24b"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Page titles and the largest single numbers. Neue Haas Grotesk Display Pro."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Section headings, topic titles, grade letters."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "All prose including the transcript. Futura."
+      },
+      "caption": {
+        "displayName": "Figure Caption",
+        "purpose": "The .fig-caption utility — Epoca Pro Medium Italic. Text that comments on the interface rather than being it: measurement bases, empty states, 'Fig. N —' labels."
+      },
+      "label": {
+        "displayName": "Data Label",
+        "purpose": "The .label-data utility — tabular figures, 0.02em tracking. All chrome controls, chips, and changing numbers. Drops to 10px uppercase / 0.16em in control chrome."
+      }
+    },
+    "themes": {
+      "dark": {
+        "displayName": "Night Atlas",
+        "void": "#0d0e12",
+        "note": "Default. Cajal's sepia ink inverted onto the night."
+      },
+      "light": {
+        "displayName": "Atlas by Daylight",
+        "void": "#f4efe4",
+        "note": "Re-tunes every token, keeps every meaning. One deliberate split: pure-chrome emphasis (focus ring, frame-hover/selected, dogear, primary button) routes through --color-accent-cta #3d5266 instead of amber. Semantic inks never do.",
+        "tokens": {
+          "void": "#f4efe4",
+          "surface": "#e3e4e2",
+          "surface-2": "#d2d4d0",
+          "surface-3": "#bcbfba",
+          "hairline": "#a5b2c0",
+          "ink-cool": "#1f6b86",
+          "ink-cool-dim": "#4f8ea3",
+          "ink-warm": "#8f5416",
+          "ink-warm-dim": "#a97a3a",
+          "ink-hot": "#7a5a10",
+          "ink-danger": "#a13527",
+          "ink-danger-dim": "#c06452",
+          "ink-violet": "#6b4fa0",
+          "ink-violet-dim": "#8f76b8",
+          "accent-cta": "#3d5266",
+          "accent-cta-hover": "#2e3f50",
+          "accent-masthead": "#0f6b78",
+          "ink-paper": "#2b2016",
+          "text-primary": "#2b2016",
+          "text-dim": "#6b5c46",
+          "text-faint": "#93856c"
+        }
+      }
+    },
+    "shadows": [
+      {
+        "name": "panel-rest",
+        "value": "inset 0 1px 0 rgba(228,231,237,0.04), 0 8px 20px -12px rgba(0,0,0,0.5)",
+        "purpose": "Every .panel. Hairline top catch-light plus a soft high-offset drop."
+      },
+      {
+        "name": "panel-raised",
+        "value": "inset 0 1px 0 rgba(228,231,237,0.05), 0 8px 20px -12px rgba(0,0,0,0.5)",
+        "purpose": ".panel-raised — same recipe, slightly brighter catch-light."
+      },
+      {
+        "name": "panel-plate",
+        "value": "inset 0 0 0 1px var(--color-ink-warm-dim), inset 0 1px 0 rgba(228,231,237,0.04), 0 8px 20px -12px rgba(0,0,0,0.5)",
+        "purpose": ".panel-plate — a full-frame warm inset hairline marking a published answer (the canonical reveal), not one item in a column."
+      },
+      {
+        "name": "panel-rest-light",
+        "value": "inset 0 1px 0 rgba(255,252,244,0.55), 0 8px 20px -12px rgba(43,32,22,0.22)",
+        "purpose": "Light theme. A pale ground needs a warm-ink lift, not a bruise-black drop."
+      },
+      {
+        "name": "frame-hover",
+        "value": "::after at inset -3px, 1px solid var(--color-ink-warm)",
+        "purpose": "Hover/selected frame drawn OUTSIDE the element's own border. Never `outline` — .focus-ring owns that channel. Clipped and invisible on an overflow-hidden host."
+      }
+    ],
+    "motion": [
+      {
+        "name": "dur-fast",
+        "value": "120ms",
+        "purpose": "Buttons and icon/ghost-button color transitions."
+      },
+      {
+        "name": "dur-base",
+        "value": "200ms",
+        "purpose": "Panel border/shadow, row and card hover, view-transition fades."
+      },
+      {
+        "name": "ease-out-soft",
+        "value": "cubic-bezier(0.25, 0.8, 0.35, 1)",
+        "purpose": "The shared easing for every --dur-base transition."
+      },
+      {
+        "name": "tilt-idle",
+        "value": "<=0.9deg sinusoid, ~30s period, per-card phase",
+        "purpose": "Idle drift on card-scale surfaces. Per-card phase so the surface breathes rather than marches."
+      },
+      {
+        "name": "tilt-pointer",
+        "value": "<=3.2deg, damped, perspective(1200px)",
+        "purpose": "Pointer-follow tilt. The corner under the cursor dips AWAY, as if pressed. Scaled down by SOFT_SCALE / RAIL_SCALE for the quieter tiers."
+      }
+    ],
+    "glass": [
+      {
+        "name": "panel",
+        "value": "color-mix(in srgb, var(--color-surface) 62%, transparent) + backdrop-filter: blur(12px)"
+      },
+      {
+        "name": "panel-raised",
+        "value": "color-mix(in srgb, var(--color-surface-2) 68%, transparent) + blur(12px)"
+      },
+      {
+        "name": "chat-glass panel",
+        "value": "76% — the transcript steps toward opacity so long-form reading sits on steadier ground"
+      },
+      {
+        "name": "chat-glass panel-raised",
+        "value": "82%"
+      },
+      {
+        "name": "light theme",
+        "value": "78 / 84 / 82 / 90 / 93% — a pale field behind the blur gives a card less to differentiate against"
+      }
+    ],
+    "tiltTiers": [
+      {
+        "name": "tilt-card",
+        "purpose": "Full amplitude. Coach and dashboard surfaces: topic cards, stat blocks, chart-host panels, artifact tiles, history rows."
+      },
+      {
+        "name": "tilt-card-soft",
+        "purpose": "Every chat-transcript card (the ritual family)."
+      },
+      {
+        "name": "tilt-card-rail",
+        "purpose": "Quieter still. Nav rows and small chrome controls. The multiplier is a CEILING lowered per-axis by a measured edge-throw cap, so a long thin row's sweep across its length is damped while its dip across its depth is untouched. Plates are exempt."
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The composer send action and other single primary calls. Hard right angle, accent fill, app-wide press scale.",
+      "html": "<button class=\"ds-btn-primary\">Send</button>",
+      "css": ".ds-btn-primary { background: var(--color-accent-cta, #e8a857); color: var(--color-void, #0d0e12); font-family: var(--font-body, 'Futura', 'Inter', sans-serif); font-size: 0.875rem; padding: 12px 16px; border: none; border-radius: 0; transition: background var(--dur-fast, 120ms) ease-out, transform var(--dur-fast, 120ms) ease-out; } .ds-btn-primary:hover { background: var(--color-accent-cta-hover, #f0c24b); } .ds-btn-primary:active { transform: scale(0.97); } .ds-btn-primary:focus-visible { outline: 2px solid var(--color-ink-warm, #e8a857); outline-offset: 2px; }"
+    },
+    {
+      "name": "Quiet Control",
+      "kind": "button",
+      "refersTo": "control-quiet",
+      "description": "CTRL_QUIET — the app-wide idiom for page-level chrome. Transparent at rest, hairline bordered, uppercase data label.",
+      "html": "<button class=\"ds-ctrl-quiet\">Attach</button>",
+      "css": ".ds-ctrl-quiet { font-family: var(--font-data, 'Futura', ui-monospace, monospace); font-variant-numeric: tabular-nums; font-size: 10px; text-transform: uppercase; letter-spacing: 0.16em; padding: 4px 10px; background: transparent; color: var(--color-text-dim, #8b8878); border: 1px solid var(--color-edge, #3b3f49); border-radius: 0; transition: color var(--dur-fast, 120ms) ease-out; } .ds-ctrl-quiet:hover { color: var(--color-text-primary, #e6dfd0); } .ds-ctrl-quiet:active { transform: scale(0.97); } .ds-ctrl-quiet:focus-visible { outline: 2px solid var(--color-ink-warm, #e8a857); outline-offset: 2px; }"
+    },
+    {
+      "name": "Filled Control (Learn / warm)",
+      "kind": "button",
+      "refersTo": "control-filled-warm",
+      "description": "ctrlFilled('warm') — an active toggle or lens in the Learn environment. Learn accents warm (encoding new ground); Review accents cool.",
+      "html": "<button class=\"ds-ctrl-filled-warm\">Preview</button>",
+      "css": ".ds-ctrl-filled-warm { font-family: var(--font-data, 'Futura', ui-monospace, monospace); font-size: 10px; text-transform: uppercase; letter-spacing: 0.16em; padding: 4px 10px; background: color-mix(in srgb, var(--color-ink-warm, #e8a857) 16%, transparent); color: var(--color-ink-warm, #e8a857); border: 1px solid var(--color-ink-warm-dim, #8a6533); border-radius: 0; transition: color var(--dur-fast, 120ms) ease-out; } .ds-ctrl-filled-warm:active { transform: scale(0.97); } .ds-ctrl-filled-warm:focus-visible { outline: 2px solid var(--color-ink-warm, #e8a857); outline-offset: 2px; }"
+    },
+    {
+      "name": "Filled Control (Review / cool)",
+      "kind": "button",
+      "refersTo": "control-filled-cool",
+      "description": "ctrlFilled('cool') — the same control in the Review environment. Returns a STATIC template string so Tailwind's JIT sees both literal class lists.",
+      "html": "<button class=\"ds-ctrl-filled-cool\">Focus</button>",
+      "css": ".ds-ctrl-filled-cool { font-family: var(--font-data, 'Futura', ui-monospace, monospace); font-size: 10px; text-transform: uppercase; letter-spacing: 0.16em; padding: 4px 10px; background: color-mix(in srgb, var(--color-ink-cool, #5b8fa8) 16%, transparent); color: var(--color-ink-cool, #5b8fa8); border: 1px solid var(--color-ink-cool-dim, #3a5a6b); border-radius: 0; transition: color var(--dur-fast, 120ms) ease-out; } .ds-ctrl-filled-cool:active { transform: scale(0.97); } .ds-ctrl-filled-cool:focus-visible { outline: 2px solid var(--color-ink-warm, #e8a857); outline-offset: 2px; }"
+    },
+    {
+      "name": "Glass Panel",
+      "kind": "card",
+      "refersTo": "panel",
+      "description": "The base surface. Translucent over a 12px blur so the ambient field reads through as weather behind text.",
+      "html": "<div class=\"ds-panel\"><div class=\"ds-panel-title\">Due today</div><p class=\"ds-panel-body\">Eighteen items across four topics.</p></div>",
+      "css": ".ds-panel { background: color-mix(in srgb, var(--color-surface, #14151c) 62%, transparent); border: 1px solid var(--color-edge, #3b3f49); border-radius: 0; box-shadow: inset 0 1px 0 rgba(228,231,237,0.04), 0 8px 20px -12px rgba(0,0,0,0.5); backdrop-filter: blur(12px); padding: 10px 12px; transition: border-color 200ms cubic-bezier(0.25,0.8,0.35,1), box-shadow 200ms cubic-bezier(0.25,0.8,0.35,1); } .ds-panel-title { font-family: var(--font-display, 'Space Grotesk', sans-serif); font-size: 1.25rem; color: var(--color-text-primary, #e6dfd0); margin: 0 0 4px; } .ds-panel-body { font-family: var(--font-body, 'Futura', 'Inter', sans-serif); font-size: 0.875rem; line-height: 1.6; color: var(--color-text-dim, #8b8878); margin: 0; }"
+    },
+    {
+      "name": "Specimen Plate",
+      "kind": "card",
+      "refersTo": "panel-plate",
+      "description": "The engraved specimen label — a full-frame warm inset hairline instead of a left-edge accent bar, because a canonical reveal is a published answer, not one item in a column.",
+      "html": "<div class=\"ds-plate\"><div class=\"ds-plate-cap\">Fig. 3 — canonical</div><p class=\"ds-plate-body\">The Runge–Lenz vector is conserved only for a strict inverse-square force.</p></div>",
+      "css": ".ds-plate { background: color-mix(in srgb, var(--color-surface, #14151c) 68%, transparent); border: 1px solid var(--color-edge, #3b3f49); border-radius: 0; box-shadow: inset 0 0 0 1px var(--color-ink-warm-dim, #8a6533), inset 0 1px 0 rgba(228,231,237,0.04), 0 8px 20px -12px rgba(0,0,0,0.5); backdrop-filter: blur(12px); padding: 10px 12px; } .ds-plate-cap { font-family: var(--font-serif, 'Fraunces', Georgia, serif); font-style: italic; font-weight: 500; font-size: 0.75rem; letter-spacing: 0.01em; color: var(--color-text-dim, #8b8878); margin-bottom: 4px; } .ds-plate-body { font-family: var(--font-body, 'Futura', 'Inter', sans-serif); font-size: 0.875rem; line-height: 1.6; color: var(--color-text-primary, #e6dfd0); margin: 0; }"
+    },
+    {
+      "name": "Transcript Mark",
+      "kind": "custom",
+      "refersTo": "panel",
+      "description": "MarkFrame — the shared skeleton behind ~20 structured transcript card kinds. Soft tilt, entry animation, 92% max width, four-ink taxonomy applied to the left accent.",
+      "html": "<div class=\"ds-mark ds-mark-cool\"><div class=\"ds-mark-label\">STEPS · 3</div><p class=\"ds-mark-body\">Expand the potential about the circular orbit.</p></div>",
+      "css": ".ds-mark { position: relative; max-width: 92%; display: flex; flex-direction: column; gap: 6px; background: color-mix(in srgb, var(--color-surface, #14151c) 76%, transparent); border: 1px solid var(--color-edge, #3b3f49); border-left: 2px solid var(--mark-ink, #5b8fa8); border-radius: 0; padding: 10px 12px; box-shadow: inset 0 1px 0 rgba(228,231,237,0.04), 0 8px 20px -12px rgba(0,0,0,0.5); backdrop-filter: blur(12px); } .ds-mark-cool { --mark-ink: var(--color-ink-cool, #5b8fa8); } .ds-mark-label { font-family: var(--font-data, 'Futura', ui-monospace, monospace); font-variant-numeric: tabular-nums; font-size: 10px; text-transform: uppercase; letter-spacing: 0.16em; color: var(--mark-ink); } .ds-mark-body { font-family: var(--font-body, 'Futura', 'Inter', sans-serif); font-size: 0.875rem; line-height: 1.6; color: var(--color-text-primary, #e6dfd0); margin: 0; }"
+    },
+    {
+      "name": "Chip",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "Attachment chips, focus-area chips, QUICK receipt markers. Data label on a third-surface wash.",
+      "html": "<span class=\"ds-chip\">quals-2019.pdf</span>",
+      "css": ".ds-chip { display: inline-flex; align-items: center; gap: 4px; font-family: var(--font-data, 'Futura', ui-monospace, monospace); font-variant-numeric: tabular-nums; font-size: 10px; letter-spacing: 0.02em; padding: 2px 6px; background: color-mix(in srgb, var(--color-surface-3, #262937) 68%, transparent); color: var(--color-text-dim, #8b8878); border: 1px solid var(--color-edge, #3b3f49); border-radius: 0; }"
+    },
+    {
+      "name": "Nav Item",
+      "kind": "nav",
+      "refersTo": "control-quiet",
+      "description": "Sidebar rail item in the nocturne register — a distinct near-black-violet plane with lavender ink, dogeared when active.",
+      "html": "<nav class=\"ds-rail\"><button class=\"ds-nav-item\">Learn</button><button class=\"ds-nav-item ds-nav-active\">Review</button><button class=\"ds-nav-item\">Grades</button></nav>",
+      "css": ".ds-rail { display: flex; flex-direction: column; gap: 2px; padding: 8px; background: linear-gradient(var(--color-nocturne-hi, #121020), var(--color-nocturne-lo, #0c0b16)); } .ds-nav-item { position: relative; text-align: left; font-family: var(--font-data, 'Futura', ui-monospace, monospace); font-size: 10px; text-transform: uppercase; letter-spacing: 0.16em; padding: 6px 10px; background: transparent; color: var(--color-ink-lavender-dim, #7d73b8); border: 1px solid transparent; border-radius: 0; transition: color var(--dur-fast, 120ms) ease-out, background-color var(--dur-base, 200ms) cubic-bezier(0.25,0.8,0.35,1); } .ds-nav-item:hover { color: var(--color-ink-lavender, #a99ef0); background-color: color-mix(in srgb, var(--color-ink-lavender, #a99ef0) 8%, transparent); } .ds-nav-active { color: var(--color-ink-lavender, #a99ef0); border-color: color-mix(in srgb, var(--color-ink-lavender-dim, #7d73b8) 60%, transparent); } .ds-nav-active::before { content: ''; position: absolute; top: 0; right: 0; width: 0; height: 0; border-top: 9px solid var(--color-ink-warm, #e8a857); border-left: 9px solid transparent; } .ds-nav-item:focus-visible { outline: 2px solid var(--color-ink-warm, #e8a857); outline-offset: 2px; }"
+    },
+    {
+      "name": "Dendrite Divider",
+      "kind": "custom",
+      "description": "Replaces the horizontal rule under section headers: one axon line, two short dendrite branches, a node dot, at fixed geometry so the branch never distorts.",
+      "html": "<div class=\"ds-dendrite\"><svg width=\"48\" height=\"12\" viewBox=\"0 0 48 12\" fill=\"none\"><path d=\"M0 6h18M18 6l6-4M18 6l6 4M30 6h18\" stroke=\"var(--color-hairline, #262a36)\" stroke-width=\"1\"/><circle cx=\"27\" cy=\"6\" r=\"2\" fill=\"var(--color-text-faint, #545248)\"/></svg><span class=\"ds-dendrite-line\"></span></div>",
+      "css": ".ds-dendrite { display: flex; align-items: center; gap: 0; } .ds-dendrite-line { flex: 1; height: 1px; background: var(--color-hairline, #262a36); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Night Atlas",
+    "overview": "Cajal drew the nervous system in sepia ink on paper. This system is that atlas inverted onto the night: a void warmed slightly toward sepia, text in warm paper-ink rather than cold white, and accents in the colors ink takes when it is the only bright thing in a dark room. Every card is a specimen plate, every divider is a dendrite, every figure caption reads 'Fig. N —'. The metaphor is load-bearing. This app is a window onto a spaced-repetition engine, and it exists so a learner sits down for half an hour and retrieves difficult material from memory. An atlas is the right register for that: a record made carefully, over time, of something the maker was trying to understand. So the interface behaves like an instrument panel rather than a product tour — it states what it measured, it does not congratulate, and it holds a dense transcript legibly for the length of a real sitting. The system's own tension is that it is simultaneously very dark, very sharp, and very physical: right angles everywhere, hairline borders, translucent glass over an ambient field, and a card-scale 3D tilt just barely above the threshold of perception. Nothing here is soft. But nothing shouts either — the whole palette lives in a narrow band of luminance, and the loudest thing on screen is usually one amber word.",
+    "keyCharacteristics": [
+      "Warm-black ground (#0d0e12), warm paper text (#e6dfd0) — never a cold gray/white pairing",
+      "Zero radius everywhere by decree; rounded-full is the single reserved exception for organic marks",
+      "Semantic ink: color encodes memory state, not visual hierarchy",
+      "Translucent glass panels (62–82% fill, 12px blur) over an ambient field",
+      "Near-subliminal card physics — slow idle drift plus damped pointer-follow tilt",
+      "Two motion durations for the entire app: 120ms and 200ms",
+      "Density as a feature — a reading surface for thirty-minute sittings"
+    ],
+    "rules": [
+      {
+        "name": "The Consolidation Axis Rule",
+        "body": "Cool and warm are not accent 1 and accent 2. Cool means not yet consolidated; warm means survived. A warm accent on something unconsolidated is a defect, not a style choice. Nothing may be recolored along this axis for visual balance.",
+        "section": "colors"
+      },
+      {
+        "name": "The Reserved Danger Rule",
+        "body": "Danger ink marks a learner's struggle or a lapsed memory. Never a validation error, a failed network call, a destructive-action button, or a generic alert.",
+        "section": "colors"
+      },
+      {
+        "name": "The Off-Axis Violet Rule",
+        "body": "Violet marks synthesis and creation. It must never become a third station on the consolidation ramp, and never appear simply because a surface needs a third color.",
+        "section": "colors"
+      },
+      {
+        "name": "The Two Themes, One Semantics Rule",
+        "body": "Atlas by Daylight re-tunes every token and keeps every meaning. One deliberate split: pure-chrome emphasis (focus ring, frame, dogear, primary button) routes through --color-accent-cta instead of amber. Semantic inks never do.",
+        "section": "colors"
+      },
+      {
+        "name": "The Tabular Rule",
+        "body": "Every number that can change in place uses .label-data. Tabular figures mean a counter or timer never makes the layout twitch.",
+        "section": "typography"
+      },
+      {
+        "name": "The Caption-Is-Commentary Rule",
+        "body": "Italic serif is not emphasis inside prose. It marks text that is about the interface — a measurement's basis, an empty state, a figure label.",
+        "section": "typography"
+      },
+      {
+        "name": "The Math-Renders-Everywhere Rule",
+        "body": "Learner content is graduate-level and routinely contains LaTeX. Every slot that can hold learner or tutor text — titles, chips, labels, captions, not just prose bodies — passes through the math renderer. A raw $ on screen is a bug.",
+        "section": "typography"
+      },
+      {
+        "name": "The Three Tilt Tiers Rule",
+        "body": "tilt-card (full) for coach/dashboard surfaces, tilt-card-soft for transcript cards, tilt-card-rail for sidebar nav and small chrome. Same physics at three amplitudes, not three tunings.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Chart Doesn't Tilt Rule",
+        "body": "A chart's SVG never tilts. The panel hosting it does.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Right Angle Rule",
+        "body": "Do not reintroduce a radius, at any value, on any surface. If a shape needs softening, it is the wrong shape. rounded-full on an organic mark is the only exception.",
+        "section": "shapes"
+      },
+      {
+        "name": "The Scarce Dogear Rule",
+        "body": "Active only, by decree. A dogear on every card in a list is wallpaper; it means something because most cards don't have one.",
+        "section": "shapes"
+      },
+      {
+        "name": "The Unclipped Frame Rule",
+        "body": "Never apply .frame-hover or .frame-selected to an overflow-hidden host — the inset-negative ::after gets clipped and silently disappears. Give the frame its own unclipped wrapper, or skip it on that surface.",
+        "section": "shapes"
+      },
+      {
+        "name": "The Formatting Channel Rule",
+        "body": "MCP bridge cards format prose the tutor would have written anyway — advisory, non-blocking, never load-bearing for the learning loop. A card the loop depends on is a design error, not a richer card.",
+        "section": "components"
+      },
+      {
+        "name": "The Density Over Ceremony Rule",
+        "body": "Transcript cards stay compact and scannable. No mark may grow into a full-width panel that breaks the transcript's rhythm; the 92% cap and tight padding are what make twenty card kinds feel like one surface.",
+        "section": "components"
+      },
+      {
+        "name": "The Edge-Throw Rule",
+        "body": "A rotation's felt strength is how far it throws the edge it pivots about — (width/2)·sin(rotateY), (height/2)·sin(rotateX) — not its angle. The rail tier caps edge excursion per axis rather than fixing one angle, so a full-width row inside a plate loses its long-axis sweep and keeps its short-axis dip. Plates stay unclamped.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do encode state in ink: cool for unconsolidated, warm for survived, violet for synthesis, danger for lapse.",
+      "Do route every learner- or tutor-authored string through the math renderer, including titles, chips, labels, and captions.",
+      "Do use the two motion tokens — --dur-fast 120ms for buttons and color shifts, --dur-base 200ms with --ease-out-soft for panels, rows, cards, and view transitions.",
+      "Do reach for .panel, .panel-raised, .panel-plate, .label-data, .fig-caption, .focus-ring, and the CTRL recipes before writing new chrome.",
+      "Do pass EnvAccent explicitly on shared components (Learn warm, Review cool), and keep semantic inks out of it.",
+      "Do give a .frame-hover or .frame-selected element its own unclipped wrapper when the natural host is overflow-hidden.",
+      "Do respect prefers-reduced-motion — the app-wide kill-switch covers idle drift, pointer tilt, and entry animations.",
+      "Do keep the transcript dense. It is read for thirty minutes at a stretch."
+    ],
+    "donts": [
+      "Don't reintroduce a corner radius anywhere. rounded-full on organic marks is the only exception.",
+      "Don't use danger ink for validation errors, failed requests, or destructive-action buttons.",
+      "Don't promote violet to a third consolidation state, or add a fifth ink because a surface needs another color.",
+      "Don't scale anything that isn't a real <button> on hover or press — scale is a button-only affordance.",
+      "Don't scatter dogears. Active only.",
+      "Don't build a bridge card the learning loop depends on. Cards format; they never carry authority.",
+      "Don't invent a bespoke focus treatment. .focus-ring owns outline; the frame vocabulary uses ::after so a 2px focus ring always outranks a 1px hover frame.",
+      "Don't tilt a chart's SVG. Tilt the panel that hosts it.",
+      "Don't treat the open fallback typefaces as an alternate design. They are a degradation path; the licensed mapping is the system."
+    ]
+  }
+}
