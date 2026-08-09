@@ -41,11 +41,14 @@ export const QueueRail = memo(function QueueRail({
   completedGrades,
   hasCurrent,
   currentNodeId,
+  remainingLabel,
 }: {
   total: number
   completedGrades: GradeResult[]
   hasCurrent: boolean
-  currentNodeId?: string | null
+  currentNodeId?: string
+  /** "3 left · about 20 min", priced at the learner's measured pace. */
+  remainingLabel?: string | null | null
 }) {
   if (total <= 1) return null
   const completedCount = completedGrades.length
@@ -80,6 +83,9 @@ export const QueueRail = memo(function QueueRail({
         // Remaining — hollow hairline, NO title/aria-label/identifying text.
         return <span key={i} className="h-2 w-2 rounded-full shrink-0 border border-[var(--color-hairline)]" />
       })}
+      {remainingLabel && (
+        <span className="fig-caption shrink-0 tabular-nums ml-2">{remainingLabel}</span>
+      )}
     </div>
   )
 })

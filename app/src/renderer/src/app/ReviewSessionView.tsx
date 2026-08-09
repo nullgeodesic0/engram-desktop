@@ -49,13 +49,14 @@ import { TicketCard } from '../components/ritual/TicketCard'
 import { ActionChips, type SuggestedAction } from '../components/ritual/ActionChips'
 import { bridgeUiIntent } from '../../../shared/bridgeUiIntents'
 import { handwritingRequestMessage } from '../shared/handwritingRequest'
-import { planSitting, type PaceModel } from '../../../shared/sittingPace'
+import { planSitting, secondsForTopic, humanMinutes, type PaceModel } from '../../../shared/sittingPace'
 import { saveDraft, loadDraft, clearDraft } from '../shared/composerDrafts'
 import { ReadyRoomPlate } from '../components/ritual/ReadyRoomPlate'
 import { ReviewHorizon } from '../components/ReviewHorizon'
 import { InkWell } from '../components/ritual/InkWell'
 import { FlowChain } from '../components/ritual/FlowChain'
 import { ExportCommand } from '../components/ui/ExportCommand'
+import { Button } from '../components/ui/Button'
 import { trailingRecalled } from '../../../shared/gradeResult'
 import { invalidateSearchIndex } from '../shared/searchIndex'
 import { computeDueBuckets } from '../shared/dueBuckets'
@@ -391,6 +392,19 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
       setHoldingCount(holding)
     })
   }
+
+  // ITEM 5 — the queue goes stale the moment you leave the app: a sitting in
+  // another window, or simply midnight passing, changes what is due. Refreshed
+  // on focus so the plate is never showing yesterday's answer. Read-only and
+  // cheap; the pace model has its own hourly cache.
+  useEffect(() => {
+    const onFocus = () => {
+      if (phase !== 'in-session') refreshQueue()
+    }
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase])
 
   // Measured per-topic pace, read once per mount (the main process caches it
   // hourly — see paceScan.ts).
@@ -1240,6 +1254,20 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
   }, [latestProbe, queue])
   // The sweep between items — Review's counterpart to Learn's node crossing —
 
+  // ITEM 8 — how much of the sitting is left, in MINUTES rather than items.
+  // "3 of 5" says nothing about whether to keep going when one of the three
+  // is a fourteen-minute derivation; time is the quantity the learner is
+  // actually budgeting. Priced at their own measured pace, same model the
+  // plate uses.
+  const remainingTimeLabel = useMemo(() => {
+    if (!pace) return null
+    const done = sessionGrades.length
+    const left = queueRef.current.slice(done, sessionTotal)
+    if (left.length === 0) return null
+    const secs = left.reduce((sum, d) => sum + secondsForTopic(pace, d.topic).seconds, 0)
+    return `${left.length} left · about ${humanMinutes(secs)}`
+  }, [pace, sessionGrades.length, sessionTotal])
+
   // ── Drafts ───────────────────────────────────────────────────────────────
   // A half-written recall answer is the most expensive thing this app can
   // lose: the retrieval has already happened, and re-typing it does not
@@ -2036,6 +2064,7 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
                               completedGrades={sessionGrades}
                               hasCurrent
                               currentNodeId={current.id}
+                              remainingLabel={remainingTimeLabel}
                             />
                           )}
                         </div>
@@ -2187,8 +2216,17 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
                   </div>
                 )}
                 {busy && stalled && (
-                  <div className="fig-caption text-[var(--color-ink-warm)]">
-                    No response in over a minute — the app is still running; Stop above cancels it if you'd rather not wait.
+                  // ITEM 6 — a stall used to point at a button somewhere else
+                  // on screen. The action belongs where the problem is
+                  // reported, and stopping is safe: every graded item is
+                  // already filed, so nothing in hand is lost.
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <span className="fig-caption text-[var(--color-ink-warm)]">
+                      No response in over a minute. Everything already graded is filed — stopping loses nothing.
+                    </span>
+                    <Button variant="ghost" onClick={stopSession}>
+                      Stop and keep what is graded
+                    </Button>
                   </div>
                 )}
                 {log.length > 0 && (

@@ -268,6 +268,7 @@ export function HomeView({
   const [activeExperiment, setActiveExperiment] = useState<ActiveExperiment | null>(null)
   const [pendingProductions, setPendingProductions] = useState<number>(0)
   const [updateBehind, setUpdateBehind] = useState(false)
+  const [paceSeconds, setPaceSeconds] = useState<number | null>(null)
   // Which "Continue learning" topic actually has an in-progress Learn
   // session — the one card in that group that earns `.dogear` ("the one
   // you're in"). Same `lastSessionFor('learn', …)` probe LearnSessionView's
@@ -283,6 +284,17 @@ export function HomeView({
       .pendingProductions()
       .then((r) => {
         if (alive && r && 'pending' in r) setPendingProductions(r.pending)
+      })
+      .catch(() => {})
+    // What the due queue actually costs at this learner's measured pace. The
+    // plugin's own hook still says "~7 min" for 12 items (about 35s each);
+    // measurement puts the median nearer 4.6 MINUTES an item, so that number
+    // understates the real ask by roughly 8x and is the first thing a learner
+    // reads each day.
+    window.engram
+      .sittingPace()
+      .then((m) => {
+        if (alive && m && m.overallMedianSeconds) setPaceSeconds(m.overallMedianSeconds)
       })
       .catch(() => {})
     // Cached only — no network from Home. The daily auto-check refreshes it.
@@ -588,6 +600,12 @@ export function HomeView({
             </div>
 
             <div className="fig-caption">Fig. — items awaiting free recall; streak and the coming week beneath</div>
+
+            {stats.due_now > 0 && paceSeconds !== null && (
+              <div className="fig-caption">
+                {`clearing all ${stats.due_now} would take about ${Math.round((stats.due_now * paceSeconds) / 60)} min at your pace`}
+              </div>
+            )}
 
             {stats.due_now > 0 && (
               <div className="flex gap-3 items-center">

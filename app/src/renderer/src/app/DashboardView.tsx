@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { type PaceModel, humanMinutes } from '../../../shared/sittingPace'
 import type { EngramStats, ReceiptsHistory, ReceiptItem, TopicGraph, TopicListEntry, ActiveExperiment } from '../../../shared/types'
 import { CoachSessionPanel } from '../components/CoachSessionPanel'
 import { SkeletonBar, SkeletonGrid } from '../components/Skeleton'
@@ -111,6 +112,7 @@ interface DashboardViewProps {
 }
 
 export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts, coachHomeSignal, onRetestMisconception, reviewSessionLive, misconceptionsEpoch, onMisconceptionResolved }: DashboardViewProps = {}) {
+  const [pace, setPace] = useState<PaceModel | null>(null)
   const [stats, setStats] = useState<EngramStats | null>(null)
   const [history, setHistory] = useState<ReceiptsHistory | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -138,6 +140,16 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts, coachHomeSi
   // from the ref's own last-seen value, never on mount (a fresh signal of 0
   // must not close a drilldown that was never open).
   const coachHomeSignalRef = useRef(0)
+  // Measured per-item cost, per topic. This is genuinely interesting data
+  // about the learner's own work — a graduate derivation costing 4x a
+  // vocabulary item is a fact about the subject, not a failing — and until
+  // now it existed only inside the estimator.
+  useEffect(() => {
+    let alive = true
+    window.engram.sittingPace().then((m) => { if (alive) setPace(m) }).catch(() => {})
+    return () => { alive = false }
+  }, [])
+
   useEffect(() => {
     if (coachHomeSignal !== undefined && coachHomeSignal !== coachHomeSignalRef.current) {
       setOpenTopic(null)
@@ -511,6 +523,32 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts, coachHomeSi
           </div>
         )}
       </Section>
+
+      {pace && pace.totalSamples > 0 && (
+        <Section title="What an item costs you">
+          <div className="flex flex-col gap-1">
+            {Object.values(pace.byTopic)
+              .sort((a, b) => b.medianSeconds - a.medianSeconds)
+              .map((t) => (
+                <div key={t.topic} className="flex items-baseline gap-3">
+                  <span className="text-xs text-[var(--color-text-primary)] flex-1 min-w-0 truncate">{t.topic}</span>
+                  <span className="label-data text-xs tabular-nums text-[var(--color-ink-warm)]">
+                    {humanMinutes(t.medianSeconds)}
+                  </span>
+                  <span className="fig-caption tabular-nums w-16 text-right">
+                    {t.samples === 1 ? '1 item' : `${t.samples} items`}
+                  </span>
+                </div>
+              ))}
+          </div>
+          <div className="fig-caption">
+            Fig. — median wall-clock per review item, measured from your own sittings. A graduate
+            derivation costing several times a short factual item is a fact about the subject, not a
+            failing; it is also why a flat &ldquo;5 min&rdquo; estimate was wrong. Topics with one or two
+            items are shown for completeness but are not yet used for planning.
+          </div>
+        </Section>
+      )}
 
       <Section title="Momentum">
         {/* stats.momentum — the engine's own compute_momentum, not the port

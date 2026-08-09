@@ -6,6 +6,7 @@ import { Button } from '../ui/Button'
 import { PlateFigure } from '../ui/PlateFigure'
 import { SegmentedControl } from '../ui/SegmentedControl'
 import { planSitting, secondsForTopic, humanMinutes, type PaceModel } from '../../../../shared/sittingPace'
+import { loadSittingOutcome, describeAccuracy } from '../../shared/lastSitting'
 import { capForMins, coveredCount, type SittingMins, type SittingStyle } from '../../shared/reviewKickoff'
 import type { SittingPrefs } from '../../shared/sittingPrefs'
 
@@ -120,6 +121,26 @@ export const ReadyRoomPlate = memo(function ReadyRoomPlate({
     .filter((d) => !prefs.focusTopic || d.topic === prefs.focusTopic)
     .map((d) => d.topic)
   const plan = pace ? planSitting(prefs.mins, queueTopics, pace) : null
+
+  // ITEM 4 — what the FIRST item costs, when that alone is a sitting. A
+  // 14-minute stat-mech item inside a "5 min" budget is an ambush; saying so
+  // up front lets the learner pick a different budget instead of abandoning
+  // the sitting halfway.
+  const firstCost = pace && queueTopics[0] ? secondsForTopic(pace, queueTopics[0]) : null
+  const firstIsLong = firstCost !== null && firstCost.seconds > 8 * 60
+
+  // ITEM 10 — how the last estimate actually did. An estimate nobody checks
+  // is a guess in a confident font.
+  const overdueItems = dueItems.filter((d) => (d.overdue_days ?? 0) > 0)
+  const overdueSpread =
+    overdueItems.length > 0
+      ? `${overdueItems.length} of ${dueItems.length} already overdue, the oldest by ${Math.max(
+          ...overdueItems.map((d) => d.overdue_days ?? 0),
+        )} days — the engine serves those first`
+      : null
+
+  const lastOutcome = loadSittingOutcome()
+  const accuracy = lastOutcome ? describeAccuracy(lastOutcome) : null
   const paceBasis = pace && queueTopics[0] ? secondsForTopic(pace, queueTopics[0]) : null
 
   return (
@@ -185,6 +206,29 @@ export const ReadyRoomPlate = memo(function ReadyRoomPlate({
           anywhere in this file — the picker reads counts, never content. */}
       <div className="flex flex-col gap-2 border-t border-[var(--color-hairline)] pt-3">
         <div className="flex items-center gap-3 flex-wrap">
+          {/* ITEM 3 — "I have to leave at 21:40" is how the constraint
+              actually arrives; a duration is arithmetic the learner should
+              not have to do. Snaps to the nearest offered budget rather than
+              inventing a fourth. */}
+          <input
+            type="time"
+            aria-label="Out by"
+            title="Set when you have to stop — the budget snaps to the nearest option"
+            className="focus-ring panel px-2 py-1 text-xs text-[var(--color-text-primary)]"
+            onChange={(e) => {
+              const [h, m] = e.target.value.split(':').map(Number)
+              if (!Number.isFinite(h) || !Number.isFinite(m)) return
+              const now = new Date()
+              const end = new Date(now)
+              end.setHours(h, m, 0, 0)
+              if (end.getTime() <= now.getTime()) end.setDate(end.getDate() + 1)
+              const mins = (end.getTime() - now.getTime()) / 60000
+              const nearest = ([5, 10, 25] as SittingMins[]).reduce((a, b) =>
+                Math.abs(b - mins) < Math.abs(a - mins) ? b : a,
+              )
+              onPrefsChange({ ...prefs, mins: nearest })
+            }}
+          />
           <SegmentedControl<`${SittingMins}`>
             options={MINS_OPTIONS}
             value={`${prefs.mins}`}
@@ -209,6 +253,29 @@ export const ReadyRoomPlate = memo(function ReadyRoomPlate({
       </div>
 
       <div className="flex gap-3 items-center">
+        {/* ITEM 7 — the queue's own shape. `overdue_days` rides on every due
+            item and was never shown, so the ordering looked arbitrary when it
+            is in fact most-overdue-first. */}
+        {/* ITEM 9 — nothing due used to be a dead end: a Start button over an
+            empty queue. An empty queue is the system working, and the useful
+            next move is learning something new, so say both. */}
+        {dueItems.length === 0 && (
+          <div className="fig-caption">
+            Nothing is due — the schedule is ahead of you. Reviewing early would teach the engine that
+            recall was easier than it was, so the honest move is to leave it and learn something new.
+          </div>
+        )}
+
+        {overdueSpread && <div className="fig-caption">{overdueSpread}</div>}
+
+        {firstIsLong && (
+          <div className="fig-caption text-[var(--color-ink-warm)]">
+            {`heads up — the first item here usually takes about ${humanMinutes(firstCost.seconds)} on its own`}
+          </div>
+        )}
+
+        {accuracy && <div className="fig-caption">{accuracy}</div>}
+
         {plan && plan.items > 0 && (
           <div className="fig-caption">
             {`${prefs.mins} min covers about ${plan.items} ${plan.items === 1 ? 'item' : 'items'} — ${humanMinutes(plan.predictedSeconds)} at your pace`}
