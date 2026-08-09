@@ -294,6 +294,17 @@ const PINNED_WRITERS: Record<string, string> = {
   // file's afterAll. Never runs outside `npm run test`; never touches
   // anything but its own tmpdir directory.
   'main/deepLink.test.ts': 'os tmpdir — ephemeral test fixtures (paper/notes/archive files + a symlink)',
+  // Engram Mobile link layer (2026-08-09). Both stores take their path by
+  // INJECTION rather than deriving one, and both are wired in main to fixed
+  // app-userData filenames — see main/link/README-less note in LinkServer.ts.
+  // Neither module imports the learning home, spawns anything, or knows what
+  // a receipt is: the queue is inert until a live session drains it, which is
+  // what keeps the phone from becoming a second author of engine state.
+  'main/link/outboxStore.ts': 'app userData — outbox.jsonl, the append-only queue of evidence received from the phone (path injected)',
+  'main/link/pairing.ts': 'app userData — paired-devices.json, SHA-256 token digests only, never a usable credential (path injected)',
+  'main/link/outboxStore.test.ts': 'os tmpdir — ephemeral mkdtemp fixtures for the queue durability tests, removed in afterEach',
+  'main/link/pairing.test.ts': 'os tmpdir — ephemeral mkdtemp fixtures for the pairing tests, removed in afterEach',
+  'main/link/LinkServer.test.ts': 'os tmpdir — ephemeral mkdtemp fixtures backing the injected stores, removed in afterEach',
 }
 
 /** The only module allowed to name the learning home on a write. */
@@ -881,6 +892,96 @@ try {
   }
 } catch {
   console.log('  (D5.overlayApplied skipped — no plugin install manifest on this machine)')
+}
+
+// ===========================================================================
+// SECTION 6 — the mobile boundary: the phone is a client, never an author
+// ===========================================================================
+// The iOS companion reaches this app over the network, and what it sends
+// becomes learner evidence. Sections 1–2 already prove the DESKTOP never
+// authors engine state; this section proves the link layer did not quietly
+// open a second door. Three properties, each cheap to check and expensive to
+// lose:
+//
+//   (a) the source-stamp table is pinned, because it IS the honesty
+//       mechanism — a stamp added or repointed silently is how recognition
+//       evidence gets laundered into the free-recall pool;
+//   (b) no module under main/link/ names engram.py, spawns a process, or
+//       names the learning home — the queue is inert until a live session
+//       drains it;
+//   (c) the wire schema keeps refusing a client-supplied rating or stamp.
+
+const LINK_DIR_PREFIX = 'main/link/'
+const linkFiles = FILES.filter((f) => f.startsWith(LINK_DIR_PREFIX) && !f.endsWith('.test.ts'))
+
+// (a) The stamp table, pinned value by value.
+const PINNED_SOURCE_STAMPS: Record<string, string> = {
+  checkpoint: 'quick-mc',
+  connect: 'mobile-mc',
+  cloze: 'mobile-cloze',
+  ladder: 'mobile-ladder',
+  // `self` is the load-bearing one: a spoken or typed production on the phone
+  // is ordinary free recall, assessor-graded and uncapped. Repointing this to
+  // a mobile-* value would silently demote every honest production the
+  // companion ever collected.
+  recall: 'self',
+}
+const protocolText = TEXT.get('shared/linkProtocol.ts') ?? ''
+if (protocolText) {
+  for (const [kind, stamp] of Object.entries(PINNED_SOURCE_STAMPS)) {
+    if (!new RegExp(`${kind}:\\s*'${stamp}'`).test(protocolText)) {
+      fail(
+        'D6.sourceStamps',
+        `shared/linkProtocol.ts no longer maps ${kind} → '${stamp}'.`,
+        'The stamp table is the mobile bargain’s enforcement point: it is what keeps recognition-grade evidence distinguishable from free recall in every stat, audit, and export that ever reads a receipt. Changing a mapping — especially repointing `recall` away from `self` — is a doctrine change, not a refactor. Re-pin here in the same commit and say why.',
+      )
+    }
+  }
+} else {
+  fail(
+    'D6.sourceStamps',
+    'shared/linkProtocol.ts is missing — the mobile source-stamp table has no source of truth.',
+    'The link layer’s stamps are pinned here against that file. If the protocol moved, move the pin in the same commit; if the mobile surface was removed, remove this section and its pins together.',
+  )
+}
+
+// (b) The link layer stays inert.
+//
+// Matched against CODE, not prose. These modules are expected to describe the
+// boundary they keep — "never runs engram.py", "never touches
+// ~/.claude/learning/" — and a check that made documenting the rule into a
+// violation would train authors to delete the explanation, which is the
+// opposite of what this file is for.
+function codeOnly(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/.*$/gm, '$1')
+}
+const LINK_FORBIDDEN: Array<[RegExp, string]> = [
+  [/engram\.py/, 'names engram.py'],
+  [/\bspawn\b|\bexecFile\b|\bexecSync\b|child_process/, 'spawns a process'],
+  [/\.claude[/'"`]|learning[/'"`]home|getLearningHome/, 'names the learning home'],
+]
+for (const f of linkFiles) {
+  const t = codeOnly(TEXT.get(f)!)
+  for (const [pattern, what] of LINK_FORBIDDEN) {
+    if (pattern.test(t)) {
+      fail(
+        'D6.linkInert',
+        `${f} ${what}.`,
+        'main/link/ receives evidence from an untrusted client over the network. It must stay a queue: authenticate, validate, append. The moment it can run the engine or reach the learning home, a network peer is one bug away from authoring the learner’s record — which is exactly the boundary “a window, never a second author” draws. Drain the queue from a live session instead.',
+      )
+    }
+  }
+}
+
+// (c) The wire schema still refuses a client-supplied rating or stamp.
+for (const needle of ['.strict()', 'sourceStampFor']) {
+  if (protocolText && !protocolText.includes(needle)) {
+    fail(
+      'D6.wireSchema',
+      `shared/linkProtocol.ts lost ${needle}.`,
+      '`.strict()` is what turns a client-supplied `rating` or `source` into a rejection instead of a silently-ignored field, and sourceStampFor is the single place a stamp is derived. Losing either means a payload can assert its own grade and have the app shrug.',
+    )
+  }
 }
 
 // ===========================================================================
