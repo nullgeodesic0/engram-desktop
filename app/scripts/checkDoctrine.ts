@@ -749,6 +749,17 @@ const PINNED_OVERLAY_HASHES: Record<string, string> = {
   // by-position rule (the app shuffles checkpoint option display order).
   'review-skill.quick-checkpoint-protocol.md': 'dd49fcd70b6ee8c8',
   'dialogue-grammar.checkpoint-exception.md': '9c4b24e6b10a16d4',
+  // 2026-08-09 pin: the mobile-walk pedagogy overlay and its own
+  // dialogue-grammar companion — the second admission under the widened
+  // charter, and the first that touches ENCODING rather than review. Priced
+  // higher for exactly that reason: provisional status until a desk sitting
+  // solidifies the node, `mobile-*` stamps on every receipt, and the beats
+  // recognition damages most barred from menus outright. Drafted here and
+  // pinned before being wired into applyPluginOverlays' OVERLAYS array —
+  // a pin is cheap, and an unpinned overlay sitting in this directory is
+  // exactly the unaudited voice this section exists to prevent.
+  'learn-skill.mobile-walk-protocol.md': '5f808bedbd581255',
+  'dialogue-grammar.mobile-walk-exception.md': '9cbbd325856c2c76',
 }
 const overlayFiles = readdirSync(OVERLAY_DIR).filter((f) => f.endsWith('.md'))
 for (const f of overlayFiles) {
@@ -777,26 +788,52 @@ for (const f of Object.keys(PINNED_OVERLAY_HASHES)) {
   }
 }
 
-// (b) The pedagogy overlay's load-bearing sentences, asserted verbatim.
-const checkpointOverlayPath = join(OVERLAY_DIR, 'review-skill.quick-checkpoint-protocol.md')
-const checkpointOverlay = overlayFiles.includes('review-skill.quick-checkpoint-protocol.md')
-  ? readFileSync(checkpointOverlayPath, 'utf-8')
-  : ''
-const LOAD_BEARING = [
-  'Run this protocol ONLY when the learner\'s opening message for this sitting explicitly asks for the checkpoint style',
-  'NEVER `easy`',
-  '`effectively_relearn: true`',
-  '--source quick-mc',
-  'EXCLUDED from the §3 assessor-audit stash',
-  'omit `--confidence` from the rate call',
-]
-for (const needle of LOAD_BEARING) {
-  if (checkpointOverlay && !checkpointOverlay.includes(needle)) {
-    fail(
-      'D5.overlayContent',
-      `the checkpoint overlay lost a load-bearing sentence: ${needle}`,
-      'These sentences ARE the bargain that licenses a pedagogy overlay: per-sitting opt-in, the rating cap, the recall carve-outs, the permanent source stamp, the audit exclusion, and the calibration quarantine. Any one of them missing turns a priced exception into silent doctrine erosion. If the wording must change, change the assert in the same commit and say why.',
-    )
+// (b) Each pedagogy overlay's load-bearing sentences, asserted verbatim.
+// One entry per pedagogy overlay. A presentation overlay needs no entry —
+// only the ones that buy an exception have a bargain to keep.
+const LOAD_BEARING: Record<string, string[]> = {
+  'review-skill.quick-checkpoint-protocol.md': [
+    'Run this protocol ONLY when the learner\'s opening message for this sitting explicitly asks for the checkpoint style',
+    'NEVER `easy`',
+    '`effectively_relearn: true`',
+    '--source quick-mc',
+    'EXCLUDED from the §3 assessor-audit stash',
+    'omit `--confidence` from the rate call',
+  ],
+  // The mobile-walk bargain, clause by clause: the per-sitting election; the
+  // two beats menus may never reach; the four rules that stop an assembly
+  // degenerating into a guessable chain; the refusal to serve an instance
+  // whose key was never executed; the rating cap; the permanent stamp; the
+  // audit exclusion; the calibration quarantine; and provisional status,
+  // which is the clause that licenses touching encoding at all.
+  'learn-skill.mobile-walk-protocol.md': [
+    'Run this protocol ONLY when this sitting\'s opening message declares the mobile surface',
+    'step assembly or a real production only, never a chain of picks',
+    'Pool ≥ 2N',
+    'No backtracking.',
+    'L4 cold solve is never an assembly',
+    'not served here at all',
+    'Tap-derived items are rated at `good` at best.',
+    '`--source mobile-walk` on the node',
+    'EXCLUDED from the §4 assessor stash',
+    'omit `--confidence` from the rate call',
+    'is **provisional**',
+  ],
+  'dialogue-grammar.mobile-walk-exception.md': [
+    'A second learner-elected exception to the menus rule',
+  ],
+}
+for (const [file, needles] of Object.entries(LOAD_BEARING)) {
+  if (!overlayFiles.includes(file)) continue
+  const body = readFileSync(join(OVERLAY_DIR, file), 'utf-8')
+  for (const needle of needles) {
+    if (!body.includes(needle)) {
+      fail(
+        'D5.overlayContent',
+        `${file} lost a load-bearing sentence: ${needle}`,
+        'These sentences ARE the bargain that licenses a pedagogy overlay: per-sitting opt-in, the rating cap, the recall carve-outs, the permanent source stamp, the audit exclusion, and the calibration quarantine. Any one of them missing turns a priced exception into silent doctrine erosion. If the wording must change, change the assert in the same commit and say why.',
+      )
+    }
   }
 }
 
