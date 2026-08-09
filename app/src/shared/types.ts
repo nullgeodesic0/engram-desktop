@@ -409,6 +409,11 @@ export interface RawReceipt {
    * sittings. Sparse — old rows lack it; never assume, never read null as
    * "self". */
   source: string | null
+  /** engram.py's own `production_truncated`: this receipt's stored production
+   * was cut at PRODUCTION_MAX (800 chars). The cap applies to the receipt AND
+   * the stash — it is record-wide policy, not a stash quirk — and the app only
+   * reports it. */
+  productionTruncated?: boolean
 }
 
 export interface ReceiptsHistory {
