@@ -11,8 +11,15 @@ const VARIANT: Record<string, string> = {
     'bg-[color-mix(in_srgb,var(--color-accent-cta)_82%,transparent)] text-[var(--color-void)] hover:bg-[color-mix(in_srgb,var(--color-accent-cta-hover)_86%,transparent)] font-medium',
   ghost:
     'border border-[var(--color-edge)] text-[var(--color-text-dim)] hover:text-[var(--color-text-primary)] hover:border-[var(--color-text-faint)] bg-transparent',
+  // NOT danger ink. This variant marks a DESTRUCTIVE ACTION — delete a topic,
+  // close a window — and DESIGN.md reserves danger for the learner's struggle
+  // or a lapsed memory. A shared variant is the worst place to break that,
+  // because it propagates the violation to every future call site: the button
+  // renders the same colour as a lapsed concept, on a surface whose whole
+  // thesis is that hue carries memory state. Weight and an explicit label
+  // carry "this is destructive"; confirmation carries the rest.
   danger:
-    'border border-[var(--color-ink-danger-dim)] text-[var(--color-ink-danger)] hover:bg-[var(--color-ink-danger-dim)]/30 bg-transparent',
+    'border border-[var(--color-text-faint)] text-[var(--color-text-primary)] hover:bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] hover:border-[var(--color-text-dim)] bg-transparent font-medium',
 }
 
 /** `md` is the original, unchanged geometry (px-3 py-1.5 text-sm) — every

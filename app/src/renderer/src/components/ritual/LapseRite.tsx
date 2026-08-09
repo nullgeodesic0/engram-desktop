@@ -20,7 +20,15 @@ function formatReturnDate(iso: string): string {
 export const LapseRite = memo(function LapseRite({ returnDate }: { node: string; returnDate: string | null }) {
   return (
     <div className="flex justify-start my-1.5 pl-1">
-      <div className="tilt-card-soft max-w-[92%] flex flex-col gap-1 rounded-md border border-[var(--color-ink-warm-dim)] px-3 py-2.5 ritual-misconception-in">
+      {/* `ritual-mark-in`, NOT `ritual-misconception-in`.
+          That class sets `--ink-accent: danger`, and `mark-settle-in` opens at
+          a 15% wash of it — so this card spent its first 600ms flashing the
+          alarm colour while its own copy said "a lapse resets the interval,
+          not the work", inside a warm border. The entrance contradicted both
+          the frame and the sentence. MarkFrame's doctrine says the accent
+          variable exists precisely so entrance can never mismatch border; this
+          card had simply never been migrated. */}
+      <div className="tilt-card-soft max-w-[92%] flex flex-col gap-1 rounded-md border border-[var(--color-ink-warm-dim)] px-3 py-2.5 ritual-mark-in">
         <span className="text-xs text-[var(--color-ink-warm)]">
           Filed for relearning{returnDate ? ` — returns ${formatReturnDate(returnDate)}.` : '.'}
         </span>

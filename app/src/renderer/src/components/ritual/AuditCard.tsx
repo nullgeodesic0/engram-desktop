@@ -31,9 +31,9 @@ export const AuditCard = memo(function AuditCard({
   disputedNodes: string[]
 }) {
   const tone =
-    verdict === 'disputed' ? 'var(--color-ink-danger)' : verdict === 'agreed' ? 'var(--color-ink-cool)' : 'var(--color-text-faint)'
+    verdict === 'disputed' ? 'var(--color-ink-cool)' : verdict === 'agreed' ? 'var(--color-ink-cool)' : 'var(--color-text-faint)'
   const borderTone =
-    verdict === 'disputed' ? 'var(--color-ink-danger-dim)' : verdict === 'agreed' ? 'var(--color-ink-cool-dim)' : 'var(--color-hairline)'
+    verdict === 'disputed' ? 'var(--color-ink-cool-dim)' : verdict === 'agreed' ? 'var(--color-ink-cool-dim)' : 'var(--color-hairline)'
 
   return (
     <div className="flex justify-start my-1.5 pl-1">

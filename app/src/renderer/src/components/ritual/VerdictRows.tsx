@@ -103,7 +103,7 @@ export const ScheduleEchoRow = memo(function ScheduleEchoRow({ segment }: { segm
       </span>
       <MathRenderer
         text={segment.raw.trim()}
-        className="label-data text-[10px] text-[var(--color-text-faint)] leading-relaxed"
+        className="label-data text-[10px] text-[var(--color-text-dim)] leading-relaxed"
       />
     </div>
   )

@@ -168,7 +168,7 @@ export function GradeResultCard({
 
   if (stage === 'facedown' || stage === 'flipping') {
     return (
-      <div className="card-flip-scene max-w-sm">
+      <div className="card-flip-scene max-w-md">
         {/* `.tilt-card-soft` composes cleanly with the flip: a running CSS
             animation (flip-away/flip-in) overrides the static tilt transform
             for exactly as long as it runs, then hands back. Soft, not full
@@ -195,7 +195,7 @@ export function GradeResultCard({
       onMouseEnter={onHoverChange ? () => onHoverChange(true) : undefined}
       onMouseLeave={onHoverChange ? () => onHoverChange(false) : undefined}
     >
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <span className="text-sm text-[var(--color-text-primary)]">{humanizeNodeId(result.node)}</span>
         <span className="relative shrink-0">
           {showBurst && <InkBurst />}
@@ -214,7 +214,7 @@ export function GradeResultCard({
               style={{ width: `${afterPct}%`, background: ink.ink }}
             />
           </div>
-          <span className="label-data text-[10px] text-[var(--color-text-faint)] shrink-0">
+          <span className="label-data text-[10px] text-[var(--color-text-dim)] shrink-0">
             {before.toFixed(1)}d → {displayAfter.toFixed(1)}d
           </span>
         </div>

@@ -137,7 +137,7 @@ export function MessageComposer({
               <button
                 onClick={() => onRemoveAttachment(path)}
                 aria-label={`Remove attachment ${fileName(path)}`}
-                className="focus-ring hover:text-[var(--color-ink-danger)]"
+                className="focus-ring hover:text-[var(--color-text-primary)]"
               >
                 <span aria-hidden="true">✕</span>
               </button>
@@ -212,7 +212,13 @@ export function MessageComposer({
         <div className="flex items-center justify-between gap-3 flex-wrap">
           {status ? (
             <span
-              className={`fig-caption ${scan.problems.length > 0 ? 'text-[var(--color-ink-danger)]' : ''}`}
+              // A LaTeX delimiter problem is a validation error, and DESIGN.md is
+              // explicit that danger ink is never that — it marks the learner's
+              // struggle or a lapsed memory, and spending it on an unclosed `$`
+              // devalues the one colour reserved for being wrong, at the moment
+              // just before you submit. `describeScan` already names the problem
+              // in words; the emphasis is weight, not hue.
+              className={`fig-caption ${scan.problems.length > 0 ? 'text-[var(--color-text-primary)]' : ''}`}
             >
               {status}
             </span>

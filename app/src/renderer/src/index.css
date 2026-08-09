@@ -63,7 +63,19 @@
   --color-ink-paper: #e6dfd0;
   --color-text-primary: #e6dfd0;
   --color-text-dim: #8b8878;
-  --color-text-faint: #545248;
+  /* Was #545248, which measured 1.84:1 on a raised card, 2.19:1 on a panel
+     and 2.46:1 at its very best — never once clearing even the 3:1 large-text
+     floor, while carrying node names, scheduling intervals and row keys at
+     9–10px. A record the learner cannot read is not a record.
+     #7b7768 reads 4.30 / 3.83 / 3.22 on void / panel / raised card: clear of
+     the 3:1 non-text-and-large floor everywhere, and still 1.1 points below
+     text-dim so the ramp keeps three distinguishable steps.
+     It deliberately does NOT clear 4.5:1 on every surface — doing so needs a
+     value BRIGHTER than text-dim, which collapses the ramp into two steps.
+     Faint is therefore for decoration and glyphs only; anything carrying
+     information belongs on text-dim, and the callers that were breaking that
+     rule were moved (see ScheduleEchoRow, GradeResultCard, ProbeCard). */
+  --color-text-faint: #7b7768;
 
   /* Type system (user's explicit mapping, 2026-07-30): Neue Haas Grotesk =
      important text/titles/important numbers/grades; Futura = general text,
@@ -1368,11 +1380,26 @@
   /* The transcript reads as a set page, not a chat log — one reading measure,
      centered when the window is wide. */
   .transcript-measure {
-    /* 78ch → 92ch when the persistent sidebar was removed — the rail's
-       ~192px came back to the window, and the transcript is the surface
-       that earns it. Bubbles cap at percentages of this measure, so they
-       widen with it automatically. */
-    max-width: 92ch;
+    /* 92ch → 60ch, because `ch` is not a character.
+       CSS `ch` is the advance width of "0" in the element's OWN font — the UI
+       sans here — while the prose inside sets in a narrower serif. The two
+       disagree by ~30%, so the number in this declaration has never been the
+       characters-per-line it looks like. Measured, not reasoned: prose
+       rendered at these caps and counted per line with per-glyph Range rects.
+
+         92ch  →   135 free-flowing / 121 in a bubble
+         70ch  →   102 / 93
+         60ch  →    88 / 79     ← both inside the 45–90 readable band
+
+       Two cases, because the transcript has two: text that flows at the full
+       measure, and text inside a mark frame (`max-w-[92%] px-3`, pinned by
+       cardGeometry.test.ts), which is ~9 characters narrower. 60ch is chosen
+       so the WIDER of the two just clears the bound — this transcript is
+       dense by design (see the density note in DESIGN.md), so the goal is to
+       come inside the band giving up as little width as possible, not to sit
+       at its comfortable middle. Bubbles cap at percentages of this measure,
+       so they narrow with it automatically. */
+    max-width: 60ch;
     width: 100%;
     margin-inline: auto;
   }
@@ -1380,8 +1407,8 @@
   /* The measure for page-level list and plate surfaces — the same idea as
      `.transcript-measure` above, one step wider.
      
-     Prose caps at 92ch because that is where a LINE stops being readable. A
-     shelf row is not a line: it carries a glyph, a health ring, a title, a
+     Prose caps where a LINE stops being readable (see the measured band on
+     `.transcript-measure` above). A shelf row is not a line: it carries a glyph, a health ring, a title, a
      goal, a chip row AND its own actions, and those actions sit at the far
      edge by `justify-between`. Unbounded, the Learn shelf put a row's content
      inside the first ~900px of a 1600px window and its settings control at

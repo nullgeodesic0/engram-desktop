@@ -2102,7 +2102,9 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
               session drawer (ticket + probe), which renders OVER the
               transcript rather than claiming layout rows of its own. */}
           <div
-            className={`relative flex-1 min-h-0 flex flex-col${chamber ? ' chamber-blur' : ''}`}
+            role="region"
+            aria-label="Review sitting"
+            className="relative flex-1 min-h-0 flex flex-col"
             onMouseMove={current || latestTicket || phase === 'done' ? handleSessionPointer : undefined}
           >
             {/* Session ticket — floats over the transcript on the LEFT edge,
@@ -2246,6 +2248,7 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
               )
             })()}
             <ChatScrollRegion
+              chamber={chamber}
               deps={[messages, busy, marks]}
               onContainerRef={setScrollEl}
               railSlot={

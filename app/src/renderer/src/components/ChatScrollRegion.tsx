@@ -9,6 +9,7 @@ export function ChatScrollRegion({
   deps,
   railSlot,
   onContainerRef,
+  chamber = false,
 }: {
   children: ReactNode
   deps: unknown[]
@@ -28,6 +29,16 @@ export function ChatScrollRegion({
    * fired on every mount/unmount is what stays correct across a remount,
    * where a plain `useEffect(() => ..., [])` handed a `RefObject` would not. */
   onContainerRef?: (el: HTMLDivElement | null) => void
+  /** Recall chamber active — blurs THIS region only.
+   *
+   * The blur used to sit on the pane wrapper that also holds the ticket and
+   * the probe card, so entering the chamber blurred the very question the
+   * learner had just been invited to answer, with `pointer-events: none` so
+   * they could not even scroll to it. A parent `filter` rasterises its whole
+   * subtree, so no child could opt out in CSS — the blur had to move to the
+   * one element it was ever meant to cover. The chamber's contract is "the
+   * transcript is hidden"; it was never "the question is hidden". */
+  chamber?: boolean
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [stick, setStick] = useState(true)
@@ -78,7 +89,23 @@ export function ChatScrollRegion({
           last line sits ABOVE the fade with only padding inside it, so the
           newest message is never dimmed — the fade only ever eats empty space
           or content still scrolling past. */}
-      <div ref={containerRef} onScroll={onScroll} className="h-full overflow-y-auto flex flex-col gap-4 pb-7 scroll-fade-top">
+      {/* `tabIndex={0}` + a role and name: this element scrolls 5000px in a
+          real sitting and had neither, so a keyboard-only learner could reach
+          the transcript's CONTENTS by tabbing through every control in it but
+          could never simply scroll it. A named, focusable scroll region is the
+          standard fix and costs a pointer user nothing. */}
+      <div
+        ref={containerRef}
+        onScroll={onScroll}
+        tabIndex={0}
+        role="log"
+        aria-label="Session transcript"
+        aria-live="polite"
+        aria-relevant="additions"
+        className={`h-full overflow-y-auto flex flex-col gap-4 pb-7 scroll-fade-top focus-ring${
+          chamber ? ' chamber-blur' : ''
+        }`}
+      >
         {children}
       </div>
       {railSlot}

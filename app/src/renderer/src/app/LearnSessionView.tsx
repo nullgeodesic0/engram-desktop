@@ -2423,7 +2423,7 @@ export function LearnSessionView({
               inside a plain block wrapper. `relative` hosts the floating
               session ticket so the transcript flows underneath it instead of
               ceding a whole layout row. */}
-          <div className={`relative flex-1 min-h-0 flex flex-col${chamber ? ' chamber-blur' : ''}`}>
+          <div role="region" aria-label="Learn session" className="relative flex-1 min-h-0 flex flex-col">
             {latestTicket && (() => {
               const ticketOut = ticketPinned || ticketPeek
               return (
@@ -2468,6 +2468,7 @@ export function LearnSessionView({
               )
             })()}
             <ChatScrollRegion
+              chamber={chamber}
               deps={[messages, busy, marks]}
               onContainerRef={setScrollEl}
               railSlot={

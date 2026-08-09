@@ -243,8 +243,10 @@ export const ReadyRoomPlate = memo(function ReadyRoomPlate({
         // A prose measure, not the plate's. Unbounded this ran ~180
         // characters on one line — two and a half times readable — which for
         // a paragraph whose whole job is to lower the temperature is the
-        // opposite of calming. The transcript caps at 92ch for the same
-        // reason; this is shorter still because it is a single aside.
+        // opposite of calming. The transcript caps for the same reason; this
+        // is shorter still because it is a single aside. Note `ch` is honest
+        // here in a way it is not there — this sets in the same sans that
+        // `ch` measures, rather than in the transcript's narrower serif.
         <p className="text-sm text-[var(--color-ink-warm)] leading-relaxed max-w-[64ch]">
           {totalDue} reviews have piled up — nothing is owed, and that’s not a debt to clear in one sitting. This
           sitting still only covers a capped set, most-overdue first; the rest just stays due, no guilt attached.

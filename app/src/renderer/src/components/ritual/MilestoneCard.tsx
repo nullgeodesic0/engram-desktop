@@ -58,7 +58,10 @@ export const MilestoneCard = memo(function MilestoneCard({
 }) {
   return (
     <div className="flex justify-start my-1.5 pl-1">
-      <div className="tilt-card-soft max-w-[92%] flex flex-col gap-1 rounded-md border border-[var(--color-ink-warm-dim)] px-3 py-2.5 ritual-misconception-in">
+      {/* Warm entrance. This card marks a month-scale retention milestone —
+          the most unambiguously good event the app has — and it was opening in
+          the ink reserved for a learner's lapse. */}
+      <div className="tilt-card-soft max-w-[92%] flex flex-col gap-1 rounded-md border border-[var(--color-ink-warm-dim)] px-3 py-2.5 ritual-mark-in">
         <span className="text-xs text-[var(--color-ink-warm)]">
           {humanizeNodeId(node)} — {pairedWithGradeCard ? PAIRED_SCALE_TEXT[scale] : SCALE_TEXT[scale]}
         </span>

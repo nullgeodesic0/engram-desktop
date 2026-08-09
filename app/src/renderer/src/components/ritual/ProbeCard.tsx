@@ -57,7 +57,7 @@ export const ProbeCard = memo(function ProbeCard({
           {humanizeNodeId(header.node)}
         </span>
         {header.topic && (
-          <span className="label-data text-[10px] uppercase tracking-wider text-[var(--color-text-faint)]">
+          <span className="label-data text-[10px] uppercase tracking-wider text-[var(--color-text-dim)]">
             {header.topic}
           </span>
         )}
@@ -76,7 +76,7 @@ export const ProbeCard = memo(function ProbeCard({
             fetch, never `due()`'s own numbers recomputed here. Absent for
             the common case of a header with no overdue clause at all. */}
         {header.daysOverdue !== null && (
-          <span className="label-data text-[10px] font-mono text-[var(--color-text-faint)]">
+          <span className="label-data text-[10px] font-mono text-[var(--color-text-dim)]">
             {header.daysOverdue} {header.daysOverdue === 1 ? 'day' : 'days'} overdue
           </span>
         )}

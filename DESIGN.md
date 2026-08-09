@@ -264,7 +264,7 @@ The split also governs the doors: Home's main menu inks Learn warm and Review co
 
 ### Chips
 - **Style:** `.label-data` at 10px, `px-1.5 py-0.5`, hairline border, a 68% `surface-3` wash, dim text.
-- **State:** selected chips take the environment accent's filled treatment; a removable chip carries an inline dismiss that turns `--color-ink-danger` on hover.
+- **State:** selected chips take the environment accent's filled treatment; a removable chip's inline dismiss brightens to primary text on hover — never danger ink, which the Reserved Danger Rule above keeps for a learner's lapse.
 
 ### Cards / Containers
 - **Corner style:** `0px`.

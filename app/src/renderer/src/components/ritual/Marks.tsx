@@ -446,7 +446,7 @@ export function MarkView({
       // it's closed.
       content = (
         <div className="flex justify-start my-1.5 pl-1">
-          <div className="max-w-[92%] rounded-md border border-[var(--color-hairline)] px-4 py-2">
+          <div className="max-w-[92%] rounded-md border border-[var(--color-hairline)] px-3 py-2.5">
             <span className="label-data text-[10px] tracking-[0.14em] text-[var(--color-text-faint)]">
               {mark.header.toUpperCase()} — waits for the open question above
             </span>
