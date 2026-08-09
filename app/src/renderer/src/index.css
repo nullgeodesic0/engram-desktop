@@ -1377,38 +1377,46 @@
     outline-color: var(--color-accent-cta);
   }
 
-  /* The transcript reads as a set page, not a chat log — one reading measure,
-     centered when the window is wide. */
+  /* The transcript takes the window it is given, and stops growing only when
+     the display is wide enough that centring beats filling. */
   .transcript-measure {
-    /* 92ch → 60ch, because `ch` is not a character.
-       CSS `ch` is the advance width of "0" in the element's OWN font — the UI
-       sans here — while the prose inside sets in a narrower serif. The two
-       disagree by ~30%, so the number in this declaration has never been the
-       characters-per-line it looks like. Measured, not reasoned: prose
-       rendered at these caps and counted per line with per-glyph Range rects.
+    /* FLUID, not a character count.
 
-         92ch  →   135 free-flowing / 121 in a bubble
-         70ch  →   102 / 93
-         60ch  →    88 / 79     ← both inside the 45–90 readable band
+       A fixed `ch` cap was the wrong instrument twice over. First, `ch` is
+       the advance width of "0" in the element's OWN font — the UI sans —
+       while the prose inside sets in a serif ~30% narrower, so the number
+       never meant the characters-per-line it looked like (92ch measured 135
+       real characters; 60ch measured 88).
 
-       Two cases, because the transcript has two: text that flows at the full
-       measure, and text inside a mark frame (`max-w-[92%] px-3`, pinned by
-       cardGeometry.test.ts), which is ~9 characters narrower. 60ch is chosen
-       so the WIDER of the two just clears the bound — this transcript is
-       dense by design (see the density note in DESIGN.md), so the goal is to
-       come inside the band giving up as little width as possible, not to sit
-       at its comfortable middle. Bubbles cap at percentages of this measure,
-       so they narrow with it automatically. */
-    max-width: 60ch;
+       But the deeper error was tuning a constant at all. This is not an
+       article column. It is the app's primary working surface, and it
+       carries bubbles, verdict rows, grade cards, explorables, plots and
+       KaTeX display math — none of which get more readable when squeezed to
+       a prose measure. A cap chosen to flatter one paragraph starved
+       everything else on the surface, and a chat bubble that stops at 60%
+       of an open window reads as a rendering fault, not as typography.
+
+       So: `width: 100%` already tracks the pane, and the CEILING is fluid
+       too, climbing with the window rather than binding at every realistic
+       size. 108rem (1728px) is where it stops — past that, more width is
+       just a longer saccade back to the start of the next line, and the
+       centred margins read as deliberate rather than as a half-used window.
+       The 52rem floor only matters below ~1010px, where the pane wins
+       anyway via `min(100%, …)`.
+
+       Bubbles cap at percentages of this measure, so they widen with it. */
+    max-width: min(100%, max(52rem, min(82vw, 108rem)));
     width: 100%;
     margin-inline: auto;
   }
 
-  /* The measure for page-level list and plate surfaces — the same idea as
-     `.transcript-measure` above, one step wider.
-     
-     Prose caps where a LINE stops being readable (see the measured band on
-     `.transcript-measure` above). A shelf row is not a line: it carries a glyph, a health ring, a title, a
+  /* The measure for page-level list and plate surfaces. Deliberately NOT the
+     same rule as `.transcript-measure` above, and deliberately tighter: that
+     one is fluid because a transcript is a working surface that should use
+     the window, while this one is a fixed cap because the thing it bounds is
+     a ROW, and a row has a failure mode that width causes rather than cures.
+
+     A shelf row carries a glyph, a health ring, a title, a
      goal, a chip row AND its own actions, and those actions sit at the far
      edge by `justify-between`. Unbounded, the Learn shelf put a row's content
      inside the first ~900px of a 1600px window and its settings control at
