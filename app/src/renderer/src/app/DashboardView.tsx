@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { TopicTitle } from '../components/TopicTitle'
 import { type PaceModel, humanMinutes } from '../../../shared/sittingPace'
 import type { EngramStats, ReceiptsHistory, ReceiptItem, TopicGraph, TopicListEntry, ActiveExperiment } from '../../../shared/types'
 import { CoachSessionPanel } from '../components/CoachSessionPanel'
@@ -614,7 +615,7 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts, coachHomeSi
                 className="focus-ring tilt-card panel px-4 py-3 flex items-center justify-between text-left w-full hover:border-[var(--color-text-faint)] transition-colors"
               >
                 <div>
-                  <div className="text-sm text-[var(--color-text-primary)]">{t.title}</div>
+                  <div className="text-sm text-[var(--color-text-primary)]"><TopicTitle title={t.title} /></div>
                   <div className="label-data text-xs text-[var(--color-text-faint)]">{t.topic}</div>
                 </div>
                 <div className="flex gap-4 text-xs label-data">

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { TopicTitle } from '../components/TopicTitle'
 import type {
   EngramStats,
   TopicListEntry,
@@ -174,7 +175,7 @@ function TopicGroup({
               <div className="flex items-center gap-2 min-w-0">
                 <InkNode id={t.topic} variant={t.states.review > 0 ? 'filled' : 'outlined'} size={14} />
                 <HealthRing consolidated={t.states.review} total={total} due={t.due} size={16} />
-                <span className="font-(family-name:--font-display) text-base text-[var(--color-text-primary)] truncate">{t.title}</span>
+                <TopicTitle title={t.title} className="font-(family-name:--font-display) text-base text-[var(--color-text-primary)] truncate" />
               </div>
               {/* Right cluster — the same anatomy as the Grades roster rows:
                   the count in dim mono, then the letter as a real

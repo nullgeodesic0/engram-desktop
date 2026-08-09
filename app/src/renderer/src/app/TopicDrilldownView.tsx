@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { TopicTitle } from '../components/TopicTitle'
 import type { ArtifactEntry, NodeProvenance, ReceiptsHistory, TopicGraph, TopicSummary } from '../../../shared/types'
 import { RetentionCurve } from '../components/charts/RetentionCurve'
 import { ActivityStrip } from '../components/charts/ActivityStrip'
@@ -239,7 +240,7 @@ export function TopicDrilldownView({ topic, topicSummary, due, history, graphs, 
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
             <h1 className="font-(family-name:--font-serif) text-[length:var(--text-display)] text-[var(--color-text-primary)]">
-              {topicSummary.title}
+              <TopicTitle title={topicSummary.title} />
             </h1>
             <div className="label-data text-xs text-[var(--color-text-faint)] mt-1">{topic}</div>
           </div>

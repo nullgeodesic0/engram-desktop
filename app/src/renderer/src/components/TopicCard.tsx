@@ -1,4 +1,5 @@
 import type { TopicListEntry } from '../../../shared/types'
+import { TopicTitle } from '../components/TopicTitle'
 import { InkNode } from './ui/InkNode'
 import { HealthRing } from './ui/HealthRing'
 import { IconButton } from './ui/IconButton'
@@ -101,7 +102,7 @@ export function TopicCard({ variant, topic: t, onOpen, resumable = false, onSett
           {grade?.available && (
             <span className={`label-data text-[10px] font-medium shrink-0 ${letterColorClass(grade.letter)}`}>{grade.letter}</span>
           )}
-          <span className="line-clamp-1">{t.title}</span>
+          <TopicTitle title={t.title} className="line-clamp-1" />
         </div>
         <div className="flex gap-3 text-xs label-data">
           {chips.map((c) => (
@@ -136,7 +137,7 @@ export function TopicCard({ variant, topic: t, onOpen, resumable = false, onSett
       <HealthRing consolidated={t.states.review} total={total} due={t.due} />
       <button onClick={onOpen} className="focus-ring flex-1 min-w-0 text-left flex flex-col gap-1">
         <div className="text-sm text-[var(--color-text-primary)] flex items-center gap-2">
-          <span className="truncate">{t.title}</span>
+          <TopicTitle title={t.title} className="truncate" />
           {resumable && (
             <span className="label-data text-[10px] px-1.5 py-0.5 rounded text-[var(--color-ink-cool)] bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] shrink-0">
               continuing

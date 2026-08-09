@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { TopicTitle } from '../components/TopicTitle'
 import type { SessionEvent } from '../../../shared/sessionEvents'
 import type {
   TopicListEntry,
@@ -1862,7 +1863,7 @@ export function LearnSessionView({
                 onFocusPeek={peekMasthead}
                 // In a session, the topic IS the page — one serif title, no
                 // static "Learn" h1, no repeated title on the opening plate.
-                title={activeTopic ? activeTopic.title : 'New topic'}
+                title={activeTopic ? <TopicTitle title={activeTopic.title} /> : 'New topic'}
                 // The identity sub-line: current node · position · walk, in
                 // one compact mono lockup under the title. The why-chain
                 // disclosure rides here, attached to the node it explains.

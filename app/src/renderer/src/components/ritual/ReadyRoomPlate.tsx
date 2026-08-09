@@ -1,4 +1,5 @@
 import { memo } from 'react'
+import { TopicTitle } from '../TopicTitle'
 import type { DueItem } from '../../../../shared/types'
 import { humanizeNodeId } from '../../../../shared/humanizeId'
 import { InkNode } from '../ui/InkNode'
@@ -184,7 +185,7 @@ export const ReadyRoomPlate = memo(function ReadyRoomPlate({
               <div className="flex items-center justify-between gap-2 text-xs">
                 <div className="flex items-center gap-2 min-w-0">
                   <InkNode id={topic} variant="outlined" size={14} />
-                  <span className="text-[var(--color-text-primary)] truncate">{topicTitles?.[topic] ?? topic}</span>
+                  <TopicTitle title={topicTitles?.[topic] ?? topic} className="text-[var(--color-text-primary)] truncate" />
                 </div>
                 <span className="label-data text-[var(--color-text-dim)] shrink-0">{items.length}</span>
               </div>

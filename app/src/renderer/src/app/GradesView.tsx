@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { TopicTitle } from '../components/TopicTitle'
 import type {
   DayActivity,
   GraderHealthResult,
@@ -348,7 +349,7 @@ function TopicRosterRow({
   return (
     <button onClick={onOpen} className="tilt-card panel-raised px-4 py-3 flex items-center justify-between gap-4 w-full text-left frame-hover">
       <div className="min-w-0">
-        <div className="text-sm text-[var(--color-text-primary)] truncate">{entry.title}</div>
+        <div className="text-sm text-[var(--color-text-primary)] truncate"><TopicTitle title={entry.title} /></div>
         <div className="label-data text-[10px] text-[var(--color-text-faint)] mt-0.5">
           {entry.states.review}/{entry.nodes} consolidated
         </div>
