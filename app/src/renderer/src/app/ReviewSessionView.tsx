@@ -58,6 +58,7 @@ import { trailingRecalled } from '../../../shared/gradeResult'
 import { invalidateSearchIndex } from '../shared/searchIndex'
 import { computeDueBuckets } from '../shared/dueBuckets'
 import { MarkView, type RitualMark, type MarkPayload } from '../components/ritual/Marks'
+import { WarmingPlate } from '../components/ritual/WarmingPlate'
 import type { ReviewDocketItem } from '../components/ritual/ReviewDocket'
 import { deriveRitualMarks } from '../../../shared/ritualFromTranscript'
 import { parseAuditNotification, parseCurriculumReturn } from '../../../shared/taskNotification'
@@ -2042,6 +2043,18 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
                   .map((k) => (
                     <MarkView key={k.id} mark={k} onAnswerAsk={answerAsk} onConfirmTranscription={(latex) => setProduction(latex)} deferAsk={deferAskFor(k)} suppressBeatExcerpt={messages[k.atIndex]?.role === 'assistant'} />
                   ))}
+                {/* The boot window, filled. Derived purely from existing
+                    state — no new lifecycle: an in-session sitting with an
+                    empty transcript IS the gap between Start and the tutor's
+                    first word. Vanishes on the first message. */}
+                {messages.length === 0 && phase === 'in-session' && queue[0] && (
+                  <WarmingPlate
+                    probe={queue[0].probe}
+                    node={queue[0].id}
+                    topic={queue[0].topic}
+                    remaining={sessionCapRef.current ?? queue.length}
+                  />
+                )}
                 {messages.map((m, i) => {
                   // Verdict Anatomy (Wave 2) — undefined for the common case
                   // of a message no region claims, which renders byte-

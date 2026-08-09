@@ -1,4 +1,4 @@
-import { memo, useMemo, useRef, useState } from 'react'
+import { memo, useMemo, useRef, useState, useEffect } from 'react'
 import { useFocusTrap } from '../useFocusTrap'
 import { MathRenderer } from '../MathRenderer'
 import { isCheckpointHeader, parseCheckpointHeader } from '../../shared/checkpointHeader'
@@ -122,6 +122,32 @@ export const AskCard = memo(function AskCard({
 
   useFocusTrap(containerRef, isOpen)
 
+  // ── Number keys pick an option ───────────────────────────────────────────
+  // The confidence pick lands in the middle of recall — the worst moment to
+  // leave the keyboard for a mouse. 1..9 choose directly.
+  //
+  // Guarded on focus, which is the whole safety question: a bare digit must
+  // never steal a keystroke from someone typing a production. If focus sits in
+  // any editable surface, the key belongs to that surface and this does
+  // nothing. During a real ask the composer is disabled and focus rests on the
+  // body, which is exactly when this is wanted. `⌘1`-style bindings were the
+  // alternative and are already taken by view switching.
+  useEffect(() => {
+    if (!isOpen || showOther || !onAnswer) return
+    const picks = isConfidence ? options : displayOptions
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      const el = e.target as HTMLElement | null
+      if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return
+      const n = Number(e.key)
+      if (!Number.isInteger(n) || n < 1 || n > picks.length) return
+      e.preventDefault()
+      onAnswer([picks[n - 1].label])
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [isOpen, showOther, onAnswer, isConfidence, options, displayOptions])
+
   return (
     <div className="flex justify-start my-1.5 pl-1">
       <div
@@ -169,7 +195,10 @@ export const AskCard = memo(function AskCard({
                     <span className="text-lg leading-none" aria-hidden="true" style={{ color: style.color }}>
                       {style.icon}
                     </span>
-                    <div className="text-sm text-[var(--color-text-primary)]">{opt.label}</div>
+                    <div className="text-sm text-[var(--color-text-primary)]">
+                      <span className="label-data text-[10px] text-[var(--color-text-faint)] mr-1.5">{i + 1}</span>
+                      {opt.label}
+                    </div>
                     {opt.description && <div className="text-xs text-[var(--color-text-dim)]">{opt.description}</div>}
                   </button>
                 )
@@ -177,7 +206,7 @@ export const AskCard = memo(function AskCard({
             </div>
           ) : (
             <div className="flex flex-col gap-2">
-              {displayOptions.map((opt) => (
+              {displayOptions.map((opt, i) => (
                 <button
                   key={opt.label}
                   onClick={() => onAnswer?.([opt.label])}
@@ -185,7 +214,8 @@ export const AskCard = memo(function AskCard({
                     isCheckpoint ? 'hover:border-[var(--color-ink-cool-dim)]' : 'hover:border-[var(--color-ink-warm-dim)]'
                   }`}
                 >
-                  <MathRenderer text={opt.label} inlineOnly className="text-sm text-[var(--color-text-primary)]" />
+                  <span className="label-data text-[10px] text-[var(--color-text-faint)] mr-1.5">{i + 1}</span>
+                  <MathRenderer text={opt.label} inlineOnly className="text-sm text-[var(--color-text-primary)] inline" />
                   {opt.description && (
                     <MathRenderer text={opt.description} inlineOnly className="text-xs text-[var(--color-text-dim)] mt-0.5" />
                   )}
