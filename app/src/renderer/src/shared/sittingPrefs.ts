@@ -29,7 +29,16 @@ export function loadSittingPrefs(): SittingPrefs {
     const raw = localStorage.getItem(KEY)
     const parsed = raw ? (JSON.parse(raw) as unknown) : null
     const mins = (parsed as { mins?: unknown } | null)?.mins
-    if (mins === 5 || mins === 10 || mins === 25) {
+    // Any sane positive duration, not the three legacy presets.
+    //
+    // The budgets stopped being 5/10/25 when they became queue-derived, and
+    // stopped being discrete at all when the ruler made them continuous — so
+    // this guard silently discarded almost every budget a learner could
+    // actually set. `saveSittingMins` wrote 23 to disk and this read it back
+    // as "not one of mine" and returned the default, so the setting looked
+    // like it simply did not persist. Bounded rather than open: a stored
+    // value is untrusted input, and a 40-hour sitting is not a real budget.
+    if (typeof mins === 'number' && Number.isFinite(mins) && mins >= 1 && mins <= 600) {
       // style and focusTopic are per-sitting intents, never restored.
       return { mins, style: 'standard', focusTopic: null }
     }

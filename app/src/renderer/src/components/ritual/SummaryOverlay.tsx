@@ -69,13 +69,25 @@ export function SummaryOverlay({
   return (
     <>
       {!out && (
-        <div
-          className="absolute bottom-0 left-0 right-0 z-20 h-2 flex items-center justify-center group cursor-default"
+        // A real button, not an `aria-hidden` hover strip.
+        //
+        // This was a 12px `aria-hidden` div whose only affordance was
+        // `onMouseEnter` — so the closing record of a forty-minute sitting,
+        // the thing PRODUCT.md's "trusts the record afterwards" actually rests
+        // on, was unreachable by keyboard or screen reader and invisible as an
+        // affordance to everyone else. It is now focusable, named, and
+        // openable by click or Enter; the hover-peek still works exactly as
+        // before for a pointer.
+        <button
+          type="button"
           onMouseEnter={onPeek}
-          aria-hidden="true"
+          onClick={onPeek}
+          aria-label="Show the sitting's closing record"
+          aria-expanded={false}
+          className="focus-ring no-press absolute bottom-0 left-0 right-0 z-20 h-6 flex items-center justify-center group cursor-default"
         >
           <span className={`h-px w-12 rounded bg-[var(--color-edge)] ${nubHover} transition-colors duration-[var(--dur-fast)]`} />
-        </div>
+        </button>
       )}
       <div
         onMouseEnter={onPeek}
@@ -102,7 +114,7 @@ export function SummaryOverlay({
                   onClick={onTogglePin}
                   aria-label={pinned ? 'Unpin session summary' : 'Pin session summary'}
                   title={pinned ? 'Unpin — tuck away unless the cursor visits the bottom edge' : 'Pin — keep the summary out'}
-                  className={`focus-ring no-press h-5 w-5 shrink-0 flex items-center justify-center transition-colors duration-[var(--dur-fast)] ${
+                  className={`focus-ring no-press h-6 w-6 shrink-0 flex items-center justify-center transition-colors duration-[var(--dur-fast)] ${
                     pinned
                       ? 'bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)]'
                       : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]'

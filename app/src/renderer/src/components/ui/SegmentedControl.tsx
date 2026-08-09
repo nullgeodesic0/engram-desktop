@@ -24,7 +24,12 @@ export function SegmentedControl<T extends string>({
       role="group"
       aria-label={ariaLabel}
       aria-labelledby={ariaLabelledBy}
-      className="inline-flex rounded-lg border border-[var(--color-hairline)] overflow-hidden"
+      // No `overflow-hidden`. It was clipping `.focus-ring`'s 2px outline on
+      // the first and last segment — the same trap index.css documents for the
+      // frame vocabulary, arriving here through `outline` instead of a
+      // pseudo-element. Radii are zeroed app-wide by decree, so nothing needed
+      // clipping to a rounded corner in the first place.
+      className="inline-flex rounded-lg border border-[var(--color-hairline)]"
     >
       {options.map((o) => (
         <button

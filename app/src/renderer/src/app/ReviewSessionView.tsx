@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { PinTackIcon } from '../components/ui/PinTackIcon'
 import type { DueItem, ExportSittingFormat, Misconception } from '../../../shared/types'
 import type { SessionEvent } from '../../../shared/sessionEvents'
@@ -148,8 +149,19 @@ interface ReviewSessionViewProps {
   onRetestConsumed?: () => void
 }
 
+/** How many due items the ready page reads to draw its queue. Generous enough
+ * that the ruler can show a full-clear for a realistic backlog, bounded so a
+ * 200-item debt does not ship 200 rows into the renderer. The SITTING's own
+ * cap is decided separately at start (see `sessionCapRef`); this is only what
+ * the plate is allowed to look at. */
+const READY_QUEUE_CAP = 30
+
 export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed }: ReviewSessionViewProps = {}) {
   const [phase, setPhase] = useState<Phase>('loading')
+  /** True only while the ready plate is morphing into the session header.
+   * Exactly one element may hold a given `view-transition-name` at a time, so
+   * the name is applied to both halves for the duration and released after. */
+  const [morphing, setMorphing] = useState(false)
   const [queue, setQueue] = useState<DueItem[]>([])
   const [sessionId, setSessionId] = useState<string | null>(null)
   // Addition D (chat refine round) — see LearnSessionView.tsx's own
@@ -218,6 +230,25 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
   // render below.
   const [summaryPinned, setSummaryPinned] = useState(false)
   const [summaryPeek, setSummaryPeek] = useState(false)
+
+  // The closing record presents itself once, when the sitting ends.
+  //
+  // It used to wait to be found: tucked by default, revealed only by putting a
+  // mouse into the bottom 28px. So a learner finished forty minutes of hard
+  // retrieval and the screen went quiet — the record that PRODUCT.md's "trusts
+  // the record afterwards" rests on, and the end half of the peak-end pair,
+  // hidden behind a gesture nobody had a reason to make. It peeks ONCE on the
+  // transition into `done` and is dismissable exactly as before; this does not
+  // pin it, so the existing tuck-away behaviour still applies the moment the
+  // learner moves away.
+  const announcedDoneRef = useRef(false)
+  useEffect(() => {
+    if (phase === 'done' && !announcedDoneRef.current) {
+      announcedDoneRef.current = true
+      setSummaryPeek(true)
+    }
+    if (phase !== 'done') announcedDoneRef.current = false
+  }, [phase])
   const probeLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const ticketLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const summaryLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -911,6 +942,33 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
     }
   }
 
+  /** Wraps the flip into a session in a view transition, so the ready plate
+   * reads as BECOMING the session header rather than being swapped for it.
+   *
+   * Only the synchronous flip belongs inside: `startSession` awaits transcript
+   * hydration and the spawn, and holding a transition open across an await
+   * would freeze the old snapshot on screen for as long as the disk took —
+   * the opposite of the intended effect. The phase change is what the
+   * transition captures; everything after it streams in normally.
+   */
+  function openWithMorph(run: () => void): void {
+    const startViewTransition = (
+      document as Document & { startViewTransition?: (cb: () => void) => { finished: Promise<void> } }
+    ).startViewTransition
+    if (typeof startViewTransition !== 'function' || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      run()
+      return
+    }
+    setMorphing(true)
+    const t = startViewTransition.call(document, () => {
+      flushSync(run)
+    })
+    // Released whether it settles or is interrupted — a stale
+    // `view-transition-name` left on a hidden node collides with the next
+    // transition and silently kills it.
+    void t.finished.catch(() => {}).finally(() => setMorphing(false))
+  }
+
   async function startSession(resume: boolean, retest?: Misconception) {
     // Chat Presence Wave D — live-only, no replay obligation: a resumed
     // session's activity starts fresh at `idle` here, same as a brand-new
@@ -1059,7 +1117,23 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
     // time budget, and — for checkpoint sittings — the recall-floor node
     // list computed from receipt sources. Resume keeps the cap of the
     // sitting being re-entered (app-restart resume degrades to 12).
-    if (!resume) sessionCapRef.current = capForMins(sittingPrefs.mins)
+    // Sized by the number the PLATE showed, not by a parallel rule.
+    //
+    // This used to be `capForMins(mins)` — the flat 60s-an-item fallback —
+    // while the kickoff prose beside it was sized by `planSitting` at the
+    // learner's real measured pace. On a queue the ruler prices at 5 items a
+    // 25-minute budget therefore told the tutor "about 5" and sized its own
+    // queue to 25, so the masthead read "0 of 25" one second after the plate
+    // promised 5, and the loop-position denominator was wrong for the whole
+    // sitting. Two numbers for one decision is one number too many.
+    if (!resume) {
+      const planTopics = queue
+        .filter((q) => !sittingPrefs.focusTopic || q.topic === sittingPrefs.focusTopic)
+        .map((q) => q.topic)
+      sessionCapRef.current = pace
+        ? planSitting(sittingPrefs.mins, planTopics, pace).items
+        : capForMins(sittingPrefs.mins)
+    }
     const kickoff = composeReviewKickoff({
       style: sittingPrefs.style,
       mins: sittingPrefs.mins,
@@ -1667,7 +1741,20 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
   // shows today's exact behavior.
   useEffect(() => {
     if (phase !== 'ready' && !detachedFromSitting) return
-    const cap = capForMins(sittingPrefs.mins)
+    // A FIXED cap, deliberately not `capForMins(sittingPrefs.mins)`.
+    //
+    // The budget used to size this fetch, which was survivable while the
+    // budget moved in three discrete presets and became actively hostile once
+    // the ruler made it continuous: dragging the handle toward "the whole
+    // queue" refetched a LARGER queue, so the axis grew, the handle slid back
+    // toward the middle, and the finish line receded from the hand reaching
+    // for it. The one gesture a backlogged learner most wants — what would it
+    // actually take to be done — was the one the instrument fought.
+    //
+    // The queue is the given; the budget is a cut across it. So the ready page
+    // reads one generous slice and the ruler slices THAT, and nothing the
+    // learner does to the budget changes what they are looking at.
+    const cap = READY_QUEUE_CAP
     let cancelled = false
     window.engram
       .dueCapped(cap)
@@ -1681,7 +1768,7 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, detachedFromSitting, sittingPrefs.mins])
+  }, [phase, detachedFromSitting])
   // The fix for "the review page doesn't refresh at midnight unless you
   // restart": this view is KeepMounted (App.tsx) — its mount effect fetched
   // the queue/totalDue/horizon exactly once, on first visit, and a topic
@@ -1743,6 +1830,7 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
         accent="cool"
         eyebrow="REVIEW"
         title="Review"
+        morphName={morphing ? 'review-morph-plate' : undefined}
         // Identity sub-line, one compact mono lockup under the title (its
         // OWN label-data line now, never nested inside prose-size text): in
         // a sitting (and at its close) it's the session's own position —
@@ -1833,7 +1921,7 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
           the one item that can't be given a fixed cost. */}
       {exportStatus && (
         <div
-          className={`shrink-0 -mt-1 text-xs truncate text-right ${exportStatus.failed ? 'text-[var(--color-ink-danger)]' : 'text-[var(--color-text-faint)]'}`}
+          className={`shrink-0 -mt-1 text-xs truncate text-right ${exportStatus.failed ? 'text-[var(--color-ink-warm)]' : 'text-[var(--color-text-faint)]'}`}
           title={exportStatus.text}
         >
           {exportStatus.text}
@@ -1847,6 +1935,35 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
       )}
       {error && <ErrorPanel error={error} onDismiss={() => setError(null)} />}
 
+      {/* THE SCROLL HOST for every non-chat phase.
+
+          These five branches — loading, empty, closed-unexpectedly, ready and
+          the detached page — were direct children of a `h-full min-h-0 flex
+          flex-col` container with no `overflow` anywhere, so anything taller
+          than the window was simply cut off with no way to reach it. It only
+          became visible when the ready plate grew, but the gap was structural
+          and applied to all five: a short viewport lost the Start button.
+
+          The header above stays pinned (it is `shrink-0` and owns the page's
+          full-bleed rule); the body scrolls under it, which is exactly the
+          shape Learn's shelf already had. `min-h-0` is the load-bearing part —
+          without it a flex child refuses to shrink below its content and the
+          overflow never engages.
+
+          The measure lives here rather than on one branch, so every non-chat
+          state is bounded the same way.
+
+          GATED ON `!chatMode`, and that gate is load-bearing. Rendered
+          unconditionally this div still claimed `flex-1` during a live
+          sitting even though every branch inside it was false — an empty box
+          competing with the transcript's own `flex-1` sibling, so the two
+          split the window and the chat lost half its height. `chatMode` is
+          exactly the complement of the phases inside here (see its definition
+          above: in-session or done, and not detached), so the detached page
+          still belongs to this host. */}
+      {!chatMode && (
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="page-measure flex flex-col gap-4">
       {phase === 'loading' && (
         <div className="panel px-5 py-4 flex flex-col gap-3">
           <SkeletonBar width="35%" height={10} />
@@ -1867,8 +1984,27 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
         )
       )}
       {phase === 'closed-unexpectedly' && (
-        <div className="panel border-[var(--color-ink-danger-dim)] px-4 py-3 text-sm text-[var(--color-ink-danger)]">
-          The session process ended unexpectedly. {queue.length} item(s) still due — safe to start a new session.
+        <div className="panel px-4 py-3 flex flex-col gap-3 items-start">
+          <div className="text-sm text-[var(--color-ink-warm)]">
+            The session process ended unexpectedly. Nothing you finished was lost — every graded item was
+            written to its receipt as it happened.
+          </div>
+          {/* This state used to be a dead end: one panel, no control, and copy
+              that said it was "safe to start a new session" while offering no
+              way to. The view is KeepMounted, so navigating away and back did
+              not clear it either — a crash mid-backlog took the whole surface
+              until the app restarted. An error state that names no next move
+              is not an error state, it is a wall. */}
+          <div className="flex gap-3 items-center">
+            <Button variant="primary" onClick={() => openWithMorph(() => void startSession(false))} disabled={blocked}>
+              Start a new sitting
+            </Button>
+            {hasPriorSession && (
+              <Button variant="ghost" onClick={() => openWithMorph(() => void startSession(true))} disabled={blocked}>
+                Resume the last one
+              </Button>
+            )}
+          </div>
         </div>
       )}
 
@@ -1899,7 +2035,8 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
             pace={pace}
             totalDue={totalDue}
             topicTitles={topicTitles}
-            onStart={() => startSession(false)}
+            morphName={morphing ? 'review-morph-plate' : undefined}
+            onStart={() => openWithMorph(() => void startSession(false))}
             onResume={() => startSession(true)}
             hasPriorSession={hasPriorSession}
             blocked={blocked}
@@ -1950,6 +2087,10 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
           />
           {horizonBuckets && <ReviewHorizon buckets={horizonBuckets} holdingCount={holdingCount} />}
         </>
+      )}
+
+        </div>
+      </div>
       )}
 
       {(phase === 'in-session' || phase === 'done') && !detachedFromSitting && (
@@ -2209,7 +2350,7 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
                     <ActivityLine activity={tutorActivity.activity} />
                     <button
                       onClick={stopSession}
-                      className="focus-ring text-xs px-2.5 py-1 rounded-lg text-[var(--color-text-faint)] hover:text-[var(--color-ink-danger)] hover:bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)]"
+                      className="focus-ring text-xs px-2.5 py-1 rounded-lg text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] hover:bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)]"
                     >
                       Stop
                     </button>
@@ -2274,7 +2415,7 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
                   // intervention: the receipt is already on disk (the app
                   // never rewrites receipts); this line makes the drift
                   // visible instead of silent.
-                  <div className="fig-caption text-[var(--color-ink-danger)]">
+                  <div className="fig-caption text-[var(--color-ink-warm)]">
                     {sessionCapViolations} checkpoint receipt{sessionCapViolations === 1 ? '' : 's'} exceeded the rating
                     cap (easy) — recognition evidence should top out at good.
                   </div>

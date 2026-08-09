@@ -1,4 +1,4 @@
-import { memo, useEffect } from 'react'
+import { memo } from 'react'
 import { TopicTitle } from '../TopicTitle'
 import type { DueItem } from '../../../../shared/types'
 import { humanizeNodeId } from '../../../../shared/humanizeId'
@@ -6,15 +6,23 @@ import { InkNode } from '../ui/InkNode'
 import { Button } from '../ui/Button'
 import { PlateFigure } from '../ui/PlateFigure'
 import { SegmentedControl } from '../ui/SegmentedControl'
-import { planSitting, secondsForTopic, humanMinutes, sittingOptions, nearestOption, type PaceModel } from '../../../../shared/sittingPace'
+import { SittingRuler } from './SittingRuler'
+import { buildRuler, snapToItem } from '../../shared/sittingRuler'
+import { secondsForTopic, sittingOptions, type PaceModel } from '../../../../shared/sittingPace'
 import { loadSittingOutcome, describeAccuracy } from '../../shared/lastSitting'
-import { capForMins, coveredCount, type SittingMins, type SittingStyle } from '../../shared/reviewKickoff'
+import type { SittingMins, SittingStyle } from '../../shared/reviewKickoff'
 import type { SittingPrefs } from '../../shared/sittingPrefs'
 
 /** Same local-date discipline as ReviewSessionView's own `daysOverdueLocal`
  * (getFullYear/Month/Date, never toISOString) — duplicated here rather than
  * imported so this component stays pure of the app-level view, the same
  * pattern LapseRite's own `formatReturnDate` copy already uses. */
+/** How many of a topic's due items are already past their date. `overdue_days`
+ * rides on every DueItem and was never shown per topic. */
+function overdueIn(items: DueItem[]): number {
+  return items.filter((i) => (i.overdue_days ?? 0) > 0).length
+}
+
 function daysOverdueLocal(due: string): number {
   const today = new Date()
   const dayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate())
@@ -22,6 +30,22 @@ function daysOverdueLocal(due: string): number {
   return Math.floor((dayStart.getTime() - d.getTime()) / 86400000)
 }
 
+/** INK ON THIS SURFACE, since two rules meet here and pull opposite ways.
+ *
+ * `controlChrome.ts` decrees Review accents COOL (retrieval under test), and
+ * this whole plate was drawing its chrome warm. But DESIGN.md's Consolidation
+ * Axis says warm marks a memory that SURVIVED — and a due review item is
+ * exactly that: it reached `state: 'review'` and is now being re-tested. So
+ * the split is not "make it all cool", it is:
+ *
+ *   · CHROME — selection, pills, active washes, section labels — takes the
+ *     environment accent (cool here). It is saying "you are in Review".
+ *   · STATE — the due figure, overdue emphasis — stays warm. It is saying
+ *     "these are consolidated memories", which is true and is what warm means.
+ *
+ * Get that backwards and either the environment loses its identity or the
+ * consolidation axis stops meaning anything.
+ */
 /** The briefing plate — replaces the old bare "topic + first probe's raw
  * text + two buttons" panel with a full-width recompose: ONE count, said once
  * and big, the surface's own signature figure; then, only when the backlog is
@@ -66,6 +90,7 @@ export const ReadyRoomPlate = memo(function ReadyRoomPlate({
   onPrefsChange,
   quickShareStat,
   resumeLabel = 'Resume last session',
+  morphName,
 }: {
   /** The already-fetched, capped queue (`window.engram.due(12)`) — what this
    * sitting will actually cover, most-overdue-first is not guaranteed by the
@@ -97,6 +122,9 @@ export const ReadyRoomPlate = memo(function ReadyRoomPlate({
    * "Return to the sitting" (its onResume just re-enters the live view, no
    * respawn) while the default stays the plain resume wording. */
   resumeLabel?: string
+  /** Shared-element name for the view transition into the session — see
+   * SessionMasthead's own `morphName`. Set only while a sitting is opening. */
+  morphName?: string
 }) {
   const topicGroups = new Map<string, DueItem[]>()
   let oldestDays = 0
@@ -124,50 +152,60 @@ export const ReadyRoomPlate = memo(function ReadyRoomPlate({
     ? queueTopics.reduce((sum, t) => sum + secondsForTopic(pace, t).seconds, 0)
     : 0
   const options = sittingOptions(queueTotalSeconds)
-  // A budget remembered from a different queue must still read as selected.
-  const activeMins = nearestOption(prefs.mins, options)
-  // The largest option always clears the queue, and says so — that is the
-  // number a learner most needs and never had.
-  // Persist the snap. The plate showing one budget while the sitting starts
-  // from another would be the worst of both: the view reads `prefs.mins`
-  // directly, so display and behaviour have to agree on one number.
-  useEffect(() => {
-    if (options.length > 0 && activeMins !== prefs.mins) {
-      onPrefsChange({ ...prefs, mins: activeMins })
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeMins])
+  // NOTE: an earlier version snapped `prefs.mins` to the nearest preset in an
+  // effect. That was fine while the presets were the only control and fatal
+  // once the ruler existed — setting 23 minutes on the ruler was immediately
+  // rewritten to the nearest preset, so the handle sprang back on every drag.
+  // The ruler is the continuous control and owns `prefs.mins`; the presets are
+  // jump-to shortcuts that highlight only on an exact match.
 
   const minsOptions = options.map((m, i) => ({
     value: `${m}` as `${SittingMins}`,
     label: i === options.length - 1 && options.length > 1 ? `${m} min · all` : `${m} min`,
   }))
 
-  const plan = pace ? planSitting(activeMins, queueTopics, pace) : null
+  // Explicitly projected, never the DueItem itself: `DueItem` carries probe,
+  // claim and rubric, and the ready room must not hold them. Mapping to the
+  // three structural fields the ruler needs makes that a type guarantee
+  // rather than a rule someone has to remember.
+  const rulerItems = dueItems
+    .filter((d) => !prefs.focusTopic || d.topic === prefs.focusTopic)
+    .map((d) => ({ topic: d.topic, id: d.id, overdue_days: d.overdue_days }))
+  const ruler = buildRuler(rulerItems, pace ?? null, prefs.mins)
 
-  // ITEM 4 — what the FIRST item costs, when that alone is a sitting. A
-  // 14-minute stat-mech item inside a "5 min" budget is an ambush; saying so
-  // up front lets the learner pick a different budget instead of abandoning
-  // the sitting halfway.
-  const firstCost = pace && queueTopics[0] ? secondsForTopic(pace, queueTopics[0]) : null
-  const firstIsLong = firstCost !== null && firstCost.seconds > 8 * 60
+  // The "first item is long" warning used to be a caption. The ruler says it
+  // better and continuously: that item is simply the widest segment, and if it
+  // alone overruns the chosen budget the ruler's own readout reports it (see
+  // `overruns`). One statement, in the place you are already looking.
 
   // ITEM 10 — how the last estimate actually did. An estimate nobody checks
   // is a guess in a confident font.
-  const overdueItems = dueItems.filter((d) => (d.overdue_days ?? 0) > 0)
-  const overdueSpread =
-    overdueItems.length > 0
-      ? `${overdueItems.length} of ${dueItems.length} already overdue, the oldest by ${Math.max(
-          ...overdueItems.map((d) => d.overdue_days ?? 0),
-        )} days — the engine serves those first`
-      : null
+  // The overdue spread used to be a caption here. It is now drawn: the ruler
+  // foots every overdue segment in danger ink and its own caption names the
+  // mark, so the sentence was a third telling of a fact already on screen
+  // twice. The ruler was built to retire these lines; leaving them was an
+  // admission it had not.
+
+  // "Heavy" measured in time, not item count — see the amnesty comment below.
+  const AMNESTY_MINUTES = 90
+  const perItemSeconds = pace && queueTopics[0] ? secondsForTopic(pace, queueTopics[0]).seconds : 60
+  const backlogFeelsHeavy = (totalDue * perItemSeconds) / 60 >= AMNESTY_MINUTES
 
   const lastOutcome = loadSittingOutcome()
   const accuracy = lastOutcome ? describeAccuracy(lastOutcome) : null
   const paceBasis = pace && queueTopics[0] ? secondsForTopic(pace, queueTopics[0]) : null
 
   return (
-    <div className="tilt-card-soft panel px-6 py-6 flex flex-col gap-4">
+    // gap-6 between registers, tight inside them. Every child used to sit at
+    // gap-4 — six registers at one interval, so the figure, its aside, the
+    // inventory, the budget, the caveats and the action all read as equally
+    // related to each other, which is to say not grouped at all. The
+    // situation (figure + its aside) now holds together at gap-2 while the
+    // decision below is a clear step away.
+    <div
+      className="tilt-card-soft panel px-6 py-6 flex flex-col gap-6"
+      style={morphName ? { viewTransitionName: morphName } : undefined}
+    >
       {/* ONE count, said once, big — the plate's signature. Deliberately
           `totalDue` (the true, uncapped debt), never `dueItems.length` — the
           headline must never understate what's actually owed. The sitting
@@ -175,6 +213,7 @@ export const ReadyRoomPlate = memo(function ReadyRoomPlate({
           explained by the caption below, not by shrinking this figure.
           Rendered through the shared PlateFigure anatomy — this plate is the
           origin of that grammar, and now its first consumer. */}
+      <div className="flex flex-col gap-2">
       <PlateFigure
         value={totalDue}
         tone="warm"
@@ -193,80 +232,231 @@ export const ReadyRoomPlate = memo(function ReadyRoomPlate({
           separately, above the plate). Same "due > 2x mode cap" heuristic
           (SKILL.md: standard cap ~12) the skill's own prose echoes once a
           session starts; this is the reliable pre-session beat. */}
-      {totalDue > 24 && (
-        <p className="text-sm text-[var(--color-ink-warm)] leading-relaxed">
+      {/* Threshold in MINUTES of real work, not in the engine's cap.
+          It was `totalDue > 24` — twice the standard cap — so the compassion
+          was indexed to a scheduler constant. At the measured ~4.6 min an item
+          a person is already looking at two hours of work by 24, and someone
+          at 18 due got the full indictment and none of the reassurance. This
+          fires when the backlog exceeds about an hour and a half of actual
+          sitting, computed at this learner's own pace where one exists. */}
+      {backlogFeelsHeavy && (
+        // A prose measure, not the plate's. Unbounded this ran ~180
+        // characters on one line — two and a half times readable — which for
+        // a paragraph whose whole job is to lower the temperature is the
+        // opposite of calming. The transcript caps at 92ch for the same
+        // reason; this is shorter still because it is a single aside.
+        <p className="text-sm text-[var(--color-ink-warm)] leading-relaxed max-w-[64ch]">
           {totalDue} reviews have piled up — nothing is owed, and that’s not a debt to clear in one sitting. This
           sitting still only covers a capped set, most-overdue first; the rest just stays due, no guilt attached.
         </p>
       )}
+      </div>
 
       {topics.length > 0 && (
-        <div className="flex flex-col gap-2.5 border-t border-[var(--color-hairline)] pt-3">
-          {topics.map(([topic, items]) => (
-            <div key={topic} className="flex flex-col gap-1">
-              <div className="flex items-center justify-between gap-2 text-xs">
-                <div className="flex items-center gap-2 min-w-0">
-                  <InkNode id={topic} variant="outlined" size={14} />
-                  <TopicTitle title={topicTitles?.[topic] ?? topic} className="text-[var(--color-text-primary)] truncate" />
+        <div className="flex flex-col gap-2 border-t border-[var(--color-hairline)] pt-4">
+          {/* The group had no name and no home for its own control. It now
+              has both — and the ALL pill is where "clear the focus" lives,
+              which is why the separate focus-chip row below could go. */}
+          <div className="flex items-center gap-2.5">
+            <span className="label-data text-[10px] uppercase tracking-[0.28em] text-[var(--color-text-dim)] shrink-0">
+              Due by topic
+            </span>
+            {focusChoices.length > 1 && (
+              <button
+                onClick={() => onPrefsChange({ ...prefs, focusTopic: null })}
+                aria-pressed={prefs.focusTopic === null}
+                className={`focus-ring label-data text-[10px] tracking-[0.14em] px-2 py-0.5 border shrink-0 ${
+                  prefs.focusTopic === null
+                    ? 'border-[var(--color-ink-cool)] text-[var(--color-ink-cool)]'
+                    : 'border-[var(--color-hairline)] text-[var(--color-text-faint)] hover:text-[var(--color-text-dim)]'
+                }`}
+              >
+                ALL
+              </button>
+            )}
+            <span className="h-px flex-1 bg-[var(--color-hairline)]" aria-hidden="true" />
+          </div>
+
+          {/* One list, not two. These rows named every topic and a separate
+              chip row underneath named all of them AGAIN as focus buttons —
+              the same four things twice, three hundred pixels apart, so the
+              inventory and the control that acts on it had to be matched up
+              by reading. The row IS the control now: pressing one works that
+              topic only, pressing it again clears. Same `focusTopic` state
+              and same behaviour as the chips had; it just lives on the thing
+              it names. */}
+          {topics.map(([topic, items]) => {
+            const active = prefs.focusTopic === topic
+            const selectable = focusChoices.length > 1
+            const Row = selectable ? 'button' : 'div'
+            return (
+              <Row
+                key={topic}
+                {...(selectable
+                  ? {
+                      onClick: () => onPrefsChange({ ...prefs, focusTopic: active ? null : topic }),
+                      'aria-pressed': active,
+                      title: active ? 'Working this topic only — press to clear' : 'Work only this topic',
+                    }
+                  : {})}
+                className={`w-full text-left flex flex-col gap-1 px-2 py-1.5 border transition-colors duration-[var(--dur-base)] ${
+                  selectable ? 'focus-ring' : ''
+                } ${
+                  active
+                    ? 'border-[var(--color-ink-cool-dim)] bg-[color-mix(in_srgb,var(--color-ink-cool)_8%,transparent)]'
+                    : `border-transparent ${selectable ? 'hover:border-[var(--color-edge)]' : ''}`
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2 text-xs">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <InkNode
+                      id={topic}
+                      variant="outlined"
+                      color={active ? 'var(--color-ink-cool)' : undefined}
+                      size={14}
+                    />
+                    <TopicTitle
+                      title={topicTitles?.[topic] ?? topic}
+                      className={`truncate ${active ? 'text-[var(--color-ink-cool)]' : 'text-[var(--color-text-primary)]'}`}
+                    />
+                  </div>
+                  {/* Overdue carried no colour at all: a topic nine days past
+                      and a topic due this morning printed the same dim number,
+                      so the queue's shape had to be read out of the node names
+                      or not at all. Danger ink is right here and is already
+                      the established mark for it — HealthRing's due notch and
+                      the ruler's overdue foot both use it — and the count is
+                      spelled out rather than implied, so the signal is not
+                      hue-only. */}
+                  <span className="label-data shrink-0 flex items-baseline gap-1.5">
+                    {/* Total first, then the overdue share. Reversed, "2
+                        overdue 4" read as "2 overdue out of 4" — the eye takes
+                        the leading number as the subject, and the subject here
+                        is how many are due. */}
+                    <span className="text-[var(--color-text-dim)]">{items.length}</span>
+                    {overdueIn(items) > 0 && (
+                      <span className="text-[var(--color-ink-danger)]">· {overdueIn(items)} overdue</span>
+                    )}
+                  </span>
                 </div>
-                <span className="label-data text-[var(--color-text-dim)] shrink-0">{items.length}</span>
-              </div>
-              {/* Node NAMES, never the probe text — see the doctrine comment
-                  above this component. */}
-              <div className="label-data text-[10px] text-[var(--color-text-faint)] pl-[20px] truncate">
-                {items.map((it) => humanizeNodeId(it.id)).join(' · ')}
-              </div>
-            </div>
-          ))}
+                {/* Node NAMES, never the probe text — see the doctrine comment
+                    above this component. */}
+                {/* `text-dim`, not `text-faint`. Measured: faint on this
+                    panel is 2.38:1 in the dark theme and 2.89:1 in the light —
+                    below even the 3:1 large-text floor, at the SMALLEST size on
+                    the page, on the one line that says what is actually due.
+                    Dim measures 5.23:1 and clears the 4.5:1 body floor. */}
+                <div className="label-data text-[10px] text-[var(--color-text-dim)] pl-[20px] truncate">
+                  {items.map((it) => humanizeNodeId(it.id)).join(' · ')}
+                </div>
+              </Row>
+            )
+          })}
         </div>
       )}
 
-      {/* The intake — time and style are session LOGISTICS (the dialogue
-          grammar's own carve-out: menus for navigation, never for
-          knowledge), so pickers are the honest form here. Style resets to
-          Standard every mount (sittingPrefs.ts) — checkpoint is elected per
-          sitting, never a sticky default. Still no `.probe` dereference
-          anywhere in this file — the picker reads counts, never content. */}
-      <div className="flex flex-col gap-2 border-t border-[var(--color-hairline)] pt-3">
-        <div className="flex items-center gap-3 flex-wrap">
-          {/* ITEM 3 — "I have to leave at 21:40" is how the constraint
-              actually arrives; a duration is arithmetic the learner should
-              not have to do. Snaps to the nearest offered budget rather than
-              inventing a fourth. */}
-          <input
-            type="time"
-            aria-label="Out by"
-            title="Set when you have to stop — the budget snaps to the nearest option"
-            className="focus-ring panel px-2 py-1 text-xs text-[var(--color-text-primary)]"
-            onChange={(e) => {
-              const [h, m] = e.target.value.split(':').map(Number)
-              if (!Number.isFinite(h) || !Number.isFinite(m)) return
-              const now = new Date()
-              const end = new Date(now)
-              end.setHours(h, m, 0, 0)
-              if (end.getTime() <= now.getTime()) end.setDate(end.getDate() + 1)
-              const mins = (end.getTime() - now.getTime()) / 60000
-              const nearest = ([5, 10, 25] as SittingMins[]).reduce((a, b) =>
-                Math.abs(b - mins) < Math.abs(a - mins) ? b : a,
-              )
-              onPrefsChange({ ...prefs, mins: nearest })
-            }}
+      {/* The intake. The RULER is the control now — a continuous budget you
+          cut against the queue's real costs — and the pickers beside it are
+          shortcuts and modifiers, not the primary means. Time and style are
+          session LOGISTICS (the dialogue grammar's own carve-out: menus for
+          navigation, never for knowledge), so pickers remain the honest form.
+          Style resets to Standard every mount (sittingPrefs.ts) — checkpoint
+          is elected per sitting, never a sticky default. Still no `.probe`
+          dereference anywhere in this file: the ruler is handed a projected
+          shape that cannot carry one. */}
+      {dueItems.length > 0 && (
+        <div className="flex flex-col gap-3 border-t border-[var(--color-hairline)] pt-3">
+          <SittingRuler
+            items={rulerItems}
+            pace={pace ?? null}
+            budgetMins={prefs.mins}
+            onBudgetChange={(mins) => onPrefsChange({ ...prefs, mins })}
           />
-          <SegmentedControl<`${SittingMins}`>
-            options={minsOptions}
-            value={`${activeMins}`}
-            onChange={(v) => onPrefsChange({ ...prefs, mins: Number(v) as SittingMins })}
-          />
-          <SegmentedControl<SittingStyle>
-            options={STYLE_OPTIONS}
-            value={prefs.style}
-            onChange={(v) => onPrefsChange({ ...prefs, style: v })}
-          />
+
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* "I have to leave at 21:40" is how the constraint actually
+                arrives; a duration is arithmetic the learner should not have to
+                do. It used to snap to a hardcoded [5, 10, 25] — stale since the
+                budgets became queue-derived, so an out-time could select a
+                number the plate never offered. It now lands on a real item
+                edge, the same places the ruler can stop. */}
+            <input
+              // `key` on the budget, so the field REMOUNTS — and therefore
+              // clears — whenever the budget changes by any other means. It is
+              // uncontrolled by nature (a clock time is not derivable from a
+              // duration without re-deriving it every second), and left alone
+              // it went on displaying "21:40" after a ruler drag had moved the
+              // finish somewhere else entirely. An empty field asks a
+              // question; a stale one makes a false claim.
+              key={prefs.mins}
+              type="time"
+              aria-label="Out by — set when you have to stop"
+              title="Set when you have to stop — the budget lands on the last item that fits"
+              className="focus-ring panel px-2 py-1 text-xs text-[var(--color-text-primary)]"
+              onChange={(e) => {
+                const [h, m] = e.target.value.split(':').map(Number)
+                if (!Number.isFinite(h) || !Number.isFinite(m)) return
+                const now = new Date()
+                const end = new Date(now)
+                end.setHours(h, m, 0, 0)
+                if (end.getTime() <= now.getTime()) end.setDate(end.getDate() + 1)
+                const mins = (end.getTime() - now.getTime()) / 60000
+                const fraction = ruler.totalSeconds > 0 ? (mins * 60) / ruler.totalSeconds : 0
+                onPrefsChange({ ...prefs, mins: snapToItem(ruler, fraction) })
+              }}
+            />
+            {/* Jump-to presets — a quarter, a half, the lot. Highlighted only
+                on an exact match, because the ruler can sit between them. */}
+            {/* Both controls reached a screen reader as bare unlabelled
+                groups — the component supports `ariaLabel` and neither call
+                site passed one, which is the exact defect its own doc comment
+                warns about. Every BUTTON had a name; the group did not, so you
+                heard "5 min, 15 min, 30 min" with no statement of what it
+                governed. */}
+            <SegmentedControl<`${SittingMins}`>
+              ariaLabel="Jump the budget to a preset length"
+              options={minsOptions}
+              value={`${prefs.mins}`}
+              onChange={(v) => onPrefsChange({ ...prefs, mins: Number(v) as SittingMins })}
+            />
+            <SegmentedControl<SittingStyle>
+              ariaLabel="Sitting style — free recall or checkpoints"
+              options={STYLE_OPTIONS}
+              value={prefs.style}
+              onChange={(v) => onPrefsChange({ ...prefs, style: v })}
+            />
+          </div>
+
         </div>
-        <div className="fig-caption">
-          covers about {coveredCount(capForMins(activeMins), totalDue)} of {totalDue}
-          {prefs.style === 'checkpoint' ? ' · checkpoint style where eligible' : ''}, in triage order
-        </div>
+      )}
+
+      {/* The notes register — a stacked COLUMN. These were seven siblings
+          inside one `flex gap-3 items-center` row together with the buttons,
+          so a caption, a warning and a CTA wrapped against each other at
+          whatever width the window happened to be. Facts stack; the action
+          gets its own row below. */}
+      <div className="flex flex-col gap-1">
+        {dueItems.length === 0 && (
+          <div className="fig-caption">
+            Nothing is due — the schedule is ahead of you. Reviewing early would teach the engine that
+            recall was easier than it was, so the honest move is to leave it and learn something new.
+          </div>
+        )}
+        {accuracy && <div className="fig-caption">{accuracy}</div>}
+        {/* The first-run case was the one that said nothing. `paceBasis` is
+            null when `pace` itself is null, so a learner with NO history saw
+            equal-width segments under a caption reading "each item as wide as
+            it costs you" — the app asserting a measurement it had not taken,
+            which PRODUCT.md forbids by name. That case now speaks first. */}
+        {!pace && (
+          <div className="fig-caption">
+            no pace history yet — every item is drawn at the same assumed minute, and the widths will separate
+            once you have sat a few
+          </div>
+        )}
+        {pace && paceBasis?.basis === 'overall' && (
+          <div className="fig-caption">widths come from your overall pace — this topic has little history yet</div>
+        )}
         {quickShareStat && quickShareStat.quick > 0 && (
           <div className="fig-caption">
             {quickShareStat.quick} of your last {quickShareStat.total} reviews were checkpoint style — checkpoint
@@ -276,61 +466,6 @@ export const ReadyRoomPlate = memo(function ReadyRoomPlate({
       </div>
 
       <div className="flex gap-3 items-center">
-        {/* ITEM 7 — the queue's own shape. `overdue_days` rides on every due
-            item and was never shown, so the ordering looked arbitrary when it
-            is in fact most-overdue-first. */}
-        {/* ITEM 9 — nothing due used to be a dead end: a Start button over an
-            empty queue. An empty queue is the system working, and the useful
-            next move is learning something new, so say both. */}
-        {dueItems.length === 0 && (
-          <div className="fig-caption">
-            Nothing is due — the schedule is ahead of you. Reviewing early would teach the engine that
-            recall was easier than it was, so the honest move is to leave it and learn something new.
-          </div>
-        )}
-
-        {overdueSpread && <div className="fig-caption">{overdueSpread}</div>}
-
-        {firstIsLong && (
-          <div className="fig-caption text-[var(--color-ink-warm)]">
-            {`heads up — the first item here usually takes about ${humanMinutes(firstCost.seconds)} on its own`}
-          </div>
-        )}
-
-        {accuracy && <div className="fig-caption">{accuracy}</div>}
-
-        {plan && plan.items > 0 && (
-          <div className="fig-caption">
-            {`${activeMins} min covers about ${plan.items} ${plan.items === 1 ? 'item' : 'items'} — ${humanMinutes(plan.predictedSeconds)} at your pace`}
-            {paceBasis?.basis === 'topic' && ` (~${humanMinutes(paceBasis.seconds)} each here)`}
-            {paceBasis?.basis === 'overall' && ' (from your overall pace — this topic has little history yet)'}
-            {plan.overruns && ' · one item already runs past this'}
-          </div>
-        )}
-
-        {/* One topic at a time. A mixed queue is engine-ordered by savings,
-            which is right for retention and hard on a person — an observed
-            sitting stepped from stat-mech into quantum between two items.
-            Only shown when the queue actually spans more than one topic. */}
-        {focusChoices.length > 1 && (
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="fig-caption shrink-0">focus</span>
-            {[null, ...focusChoices].map((t) => (
-              <button
-                key={t ?? '__all__'}
-                onClick={() => onPrefsChange({ ...prefs, focusTopic: t })}
-                className={`focus-ring label-data text-[10px] tracking-[0.14em] px-2 py-0.5 border ${
-                  prefs.focusTopic === t
-                    ? 'border-[var(--color-ink-warm)] text-[var(--color-ink-warm)]'
-                    : 'border-[var(--color-hairline)] text-[var(--color-text-faint)] hover:text-[var(--color-text-dim)]'
-                }`}
-              >
-                {t === null ? 'ALL' : <TopicTitle title={topicTitles?.[t] ?? t} />}
-              </button>
-            ))}
-          </div>
-        )}
-
         <Button variant="primary" size="lg" onClick={onStart} disabled={blocked}>
           Start review session
         </Button>

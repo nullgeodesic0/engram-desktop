@@ -27,6 +27,7 @@ export function SessionMasthead({
   headerRef,
   onPeek,
   onFocusPeek,
+  morphName,
 }: {
   /** Environment chrome identity (shared/controlChrome.ts) — colors the
    * band's top rule and the eyebrow only; everything inside the slots keeps
@@ -59,10 +60,17 @@ export function SessionMasthead({
   /** Focus-capture peek — keyboard travel into the folded header claims it
    * open, same as the pre-extraction behavior. */
   onFocusPeek?: () => void
+  /** Shared-element name for a view transition INTO this masthead. Review
+   * hands the ready plate and this header the same name so the plate reads as
+   * becoming the session header rather than being replaced by it. Deliberately
+   * the container and not a number: the plate's figure is the uncapped debt
+   * and the header's is the sitting's position, so morphing one into the other
+   * would animate an equivalence that does not hold. */
+  morphName?: string
 }) {
   const a = ACCENT[accent]
   const plate = (
-    <div className="tilt-card panel flex flex-col">
+    <div className="tilt-card panel flex flex-col" style={morphName ? { viewTransitionName: morphName } : undefined}>
       {/* Deliberately compact (user decree: the masthead was eating real
           estate) — tight band padding, text-lg title, slim instrument row.
           The plate should read as chrome above the transcript, never as a
