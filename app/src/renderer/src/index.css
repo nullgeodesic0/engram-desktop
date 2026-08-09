@@ -357,6 +357,31 @@
   animation: streaming-caret-pulse 1.2s ease-in-out infinite;
 }
 
+/* The waiting dots (TypingIndicator, ActivityLine).
+ *
+ * Replaces Tailwind's `animate-bounce`, whose curve is
+ * `cubic-bezier(0.8, 0, 1, 1)` — a ballistic rubber-ball drop with a hard
+ * stop at the bottom. That reads as a toy in a window someone is sitting at
+ * for forty minutes, and it is the wrong physics for this world: every other
+ * motion here settles on `--ease-out-soft`. The signal is carried mostly by
+ * opacity, with a 1.5px lift for life, on a symmetric in-out curve.
+ *
+ * The `opacity: 0.85` is the RESTING state, and it is load-bearing: the
+ * global reduced-motion kill-switch zeros the duration and clamps the
+ * iteration count to 1, so the dots fall back to their own style rather than
+ * to a keyframe. Without it they would settle at the 28% trough and read as
+ * disabled. Under reduced motion this is three steady dots beside a label
+ * that already says what is happening. */
+@keyframes dot-breathe {
+  0%, 100% { opacity: 0.28; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(-1.5px); }
+}
+
+.dot-breathe {
+  opacity: 0.85;
+  animation: dot-breathe 1.15s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
 @keyframes activity-label-in {
   from { opacity: 0; }
   to { opacity: 1; }

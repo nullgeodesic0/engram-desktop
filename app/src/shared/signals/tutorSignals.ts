@@ -328,6 +328,16 @@ const BRIDGE_TOOL_PREFIX = 'mcp__engram-ui-bridge__'
  * suggest_action, spotlight_node, annotate_node, a generic assessor
  * verification spawn) produces no mark and does NOT split — adjacent prose
  * around those keeps merging exactly as before. */
+/** The bridge's learner-facing question tool.
+ *
+ * Split out because the bubble-splitting rule needs to know not just THAT a
+ * boundary fired but whether the LEARNER acted in the gap — an answered
+ * question ends the tutor's turn, so no text after it can belong to the
+ * bubble before it. See `bareProbeHeaderExceptionApplies`. */
+export function isAskToolUse(name: string): boolean {
+  return name === `${BRIDGE_TOOL_PREFIX}ask_user_question`
+}
+
 export function isMarkBoundaryToolUse(name: string, input: Record<string, unknown>): boolean {
   if (name.startsWith(BRIDGE_TOOL_PREFIX)) {
     const tool = name.slice(BRIDGE_TOOL_PREFIX.length)

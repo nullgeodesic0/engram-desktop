@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { splitAroundProbeHeader, endsWithBareProbeHeader, mergeAssistantText, parseAllProbeHeaders } from './probeHeader'
+import {
+  splitAroundProbeHeader,
+  endsWithBareProbeHeader,
+  bareProbeHeaderExceptionApplies,
+  mergeAssistantText,
+  parseAllProbeHeaders,
+} from './probeHeader'
 
 describe('splitAroundProbeHeader', () => {
   it('parses a real Review header with a threshold dagger and no topic', () => {
@@ -91,5 +97,38 @@ describe('mergeAssistantText — blocks are paragraphs', () => {
   it('still separates after a bare probe header', () => {
     const merged = mergeAssistantText('**[1/3] · some-node**', true, 'The question body.')
     expect(merged).toBe('**[1/3] · some-node**\n\nThe question body.')
+  })
+})
+
+describe('bareProbeHeaderExceptionApplies', () => {
+  const BARE = '**[1/7] · scattering-cross-sections-central-force** *(grad-classical-mechanics)*'
+  const one = { count: 1, interactive: false }
+
+  it('applies to the shape it exists for — one boundary, no learner action', () => {
+    // A tutor posts the header, calls render_beat once, then writes the
+    // question. The question must fold back into the header's own bubble.
+    expect(bareProbeHeaderExceptionApplies(BARE, one)).toBe(true)
+  })
+
+  it('does not apply once the learner has answered something', () => {
+    // The checkpoint-review bug: four ask_user_question calls sat between the
+    // header and the next text, and the exception merged the post-grade
+    // verdict into the bubble ABOVE the checkpoint cards — so the learner
+    // read the result of a question above the question itself.
+    expect(bareProbeHeaderExceptionApplies(BARE, { count: 4, interactive: true })).toBe(false)
+    // Interactive alone is enough, even for a single boundary.
+    expect(bareProbeHeaderExceptionApplies(BARE, { count: 1, interactive: true })).toBe(false)
+  })
+
+  it('does not apply across a run of several tutor boundaries', () => {
+    // More than one boundary means the tutor did several things in the gap;
+    // that is not a probe posting itself.
+    expect(bareProbeHeaderExceptionApplies(BARE, { count: 2, interactive: false })).toBe(false)
+  })
+
+  it('still requires the bubble to actually end with a bare header', () => {
+    expect(bareProbeHeaderExceptionApplies('Just some prose.', one)).toBe(false)
+    // A header that already carries its body is not "bare" — nothing to fold.
+    expect(bareProbeHeaderExceptionApplies(`${BARE}\n\nThe question body.`, one)).toBe(false)
   })
 })

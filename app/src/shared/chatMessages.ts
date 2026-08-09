@@ -1,6 +1,6 @@
 import { isTaskNotificationContent } from './taskNotification'
-import { isMarkBoundaryToolUse } from './signals/tutorSignals'
-import { endsWithBareProbeHeader, mergeAssistantText } from './probeHeader'
+import { isAskToolUse, isMarkBoundaryToolUse } from './signals/tutorSignals'
+import { bareProbeHeaderExceptionApplies, mergeAssistantText } from './probeHeader'
 
 export interface ChatMessage {
   id: string
@@ -88,6 +88,9 @@ export function parseTranscriptToMessages(rawLines: unknown[]): ChatMessage[] {
   // merging, so the mark pinned at that boundary renders between the prose
   // that preceded it and the prose that followed.
   let boundarySinceLastText = false
+  // The RUN of boundaries since the last text, not just "was there one" —
+  // see `bareProbeHeaderExceptionApplies`. Reset with the flag below.
+  let boundaryRun = { count: 0, interactive: false }
 
   for (const line of lines) {
     if (line.type === 'user' && typeof line.message?.content === 'string') {
@@ -116,6 +119,10 @@ export function parseTranscriptToMessages(rawLines: unknown[]): ChatMessage[] {
           isMarkBoundaryToolUse(block.name, block.input)
         ) {
           boundarySinceLastText = true
+          boundaryRun = {
+            count: boundaryRun.count + 1,
+            interactive: boundaryRun.interactive || isAskToolUse(block.name),
+          }
           continue
         }
         if (block.type !== 'text' || !block.text) continue
@@ -126,7 +133,11 @@ export function parseTranscriptToMessages(rawLines: unknown[]): ChatMessage[] {
         // itself) still absorbs the next text block into the SAME bubble —
         // the split rule exists for genuine mid-turn interleaving, not for a
         // single probe utterance that a bridge call happens to interrupt.
-        if (last && last.role === 'assistant' && (!boundarySinceLastText || endsWithBareProbeHeader(last.text))) {
+        if (
+          last &&
+          last.role === 'assistant' &&
+          (!boundarySinceLastText || bareProbeHeaderExceptionApplies(last.text, boundaryRun))
+        ) {
           // Timestamp intentionally untouched — a merged bubble keeps the
           // instant it STARTED at, same rule the live append path uses.
           last.text = mergeAssistantText(last.text, boundarySinceLastText, block.text)
@@ -134,6 +145,7 @@ export function parseTranscriptToMessages(rawLines: unknown[]): ChatMessage[] {
           messages.push({ id: `t${idCounter++}`, role: 'assistant', text: block.text, timestamp: parseLineTimestamp(line.timestamp) })
         }
         boundarySinceLastText = false
+        boundaryRun = { count: 0, interactive: false }
       }
     }
   }

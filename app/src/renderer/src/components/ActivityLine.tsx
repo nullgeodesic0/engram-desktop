@@ -27,8 +27,8 @@ export function ActivityLine({ activity }: { activity: TutorActivity }) {
         {[0, 1, 2].map((i) => (
           <span
             key={i}
-            className="w-1.5 h-1.5 rounded-full bg-[var(--color-ink-warm)] animate-bounce"
-            style={{ animationDelay: `${i * 0.15}s`, animationDuration: '0.9s' }}
+            className="w-1.5 h-1.5 rounded-full bg-[var(--color-ink-warm)] dot-breathe"
+            style={{ animationDelay: `${i * 0.15}s` }}
           />
         ))}
       </div>

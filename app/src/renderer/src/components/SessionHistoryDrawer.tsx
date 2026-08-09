@@ -15,8 +15,8 @@ import {
   type VerdictHint,
 } from '../../../shared/verdictSegments'
 import { isTaskNotificationContent } from '../../../shared/taskNotification'
-import { isMarkBoundaryToolUse } from '../../../shared/signals/tutorSignals'
-import { endsWithBareProbeHeader, mergeAssistantText } from '../../../shared/probeHeader'
+import { isAskToolUse, isMarkBoundaryToolUse } from '../../../shared/signals/tutorSignals'
+import { bareProbeHeaderExceptionApplies, mergeAssistantText } from '../../../shared/probeHeader'
 import { sittingToMarkdown, sittingToPrintHtml, type SittingMeta } from '../shared/sittingToMarkdown'
 import { recordView } from '../shared/recentlyViewed'
 import { Modal } from './ui/Modal'
@@ -130,6 +130,8 @@ export function buildHistoryTimeline(rawLines: unknown[]): {
   // predicate as `parseTranscriptToMessages`; see that function's SPLIT RULE
   // doctrine comment in shared/chatMessages.ts.
   let boundarySinceLastText = false
+  // See `bareProbeHeaderExceptionApplies` — the run, not just the flag.
+  let boundaryRun = { count: 0, interactive: false }
 
   for (let idx = 0; idx < lines.length; idx++) {
     const line = lines[idx]
@@ -168,6 +170,10 @@ export function buildHistoryTimeline(rawLines: unknown[]): {
             }
           }
           boundarySinceLastText = true
+          boundaryRun = {
+            count: boundaryRun.count + 1,
+            interactive: boundaryRun.interactive || isAskToolUse(block.name),
+          }
           continue
         }
         if (block.type !== 'text' || !block.text) continue
@@ -177,7 +183,11 @@ export function buildHistoryTimeline(rawLines: unknown[]): {
         // header-only bubble absorbs the text that follows a mark-boundary
         // tool call instead of starting a new bubble, so replay agrees with
         // the live views' fix for the same corpus bug.
-        if (last && last.role === 'assistant' && (!boundarySinceLastText || endsWithBareProbeHeader(last.text))) {
+        if (
+          last &&
+          last.role === 'assistant' &&
+          (!boundarySinceLastText || bareProbeHeaderExceptionApplies(last.text, boundaryRun))
+        ) {
           // Timestamp intentionally untouched — same "keeps the instant it
           // started at" rule as chatMessages.ts's own merge branch.
           last.text = mergeAssistantText(last.text, boundarySinceLastText, block.text)
@@ -186,6 +196,7 @@ export function buildHistoryTimeline(rawLines: unknown[]): {
           messageSourceIndex.push(idx)
         }
         boundarySinceLastText = false
+        boundaryRun = { count: 0, interactive: false }
       }
       continue
     }

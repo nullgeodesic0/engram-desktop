@@ -79,13 +79,14 @@ import {
   classifyEngramBashFailure,
   parseMisconceptionAdds,
   parseMisconceptionResolves,
+  isAskToolUse,
   isMarkBoundaryToolUse,
   type ToolFailureKind,
 } from '../../../shared/signals/tutorSignals'
 import { QueueRail } from '../components/ritual/QueueRail'
 import { NodeCrossingDivider } from '../components/ritual/Marks'
 import { deriveReviewCrossings, latestProbeHeader, resolveAnchorBeforeNextProbe, allProbeHeaders } from '../../../shared/reviewCrossing'
-import { endsWithBareProbeHeader, mergeAssistantText } from '../../../shared/probeHeader'
+import { bareProbeHeaderExceptionApplies, mergeAssistantText } from '../../../shared/probeHeader'
 import {
   deriveVerdictRegions,
   verdictRegionMessageRenders,
@@ -378,6 +379,9 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
   // turn asks/phases here had the exact same disease Learn did; the same
   // split fixes both.
   const assistantBoundaryRef = useRef(false)
+  // The RUN of boundaries since the last text delta, not just "was there
+  // one" — see `bareProbeHeaderExceptionApplies`. Reset wherever the flag is.
+  const boundaryRunRef = useRef({ count: 0, interactive: false })
 
   function pushLapseMark(node: string, returnDate: string | null) {
     setMarks((prev) => [
@@ -655,13 +659,16 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
         // between the prose that preceded it and the prose now arriving.
         const breakBubble = assistantBoundaryRef.current
         assistantBoundaryRef.current = false
+    boundaryRunRef.current = { count: 0, interactive: false }
+        const boundaryRun = boundaryRunRef.current
+        boundaryRunRef.current = { count: 0, interactive: false }
         setMessages((prev) => {
           const last = prev[prev.length - 1]
           // Bare-probe-header exception (see `endsWithBareProbeHeader`'s own
           // doctrine comment) — a header-only bubble absorbs the text that
           // follows a mark-boundary tool call (typically `render_beat`
           // posting the probe itself) instead of starting a new bubble.
-          if (last && last.role === 'assistant' && (!breakBubble || endsWithBareProbeHeader(last.text))) {
+          if (last && last.role === 'assistant' && (!breakBubble || bareProbeHeaderExceptionApplies(last.text, boundaryRun))) {
             return [...prev.slice(0, -1), { ...last, text: mergeAssistantText(last.text, breakBubble, event.text) }]
           }
           // `Date.now()` at append time — SessionEvent carries no timestamp
@@ -677,6 +684,10 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
         // specific-signal branches below; same shared predicate replay uses.
         if (isMarkBoundaryToolUse(event.name, event.input)) {
           assistantBoundaryRef.current = true
+          boundaryRunRef.current = {
+            count: boundaryRunRef.current.count + 1,
+            interactive: boundaryRunRef.current.interactive || isAskToolUse(event.name),
+          }
         }
         // Task 7 — claim this Bash call's id for tool-failure purposes before
         // the rate-specific branch below (same registry, same classifier

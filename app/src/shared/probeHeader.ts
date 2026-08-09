@@ -157,6 +157,48 @@ export function endsWithBareProbeHeader(text: string): boolean {
   return split !== null && split.header.body === ''
 }
 
+/** The run of mark-boundary tool calls since the last assistant text block.
+ *
+ * `count` is how many fired; `interactive` is whether any of them was an
+ * `ask_user_question` — i.e. whether the LEARNER acted in the gap. */
+export interface BoundaryRun {
+  count: number
+  interactive: boolean
+}
+
+/** Whether the bare-probe-header exception may fire — the ONE decision all
+ * four bubble-splitting call sites must agree on (the two live views,
+ * `parseTranscriptToMessages`, and `buildHistoryTimeline`).
+ *
+ * The exception exists for a single shape: a tutor emits `**[3/5] · \`node\`**`
+ * as its own text block, calls ONE bridge tool (`render_beat`, posting the
+ * probe), then writes the question in the next block. Folding that next block
+ * back into the header's bubble is what keeps the question inside its
+ * ProbeCard instead of stranding it as loose prose.
+ *
+ * It was previously tested with `endsWithBareProbeHeader` alone, which asks
+ * only "does the open bubble end with a bare header" and nothing about what
+ * has happened since. That is true for the rest of the sitting, so the bubble
+ * kept swallowing every later text block — in a real checkpoint review it
+ * absorbed the post-grade verdict across four `ask_user_question` calls and
+ * three grading Bash calls. Because ritual marks pin between messages by
+ * `atIndex`, the four answered checkpoint cards then rendered BELOW a bubble
+ * that now contained the verdict they produced: the learner read the result
+ * of a question above the question itself.
+ *
+ * So the exception is now bounded to the shape it was written for. A single
+ * boundary, and no learner interaction in the gap:
+ *
+ *   - `count > 1` means the tutor did several things between the header and
+ *     this text; that is not a probe posting itself.
+ *   - `interactive` means the learner answered something, so whatever arrives
+ *     next belongs to a new turn and can never be the header's own question.
+ */
+export function bareProbeHeaderExceptionApplies(lastText: string, run: BoundaryRun): boolean {
+  if (run.count > 1 || run.interactive) return false
+  return endsWithBareProbeHeader(lastText)
+}
+
 /** Merges a newly-arrived assistant text delta into the PREVIOUS bubble's
  * text — the ONE place every caller that implements the bare-probe-header
  * exception (LearnSessionView.tsx, ReviewSessionView.tsx, chatMessages.ts's
