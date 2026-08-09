@@ -56,6 +56,36 @@ typography:
     fontWeight: 400
     lineHeight: 1.4
     letterSpacing: "0.02em"
+  prose:
+    fontFamily: "'EpocaPro', 'Epoca Pro', 'Fraunces', Georgia, serif"
+    fontSize: "0.9375rem"
+    fontWeight: 400
+    lineHeight: 1.65
+    letterSpacing: "normal"
+  prose-lede:
+    fontFamily: "{typography.prose.fontFamily}"
+    fontSize: "1.06em"
+    fontWeight: 400
+    lineHeight: 1.6
+    letterSpacing: "normal"
+  prose-h1:
+    fontFamily: "'Neue Haas Grotesk Display Pro', 'Space Grotesk', ui-sans-serif, system-ui, sans-serif"
+    fontSize: "1.5rem"
+    fontWeight: 600
+    lineHeight: 1.25
+    letterSpacing: "-0.01em"
+  prose-h2:
+    fontFamily: "'Neue Haas Grotesk Display Pro', 'Space Grotesk', ui-sans-serif, system-ui, sans-serif"
+    fontSize: "1.1875rem"
+    fontWeight: 600
+    lineHeight: 1.25
+    letterSpacing: "normal"
+  prose-h3:
+    fontFamily: "'Neue Haas Grotesk Display Pro', 'Space Grotesk', ui-sans-serif, system-ui, sans-serif"
+    fontSize: "0.8125rem"
+    fontWeight: 500
+    lineHeight: 1.25
+    letterSpacing: "0.1em"
 rounded:
   none: "0px"
   full: "9999px"
@@ -188,7 +218,12 @@ The licensed faces **are the design.** They live on the author's machine and are
 ### Hierarchy
 - **Display** (`--text-display`, 1.75rem, Neue Haas, semibold): page-level titles and the largest single numbers.
 - **Headline** (`--text-heading`, 1.25rem, Neue Haas): section headings, topic titles, grade letters.
-- **Body** (`--text-body`, 0.875rem, Futura, 1.6 line-height): all prose, including the transcript.
+- **Body** (`--text-body`, 0.875rem, Futura, 1.6 line-height): interface prose — panels, plates, descriptions, anything that is the app talking about itself. NOT the transcript; see Prose below.
+- **Prose** (`.voice-serif`, 0.9375rem, Epoca Pro, 1.65 line-height): the transcript reading scale — the tutor's voice and the learner's own replies. A serif at a larger size than interface body, because this is the one surface read continuously for twenty to seventy minutes rather than scanned. Its own heading ramp rides above it:
+  - **Prose h1** (1.5rem, Neue Haas semibold)
+  - **Prose h2** (1.1875rem, Neue Haas semibold, hairline rule beneath)
+  - **Prose h3** (0.8125rem, Neue Haas medium, uppercase, `0.1em` tracking, `--color-text-dim`)
+  - **Prose lede** (`1.06em` of prose, first paragraph only, and only when a second paragraph exists)
 - **Caption** (`--text-caption`, 0.75rem, Epoca Pro Medium Italic, `--color-text-dim`): the `.fig-caption` utility — the "Fig. N —" atlas caption, used for stats, empty states, and any line that comments on the interface rather than being it.
 - **Label** (`--text-data`, 0.8125rem, Futura with `font-variant-numeric: tabular-nums`, `letter-spacing: 0.02em`): the `.label-data` utility. All chrome controls, chips, and figures. In control chrome it drops to 10px uppercase with `0.16em` tracking.
 
@@ -197,6 +232,10 @@ The licensed faces **are the design.** They live on the author's machine and are
 **The Tabular Rule.** Every number that can change in place uses `.label-data`. Tabular figures mean a counter or a timer never makes the layout twitch.
 
 **The Caption-Is-Commentary Rule.** Italic serif is not for emphasis inside prose. It marks text that is *about* the interface — a measurement's basis, an empty state, a figure label. If it could be a sentence the tutor said, it is body, not caption.
+
+**The Landmark Rule.** A prose heading earns its level by a different *kind* of prominence, never by a slightly larger size. Prose h1 is size, h2 is size plus a hairline rule, h3 is uppercase tracking. This exists because the ramp once ran 1.25 / 1.1 / 1rem above a 0.9375rem body — an h3 at 1.07× the paragraph it introduced — and three heading levels inside a five-pixel range give a long answer no landmarks at all. If a new level is ever needed, give it a new kind of prominence; do not subdivide the sizes.
+
+**The Paragraph-Gap Rule.** In prose, the space between paragraphs must exceed the space between lines within one. At `margin: 0.5em` against `line-height: 1.65` it did not, and paragraph breaks — the only structure most tutor replies have — became invisible. Any change to prose leading has to move the paragraph margin with it.
 
 **The Math-Renders-Everywhere Rule.** Learner content is graduate-level and routinely contains LaTeX. Any slot that can hold learner or tutor text — including titles, chips, labels and captions, not just prose bodies — passes through the math renderer. A raw `$` on screen is a bug.
 
