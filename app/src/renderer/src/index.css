@@ -425,6 +425,108 @@
   animation-delay: var(--tick-delay, 0ms);
 }
 
+/* TopicConstellation — a topic's real concept graph inking itself in at row
+   scale. Edges are TRUE draws, not fades: `pathLength="1"` normalises every
+   line to one unit regardless of its actual length, so a dasharray of 1 and an
+   offset sweeping 1 → 0 draws each prerequisite link from its source to its
+   dependent at a uniform rate. Cells then bloom at their own centres
+   (`transform-box: fill-box`, without which an SVG transform-origin resolves
+   against the whole viewBox and every circle flies in from the corner).
+
+   REDUCED MOTION needs its own rule here, and this is the subtle part: the
+   global kill-switch above zeroes animation DURATION but not animation DELAY.
+   A `both`-filled animation with a 320ms delay therefore holds its `from`
+   state — fully invisible — for those 320ms and then snaps, which is a worse
+   experience than the motion for exactly the person who asked for less of it.
+   Zeroing the delay for these classes makes the figure simply be there.
+   (`.tick-fade-in` above carries the same latent issue at a smaller stagger;
+   left alone as out of scope rather than fixed silently.) */
+/* Shelf → session, as one motion. The row's title and the session masthead's
+   title share `view-transition-name: learn-morph-title`, so the browser treats
+   them as ONE element that moved and interpolates position, size and type
+   between them instead of cross-fading two strangers.
+
+   Only the pair is retimed. `::view-transition-group` owns the geometry
+   morph; the app's own easing and a duration off `--dur-base` keep it in the
+   same motion vocabulary as every panel transition rather than the browser's
+   default 250ms ease. The root cross-fade underneath is left at its default —
+   two competing choreographies in one transition is exactly the "layer
+   multiple extraordinary moments" failure.
+
+   No reduced-motion rule is needed: `openTopic` does not call
+   `startViewTransition` at all when the query matches, so the flip is instant
+   and this never runs. That is deliberate — a zeroed-duration view transition
+   still snapshots and composites, which is work for someone who asked for
+   none. */
+/* Review's ready plate becoming the session header. The plate and the
+   masthead share `view-transition-name: review-morph-plate`, so the browser
+   interpolates one surface between two positions and sizes rather than
+   cross-fading two unrelated boxes.
+
+   A CONTAINER, not a number. Review's plate leads with the uncapped debt and
+   its session header leads with the sitting's position — morphing one figure
+   into the other would animate an equivalence that does not hold, and this
+   app does not get to imply a measurement it did not take. The surface is the
+   honest shared thing: same plate, new role. */
+::view-transition-group(review-morph-plate) {
+  animation-duration: calc(var(--dur-base) * 1.75);
+  animation-timing-function: var(--ease-out-soft);
+}
+
+::view-transition-old(review-morph-plate),
+::view-transition-new(review-morph-plate) {
+  animation-duration: calc(var(--dur-base) * 1.75);
+  animation-timing-function: var(--ease-out-soft);
+  /* The plate changes height dramatically between the two roles; letting the
+     snapshots fill keeps the chrome from stretching mid-flight. */
+  height: 100%;
+  object-fit: cover;
+}
+
+::view-transition-group(learn-morph-title) {
+  animation-duration: calc(var(--dur-base) * 1.75);
+  animation-timing-function: var(--ease-out-soft);
+}
+
+::view-transition-old(learn-morph-title),
+::view-transition-new(learn-morph-title) {
+  animation-duration: calc(var(--dur-base) * 1.75);
+  animation-timing-function: var(--ease-out-soft);
+  /* The title changes size between the two positions; height-blending the
+     snapshots keeps the text from squashing mid-flight. */
+  height: 100%;
+  object-fit: contain;
+}
+
+@keyframes constellation-edge-draw {
+  from { stroke-dashoffset: 1; opacity: 0; }
+  to { stroke-dashoffset: 0; opacity: 1; }
+}
+
+@keyframes constellation-cell-in {
+  from { opacity: 0; transform: scale(0.4); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.constellation-edge {
+  animation: constellation-edge-draw calc(var(--dur-base) * 1.6) var(--ease-out-soft) both;
+  animation-delay: var(--ink-delay, 0ms);
+}
+
+.constellation-cell {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: constellation-cell-in var(--dur-base) var(--ease-out-soft) both;
+  animation-delay: var(--ink-delay, 0ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .constellation-edge,
+  .constellation-cell {
+    animation-delay: 0ms !important;
+  }
+}
+
 @keyframes scatter-fade-in {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -540,6 +642,14 @@
  *     quieter amplitude — useCardPhysics.ts scales both numbers above down by
  *     one multiplier each (`SOFT_SCALE`/`RAIL_SCALE`) for their surfaces; not
  *     a second tuning, just a quieter current under the same physics.
+ *     EVERY tier's multiplier is a CEILING, and EDGE THROW is what is
+ *     actually tuned: a rotation's felt strength is how far it throws the
+ *     edge it pivots about, so a fixed angle makes motion grow with the card.
+ *     Each axis solves its own angle from the element's measured size, holding
+ *     throw roughly constant — small surfaces keep every degree they had,
+ *     large ones settle. Idle drift runs a much tighter budget than pointer
+ *     tilt, and scrolling stills the whole surface. See POINTER_THROW_PX /
+ *     IDLE_THROW_PX / SCROLL_STILL_MS in useCardPhysics.ts.
  *     WHAT TILTS AT FULL SCALE (`.tilt-card`): coach/dashboard surfaces —
  *     topic cards, stat blocks/cards, chart-host panels (a chart's own SVG
  *     never tilts; the panel hosting it does), the coach session panel,
@@ -1030,13 +1140,20 @@
      writes them). Element-level perspective, so each card has its own quiet
      vanishing point. A card's `.frame-hover` ::after frame and `.dogear`
      fold are children of the same box, so they tilt with it — the whole
-     plate moves as one. Rasterization stays crisp by construction: at these
-     angles (idle ≤ ~0.9deg, hover ≤ 3.2deg — `.tilt-card-soft`/
-     `.tilt-card-rail` scale both down by useCardPhysics.ts's own
-     `SOFT_SCALE`/`RAIL_SCALE`, never past them) with a 1200px perspective the
-     projected displacement across even a transcript-width card is
-     subpixel-to-low-single-digit-px, and macOS renders grayscale-AA text
-     either way. `.tilt-card-soft`/`.tilt-card-rail` are MARKER classes only —
+     plate moves as one. Rasterization stays crisp by construction, but the
+     quantity that governs it is EDGE THROW, not angle: a rotation displaces
+     the edge it pivots about by (extent / 2) * sin(angle), so the same angle
+     is imperceptible on a chat bubble and violent on a full-width row. The
+     plate tiers hold ~0.9deg idle / 2.7deg hover, which over a
+     transcript-width card is low-single-digit px through a 1200px
+     perspective. `.tilt-card-rail` runs a much wider angle on purpose
+     (`RAIL_SCALE`, up to ~10.8deg — a small control needs it to register at
+     all) and is kept honest by a per-axis edge-throw cap in useCardPhysics.ts
+     (`RAIL_MAX_EDGE_PX`) rather than by the angle: every rail surface, from a
+     26px chip to a 1400px nav row, throws at most ~12px on either axis. An
+     earlier version of this note claimed rail scaled DOWN and stayed in
+     single digits; it did neither, and a full-width row was displacing its
+     ends ~131px. `.tilt-card-soft`/`.tilt-card-rail` are MARKER classes only —
      they carry no CSS of their own beyond matching this same rule; the
      quieter motion is entirely a JS-side amplitude multiplier (see
      useCardPhysics.ts), so there is exactly one transform rule, one
@@ -1256,6 +1373,28 @@
        that earns it. Bubbles cap at percentages of this measure, so they
        widen with it automatically. */
     max-width: 92ch;
+    width: 100%;
+    margin-inline: auto;
+  }
+
+  /* The measure for page-level list and plate surfaces — the same idea as
+     `.transcript-measure` above, one step wider.
+     
+     Prose caps at 92ch because that is where a LINE stops being readable. A
+     shelf row is not a line: it carries a glyph, a health ring, a title, a
+     goal, a chip row AND its own actions, and those actions sit at the far
+     edge by `justify-between`. Unbounded, the Learn shelf put a row's content
+     inside the first ~900px of a 1600px window and its settings control at
+     x≈1500 — the same row, six hundred pixels apart, with nothing in between.
+     Distance is what proximity means, so the control stopped reading as
+     belonging to the thing it acts on.
+
+     68rem holds the widest real row (content ~900px plus the action cluster)
+     with room to breathe, and collapses to plain full-width below that, so
+     narrow windows are untouched. Centred, like the transcript, so the page
+     reads as a set column rather than content pinned to the rail. */
+  .page-measure {
+    max-width: 68rem;
     width: 100%;
     margin-inline: auto;
   }
