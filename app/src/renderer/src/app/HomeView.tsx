@@ -20,7 +20,6 @@ import { topicBucket, topicChips } from '../shared/topicShelf'
 import { DueForecast } from '../components/DueForecast'
 import { DendriteDivider } from '../components/ui/DendriteDivider'
 import { StatFraction } from '../components/ui/StatFraction'
-import { PlateFigure } from '../components/ui/PlateFigure'
 import { SectionBanner } from '../components/ui/SectionBanner'
 import { Button } from '../components/ui/Button'
 import { EnvironmentSteps } from '../components/EnvironmentSteps'
@@ -111,6 +110,98 @@ function greeting(): string {
   return 'Good evening'
 }
 
+/**
+ * Home's masthead — the app's front door, in the same bounded-plate grammar
+ * every other top-level view already opens with (SessionMasthead's
+ * `tilt-card panel` + accent). Home was the one view that opted out: a bare
+ * `<h1>` on the void, with the day's only live number rendered at ordinary
+ * plate-figure scale several children deep inside a panel that was also
+ * carrying the streak, the forecast, two captions and three conditional
+ * rows. The page had no peak.
+ *
+ * So the lockup is two columns and nothing else: who and where on the left,
+ * the one live signal and its single action on the right. `panel-plate`
+ * rather than `panel` — the warm full-frame inset is the "published answer"
+ * register (index.css: the engraved specimen label), which is exactly what a
+ * landing screen states — and full-scale `tilt-card` rather than the
+ * `tilt-card-soft` its neighbours carry, because this plate is the peak and
+ * should breathe a little harder than what sits under it.
+ *
+ * Deliberately no glyph in the lockup. An InkNode was tried here at 34px and
+ * cut: at that size it reads as a bullet rather than a cell, it clips its own
+ * wobble against the viewBox (harmless at the 10-14px the rows use it at),
+ * and InkNode means "a node" everywhere else in the app — spending it as page
+ * decoration costs more than it buys. The boldness is the scale step and the
+ * plate's warm frame, and it is stronger for being the only move.
+ */
+function HomeMasthead({
+  dueNow,
+  topicCount,
+  paceSeconds,
+  pulse,
+  onPulseEnd,
+  onGoReview,
+}: {
+  dueNow: number
+  topicCount: number | null
+  paceSeconds: number | null
+  pulse: boolean
+  onPulseEnd: () => void
+  onGoReview: () => void
+}) {
+  const live = dueNow > 0
+  return (
+    // `items-end`: the two columns share a bottom edge, so the plate reads as
+    // one band rather than a tall figure floating beside a short greeting.
+    <div className="tilt-card panel-plate px-8 py-7 flex flex-wrap items-end justify-between gap-x-12 gap-y-7">
+      <div className="flex flex-col gap-2 min-w-0">
+        <h1 className="font-(family-name:--font-serif) text-[clamp(1.75rem,3.2vw,2.75rem)] leading-[1.05] tracking-[-0.01em] text-[var(--color-text-primary)]">
+          {greeting()}.
+        </h1>
+        {topicCount !== null && (
+          <p className="text-sm text-[var(--color-text-dim)]">
+            {topicCount} {topicCount === 1 ? 'topic' : 'topics'} in your atlas
+          </p>
+        )}
+      </div>
+
+      {/* The day's one live signal. Kept to a figure, its title, its basis,
+          and the single action — anything else belongs to the Standing plate
+          below, which is where it now lives. */}
+      {/* The action sits BESIDE the figure, not under it: stacked, this column
+          ran ~90px taller than the greeting and left a hole above it. Level,
+          the whole plate is one band. */}
+      <div className="flex items-end gap-8 shrink-0 flex-wrap">
+        <div className="flex items-baseline gap-4">
+          <span
+            className={`figure-display text-[clamp(3.5rem,7vw,5.5rem)] tracking-[-0.03em] ${
+              live ? 'text-[var(--color-ink-warm)]' : 'text-[var(--color-text-dim)]'
+            } ${pulse ? 'pulse-once' : ''}`}
+            onAnimationEnd={pulse ? onPulseEnd : undefined}
+          >
+            {dueNow}
+          </span>
+          <div className="flex flex-col gap-1">
+            <span className="text-sm text-[var(--color-text-primary)]">
+              {live ? 'due for recall now' : 'nothing due right now'}
+            </span>
+            {live && paceSeconds !== null && (
+              <span className="label-data text-xs text-[var(--color-text-dim)]">
+                about {Math.round((dueNow * paceSeconds) / 60)} min at your pace
+              </span>
+            )}
+          </div>
+        </div>
+        {live && (
+          <Button variant="primary" size="lg" onClick={onGoReview}>
+            Clear today’s reviews
+          </Button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 /** One register of the atlas plate — a bucket of topics as hairline-plate
  * ROWS in ReadyRoomPlate's exact row grammar (InkNode + title on the left, a
  * dim mono count on the right, a faint-mono indented second line beneath),
@@ -119,6 +210,7 @@ function greeting(): string {
  * the later registers use to divide themselves from the one above. */
 function TopicGroup({
   heading,
+  ink,
   caption,
   topics,
   onGoTopic,
@@ -127,6 +219,10 @@ function TopicGroup({
   first = false,
 }: {
   heading: string
+  /** The consolidation state this group names, as ink. Required rather than
+   * defaulted — a new group must decide where it sits on the axis instead of
+   * inheriting warm by accident. */
+  ink: string
   caption?: string
   topics: TopicListEntry[]
   onGoTopic: (topicId: string) => void
@@ -151,7 +247,15 @@ function TopicGroup({
           this page), the rule doing the group-divider job the old border-t
           did. */}
       <div className="flex items-center gap-2.5 mb-1">
-        <span className="text-[10px] label-data uppercase tracking-[0.28em] text-[var(--color-ink-warm)] shrink-0">{heading}</span>
+        {/* The heading takes the ink of the state it names. These three
+            groups ARE the consolidation axis — "Not started" is the literal
+            definition of cool (nothing has consolidated yet), "Consolidated"
+            is the top of the warm ramp (all of it survived), and "Continue
+            learning" is the warm middle. Painting all three the same warm
+            was the axis being stated in words and contradicted in colour. */}
+        <span className="text-[10px] label-data uppercase tracking-[0.28em] shrink-0" style={{ color: ink }}>
+          {heading}
+        </span>
         {caption && <span className="fig-caption shrink-0">{caption}</span>}
         <span className="h-px flex-1 bg-[var(--color-hairline)]" aria-hidden="true" />
       </div>
@@ -166,14 +270,28 @@ function TopicGroup({
             key={t.topic}
             onClick={() => onGoTopic(t.topic)}
             // Same 1px edge line the Sections rows and every card on this
-            // page draw (.panel's own border token).
-            className={`focus-ring relative text-left flex flex-col gap-0.5 px-3 py-2 border border-[var(--color-edge)] hover:bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] transition-colors duration-[var(--dur-fast)] ${
+            // page draw (.panel's own border token), and the same two
+            // corrections those rows just took: the warm-dim border half of
+            // index.css's documented row hover (this had background only),
+            // at --dur-base rather than the button timing, plus rail-tier
+            // tilt so a row in the plate behaves like a row in the plate
+            // next to it.
+            className={`group focus-ring tilt-card-rail relative text-left flex flex-col gap-0.5 px-3 py-2 border border-[var(--color-edge)] hover:border-[var(--color-ink-warm-dim)] hover:bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] transition-colors duration-[var(--dur-base)] ${
               resumable ? 'dogear' : ''
             }`}
           >
             <div className="flex items-center justify-between gap-3 text-xs">
               <div className="flex items-center gap-2 min-w-0">
-                <InkNode id={t.topic} variant={t.states.review > 0 ? 'filled' : 'outlined'} size={14} />
+                {/* Variant AND colour off the same fact: a topic with nothing
+                    in review has nothing that survived yet, which is what cool
+                    means. The glyph was already switching filled/outlined on
+                    it and then drawing both in warm. */}
+                <InkNode
+                  id={t.topic}
+                  variant={t.states.review > 0 ? 'filled' : 'outlined'}
+                  color={t.states.review > 0 ? 'var(--color-ink-warm)' : 'var(--color-ink-cool)'}
+                  size={14}
+                />
                 <HealthRing consolidated={t.states.review} total={total} due={t.due} size={16} />
                 <TopicTitle title={t.title} className="font-(family-name:--font-display) text-base text-[var(--color-text-primary)] truncate" />
               </div>
@@ -504,26 +622,34 @@ export function HomeView({
 
   return (
     <div className="p-8 flex flex-col gap-8 w-full h-full overflow-y-auto">
-      {/* Register 1 — status band: the greeting IS the page title (the app's
-          one display-size text; every section heading below is the
-          `label-data` uppercase idiom instead), a one-line subtitle, the
-          streak/due-now/forecast readout composed as one horizontal band,
-          and the review CTA. */}
+      {/* Register 1 — the masthead: greeting, atlas size, and the day's one
+          live number with its single action, as one bounded plate. See
+          HomeMasthead. The streak/forecast readout that used to share this
+          register moved down to the Standing plate below, so the peak of the
+          page states one thing. */}
       <div className="flex flex-col gap-4">
         <header>
           {stats ? (
-            <>
-              <h1 className="font-(family-name:--font-serif) text-[length:var(--text-display)] text-[var(--color-text-primary)]">{greeting()}.</h1>
-              {topics !== null && (
-                <p className="text-sm text-[var(--color-text-dim)] mt-1">
-                  {topics.length} {topics.length === 1 ? 'topic' : 'topics'} in your atlas
-                </p>
-              )}
-            </>
+            <HomeMasthead
+              dueNow={stats.due_now}
+              topicCount={topics?.length ?? null}
+              paceSeconds={paceSeconds}
+              pulse={duePulse}
+              onPulseEnd={() => setDuePulse(false)}
+              onGoReview={onGoReview}
+            />
           ) : (
-            <div className="flex flex-col gap-2">
-              <SkeletonBar width={220} height={30} />
-              <SkeletonBar width={160} height={14} />
+            // Layout-true: the plate's own frame and both columns, so the
+            // masthead doesn't jump when stats land.
+            <div className="panel-plate px-8 py-7 flex flex-wrap items-end justify-between gap-x-12 gap-y-7">
+              <div className="flex flex-col gap-2">
+                <SkeletonBar width={220} height={40} />
+                <SkeletonBar width={160} height={14} />
+              </div>
+              <div className="flex flex-col gap-4">
+                <SkeletonBar width={200} height={72} />
+                <SkeletonBar width={180} height={50} />
+              </div>
             </div>
           )}
         </header>
@@ -548,24 +674,26 @@ export function HomeView({
             the plate's action row. The one-shot pulse (real count increases
             only — see the localStorage tracking above) lands on the figure. */}
         {stats && (
+          <div className="flex flex-col gap-3">
+            <SectionBanner label="Standing" />
           <div className="tilt-card-soft panel px-6 py-6 flex flex-col gap-4">
-            <PlateFigure
-              value={stats.due_now}
-              tone={stats.due_now > 0 ? 'warm' : 'dim'}
-              title={stats.due_now > 0 ? 'due for recall now' : 'nothing due right now'}
-              note={stats.due_now > 0 ? 'a couple of minutes each' : undefined}
-              pulse={duePulse}
-              onPulseEnd={() => setDuePulse(false)}
-            />
-
             {/* "Needs attention" — a single computed prompt, never invented:
                 only renders when a topic is genuinely struggling (D/F) or has
                 due items waiting. A clickable warm sentence, same voice as the
                 review plate's own amnesty paragraph. */}
             {needsAttention && (
+              // Two different facts wearing one ink until now. "Carrying N of
+              // these" is workload — warm. "Sitting at a D" is the learner
+              // struggling, which is the one thing danger ink is reserved for
+              // (DESIGN.md's Reserved Danger Rule); rendering it warm said
+              // "surviving signal" about a topic that is not surviving.
               <button
                 onClick={() => onGoTopic(needsAttention.topic.topic)}
-                className="focus-ring text-left text-sm text-[var(--color-ink-warm)] leading-relaxed hover:text-[var(--color-ink-hot)] transition-colors duration-[var(--dur-fast)]"
+                className={`focus-ring text-left text-sm leading-relaxed transition-colors duration-[var(--dur-fast)] ${
+                  needsAttention.reason === 'due'
+                    ? 'text-[var(--color-ink-warm)] hover:text-[var(--color-ink-hot)]'
+                    : 'text-[var(--color-ink-danger)] hover:text-[var(--color-text-primary)]'
+                }`}
               >
                 {needsAttention.reason === 'due'
                   ? `${needsAttention.topic.title} is carrying ${needsAttention.topic.due} of these — start there.`
@@ -576,7 +704,11 @@ export function HomeView({
             {/* Streak + coming week — one hairline register of labeled rows,
                 the same anatomy as the review plate's per-topic rows, with
                 each row's chart directly beneath its label. */}
-            <div className="flex flex-col gap-2.5 border-t border-[var(--color-hairline)] pt-3">
+            <div
+              className={`flex flex-col gap-2.5 ${
+                needsAttention ? 'border-t border-[var(--color-hairline)] pt-3' : ''
+              }`}
+            >
               <div className="flex items-center justify-between gap-2 text-xs">
                 <span className="text-[var(--color-text-primary)]">Streak</span>
                 <span className="label-data text-[var(--color-text-dim)] shrink-0">
@@ -600,21 +732,11 @@ export function HomeView({
               )}
             </div>
 
-            <div className="fig-caption">Fig. — items awaiting free recall; streak and the coming week beneath</div>
-
-            {stats.due_now > 0 && paceSeconds !== null && (
-              <div className="fig-caption">
-                {`clearing all ${stats.due_now} would take about ${Math.round((stats.due_now * paceSeconds) / 60)} min at your pace`}
-              </div>
-            )}
-
-            {stats.due_now > 0 && (
-              <div className="flex gap-3 items-center">
-                <Button variant="primary" size="lg" onClick={onGoReview}>
-                  Clear today’s reviews
-                </Button>
-              </div>
-            )}
+            {/* No plate-level caption: the figure and its action moved up to
+                the masthead, and each chart in this register now carries its
+                own "Fig. —" line (the strip's run summary, the forecast's
+                day readout). A third caption over the top of those two
+                labelled nothing. */}
 
             {/* Stashed but ungraded. The app cannot grade — only a live
                 session can, and the blind assessor is what actually does it —
@@ -641,6 +763,7 @@ export function HomeView({
                 </Button>
               </div>
             )}
+          </div>
           </div>
         )}
 
@@ -725,6 +848,7 @@ export function HomeView({
           <div className="tilt-card-soft panel px-6 py-6 flex flex-col gap-4">
             <TopicGroup
               heading="Continue learning"
+              ink="var(--color-ink-warm)"
               topics={active}
               onGoTopic={onGoTopic}
               resumableTopics={resumableTopics}
@@ -733,6 +857,7 @@ export function HomeView({
             />
             <TopicGroup
               heading="Consolidated"
+              ink="var(--color-ink-hot)"
               caption="fully encoded — held by review alone"
               topics={consolidated}
               onGoTopic={onGoTopic}
@@ -741,6 +866,7 @@ export function HomeView({
             />
             <TopicGroup
               heading="Not started"
+              ink="var(--color-ink-cool)"
               topics={notStarted}
               onGoTopic={onGoTopic}
               grades={grades}
@@ -772,7 +898,12 @@ export function HomeView({
                   key={v.kind === 'node' ? `n:${v.topic}:${v.node}` : `s:${v.sessionId}`}
                   onClick={() => (v.kind === 'node' ? onGoNode(v.topic, v.node) : onGoSitting(v.sessionId))}
                   title={v.kind === 'node' ? `${v.label} — ${v.topicTitle}` : v.label}
-                  className="focus-ring flex items-center gap-1.5 px-2.5 py-1 text-xs text-[var(--color-text-dim)] bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] hover:bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] hover:text-[var(--color-text-primary)] transition-colors duration-[var(--dur-fast)]"
+                  // The quietest register, but the same grammar: a real edge
+                  // line and the warm-dim border shift every other
+                  // interactive surface on this page now answers hover with.
+                  // A chip with no border was the one thing here that read as
+                  // a tag rather than something you could press.
+                  className="focus-ring tilt-card-rail flex items-center gap-1.5 px-2.5 py-1 text-xs text-[var(--color-text-dim)] border border-[var(--color-edge)] hover:border-[var(--color-ink-warm-dim)] bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] hover:bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] hover:text-[var(--color-text-primary)] transition-colors duration-[var(--dur-base)]"
                 >
                   {v.kind === 'node' && <InkNode id={v.node} variant="outlined" color="var(--color-ink-cool)" size={10} />}
                   <span className="truncate max-w-[9rem]">{v.label}</span>
