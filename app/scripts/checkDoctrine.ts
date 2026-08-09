@@ -856,9 +856,15 @@ try {
   ) as { plugins?: Record<string, { installPath?: string }[]> }
   const installPath = manifest.plugins?.['engram@engram']?.[0]?.installPath
   if (installPath) {
+    // Pedagogy overlays only — a presentation overlay that goes missing is a
+    // cosmetic regression, but a missing pedagogy overlay means the tutor is
+    // running a protocol the app believes it has. One row per applied block;
+    // add a row in the same commit that adds a pedagogy insertion.
     const EXPECTED_MARKERS: Array<[string, string]> = [
       ['skills/review/SKILL.md', 'engram-desktop-overlay:quick-checkpoint-protocol:start'],
       ['skills/_shared/dialogue-grammar.md', 'engram-desktop-overlay:checkpoint-exception:start'],
+      ['skills/learn/SKILL.md', 'engram-desktop-overlay:mobile-walk-protocol:start'],
+      ['skills/_shared/dialogue-grammar.md', 'engram-desktop-overlay:mobile-walk-exception:start'],
     ]
     for (const [rel, mark] of EXPECTED_MARKERS) {
       const installed = readFileSync(join(installPath, rel), 'utf-8')

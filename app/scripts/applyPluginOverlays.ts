@@ -94,6 +94,22 @@ const OVERLAYS: Overlay[] = [
   },
   {
     plugin: 'engram',
+    targetRelativePath: 'skills/learn/SKILL.md',
+    insertions: [
+      {
+        // The mobile-walk card protocol — the SECOND pedagogy overlay under
+        // the widened charter, and the first to touch encoding rather than
+        // review. Slots between §3 (encode the node) and §4 (the assessor),
+        // which is where its stash-exclusion rule has to be read, and where
+        // its own VERIFY carve-outs sit next to the beats they modify.
+        id: 'mobile-walk-protocol',
+        contentFile: 'engram/learn-skill.mobile-walk-protocol.md',
+        beforeLine: '## 4 · Verify via the assessor (separation of powers)',
+      },
+    ],
+  },
+  {
+    plugin: 'engram',
     targetRelativePath: 'skills/_shared/dialogue-grammar.md',
     insertions: [
       {
@@ -102,6 +118,16 @@ const OVERLAYS: Overlay[] = [
         // live contradiction for the model to adjudicate mid-sitting.
         id: 'checkpoint-exception',
         contentFile: 'engram/dialogue-grammar.checkpoint-exception.md',
+        beforeLine: '## ⚠ The session does not end on a failed retrieval (v1.5 — retrieval to criterion)',
+      },
+      {
+        // The mobile-walk companion, same job for the second exception.
+        // Shares the checkpoint sentence's anchor deliberately: the first
+        // insertion lands its block before the anchor, leaving the anchor
+        // in place, so this one lands after it — the two exceptions read in
+        // a stable order (checkpoint, then mobile) on every re-run.
+        id: 'mobile-walk-exception',
+        contentFile: 'engram/dialogue-grammar.mobile-walk-exception.md',
         beforeLine: '## ⚠ The session does not end on a failed retrieval (v1.5 — retrieval to criterion)',
       },
     ],

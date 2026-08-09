@@ -74,3 +74,19 @@ exception.
   companion inserted after `skills/_shared/dialogue-grammar.md`'s hard-rules
   section, so the model is never left adjudicating a live contradiction
   between the menus rule and the checkpoint protocol.
+- **`engram/learn-skill.mobile-walk-protocol.md`** — the learner-elected
+  card protocol for the iOS companion surface (step assembly, cloze, picks;
+  capped ratings, `mobile-*` receipts, nodes left **provisional** until a
+  desk sitting solidifies them), inserted into `skills/learn/SKILL.md`
+  between the encode section and the assessor. The second pedagogy overlay
+  under the widened charter, and the first to touch **encoding** rather than
+  review — which is why it is priced higher than the checkpoint protocol.
+  Read its constitutional-exception header before touching it. Note what it
+  does *not* do: on `kind: "procedure"` nodes it only says how
+  `problem-grammar.md`'s L1–L3 render on glass, and leaves L4 and the
+  discrimination naming step exactly as that file defines them.
+- **`engram/dialogue-grammar.mobile-walk-exception.md`** — the one-sentence
+  companion for the mobile-walk protocol, a sibling of the checkpoint
+  sentence rather than an edit to it, so each exception stays paired with
+  the one protocol that licenses it and either can be removed without
+  stranding the other's sentence.
