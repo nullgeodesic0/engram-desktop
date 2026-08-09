@@ -1460,6 +1460,12 @@
     scroll-margin-top: 140px;
   }
 
+  /* The `#000` stops are NOT palette colors and must not be replaced with
+     one. In a mask, the gradient is read as opacity: black = keep this pixel,
+     transparent = hide it. So these two stops say "fully visible between 28px
+     and 28px-from-the-bottom", and the fade is the 28px ramp at each end.
+     Substituting a themed ink here would silently change how much of the
+     transcript the fade eats — and would do it differently per theme. */
   .scroll-fade-top {
     -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 28px, #000 calc(100% - 28px), transparent 100%);
     mask-image: linear-gradient(to bottom, transparent 0, #000 28px, #000 calc(100% - 28px), transparent 100%);
