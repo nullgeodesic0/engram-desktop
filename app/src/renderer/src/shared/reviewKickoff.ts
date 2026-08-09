@@ -61,6 +61,11 @@ export interface ComposeOptions {
   /** The learner chose to work one topic at a time. Null for a mixed queue,
    * which stays the default. */
   focusTopic?: string | null
+  /** How many items actually fit the budget, measured from this learner's own
+   * pace (shared/sittingPace.ts). Undefined falls back to the flat TIME_CAPS
+   * table — which measurement showed over-promises by up to 6×, so this is
+   * the path that should normally be taken. */
+  plannedItems?: number
 }
 
 export function composeReviewKickoff(opts: ComposeOptions): string {
@@ -74,7 +79,7 @@ Re-test request — I picked one open misconception from my ledger in the app an
 It is filed open; "misconception resolve --id ${retest.id}" records a demonstrated correction. Please also run the normal review flow for whatever is due.`
   }
 
-  const n = coveredCount(capForMins(mins), totalDue)
+  const n = opts.plannedItems ?? coveredCount(capForMins(mins), totalDue)
 
   if (style === 'checkpoint') {
     const floor = recallDueNodes.length > 0 ? ` These nodes need the normal style this time: ${recallDueNodes.join(', ')}.` : ''

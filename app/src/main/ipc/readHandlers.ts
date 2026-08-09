@@ -7,6 +7,7 @@ import {
   engramDirectMutate,
   readTopicGraph,
 } from '../engramCli/readOnly'
+import { measurePace } from '../session/paceScan'
 import { buildDueArgs, buildDueCappedArgs } from '../engramCli/dueArgs'
 import { getTopicsCached } from '../engramCli/topicsCache'
 import { readReceiptsHistory } from '../engramCli/receiptsHistory'
@@ -93,6 +94,9 @@ export function registerReadHandlers(): void {
   // Productions stashed but not yet graded. See readOnly.ts's per-action gate
   // for why only the count action is reachable.
   ipcMain.handle('engram:pendingProductions', () => engramRead('stash', ['count']))
+  // How long items actually take this learner, per topic — measured from
+  // their own transcripts. Read-only and cached hourly; see paceScan.ts.
+  ipcMain.handle('engram:sittingPace', () => measurePace())
   ipcMain.handle('engram:due', (_e, limit?: number, topic?: string) => engramRead('due', buildDueArgs({ limit, topic })))
   // The savings-ordered triage read (`due --cap`) — same allowlisted command,
   // different payload shape (DueCappedResult). Used by the review ready

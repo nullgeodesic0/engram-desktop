@@ -49,6 +49,7 @@ import { TicketCard } from '../components/ritual/TicketCard'
 import { ActionChips, type SuggestedAction } from '../components/ritual/ActionChips'
 import { bridgeUiIntent } from '../../../shared/bridgeUiIntents'
 import { handwritingRequestMessage } from '../shared/handwritingRequest'
+import { planSitting, type PaceModel } from '../../../shared/sittingPace'
 import { saveDraft, loadDraft, clearDraft } from '../shared/composerDrafts'
 import { ReadyRoomPlate } from '../components/ritual/ReadyRoomPlate'
 import { ReviewHorizon } from '../components/ReviewHorizon'
@@ -289,6 +290,7 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
   // tutor sends one), the tutor's own action chips, and its one-line plan
   // note. All three are ephemeral session state, cleared on a fresh sitting
   // alongside `marks` below.
+  const [pace, setPace] = useState<PaceModel | null>(null)
   const [structuredTicket, setStructuredTicket] = useState<ParsedTicket | null>(null)
   const [suggestedActions, setSuggestedActions] = useState<SuggestedAction[]>([])
   const [progressNote, setProgressNote] = useState<string | null>(null)
@@ -389,6 +391,21 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
       setHoldingCount(holding)
     })
   }
+
+  // Measured per-topic pace, read once per mount (the main process caches it
+  // hourly — see paceScan.ts).
+  useEffect(() => {
+    let alive = true
+    window.engram
+      .sittingPace()
+      .then((m) => {
+        if (alive) setPace(m)
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [])
 
   useEffect(() => {
     refreshQueue().then((items) => {
@@ -1037,6 +1054,14 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
       retest: resume ? null : (retest ?? null),
       digestLines,
       focusTopic: resume ? null : sittingPrefs.focusTopic,
+      // Measured, not assumed — see shared/sittingPace.ts.
+      plannedItems: pace
+        ? planSitting(
+            sittingPrefs.mins,
+            queueRef.current.filter((d) => !sittingPrefs.focusTopic || d.topic === sittingPrefs.focusTopic).map((d) => d.topic),
+            pace,
+          ).items
+        : undefined,
     })
 
     const { sessionId: sid } = resume
@@ -1843,6 +1868,7 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
           />
           <ReadyRoomPlate
             dueItems={queue}
+            pace={pace}
             totalDue={totalDue}
             topicTitles={topicTitles}
             onStart={() => startSession(false)}
@@ -1879,6 +1905,7 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
           </div>
           <ReadyRoomPlate
             dueItems={queue}
+            pace={pace}
             totalDue={totalDue}
             topicTitles={topicTitles}
             onStart={startFreshFromDetached}

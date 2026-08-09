@@ -69,6 +69,7 @@ const engramApi = {
   openExplorable: (rawPath: string): Promise<{ url: string; absolutePath: string } | { error: string }> =>
     ipcRenderer.invoke('engram:openExplorable', rawPath),
   pickFiles: (): Promise<string[]> => ipcRenderer.invoke('dialog:pickFiles'),
+  sittingPace: (): Promise<import('../shared/sittingPace').PaceModel> => ipcRenderer.invoke('engram:sittingPace'),
   pendingProductions: (): Promise<{ pending: number } | { error: string }> =>
     ipcRenderer.invoke('engram:pendingProductions'),
   pickHandwriting: (): Promise<string[]> => ipcRenderer.invoke('dialog:pickHandwriting'),

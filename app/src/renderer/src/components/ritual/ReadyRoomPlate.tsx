@@ -5,6 +5,7 @@ import { InkNode } from '../ui/InkNode'
 import { Button } from '../ui/Button'
 import { PlateFigure } from '../ui/PlateFigure'
 import { SegmentedControl } from '../ui/SegmentedControl'
+import { planSitting, secondsForTopic, humanMinutes, type PaceModel } from '../../../../shared/sittingPace'
 import { capForMins, coveredCount, type SittingMins, type SittingStyle } from '../../shared/reviewKickoff'
 import type { SittingPrefs } from '../../shared/sittingPrefs'
 
@@ -60,6 +61,7 @@ export const ReadyRoomPlate = memo(function ReadyRoomPlate({
   totalDue,
   topicTitles,
   onStart,
+  pace,
   onResume,
   hasPriorSession,
   blocked,
@@ -81,6 +83,8 @@ export const ReadyRoomPlate = memo(function ReadyRoomPlate({
    * topic slug so this plate never waits on the fetch to render. */
   topicTitles?: Record<string, string>
   onStart: () => void
+  /** Measured per-topic pace; null while it loads or when nothing is known. */
+  pace?: PaceModel | null
   onResume: () => void
   hasPriorSession: boolean
   blocked: boolean
@@ -108,6 +112,15 @@ export const ReadyRoomPlate = memo(function ReadyRoomPlate({
   const topics = [...topicGroups.entries()].sort((a, b) => b[1].length - a[1].length)
 
   const focusChoices = Array.from(new Set(dueItems.map((d) => d.topic))).sort()
+
+  // What the chosen budget actually buys, charged at this learner's own
+  // measured pace per topic rather than a flat item count. The old table
+  // promised 24 items for 25 minutes; measurement put that nearer 4.
+  const queueTopics = dueItems
+    .filter((d) => !prefs.focusTopic || d.topic === prefs.focusTopic)
+    .map((d) => d.topic)
+  const plan = pace ? planSitting(prefs.mins, queueTopics, pace) : null
+  const paceBasis = pace && queueTopics[0] ? secondsForTopic(pace, queueTopics[0]) : null
 
   return (
     <div className="tilt-card-soft panel px-6 py-6 flex flex-col gap-4">
@@ -196,6 +209,15 @@ export const ReadyRoomPlate = memo(function ReadyRoomPlate({
       </div>
 
       <div className="flex gap-3 items-center">
+        {plan && plan.items > 0 && (
+          <div className="fig-caption">
+            {`${prefs.mins} min covers about ${plan.items} ${plan.items === 1 ? 'item' : 'items'} — ${humanMinutes(plan.predictedSeconds)} at your pace`}
+            {paceBasis?.basis === 'topic' && ` (~${humanMinutes(paceBasis.seconds)} each here)`}
+            {paceBasis?.basis === 'overall' && ' (from your overall pace — this topic has little history yet)'}
+            {plan.overruns && ' · one item already runs past this'}
+          </div>
+        )}
+
         {/* One topic at a time. A mixed queue is engine-ordered by savings,
             which is right for retention and hard on a person — an observed
             sitting stepped from stat-mech into quantum between two items.
