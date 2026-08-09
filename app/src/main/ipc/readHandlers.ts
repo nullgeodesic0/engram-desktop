@@ -90,6 +90,9 @@ async function artifactListWithMtime(): Promise<ArtifactEntry[]> {
 export function registerReadHandlers(): void {
   ipcMain.handle('engram:topics', () => getTopicsCached())
   ipcMain.handle('engram:stats', () => engramRead('stats'))
+  // Productions stashed but not yet graded. See readOnly.ts's per-action gate
+  // for why only the count action is reachable.
+  ipcMain.handle('engram:pendingProductions', () => engramRead('stash', ['count']))
   ipcMain.handle('engram:due', (_e, limit?: number, topic?: string) => engramRead('due', buildDueArgs({ limit, topic })))
   // The savings-ordered triage read (`due --cap`) — same allowlisted command,
   // different payload shape (DueCappedResult). Used by the review ready

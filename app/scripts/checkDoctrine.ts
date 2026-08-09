@@ -119,7 +119,14 @@ const PINNED_READ_ONLY_COMMANDS = [
   'topics', 'stats', 'due', 'decay', 'next', 'adherence', 'retention', 'transfer',
   'grader-health', 'topic-status', 'doctor', 'path', 'model',
 ]
-const PINNED_READ_ONLY_SUBCOMMANDS = ['misconception', 'list', 'experiment', 'status', 'list']
+// 2026-08-08 re-pin: + `stash count`. Verified in engram.py 1.10.1 — the
+// count branch reads the stash file and emits its length, nothing else, while
+// add and clear in the same command do write. That is why this is gated per
+// ACTION rather than by allowlisting the command. It reads no claim or rubric
+// (the stash holds the learner's own productions) and mutates nothing, so the
+// app stays a reader. It exists so pending-but-ungraded work is visible in
+// the app instead of sitting in limbo until a later session happens to run.
+const PINNED_READ_ONLY_SUBCOMMANDS = ['misconception', 'list', 'experiment', 'status', 'list', 'stash', 'count']
 // 2026-07-30 re-pin (3 → 4): `misconception` joins the mutation door,
 // action-gated to `resolve` only (see D1.mutationGate below). Rationale:
 // `misconception resolve` is engine-proven pure ledger — FSRS, scheduling,

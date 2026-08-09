@@ -42,6 +42,19 @@ const READ_ONLY_COMMANDS = new Set([
 const READ_ONLY_SUBCOMMANDS: Map<string, Set<string>> = new Map([
   ['misconception', new Set(['list'])],
   ['experiment', new Set(['status', 'list'])],
+  // The count action only. Verified against engram.py 1.10.1: that branch
+  // reads the stash file and emits its length — no write, no removal, no lock
+  // of its own. Its siblings in the SAME command do write (add appends, clear
+  // unlinks), which is exactly the case this per-action map exists for: the
+  // command as a whole could never be allowlisted, and one action of it
+  // safely can.
+  //
+  // Why the app needs it: a sitting can end with productions stashed and not
+  // yet graded, and that state was invisible in the app, so the work sat in
+  // limbo until another session happened to run. Reading the count is what
+  // lets Home say so and offer to finish it. The stash holds productions the
+  // learner wrote, so this reads no claim and no rubric.
+  ['stash', new Set(['count'])],
 ])
 
 export class EngramCliError extends Error {

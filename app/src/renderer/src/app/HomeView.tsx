@@ -266,12 +266,29 @@ export function HomeView({
   const [forecast, setForecast] = useState<number[] | null>(null)
   const [duePulse, setDuePulse] = useState(false)
   const [activeExperiment, setActiveExperiment] = useState<ActiveExperiment | null>(null)
+  const [pendingProductions, setPendingProductions] = useState<number>(0)
   // Which "Continue learning" topic actually has an in-progress Learn
   // session — the one card in that group that earns `.dogear` ("the one
   // you're in"). Same `lastSessionFor('learn', …)` probe LearnSessionView's
   // own `refreshTopics` uses, just scoped to the active bucket rather than
   // every topic (this is decoration, not the shelf's own resume affordance).
   const [resumableTopics, setResumableTopics] = useState<Set<string>>(new Set())
+  // Work that exists but has not been graded. This was invisible in the app,
+  // so a stashed production sat in limbo until a later session happened to
+  // pick it up.
+  useEffect(() => {
+    let alive = true
+    window.engram
+      .pendingProductions()
+      .then((r) => {
+        if (alive && r && 'pending' in r) setPendingProductions(r.pending)
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [])
+
   useEffect(() => {
     if (!topics) return
     const active = topics.filter((t) => topicBucket(t) === 'active')
@@ -568,6 +585,23 @@ export function HomeView({
               <div className="flex gap-3 items-center">
                 <Button variant="primary" size="lg" onClick={onGoReview}>
                   Clear today’s reviews
+                </Button>
+              </div>
+            )}
+
+            {/* Stashed but ungraded. The app cannot grade — only a live
+                session can, and the blind assessor is what actually does it —
+                so this states the fact and opens the door rather than
+                pretending to resolve it here. */}
+            {pendingProductions > 0 && (
+              <div className="flex gap-3 items-center flex-wrap">
+                <span className="fig-caption text-[var(--color-ink-warm)]">
+                  {pendingProductions === 1
+                    ? '1 production is waiting to be graded'
+                    : `${pendingProductions} productions are waiting to be graded`}
+                </span>
+                <Button variant="ghost" onClick={onGoReview}>
+                  Finish grading
                 </Button>
               </div>
             )}
