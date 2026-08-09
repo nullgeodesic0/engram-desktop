@@ -1,8 +1,9 @@
-import { useMemo } from 'react'
+import { useMemo , useState } from 'react'
 import { MarkdownPreview } from './MarkdownPreview'
 import { LatexEditor } from './LatexEditor'
 import { fileName } from './ChatMessageView'
 import { CTRL_QUIET, ctrlFilled, type EnvAccent } from '../shared/controlChrome'
+import { imagesFromPaste, imagesFromDrop, dragCarriesImage } from '../shared/incomingImages'
 import { scanLatex, describeScan } from '../shared/latexSyntax'
 import { countUnicodeMath, unicodeToLatex } from '../shared/latexEditing'
 
@@ -19,7 +20,7 @@ interface MessageComposerProps {
    * confirmation. Collapsing them into one button would hide a gate behind a
    * file extension. Omitted (and the button hidden) where there is no session
    * to ask. */
-  onAttachHandwriting?: () => void
+  onAttachHandwriting?: (paths?: string[]) => void
   markdownPreview: boolean
   onToggleMarkdownPreview: () => void
   onSubmit: () => void
@@ -99,6 +100,29 @@ export function MessageComposer({
   const unicodeCount = useMemo(() => countUnicodeMath(production), [production])
   const mathMode = scan.tokens.length > 0
 
+  // Paste/drop hand us BYTES; the handwriting flow runs on paths. Land them in
+  // a temp file and hand the paths to the same attach flow the picker uses, so
+  // there is exactly one transcription path regardless of how the image
+  // arrived — and so the attestation gate cannot be bypassed by a gesture.
+  const [dragging, setDragging] = useState(false)
+  const [landing, setLanding] = useState<number | null>(null)
+
+  async function landImages(found: ReturnType<typeof imagesFromPaste>): Promise<void> {
+    if (!onAttachHandwriting) return
+    setLanding(found.length)
+    try {
+      const paths: string[] = []
+      for (const img of found) {
+        const bytes = await img.file.arrayBuffer()
+        const res = await window.engram.saveIncomingImage({ mime: img.mime, bytes, name: img.name ?? undefined })
+        if ('path' in res) paths.push(res.path)
+      }
+      if (paths.length > 0) onAttachHandwriting(paths)
+    } finally {
+      setLanding(null)
+    }
+  }
+
   return (
     <div className="shrink-0 flex flex-col gap-2 border border-[var(--color-edge)] p-3">
       {attachedFiles.length > 0 && (
@@ -128,7 +152,41 @@ export function MessageComposer({
         </div>
       )}
       <div className={markdownPreview ? 'grid grid-cols-2 gap-3 w-full' : 'w-full'}>
-        <div className="relative w-full panel text-sm">
+        <div
+          className="relative w-full panel text-sm"
+          onPaste={(e) => {
+            // A text paste MUST fall through untouched — swallowing it would
+            // break ordinary typing. Only a paste that actually carries an
+            // image is intercepted.
+            const found = imagesFromPaste(e.clipboardData)
+            if (found.length === 0 || !onAttachHandwriting) return
+            e.preventDefault()
+            void landImages(found)
+          }}
+          onDragOver={(e) => {
+            if (!onAttachHandwriting || !dragCarriesImage(e.dataTransfer)) return
+            e.preventDefault()
+            setDragging(true)
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(e) => {
+            const found = imagesFromDrop(e.dataTransfer)
+            setDragging(false)
+            if (found.length === 0 || !onAttachHandwriting) return
+            e.preventDefault()
+            void landImages(found)
+          }}
+        >
+          {dragging && (
+            <div className="absolute inset-0 z-10 pointer-events-none flex items-center justify-center border border-dashed border-[var(--color-ink-warm)] bg-[color-mix(in_srgb,var(--color-ink-warm)_8%,transparent)]">
+              <span className="label-data text-[10px] tracking-[0.14em] text-[var(--color-ink-warm)]">
+                drop pages to transcribe
+              </span>
+            </div>
+          )}
+          {landing && (
+            <div className="absolute top-1 right-2 z-10 fig-caption">reading {landing}…</div>
+          )}
           <LatexEditor
             value={production}
             onChange={onProductionChange}
@@ -182,7 +240,7 @@ export function MessageComposer({
           </button>
           {onAttachHandwriting && (
             <button
-              onClick={onAttachHandwriting}
+              onClick={() => onAttachHandwriting()}
               title="Photograph your handwritten work — it comes back as LaTeX for you to check before it counts"
               className={CTRL_QUIET}
             >

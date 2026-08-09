@@ -1528,8 +1528,11 @@ export function LearnSessionView({
    * suggest they look. */
   const blindSinceRequest = useRef(false)
 
-  async function attachHandwriting() {
-    const picked = await window.engram.pickHandwriting()
+  async function attachHandwriting(prePicked?: string[]) {
+    // Paths already in hand (a paste or a drop) skip the picker entirely —
+    // same flow from there on, so the attestation gate is identical however
+    // the pages arrived.
+    const picked = prePicked && prePicked.length > 0 ? prePicked : await window.engram.pickHandwriting()
     const message = handwritingRequestMessage({ pages: picked })
     if (!message || !sessionId) return
     blindSinceRequest.current = false

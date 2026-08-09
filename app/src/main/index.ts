@@ -1,6 +1,7 @@
 import { app, shell, BrowserWindow, ipcMain, dialog, Tray, Menu, nativeImage } from 'electron'
 import { join } from 'node:path'
-import { cp, mkdir } from 'node:fs/promises'
+import { cp, mkdir, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { registerReadHandlers } from './ipc/readHandlers'
@@ -349,6 +350,46 @@ app.whenReady().then(() => {
       title: 'Attach files',
     })
     return result.canceled ? [] : result.filePaths
+  })
+
+  /** Write an image the learner pasted or dropped into the composer to a temp
+   * file, and return its path.
+   *
+   * The handwriting flow is built entirely on PATHS — the tutor is handed
+   * absolute paths and reads them itself, with no binary transport anywhere in
+   * the bridge (see the pickFiles comment above). Clipboard and drag-drop
+   * hand the renderer BYTES instead, so the one thing missing was somewhere to
+   * put them. This is that, and nothing more: it does not touch the learning
+   * home, and it writes only into the OS temp directory, which matches the
+   * design's "the image is ephemeral" decision — the file outlives the paste
+   * only long enough to be read.
+   *
+   * The extension is taken from the MIME type rather than trusted from a
+   * filename, since a pasted screenshot has no name at all. */
+  ipcMain.handle('dialog:saveIncomingImage', async (_e, payload: { mime: string; bytes: ArrayBuffer; name?: string }) => {
+    const EXT: Record<string, string> = {
+      'image/png': 'png',
+      'image/jpeg': 'jpg',
+      'image/heic': 'heic',
+      'image/heif': 'heif',
+      'image/webp': 'webp',
+      'image/gif': 'gif',
+      'image/tiff': 'tif',
+    }
+    const ext = EXT[payload.mime]
+    if (!ext) return { error: `unsupported image type: ${payload.mime || 'unknown'}` }
+    const bytes = Buffer.from(payload.bytes)
+    // A guard, not a policy: a pasted screenshot is ~1-5 MB, and anything an
+    // order of magnitude past that is a mis-paste rather than a page of work.
+    if (bytes.byteLength === 0) return { error: 'empty image' }
+    if (bytes.byteLength > 40 * 1024 * 1024) return { error: 'image is too large (over 40 MB)' }
+    const dir = join(tmpdir(), 'engram-handwriting')
+    await mkdir(dir, { recursive: true })
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+    const safe = (payload.name ?? 'pasted').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 40)
+    const path = join(dir, `${stamp}-${safe}.${ext}`)
+    await writeFile(path, bytes)
+    return { path }
   })
 
   // The handwriting picker. Separate from the generic one because the two

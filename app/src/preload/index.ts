@@ -70,6 +70,8 @@ const engramApi = {
     ipcRenderer.invoke('engram:openExplorable', rawPath),
   pickFiles: (): Promise<string[]> => ipcRenderer.invoke('dialog:pickFiles'),
   pickHandwriting: (): Promise<string[]> => ipcRenderer.invoke('dialog:pickHandwriting'),
+  saveIncomingImage: (payload: { mime: string; bytes: ArrayBuffer; name?: string }): Promise<{ path: string } | { error: string }> =>
+    ipcRenderer.invoke('dialog:saveIncomingImage', payload),
   exportLearningData: (): Promise<{ canceled: boolean; path?: string }> => ipcRenderer.invoke('engram:exportData'),
   environmentCheck: (): Promise<EnvironmentCheckResult> => ipcRenderer.invoke('engram:environmentCheck'),
 
