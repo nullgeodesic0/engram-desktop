@@ -45,10 +45,11 @@ The per-topic spread is the finding:
 | **total** | **358** | **53** | **81** | **35%** |
 
 A checkpoint-only mobile app would be **unable to touch 92% of statistical mechanics**.
-This is the load-bearing argument for the derivation ladder: it is not an alternative
-to checkpoint chains, it is the only mobile-viable input for the third of the corpus
-chains are forbidden from — including 81 procedure nodes that desktop checkpoint
-review cannot serve today either.
+This is the load-bearing argument for step assembly: it is not an alternative to
+checkpoint chains, it is the only mobile-viable input for the third of the corpus
+chains are forbidden from. Those 81 procedure nodes are not unserved today — the
+problem grammar serves them at the desk (Evidence 7); they are unserved *by
+recognition*, which is precisely why the phone needs a different input for them.
 
 **2. The `node_kind: procedure` carve-out is live, not dead — verified, because the
 field names differ.** Graph JSON stores `kind` (values: `concept` 151, `procedure` 81,
@@ -87,7 +88,20 @@ overlay is a repetition of an established pattern, not a new mechanism.
 `topicSettings.ts` and `achievementsStore.ts` are the app-owned-store pattern for
 anything that must not enter `~/.claude/learning/`.
 
-**7. State is small enough that sync is a non-problem.** All of
+**7. The plugin already has a ladder, and step assembly is its glass form — not a
+rival.** `skills/_shared/problem-grammar.md` drives every `node_kind: procedure` node
+through **L1 worked example → L2 completion → L3 faded → L4 cold solve**, replacing
+beats 2–4. L1 already reads *"before each step is revealed, the learner predicts the
+next move"* — a card interaction described in prose. L2 (execute the ending) and L3
+(the principle-bearing interior step blanked) are a step assembly and a cloze
+respectively. So mobile does not invent a ladder; it renders L1–L3. **L4 must stay a
+real production** — an assembly is easier than a free solve, so rendering L4 as one
+would invert the rungs. Two further rules bind mobile hard: fresh instances must have
+**answer keys computed by execution before serving** (the file is explicit that a wrong
+key becomes a false lapse), and the discrimination beat's naming step is **never a
+menu**. The phone cannot execute, so it may never invent an instance or compute a key.
+
+**8. State is small enough that sync is a non-problem.** All of
 `~/.claude/learning/` is 2.8 MB. Nothing here justifies a server, an account, or a
 cloud. Grading requires the Mac awake regardless, so LAN/Tailscale reconciliation is
 sufficient by construction.
@@ -148,11 +162,26 @@ uncapped, `easy` is reachable. Mobile is second-class only on the tap path. That
 what keeps this app from being a permanent evidence downgrade, and it gives the
 learner a real lever rather than a consolation prize.
 
-## 3. The derivation ladder
+## 3. Step assembly
 
 The desktop's `render_steps` bridge tool *shows* a step ladder. Mobile inverts it into
 an input. The tutor emits a step graph: N canonical steps in order plus ≥N distractor
 steps; the learner builds the chain top-down from a shuffled pool.
+
+**On procedure nodes this is not a new mechanism — it is `problem-grammar.md`'s L1–L3
+rendered on glass** (Evidence 7). L1's predict-the-next-move, L2's execute-the-ending,
+and L3's blanked principle-bearing step are assembly and cloze interactions already;
+rung selection stays the worked-drive signals as written. **L4 cold solve is never an
+assembly** — it is a produced fresh-instance solve, spoken, typed, or photographed.
+The discrimination beat's naming step stays typed or spoken; the problem grammar bars
+a menu there and this design does not touch that.
+
+**Fresh instances arrive with execution-verified keys or they are not served.** The
+phone cannot execute, so it never invents an instance and never computes a key;
+variants are generated and checked on the desk before packing. The
+`unverified-by-execution` fallback is a desk affordance and does not extend to a
+surface that cannot check its own arithmetic — a wrong key is a false lapse on the
+learner's schedule.
 
 These rules are the bargain, and become the overlay's asserted sentences:
 
@@ -248,8 +277,11 @@ around it.
    existing charter, same constitutional-exception header form. Load-bearing
    sentences: the provisional stamp, the rating cap, the six ladder rules, the
    threshold/procedure heavier-walk rule, and the definition of Solidify.
-2. Amend `dialogue-grammar.checkpoint-exception.md` (or add a pinned sibling) to name
-   the second exception — same licence, same pin, same removal rule.
+2. New sibling `plugin-overlays/engram/dialogue-grammar.mobile-walk-exception.md`
+   naming the second exception — kept as its own file rather than folded into
+   `dialogue-grammar.checkpoint-exception.md`, so each exception stays paired with the
+   one protocol that licenses it and either can be removed without stranding the
+   other's sentence. Same licence, same pin, same removal rule.
 3. `checkDoctrine` §D5: pin the new overlay's hash and assert its sentences verbatim,
    exactly as `:724–806` handles the checkpoint overlay today.
 4. **`checkDoctrine` new §D6 — the mobile boundary.** Pin the `LinkServer` payload
@@ -274,7 +306,7 @@ not to be worked around from the app side.
 
 An Android client. Any cloud sync, account, or hosted service. iPad-specific layouts
 and Apple Pencil input — the card grammar makes handwriting less necessary than it
-first appeared; revisit once the ladder is real. Editing the graph from the phone.
+first appeared; revisit once step assembly is real. Editing the graph from the phone.
 Coach mode on mobile. Any notification not explicitly enabled by the learner at a time
 they chose. Changing `engram.py` or any plugin skill file.
 
@@ -287,7 +319,7 @@ they chose. Changing `engram.py` or any plugin skill file.
 4. SwiftUI feed shell + Night Atlas Swift tokens. Scroll and commit ergonomics first —
    this has to beat a doomscroll and cannot be retrofitted.
 5. Review mode (smallest doctrine surface — rides the existing exception).
-6. Learn mode + derivation ladder.
+6. Learn mode + step assembly.
 7. Provisional + Solidify on the desktop.
 8. Widgets + voice recall.
 
