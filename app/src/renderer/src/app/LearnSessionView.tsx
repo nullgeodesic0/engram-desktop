@@ -71,6 +71,7 @@ import { parseGradeResults, type GradeResult } from '../../../shared/gradeResult
 import { MarkView, type RitualMark } from '../components/ritual/Marks'
 import { bridgeUiIntent } from '../../../shared/bridgeUiIntents'
 import { handwritingRequestMessage } from '../shared/handwritingRequest'
+import { saveDraft, loadDraft, clearDraft } from '../shared/composerDrafts'
 import { ActionChips, type SuggestedAction } from '../components/ritual/ActionChips'
 import { SessionOpenPlate, SessionCeremony } from '../components/ritual/Bookends'
 import { Button } from '../components/ui/Button'
@@ -1544,12 +1545,36 @@ export function LearnSessionView({
     await window.engram.sendMessage(sessionId, message)
   }
 
+  // ── Drafts ───────────────────────────────────────────────────────────────
+  // A half-written recall answer is the most expensive thing this app can
+  // lose: the retrieval has already happened, and re-typing it does not
+  // re-earn it. Keyed by node so returning to the same probe offers back what
+  // you were writing, and so two topics in one sitting never share a draft.
+  const draftId = { surface: 'learn', topic: activeTopic?.topic ?? null, node: currentNodeId }
+
+  // Restore only into an EMPTY composer — never overwrite live typing.
+  const restoredFor = useRef<string | null>(null)
+  useEffect(() => {
+    const id = `${draftId.topic}:${draftId.node}`
+    if (!draftId.topic || !draftId.node || restoredFor.current === id) return
+    restoredFor.current = id
+    const saved = loadDraft(draftId)
+    if (saved && production.trim().length === 0) setProduction(saved)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftId.topic, draftId.node])
+
+  useEffect(() => {
+    saveDraft(draftId, production)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [production, draftId.topic, draftId.node])
+
   async function submitProduction() {
     if (!sessionId || !production.trim() || busy) return
     const text = production.trim()
     const files = attachedFiles
     setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'user', text, attachments: files, timestamp: Date.now() }])
     setBusy(true)
+    clearDraft(draftId)
     setProduction('')
     setAttachedFiles([])
     setSuggestedActions([])

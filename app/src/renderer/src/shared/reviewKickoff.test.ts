@@ -153,3 +153,35 @@ These are filed open for this queue's nodes; "misconception resolve --id <ID>" r
     expect(kickoff).toContain('roughly 7 items')
   })
 })
+
+describe('composeReviewKickoff — one topic at a time', () => {
+  const base = { style: 'standard' as const, mins: 10 as const, totalDue: 12, recallDueNodes: [], retest: null, digestLines: [] }
+
+  it('names the topic and scopes the engine call to it', () => {
+    const m = composeReviewKickoff({ ...base, focusTopic: 'grad-statistical-mechanics' })
+    expect(m).toContain('/engram:review')
+    expect(m).toContain('Just grad-statistical-mechanics today')
+    expect(m).toContain('due --topic grad-statistical-mechanics --cap')
+  })
+
+  it('says the rest stays due — it filters, it does not discard', () => {
+    expect(composeReviewKickoff({ ...base, focusTopic: 't' })).toContain('stay due')
+  })
+
+  it('never tells the tutor how to teach or grade', () => {
+    const m = composeReviewKickoff({ ...base, focusTopic: 't' }).toLowerCase()
+    for (const forbidden of ['rubric', 'claim', 'grade ', 'skip', 'easier', 'hint']) {
+      expect(m, forbidden).not.toContain(forbidden)
+    }
+  })
+
+  it('leaves a mixed queue exactly as before', () => {
+    expect(composeReviewKickoff({ ...base, focusTopic: null })).toBe(composeReviewKickoff(base))
+  })
+
+  it('yields to an elected checkpoint sitting', () => {
+    // Checkpoint carries its own protocol; the focus clause must not displace it.
+    const m = composeReviewKickoff({ ...base, style: 'checkpoint', focusTopic: 't' })
+    expect(m).toContain('/engram:review quick')
+  })
+})

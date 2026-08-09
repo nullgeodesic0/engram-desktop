@@ -613,7 +613,19 @@ for (const f of FILES) {
 // — that is mine to judge." Still 362 source chars, inside the 400-char cap
 // this collector's own regex imposes; a longer literal would not match at all
 // and would drop out of the pinned set silently.
-const PINNED_MESSAGE_HASH = 'ac0c0ff860ff82e7'
+// 2026-08-08 (3) — one-topic sittings. A mixed queue is engine-ordered by
+// savings, which is right for retention and punishing for a person: an
+// observed sitting stepped from stat-mech into quantum mechanics between two
+// items. The new clause is a FILTER the learner selected in the app, phrased
+// in their own navigational voice, and it reorders nothing — the engine still
+// sequences within the topic (due --topic), and everything outside it simply
+// stays due. It says nothing about how to teach, what to skip, or how to
+// grade.
+// 2026-08-08 (4) — reviewKickoff.test.ts now asserts on the focus branch, and
+// the collector scans test files too, so its expected strings join the set.
+// Nothing the app SENDS changed between (3) and (4); these are assertions
+// about the message, not new message text.
+const PINNED_MESSAGE_HASH = '382a4014aac682b1'
 if (sha(injectedMessages.sort().join('\n')) !== PINNED_MESSAGE_HASH) {
   fail(
     'D3.kickoff',

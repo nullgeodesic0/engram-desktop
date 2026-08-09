@@ -104,7 +104,27 @@ function KeepMounted({ active, children }: { active: boolean; children: ReactEle
 }
 
 export default function App() {
-  const [view, setView] = useState<View>('home')
+  // Reopen where you left off. Window geometry already restores (see
+  // restoreWindowState in main); the VIEW did not, so every launch landed on
+  // Home regardless of what you were doing. Restoring a surface is safe —
+  // Learn and Review open on their shelf and plate, never mid-session, so
+  // this resumes your place without resuming anything on your behalf.
+  const [view, setView] = useState<View>(() => {
+    try {
+      const saved = localStorage.getItem('engram:lastView')
+      return saved && NAV.some((n) => n.id === saved) ? (saved as View) : 'home'
+    } catch {
+      return 'home'
+    }
+  })
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('engram:lastView', view)
+    } catch {
+      /* a preference, never a precondition */
+    }
+  }, [view])
   // Which stateful views have ever been opened — they mount lazily on first
   // visit, then stay mounted for session continuity (hidden, not unmounted).
   const [visited, setVisited] = useState({ learn: false, review: false, dashboard: false })
@@ -285,6 +305,21 @@ export default function App() {
         return
       }
       if (!e.metaKey && !e.ctrlKey) return
+      // ⌘⇧↩ — Continue. The single most common intention in the app had no
+      // binding: open, choose a surface, choose a topic, press Start. This
+      // goes straight to the work — the review queue when anything is due,
+      // otherwise Learn. Shift-qualified so it can never collide with the
+      // composer's own ⌘↩ send, which means it stays safe to press mid-sitting.
+      if (e.shiftKey && (e.key === 'Enter' || e.key === 'Return')) {
+        e.preventDefault()
+        // Read the count at press time rather than holding it in state: this
+        // fires rarely, and a stale count would send you to an empty queue.
+        void window.engram
+          .stats()
+          .then((st) => goToView(st && 'due_now' in st && st.due_now > 0 ? 'review' : 'learn'))
+          .catch(() => goToView('review'))
+        return
+      }
       if (e.key === 'k') {
         e.preventDefault()
         setPaletteOpen((v) => !v)

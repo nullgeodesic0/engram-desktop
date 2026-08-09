@@ -107,6 +107,8 @@ export const ReadyRoomPlate = memo(function ReadyRoomPlate({
   }
   const topics = [...topicGroups.entries()].sort((a, b) => b[1].length - a[1].length)
 
+  const focusChoices = Array.from(new Set(dueItems.map((d) => d.topic))).sort()
+
   return (
     <div className="tilt-card-soft panel px-6 py-6 flex flex-col gap-4">
       {/* ONE count, said once, big — the plate's signature. Deliberately
@@ -194,6 +196,29 @@ export const ReadyRoomPlate = memo(function ReadyRoomPlate({
       </div>
 
       <div className="flex gap-3 items-center">
+        {/* One topic at a time. A mixed queue is engine-ordered by savings,
+            which is right for retention and hard on a person — an observed
+            sitting stepped from stat-mech into quantum between two items.
+            Only shown when the queue actually spans more than one topic. */}
+        {focusChoices.length > 1 && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="fig-caption shrink-0">focus</span>
+            {[null, ...focusChoices].map((t) => (
+              <button
+                key={t ?? '__all__'}
+                onClick={() => onPrefsChange({ ...prefs, focusTopic: t })}
+                className={`focus-ring label-data text-[10px] tracking-[0.14em] px-2 py-0.5 border ${
+                  prefs.focusTopic === t
+                    ? 'border-[var(--color-ink-warm)] text-[var(--color-ink-warm)]'
+                    : 'border-[var(--color-hairline)] text-[var(--color-text-faint)] hover:text-[var(--color-text-dim)]'
+                }`}
+              >
+                {t === null ? 'ALL' : (topicTitles?.[t] ?? t)}
+              </button>
+            ))}
+          </div>
+        )}
+
         <Button variant="primary" size="lg" onClick={onStart} disabled={blocked}>
           Start review session
         </Button>

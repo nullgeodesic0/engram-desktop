@@ -13,11 +13,16 @@ import type { SittingMins, SittingStyle } from './reviewKickoff'
 export interface SittingPrefs {
   mins: SittingMins
   style: SittingStyle
+  /** Work one topic at a time this sitting. Null is a mixed queue, the
+   * default. Like `style`, this is a per-sitting intent and never persists —
+   * yesterday's decision to focus on one topic should not silently narrow
+   * today's queue. */
+  focusTopic: string | null
 }
 
 const KEY = 'engram-sitting-prefs'
 
-const DEFAULTS: SittingPrefs = { mins: 10, style: 'standard' }
+const DEFAULTS: SittingPrefs = { mins: 10, style: 'standard', focusTopic: null }
 
 export function loadSittingPrefs(): SittingPrefs {
   try {
@@ -25,7 +30,8 @@ export function loadSittingPrefs(): SittingPrefs {
     const parsed = raw ? (JSON.parse(raw) as unknown) : null
     const mins = (parsed as { mins?: unknown } | null)?.mins
     if (mins === 5 || mins === 10 || mins === 25) {
-      return { mins, style: 'standard' }
+      // style and focusTopic are per-sitting intents, never restored.
+      return { mins, style: 'standard', focusTopic: null }
     }
   } catch {
     // fall through to defaults

@@ -58,10 +58,13 @@ export interface ComposeOptions {
   /** Pre-formatted misconception digest lines (the caller owns the ledger
    * read and its best-effort failure handling). Empty array = no digest. */
   digestLines: string[]
+  /** The learner chose to work one topic at a time. Null for a mixed queue,
+   * which stays the default. */
+  focusTopic?: string | null
 }
 
 export function composeReviewKickoff(opts: ComposeOptions): string {
-  const { style, mins, totalDue, recallDueNodes, retest, digestLines } = opts
+  const { style, mins, totalDue, recallDueNodes, retest, digestLines, focusTopic } = opts
 
   if (retest) {
     return `/engram:review
@@ -78,6 +81,18 @@ It is filed open; "misconception resolve --id ${retest.id}" records a demonstrat
     return `/engram:review quick
 
 I have about ${mins} minutes. Please work in triage order and cover what fits — roughly ${n} items. For eligible items I would like the checkpoint style described in the review skill (chains of small choices); anything threshold, lapsed, or effectively past quick review should stay normal free recall.${floor}`
+  }
+
+  // One topic at a time. A mixed queue is engine-ordered by savings, which is
+  // correct for retention and brutal for a human: a real sitting went from
+  // stat-mech straight into quantum mechanics between two items. This is a
+  // FILTER the learner chose, not a reordering — the engine still sequences
+  // within the topic, and everything else simply stays due. Placed after the
+  // checkpoint branch so an elected checkpoint sitting keeps its protocol.
+  if (focusTopic) {
+    return `/engram:review
+
+Just ${focusTopic} today — I want one topic at a time, and everything else can stay due. I have about ${mins} minutes, so please size it with due --topic ${focusTopic} --cap ${n} and run the normal review flow.`
   }
 
   if (mins !== 10) {

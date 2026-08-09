@@ -49,6 +49,7 @@ import { TicketCard } from '../components/ritual/TicketCard'
 import { ActionChips, type SuggestedAction } from '../components/ritual/ActionChips'
 import { bridgeUiIntent } from '../../../shared/bridgeUiIntents'
 import { handwritingRequestMessage } from '../shared/handwritingRequest'
+import { saveDraft, loadDraft, clearDraft } from '../shared/composerDrafts'
 import { ReadyRoomPlate } from '../components/ritual/ReadyRoomPlate'
 import { ReviewHorizon } from '../components/ReviewHorizon'
 import { InkWell } from '../components/ritual/InkWell'
@@ -1035,6 +1036,7 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
       recallDueNodes: checkpointBooks.recallDue.map((e) => e.node),
       retest: resume ? null : (retest ?? null),
       digestLines,
+      focusTopic: resume ? null : sittingPrefs.focusTopic,
     })
 
     const { sessionId: sid } = resume
@@ -1114,6 +1116,7 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
     const files = attachedFiles
     setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'user', text, attachments: files, timestamp: Date.now() }])
     setBusy(true)
+    clearDraft(draftId)
     setProduction('')
     setAttachedFiles([])
     const sentText = files.length > 0 ? `${text}\n\n[Attached files — read these for context: ${files.join(', ')}]` : text
@@ -1211,6 +1214,30 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
       : { id: header.node, topic: header.topic ?? '', probe: header.body }
   }, [latestProbe, queue])
   // The sweep between items — Review's counterpart to Learn's node crossing —
+
+  // ── Drafts ───────────────────────────────────────────────────────────────
+  // A half-written recall answer is the most expensive thing this app can
+  // lose: the retrieval has already happened, and re-typing it does not
+  // re-earn it. Keyed by node so returning to the same probe offers back what
+  // you were writing, and so two topics in one sitting never share a draft.
+  const draftId = { surface: 'review', topic: current?.topic ?? null, node: current?.id ?? null }
+
+  // Restore only into an EMPTY composer — never overwrite live typing.
+  const restoredFor = useRef<string | null>(null)
+  useEffect(() => {
+    const id = `${draftId.topic}:${draftId.node}`
+    if (!draftId.topic || !draftId.node || restoredFor.current === id) return
+    restoredFor.current = id
+    const saved = loadDraft(draftId)
+    if (saved && production.trim().length === 0) setProduction(saved)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftId.topic, draftId.node])
+
+  useEffect(() => {
+    saveDraft(draftId, production)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [production, draftId.topic, draftId.node])
+
   // derived purely from the transcript's own probe headers (never an
   // imperative "did current.id just change" effect keyed off queue-matched
   // text). Each crossing's `atMessageIndex` is the header's OWN message, so it

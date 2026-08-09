@@ -15,20 +15,20 @@ beforeEach(() => {
 
 describe('sittingPrefs', () => {
   it('defaults to standard/10', () => {
-    expect(loadSittingPrefs()).toEqual({ mins: 10, style: 'standard' })
+    expect(loadSittingPrefs()).toEqual({ mins: 10, style: 'standard', focusTopic: null })
   })
   it('persists the time pick', () => {
     saveSittingMins(5)
-    expect(loadSittingPrefs()).toEqual({ mins: 5, style: 'standard' })
+    expect(loadSittingPrefs()).toEqual({ mins: 5, style: 'standard', focusTopic: null })
   })
   it('NEVER persists style — always standard on load', () => {
     store.set('engram-sitting-prefs', JSON.stringify({ mins: 25, style: 'checkpoint' }))
-    expect(loadSittingPrefs()).toEqual({ mins: 25, style: 'standard' })
+    expect(loadSittingPrefs()).toEqual({ mins: 25, style: 'standard', focusTopic: null })
   })
   it('garbage degrades to defaults', () => {
     store.set('engram-sitting-prefs', '{not json')
-    expect(loadSittingPrefs()).toEqual({ mins: 10, style: 'standard' })
+    expect(loadSittingPrefs()).toEqual({ mins: 10, style: 'standard', focusTopic: null })
     store.set('engram-sitting-prefs', JSON.stringify({ mins: 999 }))
-    expect(loadSittingPrefs()).toEqual({ mins: 10, style: 'standard' })
+    expect(loadSittingPrefs()).toEqual({ mins: 10, style: 'standard', focusTopic: null })
   })
 })
