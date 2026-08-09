@@ -470,6 +470,11 @@ app.whenReady().then(() => {
     return { openAtLogin }
   })
   ipcMain.handle('app:checkForUpdate', () => checkForUpdate())
+  // The CACHED verdict — no network. Home reads this so an available update
+  // is visible where the learner already is, instead of only inside Settings
+  // behind a button they would have to think to press. The refresh itself
+  // stays on the once-a-day auto-check and the explicit Settings button.
+  ipcMain.handle('app:cachedUpdateCheck', () => getCachedUpdateCheck())
   ipcMain.handle('app:getCachedUpdateCheck', () => getCachedUpdateCheck())
   ipcMain.handle('app:getCrashLog', () => getCrashLog())
   ipcMain.handle('app:getVersion', () => app.getVersion())

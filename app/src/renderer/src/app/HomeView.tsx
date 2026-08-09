@@ -267,6 +267,7 @@ export function HomeView({
   const [duePulse, setDuePulse] = useState(false)
   const [activeExperiment, setActiveExperiment] = useState<ActiveExperiment | null>(null)
   const [pendingProductions, setPendingProductions] = useState<number>(0)
+  const [updateBehind, setUpdateBehind] = useState(false)
   // Which "Continue learning" topic actually has an in-progress Learn
   // session — the one card in that group that earns `.dogear` ("the one
   // you're in"). Same `lastSessionFor('learn', …)` probe LearnSessionView's
@@ -282,6 +283,13 @@ export function HomeView({
       .pendingProductions()
       .then((r) => {
         if (alive && r && 'pending' in r) setPendingProductions(r.pending)
+      })
+      .catch(() => {})
+    // Cached only — no network from Home. The daily auto-check refreshes it.
+    window.engram
+      .cachedUpdateCheck()
+      .then((r) => {
+        if (alive && r && r.state === 'behind') setUpdateBehind(true)
       })
       .catch(() => {})
     return () => {
@@ -593,6 +601,15 @@ export function HomeView({
                 session can, and the blind assessor is what actually does it —
                 so this states the fact and opens the door rather than
                 pretending to resolve it here. */}
+            {updateBehind && (
+              <div className="flex gap-3 items-center flex-wrap">
+                <span className="fig-caption text-[var(--color-ink-cool)]">a newer build is available</span>
+                <Button variant="ghost" onClick={() => onGoView('settings')}>
+                  See what changed
+                </Button>
+              </div>
+            )}
+
             {pendingProductions > 0 && (
               <div className="flex gap-3 items-center flex-wrap">
                 <span className="fig-caption text-[var(--color-ink-warm)]">

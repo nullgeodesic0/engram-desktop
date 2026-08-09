@@ -92,6 +92,7 @@ const engramApi = {
   setLoginItemSettings: (openAtLogin: boolean): Promise<{ openAtLogin: boolean }> =>
     ipcRenderer.invoke('app:setLoginItemSettings', openAtLogin),
   checkForUpdate: (): Promise<UpdateCheckResult> => ipcRenderer.invoke('app:checkForUpdate'),
+  cachedUpdateCheck: (): Promise<UpdateCheckResult | null> => ipcRenderer.invoke('app:cachedUpdateCheck'),
   getCachedUpdateCheck: (): Promise<UpdateCheckResult | null> => ipcRenderer.invoke('app:getCachedUpdateCheck'),
   getCrashLog: (): Promise<CrashLogEntry[]> => ipcRenderer.invoke('app:getCrashLog'),
   getVersion: (): Promise<string> => ipcRenderer.invoke('app:getVersion'),
