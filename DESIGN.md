@@ -21,7 +21,7 @@ colors:
   ink-paper: "#e6dfd0"
   text-primary: "#e6dfd0"
   text-dim: "#8b8878"
-  text-faint: "#545248"
+  text-faint: "#7b7768"
   nocturne-hi: "#121020"
   nocturne-lo: "#0c0b16"
   accent-cta: "#e8a857"
@@ -192,13 +192,15 @@ A narrow-band palette of ink colors on a warmed near-black, where hue carries me
 - **Surface / Surface-2 / Surface-3** (`#14151c` / `#1c1e28` / `#262937`): the three tonal tiers. Base panel, raised panel, and third-tier (scrollbar thumb, code blocks, the `frame-hover` wash).
 - **Hairline** (`#262a36`): every border and divider. `--color-edge` mixes it 50% with `--color-text-faint` for the slightly more present card frame.
 - **Paper Ink** (`#e6dfd0`): primary text — the warm base of the text ramp.
-- **Sepia Dim** (`#8b8878`) and **Sepia Faint** (`#545248`): secondary/caption text, and the least prominent marks (the dendrite-divider node dot).
+- **Sepia Dim** (`#8b8878`) and **Sepia Faint** (`#7b7768`): secondary/caption text, and the least prominent marks (the dendrite-divider node dot). Faint was raised from `#545248`, which measured 2.74:1 on a raised card — it read as "quiet" in source and as unreadable on screen. Even at `#7b7768` it does **not** clear 4.5:1 on every surface (3.22:1 on the third tonal tier), so it is for marks and ornament, never for text a learner has to read. Anything informational belongs in Sepia Dim.
 
 ### Named Rules
 
 **The Consolidation Axis Rule.** Cool and warm are not "accent 1" and "accent 2." Cool means *not yet consolidated*; warm means *survived*. A warm accent on something that has not consolidated is a defect, not a style choice. Nothing may be recolored along this axis for visual balance.
 
 **The Reserved Danger Rule.** Danger ink marks a learner's struggle or a lapsed memory. It is never the color of a validation error, a failed network call, a destructive-action button, or a generic alert. Those need their own treatment — usually text, not hue.
+
+*One standing exception: the window close control in `TitleBar`.* Its red is not this product's semantics but the platform's — a macOS traffic light that is not red reads as broken chrome, and no learner will mistake the window controls for a grade. The exception is exactly one control, and it does not generalize to destructive actions inside the app, which stay under the rule.
 
 **The Off-Axis Violet Rule.** Violet marks synthesis and creation. It must never become a third station on the consolidation ramp, and it must never be used simply because a surface needs a third color.
 
@@ -288,6 +290,8 @@ Three named form devices carry state:
 
 **The Right Angle Rule.** Do not reintroduce a radius, at any value, on any surface. If a shape needs softening, it is the wrong shape. `rounded-full` on an organic mark is the only exception.
 
+**The Unclipped Frame Rule.** Never apply `.frame-hover` or `.frame-selected` to an `overflow-hidden` host — the inset-negative `::after` gets clipped and silently disappears. Give the frame its own unclipped wrapper, or skip it on that surface.
+
 ## Components
 
 ### Buttons
@@ -324,9 +328,15 @@ The left rail is its own **nocturne** register — a distinct near-black-violet 
 ### Transcript Marks (signature)
 The chat transcript is the app's densest and most characteristic surface. A shared card skeleton (`MarkFrame`) provides the geometry — `.tilt-card-soft`, `ritual-mark-in` entry, `max-w-[92%]`, hairline border, `px-3 py-2.5` — and a four-ink taxonomy (warm / cool / violet / danger) colors it by meaning. On top of that sit roughly twenty structured card kinds driven by MCP bridge tools: comparisons, step ladders, formulas with symbol highlighting, citations, checklists, timelines, definitions, and SVG plots that draw themselves in via `stroke-dashoffset` and carry a crosshair readout.
 
-**These cards are a formatting channel, never a new authority.** Every bridge tool formats prose the tutor would have written anyway — advisory, non-blocking, never load-bearing for the learning loop. A card that the loop *depends on* is a design error, not a richer card.
+Tutor prose in this transcript is set as a page rather than as chat: its own serif reading scale, a heading ramp whose levels differ by kind rather than by a few pixels, drawn hairline list markers, and an opening-paragraph lede. See Typography.
 
-**Density over ceremony.** Cards stay compact and scannable. No mark may grow into a full-width panel that breaks the transcript's rhythm; the `92%` cap and the tight padding scale are what make twenty kinds of card feel like one surface.
+**The Equation Plate.** Display math is the anchor of the paragraph it belongs to, not a line with the same weight as a sentence. It gets a hairline frame, a wash a half-step off the surface (`surface-2` at 45%), generous interior space, and — only when a sibling display equation exists to distinguish it from — a positional number set bottom-right in `--color-text-dim`. Bottom-right is structural, not stylistic: the equation-copy affordance pins its glyph to the *top* of the KaTeX box, so splitting them vertically is what keeps them from colliding on a wide equation. It is also the transcript's one authored motion moment — the plate develops from grain on first render, gated so it never re-fires mid-stream, and disabled entirely under reduced motion. Prose itself never animates.
+
+### Named Rules
+
+**The Formatting Channel Rule.** MCP bridge cards format prose the tutor would have written anyway — advisory, non-blocking, never load-bearing for the learning loop. A card the loop *depends on* is a design error, not a richer card.
+
+**The Density Over Ceremony Rule.** Transcript cards stay compact and scannable. No mark may grow into a full-width panel that breaks the transcript's rhythm; the `92%` cap and tight padding are what make twenty card kinds feel like one surface.
 
 ## Do's and Don'ts
 

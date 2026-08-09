@@ -1,7 +1,12 @@
 import { useState } from 'react'
 
 const DOTS: { key: 'close' | 'min' | 'zoom'; color: string; glyph: string; label: string }[] = [
-  { key: 'close', color: 'var(--color-text-primary)', glyph: 'M3.5 3.5 8.5 8.5 M8.5 3.5 3.5 8.5', label: 'Close window' },
+  // Red, deliberately — and an exception to the Reserved Danger rule rather
+  // than a violation of it. That rule keeps danger ink off ordinary UI so it
+  // stays legible as the learner's lapse; the close control is the one place
+  // where red is not this product's semantics at all but the platform's, and
+  // a macOS traffic light that is not red reads as broken chrome.
+  { key: 'close', color: 'var(--color-ink-danger)', glyph: 'M3.5 3.5 8.5 8.5 M8.5 3.5 3.5 8.5', label: 'Close window' },
   { key: 'min', color: 'var(--color-ink-warm)', glyph: 'M3 6 H9', label: 'Minimize window' },
   { key: 'zoom', color: 'var(--color-ink-cool)', glyph: 'M6 3 V9 M3 6 H9', label: 'Toggle fullscreen' },
 ]

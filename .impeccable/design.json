@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-08-09T00:00:00.000Z",
+  "generatedAt": "2026-08-09T21:35:00.000Z",
   "title": "Design System: Engram Desktop",
   "extensions": {
     "colorMeta": {
@@ -134,7 +134,8 @@
       "text-faint": {
         "role": "neutral",
         "displayName": "Sepia Faint",
-        "canonical": "#545248"
+        "canonical": "#7b7768",
+        "purpose": "Marks and ornament only. Raised from #545248 (2.74:1 on a raised card); even at #7b7768 it does not clear 4.5:1 on every surface (3.22:1 on surface-3), so informational text belongs in Sepia Dim."
       },
       "accent-cta": {
         "role": "primary",
@@ -143,6 +144,21 @@
         "tonalRamp": [
           "#e8a857",
           "#f0c24b"
+        ]
+      },
+      "ink-lavender-dim": {
+        "role": "secondary",
+        "displayName": "Dim Lavender",
+        "canonical": "#7d73b8",
+        "tonalRamp": [
+          "#2b2745",
+          "#3d3766",
+          "#4f4788",
+          "#6157a9",
+          "#7d73b8",
+          "#9a92c9",
+          "#b7b1da",
+          "#d4d0eb"
         ]
       }
     },
@@ -157,7 +173,7 @@
       },
       "body": {
         "displayName": "Body",
-        "purpose": "All prose including the transcript. Futura."
+        "purpose": "Interface prose — panels, plates, descriptions. The app talking about itself. Futura. NOT the transcript."
       },
       "caption": {
         "displayName": "Figure Caption",
@@ -166,6 +182,26 @@
       "label": {
         "displayName": "Data Label",
         "purpose": "The .label-data utility — tabular figures, 0.02em tracking. All chrome controls, chips, and changing numbers. Drops to 10px uppercase / 0.16em in control chrome."
+      },
+      "prose": {
+        "displayName": "Prose",
+        "purpose": "The transcript reading scale — tutor voice and learner replies. Epoca Pro at 0.9375rem/1.65, larger than interface body because this surface is read continuously for 20–70 minutes rather than scanned."
+      },
+      "prose-lede": {
+        "displayName": "Prose Lede",
+        "purpose": "Opening paragraph of a reply, 1.06em. Applied only when a second paragraph exists, so a one-line answer is never inflated."
+      },
+      "prose-h1": {
+        "displayName": "Prose H1",
+        "purpose": "Top landmark inside a tutor reply. Distinguished by size."
+      },
+      "prose-h2": {
+        "displayName": "Prose H2",
+        "purpose": "Section inside a reply. Distinguished by size plus a hairline rule beneath."
+      },
+      "prose-h3": {
+        "displayName": "Prose H3",
+        "purpose": "Sub-section inside a reply. Distinguished by uppercase 0.1em tracking rather than size — see The Landmark Rule."
       }
     },
     "themes": {
@@ -373,6 +409,14 @@
       "description": "Replaces the horizontal rule under section headers: one axon line, two short dendrite branches, a node dot, at fixed geometry so the branch never distorts.",
       "html": "<div class=\"ds-dendrite\"><svg width=\"48\" height=\"12\" viewBox=\"0 0 48 12\" fill=\"none\"><path d=\"M0 6h18M18 6l6-4M18 6l6 4M30 6h18\" stroke=\"var(--color-hairline, #262a36)\" stroke-width=\"1\"/><circle cx=\"27\" cy=\"6\" r=\"2\" fill=\"var(--color-text-faint, #545248)\"/></svg><span class=\"ds-dendrite-line\"></span></div>",
       "css": ".ds-dendrite { display: flex; align-items: center; gap: 0; } .ds-dendrite-line { flex: 1; height: 1px; background: var(--color-hairline, #262a36); }"
+    },
+    {
+      "name": "Equation Plate",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "Display math inside tutor prose — the anchor of the paragraph it belongs to. Numbered only when a sibling equation exists.",
+      "html": "<div class=\"ds-eq-plate\"><span class=\"ds-eq-body\">ℒ′ = ℒ + ∑ₖ λₖ fₖ(q, t)</span><span class=\"ds-eq-no\">(1)</span></div>",
+      "css": ".ds-eq-plate { position: relative; display: block; text-align: center; margin: 1.15em 0; padding: 0.95em 2.6em 0.95em 1.15em; border: 1px solid var(--color-hairline); border-radius: 0; background: color-mix(in srgb, var(--color-surface-2) 45%, transparent); animation: ds-plate-develop 520ms cubic-bezier(0.25,0.8,0.35,1) both; } .ds-eq-body { font-family: 'KaTeX_Main', 'EpocaPro', Georgia, serif; font-size: 1.05rem; color: var(--color-text-primary); } .ds-eq-no { position: absolute; right: 0.9em; bottom: 0.55em; font-family: 'Futura', ui-monospace, Menlo, monospace; font-size: 0.72rem; letter-spacing: 0.04em; color: var(--color-text-dim); pointer-events: none; } @keyframes ds-plate-develop { from { opacity: 0; filter: blur(7px); transform: translateY(3px); } to { opacity: 1; filter: blur(0); transform: none; } } @media (prefers-reduced-motion: reduce) { .ds-eq-plate { animation: none; } }"
     }
   ],
   "narrative": {
@@ -390,42 +434,57 @@
     "rules": [
       {
         "name": "The Consolidation Axis Rule",
-        "body": "Cool and warm are not accent 1 and accent 2. Cool means not yet consolidated; warm means survived. A warm accent on something unconsolidated is a defect, not a style choice. Nothing may be recolored along this axis for visual balance.",
+        "body": "Cool and warm are not \"accent 1\" and \"accent 2.\" Cool means *not yet consolidated*; warm means *survived*. A warm accent on something that has not consolidated is a defect, not a style choice. Nothing may be recolored along this axis for visual balance.",
         "section": "colors"
       },
       {
         "name": "The Reserved Danger Rule",
-        "body": "Danger ink marks a learner's struggle or a lapsed memory. Never a validation error, a failed network call, a destructive-action button, or a generic alert.",
+        "body": "Danger ink marks a learner's struggle or a lapsed memory. It is never the color of a validation error, a failed network call, a destructive-action button, or a generic alert. Those need their own treatment — usually text, not hue.",
         "section": "colors"
       },
       {
         "name": "The Off-Axis Violet Rule",
-        "body": "Violet marks synthesis and creation. It must never become a third station on the consolidation ramp, and never appear simply because a surface needs a third color.",
+        "body": "Violet marks synthesis and creation. It must never become a third station on the consolidation ramp, and it must never be used simply because a surface needs a third color.",
         "section": "colors"
       },
       {
         "name": "The Two Themes, One Semantics Rule",
-        "body": "Atlas by Daylight re-tunes every token and keeps every meaning. One deliberate split: pure-chrome emphasis (focus ring, frame, dogear, primary button) routes through --color-accent-cta instead of amber. Semantic inks never do.",
+        "body": "The light theme (\"Atlas by Daylight\", `:root[data-theme='light']`, void `#f4efe4` with `#2b2016` text) re-tunes every token but keeps every meaning. It makes exactly one deliberate split: pure-chrome emphasis — the focus ring, `frame-hover`/`frame-selected`, the dogear, the primary button — routes through `--color-accent-cta` (a grayish blue, `#3d5266`) instead of amber, because on a pale ground amber is emphasis-by-warmth rather than emphasis-by-contrast. Semantic inks (grade colors, threshold violet, danger) never route through that token in either theme.",
         "section": "colors"
       },
       {
         "name": "The Tabular Rule",
-        "body": "Every number that can change in place uses .label-data. Tabular figures mean a counter or timer never makes the layout twitch.",
+        "body": "Every number that can change in place uses `.label-data`. Tabular figures mean a counter or a timer never makes the layout twitch.",
         "section": "typography"
       },
       {
         "name": "The Caption-Is-Commentary Rule",
-        "body": "Italic serif is not emphasis inside prose. It marks text that is about the interface — a measurement's basis, an empty state, a figure label.",
+        "body": "Italic serif is not for emphasis inside prose. It marks text that is *about* the interface — a measurement's basis, an empty state, a figure label. If it could be a sentence the tutor said, it is body, not caption.",
+        "section": "typography"
+      },
+      {
+        "name": "The Landmark Rule",
+        "body": "A prose heading earns its level by a different *kind* of prominence, never by a slightly larger size. Prose h1 is size, h2 is size plus a hairline rule, h3 is uppercase tracking. This exists because the ramp once ran 1.25 / 1.1 / 1rem above a 0.9375rem body — an h3 at 1.07× the paragraph it introduced — and three heading levels inside a five-pixel range give a long answer no landmarks at all. If a new level is ever needed, give it a new kind of prominence; do not subdivide the sizes.",
+        "section": "typography"
+      },
+      {
+        "name": "The Paragraph-Gap Rule",
+        "body": "In prose, the space between paragraphs must exceed the space between lines within one. At `margin: 0.5em` against `line-height: 1.65` it did not, and paragraph breaks — the only structure most tutor replies have — became invisible. Any change to prose leading has to move the paragraph margin with it.",
         "section": "typography"
       },
       {
         "name": "The Math-Renders-Everywhere Rule",
-        "body": "Learner content is graduate-level and routinely contains LaTeX. Every slot that can hold learner or tutor text — titles, chips, labels, captions, not just prose bodies — passes through the math renderer. A raw $ on screen is a bug.",
+        "body": "Learner content is graduate-level and routinely contains LaTeX. Any slot that can hold learner or tutor text — including titles, chips, labels and captions, not just prose bodies — passes through the math renderer. A raw `$` on screen is a bug.",
         "section": "typography"
       },
       {
         "name": "The Three Tilt Tiers Rule",
-        "body": "tilt-card (full) for coach/dashboard surfaces, tilt-card-soft for transcript cards, tilt-card-rail for sidebar nav and small chrome. Same physics at three amplitudes, not three tunings.",
+        "body": "`.tilt-card` (full) is for coach and dashboard surfaces — topic cards, stat blocks, chart hosts, artifact tiles. `.tilt-card-soft` is for every transcript card. `.tilt-card-rail` is for nav rows and small chrome controls by standing decree. These are the same physics at three amplitudes, not three tunings.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Edge-Throw Rule",
+        "body": "A rotation's felt strength is not its angle but how far it throws the edge it pivots about — `(width / 2) · sin(rotateY)` and `(height / 2) · sin(rotateX)`. Edge throw, not angle, is what the physics tunes: every tier's multiplier is a ceiling, and each axis solves its own angle from the element's measured size so throw stays roughly constant. Below the cap a surface keeps every degree it had, so small elements are untouched and only large ones settle. Transcript cards carry the tightest budget of the three — that surface is being read. Idle drift is held far tighter than pointer tilt, because a card that moves because you moved is feedback while a card that moves on its own as you read is interference. Scrolling stills the surface entirely. A new tilt surface never needs a new tier; the throw budget already covers it.",
         "section": "elevation"
       },
       {
@@ -434,54 +493,49 @@
         "section": "elevation"
       },
       {
-        "name": "The Right Angle Rule",
-        "body": "Do not reintroduce a radius, at any value, on any surface. If a shape needs softening, it is the wrong shape. rounded-full on an organic mark is the only exception.",
+        "name": "The Scarce Dogear Rule",
+        "body": "ACTIVE ONLY, by decree. A dogear on every card in a list is wallpaper; it means something *because* most cards don't have one.",
         "section": "shapes"
       },
       {
-        "name": "The Scarce Dogear Rule",
-        "body": "Active only, by decree. A dogear on every card in a list is wallpaper; it means something because most cards don't have one.",
+        "name": "The Right Angle Rule",
+        "body": "Do not reintroduce a radius, at any value, on any surface. If a shape needs softening, it is the wrong shape. `rounded-full` on an organic mark is the only exception.",
         "section": "shapes"
       },
       {
         "name": "The Unclipped Frame Rule",
-        "body": "Never apply .frame-hover or .frame-selected to an overflow-hidden host — the inset-negative ::after gets clipped and silently disappears. Give the frame its own unclipped wrapper, or skip it on that surface.",
+        "body": "Never apply `.frame-hover` or `.frame-selected` to an `overflow-hidden` host — the inset-negative `::after` gets clipped and silently disappears. Give the frame its own unclipped wrapper, or skip it on that surface.",
         "section": "shapes"
       },
       {
         "name": "The Formatting Channel Rule",
-        "body": "MCP bridge cards format prose the tutor would have written anyway — advisory, non-blocking, never load-bearing for the learning loop. A card the loop depends on is a design error, not a richer card.",
+        "body": "MCP bridge cards format prose the tutor would have written anyway — advisory, non-blocking, never load-bearing for the learning loop. A card the loop *depends on* is a design error, not a richer card.",
         "section": "components"
       },
       {
         "name": "The Density Over Ceremony Rule",
-        "body": "Transcript cards stay compact and scannable. No mark may grow into a full-width panel that breaks the transcript's rhythm; the 92% cap and tight padding are what make twenty card kinds feel like one surface.",
+        "body": "Transcript cards stay compact and scannable. No mark may grow into a full-width panel that breaks the transcript's rhythm; the `92%` cap and tight padding are what make twenty card kinds feel like one surface.",
         "section": "components"
-      },
-      {
-        "name": "The Edge-Throw Rule",
-        "body": "A rotation's felt strength is how far it throws the edge it pivots about — (width/2)·sin(rotateY), (height/2)·sin(rotateX) — not its angle. The rail tier caps edge excursion per axis rather than fixing one angle, so a full-width row inside a plate loses its long-axis sweep and keeps its short-axis dip. Plates stay unclamped.",
-        "section": "elevation"
       }
     ],
     "dos": [
       "Do encode state in ink: cool for unconsolidated, warm for survived, violet for synthesis, danger for lapse.",
       "Do route every learner- or tutor-authored string through the math renderer, including titles, chips, labels, and captions.",
-      "Do use the two motion tokens — --dur-fast 120ms for buttons and color shifts, --dur-base 200ms with --ease-out-soft for panels, rows, cards, and view transitions.",
-      "Do reach for .panel, .panel-raised, .panel-plate, .label-data, .fig-caption, .focus-ring, and the CTRL recipes before writing new chrome.",
-      "Do pass EnvAccent explicitly on shared components (Learn warm, Review cool), and keep semantic inks out of it.",
-      "Do give a .frame-hover or .frame-selected element its own unclipped wrapper when the natural host is overflow-hidden.",
-      "Do respect prefers-reduced-motion — the app-wide kill-switch covers idle drift, pointer tilt, and entry animations.",
+      "Do use the two motion tokens — `--dur-fast` 120ms for buttons and color shifts, `--dur-base` 200ms with `--ease-out-soft` for panels, rows, cards, and view transitions.",
+      "Do reach for `.panel`, `.panel-raised`, `.panel-plate`, `.label-data`, `.fig-caption`, `.focus-ring`, and the `CTRL` recipes before writing new chrome. The idioms exist; a new one is a claim that all of them are wrong.",
+      "Do pass `EnvAccent` explicitly on shared components, and keep semantic inks out of it.",
+      "Do give a `.frame-hover` or `.frame-selected` element its own unclipped wrapper when the natural host is `overflow-hidden`.",
+      "Do respect `prefers-reduced-motion` — the app-wide kill-switch covers idle drift, pointer tilt, and entry animations, and any new motion must fall under it.",
       "Do keep the transcript dense. It is read for thirty minutes at a stretch."
     ],
     "donts": [
-      "Don't reintroduce a corner radius anywhere. rounded-full on organic marks is the only exception.",
-      "Don't use danger ink for validation errors, failed requests, or destructive-action buttons.",
+      "Don't reintroduce a corner radius anywhere. `rounded-full` on organic marks (dots, rings, pings, the brand glyph) is the only exception.",
+      "Don't use danger ink for validation errors, failed requests, or destructive-action buttons. It belongs to the learner's struggle.",
       "Don't promote violet to a third consolidation state, or add a fifth ink because a surface needs another color.",
-      "Don't scale anything that isn't a real <button> on hover or press — scale is a button-only affordance.",
+      "Don't scale anything that isn't a real `<button>` on hover or press — scale is a button-only affordance so it never competes with the border and background cues rows and cards use.",
       "Don't scatter dogears. Active only.",
       "Don't build a bridge card the learning loop depends on. Cards format; they never carry authority.",
-      "Don't invent a bespoke focus treatment. .focus-ring owns outline; the frame vocabulary uses ::after so a 2px focus ring always outranks a 1px hover frame.",
+      "Don't invent a bespoke focus treatment. `.focus-ring` owns `outline`; the frame vocabulary deliberately uses `::after` so a 2px focus ring always outranks a 1px hover frame.",
       "Don't tilt a chart's SVG. Tilt the panel that hosts it.",
       "Don't treat the open fallback typefaces as an alternate design. They are a degradation path; the licensed mapping is the system."
     ]
