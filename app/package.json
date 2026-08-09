@@ -56,7 +56,7 @@
     "vitest": "^4.1.10"
   },
   "build": {
-    "appId": "com.learner.engram-desktop",
+    "appId": "com.nullgeodesic0.engram-desktop",
     "productName": "Engram Desktop",
     "publish": [
       {

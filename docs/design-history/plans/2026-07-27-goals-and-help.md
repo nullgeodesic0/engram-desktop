@@ -75,7 +75,7 @@
 
 **Interfaces:**
 - **Keyboard reference: only shortcuts that actually work.** The real inventory is 11 menu accelerators plus ⌘K (palette) and ⌘Enter (send), plus contextual Escape/Enter/arrows. **⌘L and ⌘1 both open Learn; ⇧⌘R and ⌘2 both open Review** — present those as aliases, not as four capabilities. Verify every entry against `appMenu.ts` and the renderer's key handlers; **list any working shortcut you found that the sheet doesn't document**, and say why it's omitted or add it.
-- **Glossary:** threshold, stability, retrievability, lapse, frontier, encode, consolidate, probe, receipt, capstone. Each definition says what the word means *in this product* and where the learner sees it. **Check every definition against `engram.py` or the FSRS implementation** at `/Users/learner/.claude/plugins/cache/engram/engram/1.0.7/` — cut anything you can't ground rather than writing a plausible gloss. Report which source grounds each term.
+- **Glossary:** threshold, stability, retrievability, lapse, frontier, encode, consolidate, probe, receipt, capstone. Each definition says what the word means *in this product* and where the learner sees it. **Check every definition against `engram.py` or the FSRS implementation** at `~/.claude/plugins/cache/engram/engram/1.0.7/` — cut anything you can't ground rather than writing a plausible gloss. Report which source grounds each term.
 - This is the one surface allowed to be didactic. It is still not allowed to name `engram.py`, a CLI flag, or an internal path.
 
 - [ ] The surface + both entry points.

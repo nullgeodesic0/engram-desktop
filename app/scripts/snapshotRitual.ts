@@ -50,7 +50,7 @@ register(
 )
 
 import { readFileSync, readdirSync, statSync, mkdirSync, writeFileSync, existsSync } from 'node:fs'
-import { join, resolve, dirname, relative } from 'node:path'
+import { join, resolve, dirname, relative, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { homedir } from 'node:os'
 import type { ChatMessage } from '../src/shared/chatMessages'
@@ -60,8 +60,19 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const PROJECTS_ROOT = join(homedir(), '.claude', 'projects')
 
 // Deliberately OUTSIDE the repo — see the header comment above.
+//
+// Derived from `homedir()` rather than hardcoded: the path embeds the account
+// name, and this repo is public. Deriving it also makes the script work on any
+// machine instead of exactly one. `ENGRAM_SNAPSHOT_DIR` overrides it outright
+// for a run somewhere else entirely.
 const SCRATCHPAD =
-  '/private/tmp/claude-501/-Users-learner/0cc99282-4681-4d7b-9670-e6286e0bdff0/scratchpad'
+  process.env.ENGRAM_SNAPSHOT_DIR ??
+  join(
+    '/private/tmp/claude-501',
+    `-Users-${basename(homedir())}`,
+    '0cc99282-4681-4d7b-9670-e6286e0bdff0',
+    'scratchpad',
+  )
 const SNAPSHOT_ROOT = join(SCRATCHPAD, 'ritual-snapshots')
 const LATEST_POINTER = join(SNAPSHOT_ROOT, 'LATEST')
 
