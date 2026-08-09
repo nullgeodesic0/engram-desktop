@@ -38,6 +38,12 @@
         "value": "rgba(43, 32, 22, 0.22)",
         "createdAt": "2026-08-09T21:44:41.474Z",
         "reason": "documented shadow token in sidecar extensions.shadows; compositing alpha, not a palette ink (user confirmed)"
+      },
+      {
+        "rule": "design-system-color",
+        "value": "rgba(255, 252, 244, 0.6)",
+        "createdAt": "2026-08-09T22:03:23.744Z",
+        "reason": "documented shadow token (panel-raised-light) in sidecar extensions.shadows; compositing alpha, not a palette ink (user confirmed shadow alphas)"
       }
     ]
   }

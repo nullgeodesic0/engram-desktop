@@ -261,6 +261,11 @@
         "purpose": "Light theme. A pale ground needs a warm-ink lift, not a bruise-black drop."
       },
       {
+        "name": "panel-raised-light",
+        "value": "inset 0 1px 0 rgba(255,252,244,0.6), 0 8px 20px -12px rgba(43,32,22,0.22)",
+        "purpose": "The light theme's raised panel. A hair brighter on the inset highlight than panel-rest-light (0.6 vs 0.55) — on a pale ground the raised tier has less tonal room to separate, so the top edge does the work the background cannot."
+      },
+      {
         "name": "frame-hover",
         "value": "::after at inset -3px, 1px solid var(--color-ink-warm)",
         "purpose": "Hover/selected frame drawn OUTSIDE the element's own border. Never `outline` — .focus-ring owns that channel. Clipped and invisible on an overflow-hidden host."

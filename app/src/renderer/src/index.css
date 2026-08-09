@@ -359,7 +359,7 @@
 
 /* The waiting dots (TypingIndicator, ActivityLine).
  *
- * Replaces Tailwind's `animate-bounce`, whose curve is
+ * Replaces Tailwind's bounce utility, whose curve is
  * `cubic-bezier(0.8, 0, 1, 1)` — a ballistic rubber-ball drop with a hard
  * stop at the bottom. That reads as a toy in a window someone is sitting at
  * for forty minutes, and it is the wrong physics for this world: every other
