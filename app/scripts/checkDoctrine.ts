@@ -302,6 +302,9 @@ const PINNED_WRITERS: Record<string, string> = {
   // what keeps the phone from becoming a second author of engine state.
   'main/link/outboxStore.ts': 'app userData — outbox.jsonl, the append-only queue of evidence received from the phone (path injected)',
   'main/link/pairing.ts': 'app userData — paired-devices.json, SHA-256 token digests only, never a usable credential (path injected)',
+  'main/link/cardPackStore.ts':
+    'app userData — card-packs/<topic>/<node>.json (root injected). Deliberately NOT the learning home: explorables live there because a live tutor writes them with its own Write tool inside a session; a card pack is written by the APP, and the app authors nothing under ~/.claude/learning',
+  'main/link/cardPackStore.test.ts': 'os tmpdir — ephemeral mkdtemp fixtures for the pack store tests, removed in afterEach',
   'main/link/outboxStore.test.ts': 'os tmpdir — ephemeral mkdtemp fixtures for the queue durability tests, removed in afterEach',
   'main/link/pairing.test.ts': 'os tmpdir — ephemeral mkdtemp fixtures for the pairing tests, removed in afterEach',
   'main/link/LinkServer.test.ts': 'os tmpdir — ephemeral mkdtemp fixtures backing the injected stores, removed in afterEach',

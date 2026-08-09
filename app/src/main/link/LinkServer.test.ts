@@ -2,9 +2,11 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
+import { createCardPackStore, type CardPackStore } from './cardPackStore'
 import { createLinkServer, type LinkServer } from './LinkServer'
 import { createOutboxStore, type OutboxStore } from './outboxStore'
 import { createPairingStore, type PairingStore } from './pairing'
+import type { CardPack } from '../../shared/cardPack'
 
 /**
  * The phone-facing server. Distinct from `bridgeServer`, which is loopback-only
@@ -17,13 +19,59 @@ let dir: string
 let server: LinkServer
 let pairing: PairingStore
 let outbox: OutboxStore
+let packs: CardPackStore
 let base: string
+
+function ladderCard(beat: string) {
+  return {
+    beat,
+    kind: 'ladder' as const,
+    stem: 'Build it.',
+    pool: Array.from({ length: 6 }, (_, i) => ({ id: `s${i}`, label: `step ${i}` })),
+    sealed: { orderedStepIds: ['s0', 's1', 's2'], revealMarkdown: 'because…' },
+  }
+}
+
+function mcCard(beat: string) {
+  return {
+    beat,
+    kind: 'mc' as const,
+    stem: 'Which?',
+    options: [
+      { id: 'a', label: 'right' },
+      { id: 'b', label: 'wrong' },
+    ],
+    sealed: { correctOptionIds: ['a'], revealMarkdown: 'because…' },
+  }
+}
+
+function samplePack(): CardPack {
+  return {
+    packId: '6f1c2a10-0000-4000-8000-0000000000f1',
+    topic: 'grad-statistical-mechanics',
+    node: 'liouville-theorem',
+    nodeTitle: 'Liouville’s theorem',
+    generatedAt: '2026-08-09T18:00:00.000Z',
+    eligibility: { nodeKind: 'concept', threshold: false, transferReady: false, lapsed: false, experimentArm: null },
+    beats: [
+      { beat: 'open_gap', kind: 'prose', content: 'x' },
+      mcCard('predict'),
+      { beat: 'struggle', kind: 'hints', rungs: ['nudge'] },
+      { beat: 'resolve', kind: 'prose', content: 'x' },
+      ladderCard('self_explain'),
+      mcCard('connect'),
+      ladderCard('verify'),
+      { beat: 'close', kind: 'prose', content: 'x' },
+    ],
+  } as CardPack
+}
 
 beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), 'linkserver-'))
   pairing = createPairingStore({ filePath: join(dir, 'devices.json') })
   outbox = createOutboxStore({ filePath: join(dir, 'outbox.jsonl') })
-  server = createLinkServer({ pairing, outbox, host: '127.0.0.1' })
+  packs = createCardPackStore({ rootDir: join(dir, 'card-packs') })
+  server = createLinkServer({ pairing, outbox, packs, host: '127.0.0.1' })
   const { port } = await server.start()
   base = `http://127.0.0.1:${port}`
 })
@@ -153,6 +201,47 @@ describe('LinkServer', () => {
     const res = await post('/link/whatever', {}, await pair())
 
     expect(res.status).toBe(404)
+  })
+
+  test('serves a stored card pack to a paired device', async () => {
+    const token = await pair()
+    await packs.put(samplePack())
+
+    const res = await fetch(`${base}/link/pack?topic=grad-statistical-mechanics&node=liouville-theorem`, {
+      headers: { authorization: `Bearer ${token}` },
+    })
+
+    expect(res.status).toBe(200)
+    expect((await res.json()).node).toBe('liouville-theorem')
+  })
+
+  test('refuses to serve a card pack without a token', async () => {
+    await packs.put(samplePack())
+
+    const res = await fetch(`${base}/link/pack?topic=grad-statistical-mechanics&node=liouville-theorem`)
+
+    expect(res.status).toBe(401)
+  })
+
+  test('answers 404 for a node with no pack', async () => {
+    const token = await pair()
+
+    const res = await fetch(`${base}/link/pack?topic=grad-statistical-mechanics&node=absent`, {
+      headers: { authorization: `Bearer ${token}` },
+    })
+
+    expect(res.status).toBe(404)
+  })
+
+  test('lists the nodes a topic has packs for', async () => {
+    const token = await pair()
+    await packs.put(samplePack())
+
+    const res = await fetch(`${base}/link/packs?topic=grad-statistical-mechanics`, {
+      headers: { authorization: `Bearer ${token}` },
+    })
+
+    expect(await res.json()).toEqual({ nodes: ['liouville-theorem'] })
   })
 
   test('reports health without requiring a token, and leaks nothing', async () => {

@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { parseOutboxItem } from '../../shared/linkProtocol'
+import type { CardPackStore } from './cardPackStore'
 import type { OutboxStore } from './outboxStore'
 import type { PairingStore } from './pairing'
 
@@ -30,6 +31,7 @@ const MAX_BODY_BYTES = 1_000_000
 export interface LinkServerDeps {
   pairing: PairingStore
   outbox: OutboxStore
+  packs: CardPackStore
   /** Defaults to all interfaces — the phone is not on loopback. Tests pin it
    * to 127.0.0.1 so a test run never opens a port to the network. */
   host?: string
@@ -88,9 +90,30 @@ function bearerToken(req: IncomingMessage): string {
 }
 
 export function createLinkServer(deps: LinkServerDeps): LinkServer {
-  const { pairing, outbox } = deps
+  const { pairing, outbox, packs } = deps
   let server: Server | null = null
   let port = 0
+
+  /** Every pack route is authenticated: a pack carries its own sealed reveals,
+   * so serving one to an unpaired caller would hand out answers. */
+  async function handlePackRead(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
+    if (!(await pairing.verifyToken(bearerToken(req)))) {
+      send(res, 401, { error: 'unauthorized' })
+      return
+    }
+    const topic = url.searchParams.get('topic') ?? ''
+    if (url.pathname === '/link/packs') {
+      send(res, 200, { nodes: await packs.listFor(topic) })
+      return
+    }
+    const node = url.searchParams.get('node') ?? ''
+    const pack = await packs.get(topic, node)
+    if (!pack) {
+      send(res, 404, { error: 'no pack for that node' })
+      return
+    }
+    send(res, 200, pack)
+  }
 
   async function handlePair(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const body = await readBody(req, res)
@@ -154,7 +177,12 @@ export function createLinkServer(deps: LinkServerDeps): LinkServer {
     async start() {
       if (server) return { port }
       server = createServer((req, res) => {
-        const url = (req.url ?? '').split('?')[0]
+        const parsedUrl = new URL(req.url ?? '/', 'http://localhost')
+        const url = parsedUrl.pathname
+        if (req.method === 'GET' && (url === '/link/pack' || url === '/link/packs')) {
+          void handlePackRead(req, res, parsedUrl)
+          return
+        }
         if (req.method === 'GET' && url === '/link/health') {
           // Unauthenticated on purpose, and bare on purpose: enough for a
           // client to confirm it found the right service, and nothing that
