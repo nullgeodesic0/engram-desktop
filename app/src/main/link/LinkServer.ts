@@ -32,6 +32,12 @@ export interface LinkServerDeps {
   pairing: PairingStore
   outbox: OutboxStore
   packs: CardPackStore
+  /** Supplies the phone menu's counts. Injected as a plain function so this
+   * module gains an ANSWER, never a way to question the engine — the inertness
+   * §D6 pins depends on that distinction. Optional: without it the endpoint
+   * reports an empty overview rather than failing, which is the right shape
+   * for a menu whose data source is not wired yet. */
+  overview?: () => Promise<unknown>
   /** Defaults to all interfaces — the phone is not on loopback. Tests pin it
    * to 127.0.0.1 so a test run never opens a port to the network. */
   host?: string
@@ -104,6 +110,10 @@ export function createLinkServer(deps: LinkServerDeps): LinkServer {
     const topic = url.searchParams.get('topic') ?? ''
     if (url.pathname === '/link/packs') {
       send(res, 200, { nodes: await packs.listFor(topic) })
+      return
+    }
+    if (url.pathname === '/link/overview') {
+      send(res, 200, deps.overview ? await deps.overview() : { topics: [], dueTotal: 0, minutesPerItem: null })
       return
     }
     const node = url.searchParams.get('node') ?? ''
@@ -179,7 +189,10 @@ export function createLinkServer(deps: LinkServerDeps): LinkServer {
       server = createServer((req, res) => {
         const parsedUrl = new URL(req.url ?? '/', 'http://localhost')
         const url = parsedUrl.pathname
-        if (req.method === 'GET' && (url === '/link/pack' || url === '/link/packs')) {
+        if (
+          req.method === 'GET' &&
+          (url === '/link/pack' || url === '/link/packs' || url === '/link/overview')
+        ) {
           void handlePackRead(req, res, parsedUrl)
           return
         }
@@ -200,7 +213,32 @@ export function createLinkServer(deps: LinkServerDeps): LinkServer {
         }
         send(res, 404, { error: 'no such route' })
       })
-      await new Promise<void>((resolve) => server!.listen(deps.port ?? 0, deps.host ?? '0.0.0.0', resolve))
+      // `listen` reports failure by EMITTING 'error', not by rejecting.
+      // Unhandled, that event is an uncaught exception — in the Electron main
+      // process it took the whole app down at launch when anything else held
+      // the port, which is a spectacular way for an optional feature to fail.
+      // Bind errors now reject, and the half-built server is discarded so a
+      // later retry starts clean.
+      const listening = new Promise<void>((resolve, reject) => {
+        const onError = (err: Error) => {
+          server?.removeListener('listening', onListening)
+          reject(err)
+        }
+        const onListening = () => {
+          server?.removeListener('error', onError)
+          resolve()
+        }
+        server!.once('error', onError)
+        server!.once('listening', onListening)
+        server!.listen(deps.port ?? 0, deps.host ?? '0.0.0.0')
+      })
+      try {
+        await listening
+      } catch (err) {
+        server?.close()
+        server = null
+        throw err
+      }
       const address = server.address()
       port = typeof address === 'object' && address ? address.port : 0
       return { port }

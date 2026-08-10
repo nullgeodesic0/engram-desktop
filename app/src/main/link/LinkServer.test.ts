@@ -244,6 +244,25 @@ describe('LinkServer', () => {
     expect(await res.json()).toEqual({ nodes: ['liouville-theorem'] })
   })
 
+  test('a busy port fails as a rejected promise, never as a crash', async () => {
+    // Regression, and it was a bad one: `listen` reports failure by EMITTING
+    // 'error', not by rejecting. Unhandled, that event is an uncaught
+    // exception in the Electron main process — so a second copy of the app,
+    // or any unrelated process on the port, took Engram Desktop down at
+    // launch instead of simply leaving the link unavailable. Observed live.
+    const rival = createLinkServer({
+      pairing,
+      outbox,
+      packs,
+      host: '127.0.0.1',
+      port: server.port,
+    })
+
+    await expect(rival.start()).rejects.toThrow(/EADDRINUSE|listen/i)
+    // And the loser cleans up after itself, so a later retry can succeed.
+    await rival.stop()
+  })
+
   test('reports health without requiring a token, and leaks nothing', async () => {
     const res = await fetch(`${base}/link/health`)
 

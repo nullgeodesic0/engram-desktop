@@ -7,6 +7,7 @@ import { createOutboxStore, type OutboxStore } from './outboxStore'
 import { createPairingStore, type PairingStore } from './pairing'
 import { drainOutbox, type DrainResult } from './mobileDrain'
 import { startSession } from '../ipc/sessionHandlers'
+import { buildMobileOverview } from '../session/mobileOverview'
 import { tmpdir } from 'node:os'
 import type { LinkStatus } from '../../shared/types'
 
@@ -37,6 +38,7 @@ let pairing: PairingStore | null = null
 let outbox: OutboxStore | null = null
 let packs: CardPackStore | null = null
 let boundHost = '127.0.0.1'
+let lastError: string | null = null
 
 // The renderer sees this too, so the shape lives in shared/types.ts and this
 // module consumes it rather than declaring a second copy that could drift.
@@ -69,17 +71,29 @@ export async function startLinkServer(options: { exposeToLan?: boolean } = {}): 
   if (server) await server.stop()
 
   boundHost = host
+  lastError = null
   server = createLinkServer({
     pairing: pairing!,
     outbox: outbox!,
     packs: packs!,
+    // Counts only, built outside main/link/ — see mobileOverview.ts for why
+    // the engine read lives on the other side of the inertness boundary.
+    overview: () => buildMobileOverview((topic) => packs!.listFor(topic)),
     host,
     // A fixed port so a paired phone keeps working across restarts. An
     // ephemeral port would force re-entry of the host every launch, which is
     // exactly the friction this service exists to remove.
     port: 8787,
   })
-  await server.start()
+  try {
+    await server.start()
+  } catch (err) {
+    // A busy port must not be fatal. The app is a learning client first; the
+    // phone link is a feature, and a feature that cannot start should say so
+    // rather than take the window with it.
+    server = null
+    lastError = err instanceof Error ? err.message : String(err)
+  }
   return linkStatus()
 }
 
@@ -98,6 +112,7 @@ export async function linkStatus(): Promise<LinkStatus> {
     exposed,
     devices: await pairing!.list(),
     queued: (await outbox!.pending()).length,
+    error: lastError,
   }
 }
 

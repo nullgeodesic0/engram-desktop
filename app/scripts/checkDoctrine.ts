@@ -998,6 +998,42 @@ for (const f of linkFiles) {
   }
 }
 
+// (b2) The NETWORK module specifically stays sealed off from the engine.
+//
+// The directory rule above is necessarily coarse: linkService.ts is the
+// composition root and legitimately reaches for a session (the learner-
+// initiated drain) and for the overview counts. LinkServer.ts is the module a
+// network peer actually talks to, and it must not be able to reach either —
+// everything it needs arrives as an injected value. Without this, "the link
+// layer is inert" would quietly become "the link directory contains one file
+// that isn't".
+const linkServerText = TEXT.get('main/link/LinkServer.ts') ?? ''
+for (const forbidden of ["from '../session", "from '../ipc", "from '../engramCli"]) {
+  if (linkServerText.includes(forbidden)) {
+    fail(
+      'D6.serverSealed',
+      `main/link/LinkServer.ts imports ${forbidden}… — the network-facing module must not reach the engine or the session layer.`,
+      'This is the module an untrusted peer sends bytes to. Everything it needs must arrive as an injected value, so it holds ANSWERS and never a way to ask the engine or start a session. A direct import puts a network request one bug away from the learner’s record — exactly the boundary the rest of this section exists to keep.',
+    )
+  }
+}
+
+// (b3) The phone menu ships counts, never answers.
+//
+// A due item carries probe/claim/rubric. A menu that shipped due ITEMS so it
+// could say "6 due" would put the expected answers on the device, and the next
+// retrieval would be recognition with a receipt recording it as memory. D4
+// catches a field read app-wide; this says the narrower thing at the one place
+// whose whole job is summarising due work for an off-machine surface.
+const overviewText = TEXT.get('main/session/mobileOverview.ts') ?? ''
+if (overviewText && /\.(probe|claim|rubric|transfer_probe)\b/.test(overviewText)) {
+  fail(
+    'D6.overviewCounts',
+    'main/session/mobileOverview.ts reads a probe/claim/rubric field — the phone overview must be counts only.',
+    'The overview crosses to a device the learner carries around. Counts cannot leak an answer; items can. If the menu genuinely needs more than numbers, that is a design decision about the order of operations (probe → production → confidence → reveal), not a data-plumbing convenience.',
+  )
+}
+
 // (c) The wire schema still refuses a client-supplied rating or stamp.
 for (const needle of ['.strict()', 'sourceStampFor']) {
   if (protocolText && !protocolText.includes(needle)) {

@@ -456,8 +456,14 @@ function CompanionSection() {
             {status.running ? 'Listening for your phone' : 'Not running'}
           </div>
           <div className="label-data text-xs text-[var(--color-text-dim)] mt-1">
-            {status.running ? (status.lanUrl ?? `http://127.0.0.1:${status.port} · this Mac only`) : '—'}
+            {status.running ? (status.lanUrl ?? `http://127.0.0.1:${status.port} · this Mac only`) : (status.error ?? '—')}
           </div>
+          {!status.running && status.error?.includes('EADDRINUSE') && (
+            <div className="text-xs text-[var(--color-text-dim)] mt-1">
+              Something else is already using the port — most often a second copy of this app, or the
+              development link script.
+            </div>
+          )}
         </div>
         <button className="btn-ghost text-xs" onClick={() => void beginPairing()}>
           Link a phone…

@@ -686,6 +686,8 @@ export interface LinkStatus {
   devices: Array<{ deviceId: string; deviceName: string; pairedAt: string }>
   /** Items received from a phone and not yet settled by a session. */
   queued: number
+  /** Why the server is not running, when it isn't. Null while healthy. */
+  error: string | null
 }
 
 export interface PairingOffer {
