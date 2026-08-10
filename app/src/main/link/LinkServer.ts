@@ -57,6 +57,10 @@ export interface LinkServerDeps {
    * which is what makes a topic/node pair safe to accept from a network peer
    * — there is no path to traverse, only a lookup that matches a row the
    * engine wrote or does not. */
+  /** What the record says about how the learner learns. Counts and rates
+   * the engine already recorded — no misconception text, which belongs at the
+   * desk with the session that can work on it. */
+  coach?: () => Promise<unknown>
   artifacts?: () => Promise<unknown>
   artifact?: (topic: string, node: string) => Promise<string | null>
   /** Files a topic under an app-local folder label.
@@ -151,6 +155,14 @@ export function createLinkServer(deps: LinkServerDeps): LinkServer {
         return
       }
       send(res, 200, await deps.graph(topic))
+      return
+    }
+    if (url.pathname === '/link/coach') {
+      if (!deps.coach) {
+        send(res, 404, { error: 'no coach provider' })
+        return
+      }
+      send(res, 200, await deps.coach())
       return
     }
     if (url.pathname === '/link/artifacts') {
@@ -304,6 +316,7 @@ export function createLinkServer(deps: LinkServerDeps): LinkServer {
             url === '/link/graph' ||
             url === '/link/receipts' ||
             url === '/link/artifacts' ||
+            url === '/link/coach' ||
             url === '/link/artifact')
         ) {
           void handlePackRead(req, res, parsedUrl)

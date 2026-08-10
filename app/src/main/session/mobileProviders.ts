@@ -1,6 +1,7 @@
 import { buildMobileOverview, buildConstellationGraph } from './mobileOverview'
 import { buildTopicReceipts } from './mobileReceipts'
 import { listArtifacts, readArtifact } from './mobileArtifacts'
+import { buildCoach } from './mobileCoach'
 
 /**
  * Every answer the phone-facing server is allowed to give, in one place.
@@ -28,5 +29,6 @@ export function mobileProviders(packedFor: (topic: string) => Promise<string[]>)
     receipts: (topic: string) => buildTopicReceipts(topic),
     artifacts: () => listArtifacts(),
     artifact: (topic: string, node: string) => readArtifact(topic, node),
+    coach: () => buildCoach(),
   }
 }
