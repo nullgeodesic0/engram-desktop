@@ -305,6 +305,9 @@ const PINNED_WRITERS: Record<string, string> = {
   'main/link/cardPackStore.ts':
     'app userData — card-packs/<topic>/<node>.json (root injected). Deliberately NOT the learning home: explorables live there because a live tutor writes them with its own Write tool inside a session; a card pack is written by the APP, and the app authors nothing under ~/.claude/learning',
   'main/link/cardPackStore.test.ts': 'os tmpdir — ephemeral mkdtemp fixtures for the pack store tests, removed in afterEach',
+  'main/link/mobileDrain.ts':
+    'os tmpdir — the per-drain evidence batch a session reads (dir injected). Never a rating and never a stamp: the batch is exactly what the phone sent, and the session decides what it was worth',
+  'main/link/mobileDrain.test.ts': 'os tmpdir — ephemeral mkdtemp fixtures for the drain tests, removed in afterEach',
   'main/link/outboxStore.test.ts': 'os tmpdir — ephemeral mkdtemp fixtures for the queue durability tests, removed in afterEach',
   'main/link/pairing.test.ts': 'os tmpdir — ephemeral mkdtemp fixtures for the pairing tests, removed in afterEach',
   'main/link/LinkServer.test.ts': 'os tmpdir — ephemeral mkdtemp fixtures backing the injected stores, removed in afterEach',
@@ -654,7 +657,11 @@ for (const f of FILES) {
 // net, and inlining a learner's production into a command line is what the
 // plugin's own shell-safety rule forbids. Says nothing about how to teach or
 // judge. Verified captured un-truncated by this check's printed current-set.
-const PINNED_MESSAGE_HASH = 'baab9827fe040c8d'
+// 2026-08-09 (2) — mobileDrain.test.ts asserts the kickoff reaches the
+// session, and the collector scans test files too, so its expected substring
+// joins the set. Nothing the app SENDS changed between (1) and (2); this is an
+// assertion about the message, not new message text.
+const PINNED_MESSAGE_HASH = 'd0f3c30ed83e38f9'
 if (sha(injectedMessages.sort().join('\n')) !== PINNED_MESSAGE_HASH) {
   fail(
     'D3.kickoff',
