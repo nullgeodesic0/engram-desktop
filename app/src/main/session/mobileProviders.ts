@@ -1,5 +1,5 @@
 import { buildMobileOverview, buildConstellationGraph } from './mobileOverview'
-import { buildTopicReceipts } from './mobileReceipts'
+import { buildTopicReceipts, buildGradeRoster } from './mobileReceipts'
 import { listArtifacts, readArtifact } from './mobileArtifacts'
 import { buildCoach } from './mobileCoach'
 
@@ -26,7 +26,9 @@ export function mobileProviders(packedFor: (topic: string) => Promise<string[]>)
   return {
     overview: () => buildMobileOverview(packedFor),
     graph: (topic: string) => buildConstellationGraph(topic),
-    receipts: (topic: string) => buildTopicReceipts(topic),
+    receipts: (topic: string, mode?: string) =>
+      buildTopicReceipts(topic, mode === 'total' ? 'total' : 'completed'),
+    gradeRoster: (mode?: string) => buildGradeRoster(mode === 'total' ? 'total' : 'completed'),
     artifacts: () => listArtifacts(),
     artifact: (topic: string, node: string) => readArtifact(topic, node),
     coach: () => buildCoach(),

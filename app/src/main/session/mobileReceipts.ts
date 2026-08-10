@@ -5,8 +5,10 @@ import { engramRead, readTopicGraph } from '../engramCli/readOnly'
 import {
   computeTopicGrade,
   type GradeComponentKey,
+  type GradeMode,
 } from '../../renderer/src/shared/topicGrade'
 import type { Misconception, TopicListEntry } from '../../shared/types'
+import { getCalibrationMirror } from './calibrationMirror'
 
 /**
  * The grades the phone is allowed to see coming back.
@@ -144,13 +146,16 @@ function isPhoneSource(source: string | null): boolean {
 /** Reads the engine and projects. The composition root hands this to the
  * server as a function of one string, so the server never learns that a
  * learning home exists. */
-export async function buildTopicReceipts(topic: string): Promise<MobileReceipts> {
+export async function buildTopicReceipts(
+  topic: string,
+  mode: GradeMode = 'completed',
+): Promise<MobileReceipts> {
   const [history, nodeIds] = await Promise.all([readReceiptsHistory(), readNodeIds(topic)])
   const projected = projectTopicReceipts(topic, history.receipts, nodeIds)
   // The grade rides along rather than taking a second round trip: the page
   // shows both at once, and two requests would let the letter and the
   // receipts it summarises arrive out of step.
-  return { ...projected, grade: await buildTopicGrade(topic).catch(() => undefined) }
+  return { ...projected, grade: await buildTopicGrade(topic, mode).catch(() => undefined) }
 }
 
 // ===========================================================================
@@ -206,11 +211,62 @@ const COMPONENT_ORDER: GradeComponentKey[] = [
   'calibration',
 ]
 
-export async function buildTopicGrade(topic: string): Promise<MobileGrade> {
-  const [history, topics, misconceptions] = await Promise.all([
+/**
+ * Every topic's letter in one payload, for the roster.
+ *
+ * The desktop's Grades opens on a list of topics WITH their letters, so you
+ * can see where you stand without opening anything. Mobile's roster showed
+ * names alone, which makes the letter a thing you go hunting for one topic at
+ * a time.
+ *
+ * Computed from a SINGLE history read shared across every topic. The obvious
+ * implementation calls buildTopicGrade in a loop and re-reads every receipt
+ * file once per topic — nine full passes over the whole record to draw nine
+ * letters.
+ */
+export async function buildGradeRoster(mode: GradeMode = 'completed'): Promise<MobileGradeRow[]> {
+  const [history, topics, misconceptions, picks] = await Promise.all([
     readReceiptsHistory(),
     engramRead<TopicListEntry[]>('topics').catch(() => [] as TopicListEntry[]),
     engramRead<unknown[]>('misconception', ['list']).catch(() => [] as unknown[]),
+    getCalibrationMirror(),
+  ])
+
+  return topics.map((entry) => {
+    const result = computeTopicGrade({
+      receipts: history.receipts,
+      topic: entry.topic,
+      topicEntry: entry,
+      misconceptions: misconceptions as Misconception[],
+      days: history.days,
+      picks,
+      mode,
+    })
+    return {
+      topic: entry.topic,
+      available: result.overall.available,
+      score: result.overall.score,
+      letter: result.overall.letter,
+    }
+  })
+}
+
+export interface MobileGradeRow {
+  topic: string
+  available: boolean
+  score: number | null
+  letter: string | null
+}
+
+export async function buildTopicGrade(
+  topic: string,
+  mode: GradeMode = 'completed',
+): Promise<MobileGrade> {
+  const [history, topics, misconceptions, picks] = await Promise.all([
+    readReceiptsHistory(),
+    engramRead<TopicListEntry[]>('topics').catch(() => [] as TopicListEntry[]),
+    engramRead<unknown[]>('misconception', ['list']).catch(() => [] as unknown[]),
+    getCalibrationMirror(),
   ])
 
   const result = computeTopicGrade({
@@ -219,12 +275,16 @@ export async function buildTopicGrade(topic: string): Promise<MobileGrade> {
     topicEntry: topics.find((entry) => entry.topic === topic),
     misconceptions: misconceptions as Misconception[],
     days: history.days,
-    picks: [],
-    // `completed` grades the work actually done. `total` folds in how much of
-    // the curriculum is untouched, which on a phone would read as a scolding
-    // for not having finished a course — and the coverage component is still
-    // listed below either way, so nothing is hidden by the choice.
-    mode: 'completed',
+    // The renderer mirrors its confidence picks into app data precisely so
+    // this is not empty — see calibrationMirror.ts. With them, the phone's
+    // five components are the desk's five components, and one topic cannot
+    // read B at the desk and C in your pocket.
+    picks,
+    // Defaults to `completed` — the work actually done. `total` additionally
+    // weighs how much of the curriculum is untouched, which as a DEFAULT on a
+    // phone reads as a scolding for not having finished a course. It is the
+    // learner's toggle, as it is at the desk, not a decision made for them.
+    mode,
   })
 
   return {
@@ -240,7 +300,10 @@ export async function buildTopicGrade(topic: string): Promise<MobileGrade> {
       letter: result.components[key].letter,
       weight: result.components[key].weight,
     })),
-    excluded: COMPONENT_ORDER.filter((key) => key === 'calibration'),
+    // Nothing is excluded by the surface any more. A component can still be
+    // unavailable for want of data — the model says so itself, per component —
+    // but that is a fact about the record rather than about the device asking.
+    excluded: [],
   }
 }
 

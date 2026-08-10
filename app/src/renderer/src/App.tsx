@@ -14,6 +14,7 @@ import { HelpSheet } from './components/HelpSheet'
 import { MisconceptionLedger } from './components/MisconceptionLedger'
 import { useCardPhysics } from './components/useCardPhysics'
 import type { Misconception, NewTopicPrefill } from '../../shared/types'
+import { syncCalibrationMirror } from './shared/calibrationStore'
 
 // Code-split: both views unmount on tab switch already (they're not inside
 // KeepMounted — see the comment on `main` below), so there's no "resolve once,
@@ -117,6 +118,13 @@ export default function App() {
       return 'home'
     }
   })
+
+  // One sync at startup so a learner with months of picks already banked does
+  // not have to make a new one before their phone grade matches their desk
+  // grade. Every later pick mirrors itself as it is written.
+  useEffect(() => {
+    syncCalibrationMirror()
+  }, [])
 
   useEffect(() => {
     try {

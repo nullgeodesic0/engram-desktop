@@ -16,6 +16,8 @@ import { getMapAnnotations } from '../session/mapAnnotations'
 import { getDisplayTitles } from '../session/topicSettings'
 import { nodeProvenance } from '../session/sessionScan'
 import { recordManualResolve, getManualResolves } from '../session/misconceptionResolves'
+import { setCalibrationMirror } from '../session/calibrationMirror'
+import type { ConfidencePick } from '../../shared/confidence'
 import { moveTopicToTrash } from '../session/topicTrash'
 import { hasLiveSessions } from './sessionHandlers'
 import type {
@@ -135,6 +137,15 @@ export function registerReadHandlers(): void {
     return rename ? { ...graph, title: rename } : graph
   })
   ipcMain.handle('engram:artifactList', (): Promise<ArtifactEntry[]> => artifactListWithMtime())
+
+  // Confidence picks, mirrored from the renderer's ring buffer. Not learning
+  // state — the engine knows nothing about a pick and no rating depends on
+  // one. It is here so the phone's grade is computed from the same components
+  // as the desk's; see calibrationMirror.ts.
+  ipcMain.handle('app:mirrorCalibration', async (_e, picks: unknown) => {
+    if (!Array.isArray(picks)) return
+    await setCalibrationMirror(picks as ConfidencePick[])
+  })
   ipcMain.handle('engram:receiptsHistory', () => readReceiptsHistory())
   ipcMain.handle('engram:misconceptions', async (): Promise<Misconception[]> => {
     const rows = await engramRead<unknown[]>('misconception', ['list'])

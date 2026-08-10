@@ -43,6 +43,10 @@ import type { BridgeAskRequest, BridgeAskResponse, BridgeBeatRequest, BridgeUiRe
 
 const engramApi = {
   topics: (): Promise<TopicListEntry[]> => ipcRenderer.invoke('engram:topics'),
+  /** Mirrors the renderer's confidence picks into app data so the phone's
+   * grade has the same five components the desk's does. */
+  mirrorCalibration: (picks: unknown[]): Promise<void> =>
+    ipcRenderer.invoke('app:mirrorCalibration', picks),
   stats: (): Promise<EngramStats> => ipcRenderer.invoke('engram:stats'),
   due: (limit?: number, topic?: string): Promise<DueItem[]> => ipcRenderer.invoke('engram:due', limit, topic),
   // Savings-ordered triage read (`due --cap`) — rejects on engines without

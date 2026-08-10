@@ -50,7 +50,10 @@ export interface LinkServerDeps {
    * after the production is graded and records no content. The projection on
    * the other side of the boundary (main/session/mobileReceipts.ts) is a
    * whitelist, so a future engine field cannot leak by being forgotten. */
-  receipts?: (topic: string) => Promise<unknown>
+  receipts?: (topic: string, mode?: string) => Promise<unknown>
+  /** Every topic's letter at once, for the roster — one history read rather
+   * than one per topic. */
+  gradeRoster?: (mode?: string) => Promise<unknown>
   /** The explorable gallery: what exists, and one page's HTML.
    *
    * `artifact` returns null for anything the engine's ledger does not list,
@@ -157,6 +160,14 @@ export function createLinkServer(deps: LinkServerDeps): LinkServer {
       send(res, 200, await deps.graph(topic))
       return
     }
+    if (url.pathname === '/link/grades') {
+      if (!deps.gradeRoster) {
+        send(res, 404, { error: 'no grade roster provider' })
+        return
+      }
+      send(res, 200, { topics: await deps.gradeRoster(url.searchParams.get('mode') ?? undefined) })
+      return
+    }
     if (url.pathname === '/link/coach') {
       if (!deps.coach) {
         send(res, 404, { error: 'no coach provider' })
@@ -195,7 +206,7 @@ export function createLinkServer(deps: LinkServerDeps): LinkServer {
         send(res, 404, { error: 'no receipts provider' })
         return
       }
-      send(res, 200, await deps.receipts(topic))
+      send(res, 200, await deps.receipts(topic, url.searchParams.get('mode') ?? undefined))
       return
     }
     const node = url.searchParams.get('node') ?? ''
@@ -317,6 +328,7 @@ export function createLinkServer(deps: LinkServerDeps): LinkServer {
             url === '/link/receipts' ||
             url === '/link/artifacts' ||
             url === '/link/coach' ||
+            url === '/link/grades' ||
             url === '/link/artifact')
         ) {
           void handlePackRead(req, res, parsedUrl)

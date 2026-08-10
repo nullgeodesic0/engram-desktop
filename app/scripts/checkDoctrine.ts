@@ -264,6 +264,12 @@ const PINNED_WRITERS: Record<string, string> = {
   'main/windowState.ts': 'app userData — window bounds',
   'main/index.ts': 'user-chosen export folder (dialog), never a destination derived from the learning home',
   'main/session/notifierState.ts': 'app userData',
+  // 2026-08-10 — the renderer's confidence picks, mirrored so the phone's
+  // grade is computed from the same five components as the desk's. Not
+  // learning state by any reading: the engine knows nothing about a
+  // confidence pick, no rating depends on one, and the buffer it copies is
+  // localStorage the app already owns. App userData, alongside topicSettings.
+  'main/session/calibrationMirror.ts': 'app userData',
   'main/session/topicSettings.ts': 'app userData',
   'main/session/mapAnnotations.ts': 'app userData',
   'main/session/sessionScan.ts': 'app userData — transcript scan cache',
