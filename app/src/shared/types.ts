@@ -694,3 +694,10 @@ export interface PairingOffer {
   url: string
   loopbackOnly: boolean
 }
+
+/** What a drain of the phone queue did. */
+export interface DrainSummary {
+  sessionsStarted: number
+  itemsDrained: number
+  failures: Array<{ topic: string; error: string }>
+}

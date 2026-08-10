@@ -5,6 +5,9 @@ import { createCardPackStore, type CardPackStore } from './cardPackStore'
 import { createLinkServer, type LinkServer } from './LinkServer'
 import { createOutboxStore, type OutboxStore } from './outboxStore'
 import { createPairingStore, type PairingStore } from './pairing'
+import { drainOutbox, type DrainResult } from './mobileDrain'
+import { startSession } from '../ipc/sessionHandlers'
+import { tmpdir } from 'node:os'
 import type { LinkStatus } from '../../shared/types'
 
 /**
@@ -117,6 +120,7 @@ export function registerLinkHandlers(): void {
   })
 
   ipcMain.handle('link:expose', (_event, exposeToLan: boolean) => startLinkServer({ exposeToLan }))
+  ipcMain.handle('link:settle', () => settleQueue())
   ipcMain.handle('link:revoke', async (_event, deviceId: string) => {
     ensureStores()
     await pairing!.revoke(deviceId)
@@ -162,4 +166,31 @@ export async function showPairingCode(): Promise<void> {
     // learner who just switched networks should see the address they need.
     await showPairingCode()
   }
+}
+
+/**
+ * Hands queued phone evidence to real sittings.
+ *
+ * **Learner-initiated, never automatic.** The queue could drain the moment a
+ * push lands, and that would be wrong: a sitting is the unit of work here, and
+ * starting one because a phone finished syncing would interrupt whatever the
+ * learner was actually doing. So the Companion panel reports what is waiting
+ * and this runs when they say so.
+ *
+ * One session per topic, because a kickoff names one topic and a sitting that
+ * hopped between them would be the mixed-queue problem the desktop already
+ * solved once. Items are marked drained only after their session starts, and a
+ * topic that fails leaves its evidence queued for the next attempt — the
+ * learner produced that work and it exists in exactly one place.
+ */
+export async function settleQueue(): Promise<DrainResult> {
+  ensureStores()
+  return drainOutbox({
+    outbox: outbox!,
+    batchDir: join(tmpdir(), 'engram-mobile-batches'),
+    startSession: async (message, kind, topic) => {
+      const { sessionId } = await startSession(message, kind as 'learn' | 'review' | 'coach', undefined, topic)
+      return sessionId
+    },
+  })
 }

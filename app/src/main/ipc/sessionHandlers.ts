@@ -61,37 +61,46 @@ export function hasLiveSessions(): boolean {
   return sessions.size > 0
 }
 
+/** Starts a session. The one place a `claude` child is created, whether the
+ * caller is the renderer over IPC or main itself — the mobile drain needs to
+ * start a sitting too, and a second spawn path would be a second place for the
+ * session registry, the event wiring and the extra-instructions rule to drift. */
+export async function startSession(
+  initialMessage: string,
+  kind: SessionKind,
+  resumeSessionId?: string,
+  topicId?: string,
+): Promise<{ sessionId: string }> {
+  const manager = new SessionManager(resumeSessionId)
+  sessions.set(manager.sessionId, manager)
+  manager.on('event', (event: SessionEvent) => {
+    activeWindow?.webContents.send('session:event', { sessionId: manager.sessionId, event })
+    if (event.type === 'closed') sessions.delete(manager.sessionId)
+  })
+  // Resuming rides the prior turn's system prompt already in effect — --resume
+  // doesn't accept a new one, so a topic's extra instructions (and its initial-context
+  // files) only apply on a fresh start; a resumed session already read them once.
+  const extraInstructions =
+    !resumeSessionId && topicId ? await buildExtraInstructions(topicId) : undefined
+  await manager.start(initialMessage, extraInstructions)
+  // A specific topic gets its own remembered session, distinct from other topics'
+  // (see sessionIndex.ts) — 'review'/'coach' aren't topic-scoped, so `kind` is the key.
+  await recordSession(topicId ?? kind, manager.sessionId)
+  return { sessionId: manager.sessionId }
+}
+
 export function registerSessionHandlers(win: BrowserWindow): void {
   rebindWindow(win)
 
-  async function spawn(initialMessage: string, kind: SessionKind, resumeSessionId?: string, topicId?: string) {
-    const manager = new SessionManager(resumeSessionId)
-    sessions.set(manager.sessionId, manager)
-    manager.on('event', (event: SessionEvent) => {
-      activeWindow?.webContents.send('session:event', { sessionId: manager.sessionId, event })
-      if (event.type === 'closed') sessions.delete(manager.sessionId)
-    })
-    // Resuming rides the prior turn's system prompt already in effect — --resume
-    // doesn't accept a new one, so a topic's extra instructions (and its initial-context
-    // files) only apply on a fresh start; a resumed session already read them once.
-    const extraInstructions =
-      !resumeSessionId && topicId ? await buildExtraInstructions(topicId) : undefined
-    await manager.start(initialMessage, extraInstructions)
-    // A specific topic gets its own remembered session, distinct from other topics'
-    // (see sessionIndex.ts) — 'review'/'coach' aren't topic-scoped, so `kind` is the key.
-    await recordSession(topicId ?? kind, manager.sessionId)
-    return { sessionId: manager.sessionId }
-  }
-
   ipcMain.handle('session:start', (_e, initialMessage: string, kind: SessionKind, topicId?: string) =>
-    spawn(initialMessage, kind, undefined, topicId),
+    startSession(initialMessage, kind, undefined, topicId),
   )
 
   // "Continue if there's a previous session for this key, otherwise start fresh" — one
   // call, no separate resume-vs-start branching needed at the call site.
   ipcMain.handle('session:resume', async (_e, initialMessage: string, kind: SessionKind, topicId?: string) => {
     const previous = await lastSessionFor(topicId ?? kind)
-    return spawn(initialMessage, kind, previous ?? undefined, topicId)
+    return startSession(initialMessage, kind, previous ?? undefined, topicId)
   })
 
   ipcMain.handle('session:lastFor', (_e, kind: SessionKind, topicId?: string) => lastSessionFor(topicId ?? kind))

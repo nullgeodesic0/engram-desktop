@@ -1,4 +1,4 @@
-import type { LinkStatus, PairingOffer } from '../../../shared/types'
+import type { DrainSummary, LinkStatus, PairingOffer } from '../../../shared/types'
 import { useEffect, useState } from 'react'
 import type {
   ApiKeyStatus,
@@ -421,6 +421,8 @@ function CompanionSection() {
   const [status, setStatus] = useState<LinkStatus | null>(null)
   const [offer, setOffer] = useState<PairingOffer | null>(null)
   const [now, setNow] = useState(Date.now())
+  const [settling, setSettling] = useState(false)
+  const [settled, setSettled] = useState<DrainSummary | null>(null)
 
   useEffect(() => {
     void window.engram.linkStatus().then(setStatus)
@@ -512,8 +514,42 @@ function CompanionSection() {
       )}
 
       {status.queued > 0 && (
+        <div className="flex items-start gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="text-sm text-[var(--color-text-primary)]">
+              {status.queued} item(s) waiting from your phone
+            </div>
+            <div className="fig-caption mt-1">
+              Settling opens one sitting per topic. Nothing is graded until it does — the phone reports what
+              you did; the session decides what it was worth.
+            </div>
+          </div>
+          <button
+            className="btn-ghost text-xs"
+            disabled={settling}
+            onClick={() => {
+              setSettling(true)
+              void window.engram
+                .linkSettle()
+                .then(async (result) => {
+                  setSettled(result)
+                  setStatus(await window.engram.linkStatus())
+                })
+                .finally(() => setSettling(false))
+            }}
+          >
+            {settling ? 'Settling…' : 'Settle now'}
+          </button>
+        </div>
+      )}
+
+      {settled && (
         <div className="fig-caption">
-          {status.queued} item(s) from your phone are queued, waiting for a session to settle them.
+          {settled.sessionsStarted} sitting(s) opened for {settled.itemsDrained} item(s).
+          {settled.failures.length > 0 &&
+            ` ${settled.failures.length} topic(s) could not start and stay queued: ${settled.failures
+              .map((f) => f.topic)
+              .join(', ')}.`}
         </div>
       )}
     </div>

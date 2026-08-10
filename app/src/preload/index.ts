@@ -36,6 +36,7 @@ import type {
   NewTopicPrefill,
   LinkStatus,
   PairingOffer,
+  DrainSummary,
 } from '../shared/types'
 import type { SessionEvent } from '../shared/sessionEvents'
 import type { BridgeAskRequest, BridgeAskResponse, BridgeBeatRequest, BridgeUiRequest } from '../shared/bridgeProtocol'
@@ -56,6 +57,8 @@ const engramApi = {
   linkBeginPairing: (): Promise<PairingOffer> => ipcRenderer.invoke('link:beginPairing'),
   linkExpose: (exposeToLan: boolean): Promise<LinkStatus> => ipcRenderer.invoke('link:expose', exposeToLan),
   linkRevoke: (deviceId: string): Promise<LinkStatus> => ipcRenderer.invoke('link:revoke', deviceId),
+  /** Starts a sitting per topic for whatever the phone has queued. */
+  linkSettle: (): Promise<DrainSummary> => ipcRenderer.invoke('link:settle'),
   model: (): Promise<LearnerModel> => ipcRenderer.invoke('engram:model'),
   graderHealth: (): Promise<GraderHealthResult> => ipcRenderer.invoke('engram:graderHealth'),
   graderAuditHistory: (): Promise<GraderAuditFile[]> => ipcRenderer.invoke('engram:graderAuditHistory'),
