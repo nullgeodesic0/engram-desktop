@@ -126,6 +126,44 @@ server.registerTool(
   },
 )
 
+server.registerTool(
+  'emit_card_pack',
+  {
+    title: 'Emit Card Pack',
+    description:
+      "Author the card pack the phone will walk for ONE node, and hand it to the app. Advisory and non-blocking like the rest: skipping it simply means this node cannot be walked away from the desk.\n\n" +
+      "Every stem is YOURS to write, for THIS node. Do not reach for a house style — a pack whose PREDICT card asks 'which of these does the argument have to establish first?' would ask the same thing of Noether's theorem and of Lenin on Economism, and a question that fits every node teaches nothing about any of them. Write the question this node actually raises, in the vocabulary the learner has met.\n\n" +
+      "Beats run in grammar order and each appears at most once. SELF_EXPLAIN and a carved-out VERIFY may never be a menu — use ladder, cloze or recall there. A ladder's pool must hold at least twice its true steps, and every distractor must be competitive: a sign error, a right-step-wrong-order, a step from a neighbouring derivation, or the learner's own recorded misconception in their own words. Filler options make the card a coin flip and the receipt a lie.\n\n" +
+      "Sealed fields (`sealed.*`) hold the answer and are never shown before the learner commits.",
+    inputSchema: {
+      topic: z.string(),
+      node: z.string(),
+      nodeTitle: z.string(),
+      eligibility: z.object({
+        threshold: z.boolean().optional(),
+        lapsed: z.boolean().optional(),
+        effectivelyRelearn: z.boolean().optional(),
+        transferReady: z.boolean().optional(),
+        nodeKind: z.string().optional(),
+        experimentArm: z.boolean().optional(),
+      }),
+      beats: z.array(z.record(z.any())),
+    },
+  },
+  async ({ topic, node, nodeTitle, eligibility, beats }) => {
+    const result = await postJson(`/bridge/${encodeURIComponent(SESSION_ID)}/card-pack`, {
+      topic,
+      node,
+      nodeTitle,
+      eligibility,
+      beats,
+    })
+    // The refusal reasons come back to YOU, not to a log nobody reads: a pack
+    // that breaks the walk protocol is a pack you can fix on this turn.
+    return { content: [{ type: 'text', text: JSON.stringify(result) }] }
+  },
+)
+
 server.registerTool('session_phase', {
   title: 'Session Phase',
   description: 'Advisory, best-effort: signal the coarse session phase so the app can stage its chrome (opening plate, grading shimmer, closing ceremony). Call at each transition: intake (new-topic interview), pretest, walk (teaching nodes), grading (assessor running), closing (wrap-up).',

@@ -438,7 +438,14 @@ const injectedStrings = [...permissionTs.matchAll(/`([^`]{40,})`|'([^']{40,})'/g
 // about whether the work is right, whether a step looks wrong, or what is
 // absent. That is a correctness signal ahead of grading, which is precisely
 // what the loop withholds.
-const PINNED_PROMPT_HASH = '0ae178b0a5381e36'
+// 2026-08-10 — re-pinned for emit_card_pack's disclosure. Re-read whole: the
+// added paragraph describes what the tool writes and what the app will refuse,
+// and the two pedagogical sentences in it ("SELF_EXPLAIN may never be a menu",
+// the distractor rule) are not new doctrine — they are the D5-pinned
+// mobile-walk overlay's own load-bearing lines, restated where the tool that
+// must obey them is named. The prompt still only describes UI plumbing and
+// still ends by deferring to the installed skills.
+const PINNED_PROMPT_HASH = 'db937934d0276f9c'
 if (sha(injectedStrings) !== PINNED_PROMPT_HASH) {
   fail(
     'D3.systemPrompt',
@@ -509,6 +516,22 @@ const PINNED_BRIDGE_TOOLS = [
   // reveal — but so can a sentence defining the same term, and the timing
   // rule its description carries is the same one governing that sentence.
   'render_checks', 'render_timeline', 'define_term',
+  // 2026-08-10 — emit_card_pack, and it is NOT a display tool. It writes a
+  // card pack to the app's own store for the phone to walk later, so it got
+  // the closest look of any tool here:
+  //   · it reads no engine state — every field is authored by the tutor from
+  //     the node it has just taught;
+  //   · it writes nothing to ~/.claude/learning/. The pack lives in the app's
+  //     card-pack store, the same side of the line as topicSettings;
+  //   · it cannot smuggle a rating or a stamp. Those come from a live session
+  //     draining the phone's evidence, and the wire schema rejects a
+  //     client-supplied one outright (§D6.wireSchema);
+  //   · it carries sealed reveals, which is the point: the pack IS the
+  //     answer key, authored by the party that already knows it, and the
+  //     store refuses one that breaks the walk protocol before it lands.
+  // Its predecessor was a dev fixture with hardcoded stems, which asked every
+  // node the same question. That is the defect this tool exists to retire.
+  'emit_card_pack',
   // 2026-08-08 — propose_transcription, the only bridge tool that is not a
   // display channel: it carries a transcription of the learner's OWN
   // handwriting back for them to confirm. Same test as the others:

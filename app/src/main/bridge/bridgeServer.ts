@@ -3,6 +3,10 @@ import { randomUUID } from 'node:crypto'
 import type { BrowserWindow } from 'electron'
 import type { BridgeAskRequest, BridgeAskResponse, BridgeBeatRequest, BridgeUiRequest } from '../../shared/bridgeProtocol'
 import { sanitizeAnnotatePayload, setNodeAnnotation } from '../session/mapAnnotations'
+import { parseCardPack } from '../../shared/cardPack'
+import { createCardPackStore, type CardPackStore } from '../link/cardPackStore'
+import { app } from 'electron'
+import { join } from 'node:path'
 
 /**
  * Hosts the loopback HTTP relay the MCP bridge worker (see mcpBridgeWorker.ts,
@@ -21,6 +25,16 @@ export class BridgeServer {
   // scanning by anything other than a Map lookup — see `dropSession` below.
   private pendingAsks = new Map<string, { sessionId: string; resolve: (res: BridgeAskResponse) => void }>()
   private window: BrowserWindow | null = null
+  /** Where an authored pack lands. Lazily built so constructing the server
+   * needs no Electron app paths — the tests do exactly that. */
+  private packStore: CardPackStore | null = null
+
+  private get cardPacks(): CardPackStore {
+    this.packStore ??= createCardPackStore({
+      rootDir: join(app.getPath('userData'), 'card-packs'),
+    })
+    return this.packStore
+  }
 
   setWindow(win: BrowserWindow): void {
     this.window = win
@@ -50,6 +64,7 @@ export class BridgeServer {
     const askMatch = url.match(/^\/bridge\/([^/]+)\/ask$/)
     const beatMatch = url.match(/^\/bridge\/([^/]+)\/beat$/)
     const uiMatch = url.match(/^\/bridge\/([^/]+)\/ui$/)
+    const packMatch = url.match(/^\/bridge\/([^/]+)\/card-pack$/)
 
     if (askMatch) {
       const sessionId = decodeURIComponent(askMatch[1])
@@ -79,6 +94,29 @@ export class BridgeServer {
       settled = true
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify(answer))
+      return
+    }
+
+    if (packMatch) {
+      // The one bridge tool whose refusal the model must SEE. Everything else
+      // here is advisory and fire-and-forget; a card pack that breaks the
+      // walk protocol is a pack the tutor can fix on the same turn, and
+      // swallowing the reason would leave it re-emitting the same mistake.
+      let accepted = false
+      let reasons: string[] = []
+      try {
+        const pack = parseCardPack(JSON.parse(body))
+        if (!pack) {
+          reasons = ['the pack does not match the card-pack schema']
+        } else {
+          await this.cardPacks.put(pack)
+          accepted = true
+        }
+      } catch (error) {
+        reasons = [error instanceof Error ? error.message : String(error)]
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ accepted, reasons }))
       return
     }
 
