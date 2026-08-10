@@ -105,7 +105,16 @@ export class BridgeServer {
       let accepted = false
       let reasons: string[] = []
       try {
-        const pack = parseCardPack(JSON.parse(body))
+        // The host mints identity and time. A model-supplied pack id could
+        // collide with or overwrite another node's pack, and a model-supplied
+        // timestamp is a claim about when something happened made by the one
+        // party with no clock.
+        const authored = JSON.parse(body) as Record<string, unknown>
+        const pack = parseCardPack({
+          ...authored,
+          packId: randomUUID(),
+          generatedAt: new Date().toISOString(),
+        })
         if (!pack) {
           reasons = ['the pack does not match the card-pack schema']
         } else {

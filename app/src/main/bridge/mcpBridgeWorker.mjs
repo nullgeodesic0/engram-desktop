@@ -134,18 +134,24 @@ server.registerTool(
       "Author the card pack the phone will walk for ONE node, and hand it to the app. Advisory and non-blocking like the rest: skipping it simply means this node cannot be walked away from the desk.\n\n" +
       "Every stem is YOURS to write, for THIS node. Do not reach for a house style — a pack whose PREDICT card asks 'which of these does the argument have to establish first?' would ask the same thing of Noether's theorem and of Lenin on Economism, and a question that fits every node teaches nothing about any of them. Write the question this node actually raises, in the vocabulary the learner has met.\n\n" +
       "Beats run in grammar order and each appears at most once. SELF_EXPLAIN and a carved-out VERIFY may never be a menu — use ladder, cloze or recall there. A ladder's pool must hold at least twice its true steps, and every distractor must be competitive: a sign error, a right-step-wrong-order, a step from a neighbouring derivation, or the learner's own recorded misconception in their own words. Filler options make the card a coin flip and the receipt a lie.\n\n" +
-      "Sealed fields (`sealed.*`) hold the answer and are never shown before the learner commits.",
+      "Sealed fields (`sealed.*`) hold the answer and are never shown before the learner commits.\n\n" +
+      "A prose beat may carry a FIGURE, so the phone can show what you would show at the desk: formula (with a where-clause glossing its symbols), steps, comparison, checks, timeline, definition, citation, plot. Reach for one wherever you would have reached for the matching render_* card here — a learner who met a concept as a set equation at the desk should not meet a paragraph about it on the train.\n\n" +
+      "Identity is not yours to set: the app assigns the pack id and the timestamp.",
     inputSchema: {
       topic: z.string(),
       node: z.string(),
       nodeTitle: z.string(),
+      // Exactly the pack schema's own shape, and all of it required. An
+      // earlier draft made these optional and omitted packId/generatedAt
+      // entirely, which meant every pack this tool emitted would have been
+      // refused by the validator on arrival — a tool that cannot succeed.
+      // Read node_kind from the CLI, never the graph's raw kind.
       eligibility: z.object({
-        threshold: z.boolean().optional(),
-        lapsed: z.boolean().optional(),
-        effectivelyRelearn: z.boolean().optional(),
-        transferReady: z.boolean().optional(),
-        nodeKind: z.string().optional(),
-        experimentArm: z.boolean().optional(),
+        nodeKind: z.enum(['concept', 'fact', 'procedure']),
+        threshold: z.boolean(),
+        transferReady: z.boolean(),
+        lapsed: z.boolean(),
+        experimentArm: z.string().nullable(),
       }),
       beats: z.array(z.record(z.any())),
     },

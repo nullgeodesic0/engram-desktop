@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest'
+import { describe, expect, it, test } from 'vitest'
 import { parseCardPack, validateAgainstOverlay } from './cardPack'
 
 /**
@@ -167,5 +167,56 @@ describe('validateAgainstOverlay', () => {
       eligibility: { nodeKind: 'procedure', threshold: true, transferReady: false, lapsed: false, experimentArm: null },
     })
     expect(reasons(p)).toEqual([])
+  })
+})
+
+describe('prose figures', () => {
+  function packWith(figure: unknown) {
+    return pack({
+      beats: [
+        { beat: 'open_gap', kind: 'prose', content: 'x' },
+        { beat: 'predict', kind: 'mc', stem: 's',
+          options: [{ id: 'a', label: 'a' }, { id: 'b', label: 'b' }],
+          sealed: { correctOptionIds: ['a'], revealMarkdown: 'r' } },
+        { beat: 'resolve', kind: 'prose', content: 'x', figure },
+        { beat: 'self_explain', kind: 'recall', stem: 's', sealed: { revealMarkdown: 'r' } },
+        { beat: 'verify', kind: 'recall', stem: 's', sealed: { revealMarkdown: 'r' } },
+      ],
+    })
+  }
+
+  it('accepts each figure the desktop can render', () => {
+    const figures: unknown[] = [
+      { kind: 'formula', latex: 'E = mc^2', caption: 'mass–energy', where: [{ symbol: 'c', meaning: 'speed of light' }] },
+      { kind: 'steps', steps: [{ text: 'start', note: 'why' }] },
+      { kind: 'comparison', left: { label: 'A', body: 'a' }, right: { label: 'B', body: 'b' } },
+      { kind: 'checks', checks: [{ check: 'let T→0', expect: 'S→0' }] },
+      { kind: 'timeline', events: [{ when: '1902', what: 'published' }] },
+      { kind: 'definition', term: 'x', definition: 'y' },
+      { kind: 'citation', label: 'Goldstein', locator: '§2.3' },
+      { kind: 'plot', series: [{ label: 'V(r)', points: [[0, 1], [1, 0]] }] },
+    ]
+    for (const figure of figures) {
+      const parsed = parseCardPack(packWith(figure))
+      expect(parsed, JSON.stringify(figure).slice(0, 40)).not.toBeNull()
+    }
+  })
+
+  it('refuses a figure kind it does not know', () => {
+    expect(parseCardPack(packWith({ kind: 'render_iframe', src: 'http://x' }))).toBeNull()
+  })
+
+  it('a figure is display only — it carries no sealed field', () => {
+    // The line that keeps a figure from becoming an ungraded answer: what the
+    // learner ANSWERS with is a walk card, what they are SHOWN is a figure.
+    const parsed = parseCardPack(
+      packWith({ kind: 'formula', latex: 'x', sealed: { revealMarkdown: 'leak' } }),
+    )
+    const resolve = parsed?.beats.find((b) => b.beat === 'resolve')
+    expect(JSON.stringify(resolve)).not.toContain('leak')
+  })
+
+  it('prose without a figure is unchanged', () => {
+    expect(parseCardPack(packWith(undefined))).not.toBeNull()
   })
 })

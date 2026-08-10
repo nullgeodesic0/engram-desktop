@@ -40,10 +40,114 @@ export type Beat = (typeof BEAT_ORDER)[number]
 
 const optionSchema = z.object({ id: z.string().min(1), label: z.string().min(1).max(600) })
 
+/**
+ * A display figure a prose beat may carry, mirroring the desktop's own
+ * `render_*` bridge cards one for one.
+ *
+ * The phone had exactly one way to say anything: a markdown blob. At the desk
+ * the same tutor can set a display equation with its symbols glossed, lay a
+ * derivation out as rungs, or put two cases side by side — and a learner who
+ * met a concept that way at the desk meets a wall of prose about it on the
+ * train. Parity here is not decoration; it is the same explanation surviving
+ * the trip.
+ *
+ * These are display, never input. The walk's own cards (mc, ladder, cloze,
+ * recall) are what the learner answers with; a figure is what they are shown.
+ * Keeping that line means a figure can never become an ungraded answer.
+ */
+const figureSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('formula'),
+    latex: z.string().min(1).max(600),
+    caption: z.string().max(300).nullable().optional(),
+    where: z
+      .array(z.object({ symbol: z.string().max(60), meaning: z.string().max(200) }))
+      .max(12)
+      .optional(),
+  }),
+  z.object({
+    kind: z.literal('steps'),
+    title: z.string().max(200).nullable().optional(),
+    steps: z
+      .array(z.object({ text: z.string().min(1).max(400), note: z.string().max(300).optional() }))
+      .min(1)
+      .max(12),
+  }),
+  z.object({
+    kind: z.literal('comparison'),
+    title: z.string().max(200).nullable().optional(),
+    left: z.object({ label: z.string().max(80), body: z.string().min(1).max(800) }),
+    right: z.object({ label: z.string().max(80), body: z.string().min(1).max(800) }),
+  }),
+  z.object({
+    kind: z.literal('checks'),
+    title: z.string().max(200).nullable().optional(),
+    checks: z
+      .array(
+        z.object({
+          check: z.string().min(1).max(300),
+          expect: z.string().min(1).max(300),
+          note: z.string().max(300).optional(),
+        }),
+      )
+      .min(1)
+      .max(10),
+  }),
+  z.object({
+    kind: z.literal('timeline'),
+    title: z.string().max(200).nullable().optional(),
+    events: z
+      .array(
+        z.object({
+          when: z.string().min(1).max(80),
+          what: z.string().min(1).max(300),
+          note: z.string().max(300).optional(),
+        }),
+      )
+      .min(1)
+      .max(14),
+  }),
+  z.object({
+    kind: z.literal('definition'),
+    term: z.string().min(1).max(120),
+    definition: z.string().min(1).max(800),
+    aka: z.string().max(200).nullable().optional(),
+    notToBeConfusedWith: z.string().max(300).nullable().optional(),
+  }),
+  z.object({
+    kind: z.literal('citation'),
+    label: z.string().min(1).max(200),
+    locator: z.string().max(120).nullable().optional(),
+    note: z.string().max(300).nullable().optional(),
+  }),
+  z.object({
+    kind: z.literal('plot'),
+    title: z.string().max(200).nullable().optional(),
+    series: z
+      .array(
+        z.object({
+          label: z.string().max(80),
+          points: z.array(z.tuple([z.number(), z.number()])).min(2).max(200),
+          dashed: z.boolean().optional(),
+        }),
+      )
+      .min(1)
+      .max(4),
+    markers: z
+      .array(z.object({ x: z.number(), label: z.string().max(60).nullable().optional() }))
+      .max(4)
+      .optional(),
+  }),
+])
+
+export type CardFigure = z.infer<typeof figureSchema>
+
 const proseCard = z.object({
   beat: z.enum(BEAT_ORDER),
   kind: z.literal('prose'),
   content: z.string().min(1).max(4000),
+  /** Optional. Prose stays the carrier; a figure is what the prose is about. */
+  figure: figureSchema.optional(),
 })
 
 const hintsCard = z.object({
