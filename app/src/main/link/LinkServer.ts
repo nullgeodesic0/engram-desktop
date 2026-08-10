@@ -42,6 +42,15 @@ export interface LinkServerDeps {
    * The projection that strips answer fields lives on the other side of the
    * inertness boundary, in main/session/mobileOverview.ts. */
   graph?: (topic: string) => Promise<unknown>
+  /** One topic's graded history — what the desk decided about work the phone
+   * sent up. Injected for the same reason as `overview` and `graph`.
+   *
+   * This is the only route that returns the ENGINE'S OWN VERDICTS rather than
+   * counts, and it is safe for a reason worth naming: a receipt is written
+   * after the production is graded and records no content. The projection on
+   * the other side of the boundary (main/session/mobileReceipts.ts) is a
+   * whitelist, so a future engine field cannot leak by being forgotten. */
+  receipts?: (topic: string) => Promise<unknown>
   /** Files a topic under an app-local folder label.
    *
    * The ONLY write this server offers besides the outbox, and it is safe for a
@@ -134,6 +143,14 @@ export function createLinkServer(deps: LinkServerDeps): LinkServer {
         return
       }
       send(res, 200, await deps.graph(topic))
+      return
+    }
+    if (url.pathname === '/link/receipts') {
+      if (!deps.receipts) {
+        send(res, 404, { error: 'no receipts provider' })
+        return
+      }
+      send(res, 200, await deps.receipts(topic))
       return
     }
     const node = url.searchParams.get('node') ?? ''
@@ -251,7 +268,8 @@ export function createLinkServer(deps: LinkServerDeps): LinkServer {
           (url === '/link/pack' ||
             url === '/link/packs' ||
             url === '/link/overview' ||
-            url === '/link/graph')
+            url === '/link/graph' ||
+            url === '/link/receipts')
         ) {
           void handlePackRead(req, res, parsedUrl)
           return

@@ -270,4 +270,56 @@ describe('LinkServer', () => {
     const body = await res.json()
     expect(body).toEqual({ app: 'engram-desktop', protocol: 1 })
   })
+
+  test('refuses receipts to an unpaired caller', async () => {
+    const res = await fetch(`${base}/link/receipts?topic=mechanics`)
+
+    expect(res.status).toBe(401)
+  })
+
+  test('serves the receipts a provider returns, and passes the topic through', async () => {
+    const asked: string[] = []
+    const withReceipts = createLinkServer({
+      pairing,
+      outbox,
+      packs,
+      host: '127.0.0.1',
+      receipts: async (topic) => {
+        asked.push(topic)
+        return { topic, receipts: [], provisional: ['noether'] }
+      },
+    })
+    const { port } = await withReceipts.start()
+    try {
+      const offer = await pairing.beginPairing()
+      const paired = await fetch(`http://127.0.0.1:${port}/link/pair`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ code: offer.code, deviceName: 'iPhone' }),
+      })
+      const token = (await paired.json()).token
+      const res = await fetch(`http://127.0.0.1:${port}/link/receipts?topic=mechanics`, {
+        headers: { authorization: `Bearer ${token}` },
+      })
+
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({
+        topic: 'mechanics',
+        receipts: [],
+        provisional: ['noether'],
+      })
+      expect(asked).toEqual(['mechanics'])
+    } finally {
+      await withReceipts.stop()
+    }
+  })
+
+  test('says so plainly when no receipts provider is wired', async () => {
+    const token = await pair()
+    const res = await fetch(`${base}/link/receipts?topic=mechanics`, {
+      headers: { authorization: `Bearer ${token}` },
+    })
+
+    expect(res.status).toBe(404)
+  })
 })

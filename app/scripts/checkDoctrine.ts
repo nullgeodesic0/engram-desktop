@@ -1075,8 +1075,35 @@ if (codeOnly(linkServiceText).includes('setFolder')) {
 // explaining that this module does not rate — a rule that cries wolf teaches
 // people to silence it.
 
+// (b6) The grades that come BACK carry no content.
+//
+// /link/receipts is the only route that answers with the engine's own verdicts
+// rather than counts. That is licensed because a receipt is written AFTER the
+// production is graded and records none of it — the learner's words stay in
+// the transcript on the Mac. But "a receipt records no content" is a property
+// of today's receipt schema, not a promise the engine made, so the projection
+// is a whitelist and this pins it as one. A widened read has to name the field
+// it wants, which is a visible act in a diff.
+const receiptsText = codeOnly(TEXT.get('main/session/mobileReceipts.ts') ?? '')
+if (receiptsText) {
+  if (/\b(probe|claim|rubric|transfer_probe|production|stash)\b/.test(receiptsText)) {
+    fail(
+      'D6.receiptsGradesOnly',
+      'main/session/mobileReceipts.ts names an answer field — the return leg ships grades, never content.',
+      'A receipt may cross to the phone precisely because it is a verdict with no production attached. The moment this projection reaches for the text that was graded, the phone is holding the answer to a node it has not yet been re-asked — which is the same leak D4 prevents at the desk, arriving by a different road.',
+    )
+  }
+  if (!receiptsText.includes('PHONE_SOURCE_STAMPS')) {
+    fail(
+      'D6.receiptsGradesOnly',
+      'main/session/mobileReceipts.ts no longer derives its phone-stamp set from shared/linkProtocol.ts.',
+      'Which stamps mean "recognition-grade" decides which nodes read as provisional. Copying that list into a second file means a new mobile card kind can ship a stamp that one file knows about and the other silently treats as desk-grade work — the node would look solidified without anyone having solidified it.',
+    )
+  }
+}
+
 // (c) The wire schema still refuses a client-supplied rating or stamp.
-for (const needle of ['.strict()', 'sourceStampFor']) {
+for (const needle of ['.strict()', 'sourceStampFor', 'PHONE_SOURCE_STAMPS']) {
   if (protocolText && !protocolText.includes(needle)) {
     fail(
       'D6.wireSchema',

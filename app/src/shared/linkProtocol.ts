@@ -55,6 +55,23 @@ export function isTapDerived(kind: MobileInputKind): boolean {
   return kind !== 'recall'
 }
 
+/**
+ * The stamps that mark a rating as recognition-grade, derived from the map
+ * above rather than retyped.
+ *
+ * `self` is absent by construction, and that absence is the point: a spoken
+ * or typed recall on the phone leaves no trace distinguishing it from one at
+ * the desk, because there is no distinction to draw. Anything that reads this
+ * set to decide "did a phone do this" is really asking "was this recognition",
+ * which is the question that matters.
+ */
+export const PHONE_SOURCE_STAMPS: readonly string[] = Object.freeze(
+  Object.entries(SOURCE_STAMPS)
+    .filter(([kind]) => isTapDerived(kind as MobileInputKind))
+    .map(([, stamp]) => stamp)
+    .sort(),
+)
+
 const outboxItemSchema = z
   .object({
     /** Client-generated UUID. The dedupe key: a replayed batch is a no-op. */

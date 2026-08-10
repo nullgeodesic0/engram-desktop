@@ -8,6 +8,7 @@ import { createPairingStore, type PairingStore } from './pairing'
 import { drainOutbox, type DrainResult } from './mobileDrain'
 import { startSession } from '../ipc/sessionHandlers'
 import { buildConstellationGraph, buildMobileOverview } from '../session/mobileOverview'
+import { buildTopicReceipts } from '../session/mobileReceipts'
 import { getTopicSettings, setTopicSettings } from '../session/topicSettings'
 import { tmpdir } from 'node:os'
 import type { LinkStatus } from '../../shared/types'
@@ -81,6 +82,10 @@ export async function startLinkServer(options: { exposeToLan?: boolean } = {}): 
     // the engine read lives on the other side of the inertness boundary.
     overview: () => buildMobileOverview((topic) => packs!.listFor(topic)),
     graph: (topic) => buildConstellationGraph(topic),
+    // The return leg: what the desk decided about work the phone sent up.
+    // Grades, never content — see mobileReceipts.ts for why a receipt may
+    // cross a boundary a due item may not.
+    receipts: (topic) => buildTopicReceipts(topic),
     // Read-modify-write, so filing from the phone cannot clobber a display
     // title or any other setting the learner set at the desk.
     setFolder: async (topic, folder) => {
