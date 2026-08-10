@@ -19,7 +19,7 @@ import { z } from 'zod'
  * Adding a stamp value is a doctrine change: checkDoctrine pins this table.
  */
 
-export const MOBILE_INPUT_KINDS = ['checkpoint', 'connect', 'cloze', 'compose', 'ladder', 'recall'] as const
+export const MOBILE_INPUT_KINDS = ['checkpoint', 'connect', 'cloze', 'compose', 'match', 'sort', 'flaw', 'ladder', 'recall'] as const
 export type MobileInputKind = (typeof MOBILE_INPUT_KINDS)[number]
 
 /** The engine's own cap on a stored production (`PRODUCTION_MAX`). Mirrored,
@@ -46,6 +46,9 @@ const SOURCE_STAMPS: Record<MobileInputKind, string> = {
   // capped like every other tap-derived kind. Its own stamp, so the desk can
   // tell a composed derivation from an assembled one when it reads the record.
   compose: 'mobile-compose',
+  match: 'mobile-match',
+  sort: 'mobile-sort',
+  flaw: 'mobile-flaw',
   ladder: 'mobile-ladder',
   recall: 'self',
 }

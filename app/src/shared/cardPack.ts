@@ -263,6 +263,126 @@ const composeCard = z
     },
   )
 
+/** Guessing must be hopeless where a card carries SELF-EXPLAIN. 24 is 4!, the
+ * smallest match this admits, and every other kind is held to the same bar —
+ * the ladder's "pool >= 2N" rule expressed as an answer-space floor so the
+ * kinds can be compared to each other rather than each inventing a threshold. */
+const SELF_EXPLAIN_MIN_SPACE = 24
+
+/**
+ * Pair each item with what it belongs to.
+ *
+ * Not a menu: an n-pair match has n! orderings, so four pairs is already 24
+ * ways to be wrong and six is 720. What makes it evidence rather than a
+ * puzzle is that the pairing IS the knowledge — symbol to meaning, case to
+ * principle, term to the thing it is most often confused with.
+ */
+const matchCard = z
+  .object({
+    beat: z.enum(BEAT_ORDER),
+    kind: z.literal('match'),
+    stem: z.string().min(1).max(2000),
+    /** Shown in the order given; the phone shuffles neither side, because a
+     * generator that pre-shuffled and a client that shuffled again would
+     * disagree about what the learner saw. */
+    left: z.array(optionSchema).min(3).max(8),
+    right: z.array(optionSchema).min(3).max(8),
+    sealed: z.object({
+      /** left id -> right id. Every left item pairs exactly once. */
+      pairs: z.array(z.object({ left: z.string(), right: z.string() })).min(3).max(8),
+      revealMarkdown: z.string().min(1).max(4000),
+    }),
+  })
+  .refine(
+    (c) =>
+      c.sealed.pairs.every(
+        (p) => c.left.some((o) => o.id === p.left) && c.right.some((o) => o.id === p.right),
+      ),
+    { message: 'every pair must join two items the learner can actually see' },
+  )
+  .refine((c) => c.sealed.pairs.length === c.left.length, {
+    message: 'every left item must be paired — an unpairable item is a trick, not a distractor',
+  })
+  .refine((c) => c.beat !== 'self_explain' || factorial(c.sealed.pairs.length) >= SELF_EXPLAIN_MIN_SPACE, {
+    message: 'a match carrying self_explain needs at least four pairs, or guessing it is not hopeless',
+  })
+
+function factorial(n: number): number {
+  return n <= 1 ? 1 : n * factorial(n - 1)
+}
+
+/**
+ * Put each item in the bucket it belongs to.
+ *
+ * k buckets and n items is k^n ways to be wrong, so the floor is on the
+ * product rather than on either count. Good where the knowledge IS the
+ * partition: conserved or not, spontaneous or imported, public sector or
+ * private.
+ */
+const sortCard = z
+  .object({
+    beat: z.enum(BEAT_ORDER),
+    kind: z.literal('sort'),
+    stem: z.string().min(1).max(2000),
+    buckets: z.array(optionSchema).min(2).max(4),
+    items: z.array(optionSchema).min(4).max(14),
+    sealed: z.object({
+      /** item id -> bucket id, for every item. */
+      placements: z.array(z.object({ item: z.string(), bucket: z.string() })).min(4).max(14),
+      revealMarkdown: z.string().min(1).max(4000),
+    }),
+  })
+  .refine(
+    (c) =>
+      c.sealed.placements.every(
+        (p) => c.items.some((o) => o.id === p.item) && c.buckets.some((b) => b.id === p.bucket),
+      ),
+    { message: 'every placement must name an item and a bucket the learner can see' },
+  )
+  .refine((c) => c.sealed.placements.length === c.items.length, {
+    message: 'every item must have a home — an unplaceable item is a trick, not a distractor',
+  })
+  .refine(
+    (c) => c.beat !== 'self_explain' || Math.pow(c.buckets.length, c.items.length) >= SELF_EXPLAIN_MIN_SPACE,
+    { message: 'a sort carrying self_explain needs a larger answer space — more items, or more buckets' },
+  )
+
+/**
+ * One step in a chain is wrong. Find it.
+ *
+ * RECOGNITION, and priced as such: one of six steps is a 17% guess, which is
+ * nowhere near the bar the other kinds clear. It is barred from SELF-EXPLAIN
+ * and from a carved-out VERIFY for exactly the reason a menu is — those beats
+ * are where recognition does the most damage.
+ *
+ * Where it earns its place is STRUGGLE and CONNECT, and it earns it well: a
+ * learner who can point at the broken line in someone else's derivation is
+ * doing something a multiple-choice stem cannot ask for.
+ */
+const flawCard = z
+  .object({
+    beat: z.enum(BEAT_ORDER),
+    kind: z.literal('flaw'),
+    stem: z.string().min(1).max(2000),
+    /** The chain as written, flaw included. */
+    steps: z.array(z.object({ text: z.string().min(1).max(400) })).min(3).max(8),
+    sealed: z.object({
+      /** Zero-based index of the step that breaks. */
+      flawedIndex: z.number().int().min(0),
+      /** What is wrong with it — shown only after the commitment. */
+      why: z.string().min(1).max(600),
+      revealMarkdown: z.string().min(1).max(4000),
+    }),
+  })
+  .refine((c) => c.sealed.flawedIndex < c.steps.length, {
+    message: 'the flawed step must be one of the steps shown',
+  })
+  .refine((c) => c.beat !== 'self_explain', {
+    message:
+      'a flaw card may not carry self_explain: picking one step of six is recognition, ' +
+      'and recognition cannot carry the beat the overlay protects most',
+  })
+
 const recallCard = z.object({
   beat: z.enum(BEAT_ORDER),
   kind: z.literal('recall'),
@@ -270,7 +390,10 @@ const recallCard = z.object({
   sealed: z.object({ revealMarkdown: z.string().min(1).max(4000) }),
 })
 
-const cardSchema = z.union([proseCard, hintsCard, mcCard, ladderCard, clozeCard, composeCard, recallCard])
+const cardSchema = z.union([
+  proseCard, hintsCard, mcCard, ladderCard, clozeCard, composeCard,
+  matchCard, sortCard, flawCard, recallCard,
+])
 export type Card = z.infer<typeof cardSchema>
 
 const cardPackSchema = z.object({
@@ -331,7 +454,7 @@ export function validateAgainstOverlay(pack: CardPack): string[] {
   // no pre-written line on screen to recognise, only an alphabet to write
   // with. The rule the overlay states is about menus, and a token palette is
   // not one.
-  if (selfExplain && !['ladder', 'cloze', 'compose', 'recall'].includes(selfExplain.kind)) {
+  if (selfExplain && !['ladder', 'cloze', 'compose', 'match', 'sort', 'recall'].includes(selfExplain.kind)) {
     reasons.push('self_explain may not be served as a menu')
   }
 
@@ -343,6 +466,10 @@ export function validateAgainstOverlay(pack: CardPack): string[] {
   // template the learner did not write. A composed chain has no template: the
   // learner writes every line. That is why it is admitted here and cloze is
   // not.
+  // `match` and `sort` are absent here on purpose. They clear the bar for
+  // SELF-EXPLAIN, where the question is whether recognition can carry the
+  // beat — but a carved-out VERIFY is the cold check on a threshold node, and
+  // the overlay wants an assembly or a production there, not a partition.
   if (verify && isCarvedOut(pack.eligibility) && !['ladder', 'compose', 'recall'].includes(verify.kind)) {
     reasons.push('verify on a carved-out node requires a ladder, a composed chain, or a real production')
   }

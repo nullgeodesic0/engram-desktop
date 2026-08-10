@@ -290,3 +290,103 @@ describe('the step composer', () => {
     ).toBeNull()
   })
 })
+
+describe('match, sort and flaw', () => {
+  function match(beat: string, pairs = 4, over: Record<string, unknown> = {}) {
+    const ids = Array.from({ length: pairs }, (_, i) => i)
+    return {
+      beat, kind: 'match', stem: 'Pair each with what it belongs to.',
+      left: ids.map((i) => ({ id: `l${i}`, label: `left ${i}` })),
+      right: ids.map((i) => ({ id: `r${i}`, label: `right ${i}` })),
+      sealed: {
+        pairs: ids.map((i) => ({ left: `l${i}`, right: `r${i}` })),
+        revealMarkdown: 'the pairing',
+      },
+      ...over,
+    }
+  }
+  function sort(beat: string, items = 6, buckets = 2, over: Record<string, unknown> = {}) {
+    return {
+      beat, kind: 'sort', stem: 'Put each where it belongs.',
+      buckets: Array.from({ length: buckets }, (_, i) => ({ id: `b${i}`, label: `bucket ${i}` })),
+      items: Array.from({ length: items }, (_, i) => ({ id: `i${i}`, label: `item ${i}` })),
+      sealed: {
+        placements: Array.from({ length: items }, (_, i) => ({ item: `i${i}`, bucket: `b${i % buckets}` })),
+        revealMarkdown: 'the partition',
+      },
+      ...over,
+    }
+  }
+  function flaw(beat: string, over: Record<string, unknown> = {}) {
+    return {
+      beat, kind: 'flaw', stem: 'One line breaks. Which?',
+      steps: [{ text: 'first' }, { text: 'second' }, { text: 'third' }, { text: 'fourth' }],
+      sealed: { flawedIndex: 2, why: 'the sign flips here', revealMarkdown: 'because…' },
+      ...over,
+    }
+  }
+  const shell = (selfExplain: unknown, connect: unknown = mc('connect')) => ({
+    beats: [prose('open_gap'), mc('predict'),
+      { beat: 'struggle', kind: 'hints', rungs: ['a nudge'] }, prose('resolve'),
+      selfExplain, connect, ladder('verify'), prose('close')],
+  })
+
+  it('a four-pair match may carry self_explain', () => {
+    const p = parseCardPack(pack(shell(match('self_explain'))))
+    expect(p).not.toBeNull()
+    expect(validateAgainstOverlay(p!)).toEqual([])
+  })
+
+  it('a three-pair match may not — six orderings is a coin flip with extra steps', () => {
+    expect(parseCardPack(pack(shell(match('self_explain', 3))))).toBeNull()
+  })
+
+  it('a match with an unpairable left item is refused', () => {
+    expect(
+      parseCardPack(pack(shell(match('self_explain', 4, {
+        sealed: { pairs: [{ left: 'l0', right: 'r0' }], revealMarkdown: 'x' } })))),
+    ).toBeNull()
+  })
+
+  it('a sort clears the floor on the product, not on either count', () => {
+    // 2^6 = 64, comfortably past 24.
+    expect(validateAgainstOverlay(parseCardPack(pack(shell(sort('self_explain', 6, 2))))!)).toEqual([])
+    // 2^4 = 16, short of it.
+    expect(parseCardPack(pack(shell(sort('self_explain', 4, 2))))).toBeNull()
+  })
+
+  it('a flaw card may sit at connect', () => {
+    const p = parseCardPack(pack(shell(ladder('self_explain'), flaw('connect'))))
+    expect(p).not.toBeNull()
+    expect(validateAgainstOverlay(p!)).toEqual([])
+  })
+
+  it('a flaw card may never carry self_explain', () => {
+    // One of six is a 17% guess. The overlay protects that beat from exactly
+    // this, and the schema refuses it rather than leaving it to authorship.
+    expect(parseCardPack(pack(shell(flaw('self_explain'))))).toBeNull()
+  })
+
+  it('a flaw card pointing past the end of its own chain is refused', () => {
+    expect(
+      parseCardPack(pack(shell(ladder('self_explain'), flaw('connect', {
+        sealed: { flawedIndex: 9, why: 'x', revealMarkdown: 'y' } })))),
+    ).toBeNull()
+  })
+
+  it('neither match nor sort may carry a carved-out verify', () => {
+    // They clear the bar for self_explain, where the question is whether
+    // recognition can carry the beat. A carved-out verify is the cold check on
+    // a threshold node and wants an assembly or a production.
+    const p = parseCardPack({
+      ...pack(shell(ladder('self_explain'))),
+      eligibility: { nodeKind: 'concept', threshold: true, transferReady: false, lapsed: false, experimentArm: null },
+      beats: [prose('open_gap'), mc('predict'),
+        { beat: 'struggle', kind: 'hints', rungs: ['a'] }, prose('resolve'),
+        ladder('self_explain'), mc('connect'), match('verify'), prose('close')],
+    })
+    expect(validateAgainstOverlay(p!)).toContain(
+      'verify on a carved-out node requires a ladder, a composed chain, or a real production',
+    )
+  })
+})

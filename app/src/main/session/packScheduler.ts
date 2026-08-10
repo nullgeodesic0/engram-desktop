@@ -35,9 +35,34 @@
  * pace the app measures, and small enough that topping up is one sitting. */
 export const PACK_TARGET = 5
 
-/** Between top-up sittings. Long on purpose: stock drains one pack per walk,
- * so there is no version of "urgent" here. */
+/**
+ * The floor every topic gets before any topic gets a second helping.
+ *
+ * BREADTH BEFORE DEPTH, and the first version had it backwards. It chose the
+ * emptiest topic and filled it toward the target, which sounds right and is
+ * not: with five topics at zero and a six-hour cooldown, the fifth of them
+ * would have waited thirty hours. Observed exactly that way — a learner
+ * reached for classical mechanics on the phone and it was not there, because
+ * the scheduler had spent its one turn on derivatives.
+ *
+ * One pack in every topic beats five packs in one topic, because the learner
+ * does not choose their topic by what the scheduler happened to stock. Only
+ * once everything is reachable does depth matter.
+ */
+export const PACK_FLOOR = 2
+
+/** Between top-up sittings once every topic is reachable. Long on purpose:
+ * stock drains one pack per walk, so there is no version of urgent. */
 export const COOLDOWN_MS = 6 * 60 * 60_000
+
+/**
+ * Between sittings while a topic is still unreachable.
+ *
+ * Shorter, because "you cannot open this topic away from your desk" is a real
+ * gap rather than a low shelf, and thirty hours to close it is not automatic
+ * in any sense the word usually carries.
+ */
+export const URGENT_COOLDOWN_MS = 45 * 60_000
 
 export interface TopicStock {
   topic: string
@@ -74,18 +99,35 @@ export function packStock(topics: TopicStock[]): StockedTopic[] {
  */
 export function chooseTopUp(stocked: StockedTopic[], state: SchedulerState): StockedTopic | null {
   if (state.sittingRunning) return null
-  if (state.lastRunAt !== null && state.now - state.lastRunAt < COOLDOWN_MS) return null
 
   const hungry = stocked.filter((t) => t.deficit > 0)
   if (hungry.length === 0) return null
 
+  // Below the floor is a topic the learner cannot open away from the desk at
+  // all. That is a different condition from a low shelf, and it gets both the
+  // priority and the shorter clock.
+  const unreachable = hungry.filter((t) => t.packed < PACK_FLOOR && t.walkable > 0)
+  const urgent = unreachable.length > 0
+  const cooldown = urgent ? URGENT_COOLDOWN_MS : COOLDOWN_MS
+  if (state.lastRunAt !== null && state.now - state.lastRunAt < cooldown) return null
+
+  const pool = urgent ? unreachable : hungry
   // Emptiest first. Ties break on the larger topic, which has more to lose
   // from being unreachable.
-  return hungry.reduce((worst, t) =>
+  return pool.reduce((worst, t) =>
     t.packed < worst.packed || (t.packed === worst.packed && t.walkable > worst.walkable)
       ? t
       : worst,
   )
+}
+
+/** How many packs to ask for on this run: enough to clear the floor when a
+ * topic is unreachable, otherwise enough to reach the target. Asking for five
+ * when two would make it reachable spends a long sitting on depth nobody
+ * needed yet. */
+export function askFor(topic: StockedTopic): number {
+  const toFloor = Math.max(0, PACK_FLOOR - topic.packed)
+  return Math.max(1, Math.min(topic.walkable, toFloor > 0 ? toFloor : topic.deficit))
 }
 
 // ===========================================================================
@@ -97,7 +139,7 @@ import { composePackTopUpKickoff } from '../../shared/mobileKickoff'
 import type { TopicListEntry } from '../../shared/types'
 
 /** Polls often, acts rarely — the cooldown above is what throttles action. */
-const CHECK_INTERVAL_MS = 30 * 60_000
+const CHECK_INTERVAL_MS = 10 * 60_000
 
 let timer: ReturnType<typeof setInterval> | null = null
 let lastRunAt: number | null = null
@@ -151,7 +193,7 @@ export async function topUpPacksNow(
   // not to run.
   lastRunAt = now
   await deps
-    .startSession(composePackTopUpKickoff({ topic: choice.topic, count: choice.deficit }), choice.topic)
+    .startSession(composePackTopUpKickoff({ topic: choice.topic, count: askFor(choice) }), choice.topic)
     .catch(() => {})
   return { ranFor: choice.topic, stock }
 }
