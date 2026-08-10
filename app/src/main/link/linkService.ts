@@ -8,6 +8,7 @@ import { createPairingStore, type PairingStore } from './pairing'
 import { drainOutbox, type DrainResult } from './mobileDrain'
 import { startSession } from '../ipc/sessionHandlers'
 import { mobileProviders } from '../session/mobileProviders'
+import { receiptSince } from '../session/mobileReceipts'
 import { getTopicSettings, setTopicSettings } from '../session/topicSettings'
 import { tmpdir } from 'node:os'
 import type { LinkStatus } from '../../shared/types'
@@ -214,5 +215,8 @@ export async function settleQueue(): Promise<DrainResult> {
       const { sessionId } = await startSession(message, kind as 'learn' | 'review' | 'coach', undefined, topic)
       return sessionId
     },
+    // The record decides what counts as settled — see mobileDrain's note on
+    // why starting a sitting is not the same as it producing a receipt.
+    receiptSince: (topic, node, since) => receiptSince(topic, node, since),
   })
 }

@@ -16,11 +16,17 @@ import type { OutboxItem } from '../../shared/linkProtocol'
 let dir: string
 let outbox: OutboxStore
 let started: Array<{ message: string; kind: string; topic?: string }>
+/** Set by a test to push the store past the in-flight grace. */
+let lateClock: number | null
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'drain-'))
-  outbox = createOutboxStore({ filePath: join(dir, 'outbox.jsonl') })
+  outbox = createOutboxStore({
+    filePath: join(dir, 'outbox.jsonl'),
+    now: () => lateClock ?? Date.now(),
+  })
   started = []
+  lateClock = null
 })
 afterEach(() => {
   rmSync(dir, { recursive: true, force: true })
@@ -47,6 +53,10 @@ function deps(overrides: Partial<Parameters<typeof drainOutbox>[0]> = {}) {
       started.push({ message, kind, topic })
       return 'session-1'
     },
+    // Default: the engine has written nothing. The pessimistic default is the
+    // right one — a test that forgets to say otherwise should see work left
+    // unsettled rather than silently marked done.
+    receiptSince: async () => false,
     ...overrides,
   }
 }
@@ -82,12 +92,56 @@ describe('drainOutbox', () => {
     expect(message).toContain('companion app')
   })
 
-  test('marks items drained once their session starts', async () => {
+  test('a started session takes items out of pending without settling them', async () => {
     await outbox.append([item('a')])
 
-    await drainOutbox(deps())
+    const result = await drainOutbox(deps())
 
     expect(await outbox.pending()).toHaveLength(0)
+    expect(await outbox.inFlight()).toHaveLength(1)
+    // Handed over is not settled, and the result says which is which.
+    expect(result.itemsDrained).toBe(1)
+    expect(result.itemsSettled).toBe(0)
+  })
+
+  test('settles an in-flight item once the engine has written its receipt', async () => {
+    await outbox.append([item('a')])
+    await drainOutbox(deps())
+
+    const result = await drainOutbox(deps({ receiptSince: async () => true }))
+
+    expect(result.itemsSettled).toBe(1)
+    expect(await outbox.inFlight()).toHaveLength(0)
+    expect(await outbox.pending()).toHaveLength(0)
+  })
+
+  test('leaves an in-flight item alone while its sitting could still be working', async () => {
+    await outbox.append([item('a')])
+    await drainOutbox(deps())
+
+    // No receipt yet, and the grace has not passed: the sitting may simply be
+    // slow. Re-sending now would double the evidence.
+    const result = await drainOutbox(deps())
+
+    expect(result.itemsSettled).toBe(0)
+    expect(result.sessionsStarted).toBe(0)
+    expect(await outbox.inFlight()).toHaveLength(1)
+  })
+
+  test('a sitting that produced nothing gives the work back', async () => {
+    // The defect this whole reconciliation exists for: a session that
+    // crashed, was closed, or never rated used to leave the learner's evidence
+    // marked handled with nothing in the record to show for it.
+    await outbox.append([item('a')])
+    const t0 = new Date('2026-08-10T10:00:00.000Z')
+    await drainOutbox(deps({ now: () => t0 }))
+
+    lateClock = t0.getTime() + 31 * 60_000
+    expect(await outbox.pending()).toHaveLength(1)
+
+    const retry = await drainOutbox(deps({ now: () => new Date(lateClock!) }))
+    expect(retry.itemsRetried).toBe(1)
+    expect(retry.sessionsStarted).toBe(1)
   })
 
   test('leaves the queue untouched when a session fails to start', async () => {

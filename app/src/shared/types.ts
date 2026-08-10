@@ -700,6 +700,12 @@ export interface PairingOffer {
 /** What a drain of the phone queue did. */
 export interface DrainSummary {
   sessionsStarted: number
+  /** Handed to a sitting on this call — NOT the same as graded. */
   itemsDrained: number
+  /** Earlier items whose receipt has since landed. The only count that means
+   * the record actually changed. */
+  itemsSettled: number
+  /** Items returned to the queue because their sitting produced nothing. */
+  itemsRetried: number
   failures: Array<{ topic: string; error: string }>
 }

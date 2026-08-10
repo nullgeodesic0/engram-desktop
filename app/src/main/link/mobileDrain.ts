@@ -13,8 +13,10 @@ import type { OutboxStore } from './outboxStore'
  * a train, possibly days ago — and it exists in exactly one place until a
  * session settles it. So:
  *
- * - items are marked drained only AFTER their session actually starts, never
- *   before, so a failed start leaves them queued for the next attempt;
+ * - items are marked drained only once the engine has actually written a
+ *   receipt for them. Starting a sitting only marks them IN FLIGHT: a session
+ *   that crashed, was closed, or never rated used to leave the learner's
+ *   evidence marked handled with nothing in the record to show for it;
  * - topics fail independently, because one broken session must not strand
  *   another topic's evidence behind it;
  * - the batch is written to a file and the kickoff names the path, since a
@@ -34,11 +36,28 @@ export interface MobileDrainDeps {
   /** Starts a session, resolving to its id. Injected so the failure path is
    * testable without spawning a `claude` child process. */
   startSession: (message: string, kind: string, topic?: string) => Promise<string>
+  /** True when the engine has written a receipt for this node since the given
+   * time. Injected rather than read here: §D6 keeps main/link/ away from the
+   * learning home, so the server layer gets an ANSWER and never a way to look. */
+  receiptSince: (topic: string, node: string, since: string) => Promise<boolean>
+  /** Injected so tests need no clock. */
+  now?: () => Date
 }
 
 export interface DrainResult {
   sessionsStarted: number
+  /** Items handed to a sitting on THIS call. Not the same as settled — see
+   * `itemsSettled`, which is the number that actually reached the record. */
   itemsDrained: number
+  /** Items from an earlier sitting whose receipt has since landed. These are
+   * the ones truly finished, and they are counted here rather than folded into
+   * `itemsDrained` because conflating handed-over with settled is the exact
+   * mistake this reconciliation exists to correct. */
+  itemsSettled: number
+  /** Items whose sitting had long enough and produced nothing, returned to the
+   * queue by this call. Reported rather than silently retried: a learner whose
+   * evidence keeps coming back deserves to know the sittings are failing. */
+  itemsRetried: number
   failures: Array<{ topic: string; error: string }>
 }
 
@@ -53,9 +72,39 @@ function groupByTopic(items: OutboxItem[]): Map<string, OutboxItem[]> {
 }
 
 export async function drainOutbox(deps: MobileDrainDeps): Promise<DrainResult> {
-  const { outbox, batchDir, startSession } = deps
+  const { outbox, batchDir, startSession, receiptSince } = deps
+  const now = deps.now ?? (() => new Date())
+  const result: DrainResult = {
+    sessionsStarted: 0,
+    itemsDrained: 0,
+    itemsSettled: 0,
+    itemsRetried: 0,
+    failures: [],
+  }
+
+  // Settle first, hand over second.
+  //
+  // Anything a previous sitting took is checked against the record before this
+  // call decides what still needs doing. A receipt means done — permanently,
+  // and only now. No receipt yet means leave it alone, because that sitting
+  // may still be working; the store's grace decides when silence becomes
+  // failure and puts the item back in `pending` on its own.
+  const settled: string[] = []
+  for (const flight of await outbox.inFlight()) {
+    if (await receiptSince(flight.item.topic, flight.item.node, flight.startedAt)) {
+      settled.push(flight.item.id)
+    }
+  }
+  if (settled.length > 0) {
+    await outbox.markDrained(settled)
+    result.itemsSettled = settled.length
+  }
+
+  // Counted before the re-send, so the report distinguishes a retry from a
+  // first attempt. They are already back in `pending` — this only names them.
+  result.itemsRetried = (await outbox.staleInFlight()).length
+
   const pending = await outbox.pending()
-  const result: DrainResult = { sessionsStarted: 0, itemsDrained: 0, failures: [] }
   if (pending.length === 0) return result
 
   await mkdir(batchDir, { recursive: true })
@@ -72,8 +121,13 @@ export async function drainOutbox(deps: MobileDrainDeps): Promise<DrainResult> {
         itemCount: items.length,
       })
       await startSession(message, 'learn', topic)
-      // Only now. A drain marked before the session exists is evidence lost.
-      await outbox.markDrained(items.map((i) => i.id))
+      // IN FLIGHT, not drained. The sitting exists; that is all this knows.
+      // Whether it produces a receipt is decided by the record, on the next
+      // call, by the reconciliation above.
+      await outbox.markInFlight(
+        items.map((i) => i.id),
+        now().toISOString(),
+      )
       result.sessionsStarted += 1
       result.itemsDrained += items.length
     } catch (error) {

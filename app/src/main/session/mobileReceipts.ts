@@ -260,3 +260,26 @@ async function readNodeIds(topic: string): Promise<string[]> {
     return []
   }
 }
+
+/**
+ * Has the engine written a receipt for this node since the given moment?
+ *
+ * The drain's definition of done. Lives here rather than in main/link/ for the
+ * same §D6 reason as everything else: the server layer gets an ANSWER about
+ * the record and never a way to read it.
+ *
+ * Compared as strings because both sides are ISO-8601 and engram.py also
+ * writes date-only stamps for some rows; lexical order is correct for both,
+ * and a date-only receipt sorts to that day's start, which is the
+ * conservative direction — it can only fail to settle something, never settle
+ * something that has not happened.
+ */
+export async function receiptSince(
+  topic: string,
+  node: string,
+  since: string,
+): Promise<boolean> {
+  const history = await readReceiptsHistory().catch(() => null)
+  if (!history) return false
+  return history.receipts.some((r) => r.topic === topic && r.node === node && r.ts >= since)
+}

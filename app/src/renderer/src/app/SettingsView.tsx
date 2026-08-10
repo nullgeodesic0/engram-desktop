@@ -552,6 +552,11 @@ function CompanionSection() {
       {settled && (
         <div className="fig-caption">
           {settled.sessionsStarted} sitting(s) opened for {settled.itemsDrained} item(s).
+          {/* Settled and handed-over are reported separately on purpose: a
+              sitting that starts has not graded anything yet, and saying
+              otherwise is what let failed sittings look like finished ones. */}
+          {settled.itemsSettled > 0 && ` ${settled.itemsSettled} earlier item(s) confirmed by a receipt.`}
+          {settled.itemsRetried > 0 && ` ${settled.itemsRetried} returned to the queue after a sitting produced nothing.`}
           {settled.failures.length > 0 &&
             ` ${settled.failures.length} topic(s) could not start and stay queued: ${settled.failures
               .map((f) => f.topic)

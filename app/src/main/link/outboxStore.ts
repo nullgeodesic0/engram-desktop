@@ -26,6 +26,8 @@ import { parseOutboxItem, type OutboxItem } from '../../shared/linkProtocol'
  */
 
 export interface OutboxStoreDeps {
+  /** Injected so the grace window is testable without waiting half an hour. */
+  now?: () => number
   /** Absolute path to the log. Parent directories are created on demand. */
   filePath: string
 }
@@ -35,21 +37,61 @@ export interface AppendResult {
   duplicates: number
 }
 
+export interface InFlightItem {
+  item: OutboxItem
+  /** When the sitting that took it started, ISO. */
+  startedAt: string
+}
+
 export interface OutboxStore {
   /** Appends every previously-unseen item. Returns how many were new. */
   append(items: OutboxItem[]): Promise<AppendResult>
-  /** Items received and not yet handed to a session, in arrival order. */
+  /** Items waiting for a session: never handed off, or handed to a sitting
+   * that has since had long enough to produce a receipt and did not. */
   pending(): Promise<OutboxItem[]>
-  /** Marks items as handed off. They leave `pending` but stay known. */
+  /** Handed to a sitting that is still plausibly working on it. */
+  inFlight(): Promise<InFlightItem[]>
+  /** Handed to a sitting that has since had long enough and written nothing.
+   * These are already back in `pending`; this exists so the drain can REPORT
+   * that they are retries rather than quietly re-sending them. */
+  staleInFlight(): Promise<OutboxItem[]>
+  /** Records that a sitting has taken these items. NOT the same as done —
+   * see the state note below. */
+  markInFlight(ids: string[], startedAt: string): Promise<void>
+  /** Marks items settled. Permanent: only a receipt earns this. */
   markDrained(ids: string[]): Promise<void>
 }
 
-type LogRecord = { kind: 'item'; item: unknown } | { kind: 'drained'; id: string }
+/**
+ * ## Three states, because two lost work
+ *
+ * An item used to go straight from pending to drained the moment a sitting
+ * STARTED. That reads as careful — it is strictly later than marking on
+ * enqueue — and it is still wrong: starting a session is not the same as it
+ * producing a receipt. A sitting that crashed, was closed, or simply never
+ * rated left the learner's evidence marked handled with nothing in the record
+ * to show for it, and no way to notice.
+ *
+ * So: `pending` → `inflight` → `drained`, and only a receipt earns the last
+ * step. An in-flight item is invisible to `pending` while its sitting could
+ * still be working, and reappears if the grace passes with nothing written.
+ * The failure mode is now a repeat, which the append path already dedupes,
+ * instead of a silent loss.
+ */
+const IN_FLIGHT_GRACE_MS = 30 * 60_000
+
+type LogRecord =
+  | { kind: 'item'; item: unknown }
+  | { kind: 'inflight'; id: string; at: string }
+  | { kind: 'drained'; id: string }
 
 interface LogState {
   order: string[]
   items: Map<string, OutboxItem>
   drained: Set<string>
+  /** Latest handoff time per id. A retry overwrites the earlier one, so a
+   * second attempt gets its own grace rather than inheriting a spent one. */
+  inflight: Map<string, string>
 }
 
 /** Reads the log, skipping any record that does not parse.
@@ -59,7 +101,12 @@ interface LogState {
  * silent rather than throwing: refusing to open a queue because its last line
  * is half-written would turn a one-record loss into a total one. */
 async function readLog(filePath: string): Promise<LogState> {
-  const state: LogState = { order: [], items: new Map(), drained: new Set() }
+  const state: LogState = {
+    order: [],
+    items: new Map(),
+    drained: new Set(),
+    inflight: new Map(),
+  }
   let raw: string
   try {
     raw = await readFile(filePath, 'utf-8')
@@ -76,6 +123,10 @@ async function readLog(filePath: string): Promise<LogState> {
     }
     if (record.kind === 'drained' && typeof record.id === 'string') {
       state.drained.add(record.id)
+      continue
+    }
+    if (record.kind === 'inflight' && typeof record.id === 'string' && typeof record.at === 'string') {
+      state.inflight.set(record.id, record.at)
       continue
     }
     if (record.kind !== 'item') continue
@@ -111,6 +162,15 @@ async function appendRecords(filePath: string, records: LogRecord[]): Promise<vo
 
 export function createOutboxStore(deps: OutboxStoreDeps): OutboxStore {
   const { filePath } = deps
+  const now = deps.now ?? (() => Date.now())
+
+  /** Latest handoff per id, and whether it is still within its grace. */
+  function stillWorking(startedAt: string | undefined): boolean {
+    if (startedAt === undefined) return false
+    const began = Date.parse(startedAt)
+    if (Number.isNaN(began)) return false
+    return now() - began < IN_FLIGHT_GRACE_MS
+  }
 
   return {
     async append(items) {
@@ -135,7 +195,35 @@ export function createOutboxStore(deps: OutboxStoreDeps): OutboxStore {
 
     async pending() {
       const state = await readLog(filePath)
-      return state.order.filter((id) => !state.drained.has(id)).map((id) => state.items.get(id)!)
+      return state.order
+        .filter((id) => !state.drained.has(id) && !stillWorking(state.inflight.get(id)))
+        .map((id) => state.items.get(id)!)
+    },
+
+    async inFlight() {
+      const state = await readLog(filePath)
+      return state.order
+        .filter((id) => !state.drained.has(id) && stillWorking(state.inflight.get(id)))
+        .map((id) => ({ item: state.items.get(id)!, startedAt: state.inflight.get(id)! }))
+    },
+
+    async staleInFlight() {
+      const state = await readLog(filePath)
+      return state.order
+        .filter(
+          (id) =>
+            !state.drained.has(id) &&
+            state.inflight.has(id) &&
+            !stillWorking(state.inflight.get(id)),
+        )
+        .map((id) => state.items.get(id)!)
+    },
+
+    async markInFlight(ids, startedAt) {
+      await appendRecords(
+        filePath,
+        ids.map((id) => ({ kind: 'inflight', id, at: startedAt })),
+      )
     },
 
     async markDrained(ids) {

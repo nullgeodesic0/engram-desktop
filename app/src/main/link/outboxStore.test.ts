@@ -1,7 +1,7 @@
 import { appendFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, test } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, test } from 'vitest'
 import { createOutboxStore } from './outboxStore'
 import type { OutboxItem } from '../../shared/linkProtocol'
 
@@ -122,5 +122,71 @@ describe('createOutboxStore', () => {
     await store.markDrained([ID_A])
 
     expect(readFileSync(file, 'utf-8').startsWith(afterFirst)).toBe(true)
+  })
+})
+
+describe('in-flight handoff', () => {
+  const T0 = Date.parse('2026-08-10T10:00:00.000Z')
+
+  function storeAt(now: () => number) {
+    return createOutboxStore({ filePath: join(dir, 'outbox.jsonl'), now })
+  }
+
+  it('an item handed to a session leaves pending without being drained', async () => {
+    let clock = T0
+    const store = storeAt(() => clock)
+    await store.append([item(ID_A)])
+
+    await store.markInFlight([ID_A], new Date(clock).toISOString())
+
+    expect(await store.pending()).toHaveLength(0)
+    expect((await store.inFlight()).map((f) => f.item.id)).toEqual([ID_A])
+  })
+
+  it('returns to pending when its session has had long enough and produced nothing', async () => {
+    // The whole point: a sitting that died leaves the learner's work queued
+    // instead of marked handled. Silence past the grace is treated as failure.
+    let clock = T0
+    const store = storeAt(() => clock)
+    await store.append([item(ID_A)])
+    await store.markInFlight([ID_A], new Date(clock).toISOString())
+
+    clock = T0 + 31 * 60_000
+    expect((await store.pending()).map((i) => i.id)).toEqual([ID_A])
+  })
+
+  it('stays out of pending while its session could still be working', async () => {
+    let clock = T0
+    const store = storeAt(() => clock)
+    await store.append([item(ID_A)])
+    await store.markInFlight([ID_A], new Date(clock).toISOString())
+
+    clock = T0 + 5 * 60_000
+    expect(await store.pending()).toHaveLength(0)
+  })
+
+  it('drained beats in-flight, and is permanent', async () => {
+    let clock = T0
+    const store = storeAt(() => clock)
+    await store.append([item(ID_A)])
+    await store.markInFlight([ID_A], new Date(clock).toISOString())
+    await store.markDrained([ID_A])
+
+    clock = T0 + 10 * 60 * 60_000
+    expect(await store.pending()).toHaveLength(0)
+    expect(await store.inFlight()).toHaveLength(0)
+  })
+
+  it('a retry replaces the earlier handoff rather than stacking', async () => {
+    let clock = T0
+    const store = storeAt(() => clock)
+    await store.append([item(ID_A)])
+    await store.markInFlight([ID_A], new Date(T0).toISOString())
+    await store.markInFlight([ID_A], new Date(T0 + 31 * 60_000).toISOString())
+
+    // Judged against the SECOND handoff, so the retry gets its own grace.
+    clock = T0 + 40 * 60_000
+    expect(await store.pending()).toHaveLength(0)
+    expect(await store.inFlight()).toHaveLength(1)
   })
 })
