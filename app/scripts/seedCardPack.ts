@@ -16,6 +16,7 @@
  *
  *   npx tsx scripts/seedCardPack.ts <topic> [nodeId]
  */
+import { humanizeNodeId } from '../src/shared/humanizeId'
 import { randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
@@ -139,7 +140,8 @@ async function main(): Promise<void> {
     packId: randomUUID(),
     topic,
     node: nodeId,
-    nodeTitle: nodeId.replace(/-/g, ' '),
+    // The app's one way of spelling a node id, not a local dash-strip.
+    nodeTitle: humanizeNodeId(nodeId),
     generatedAt: new Date().toISOString(),
     eligibility,
     beats: [
