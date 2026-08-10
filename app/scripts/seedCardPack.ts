@@ -16,7 +16,7 @@
  *
  *   npx tsx scripts/seedCardPack.ts <topic> [nodeId]
  */
-import { humanizeNodeId } from '../src/shared/humanizeId'
+import { arcPrefixesOf, humanizeWithArcs } from '../src/shared/humanizeId'
 import { randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
@@ -140,8 +140,9 @@ async function main(): Promise<void> {
     packId: randomUUID(),
     topic,
     node: nodeId,
-    // The app's one way of spelling a node id, not a local dash-strip.
-    nodeTitle: humanizeNodeId(nodeId),
+    // The app's one way of spelling a node id, not a local dash-strip. The
+    // graph supplies the sibling context that tells an arc prefix from a word.
+    nodeTitle: humanizeWithArcs(nodeId, arcPrefixesOf(Object.keys(graph.nodes ?? {}))),
     generatedAt: new Date().toISOString(),
     eligibility,
     beats: [

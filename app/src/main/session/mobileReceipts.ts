@@ -1,6 +1,6 @@
 import { readReceiptsHistory, type RawReceipt } from '../engramCli/receiptsHistory'
 import { PHONE_SOURCE_STAMPS } from '../../shared/linkProtocol'
-import { humanizeNodeId } from '../../shared/humanizeId'
+import { arcPrefixesOf, humanizeWithArcs } from '../../shared/humanizeId'
 import { engramRead } from '../engramCli/readOnly'
 import {
   computeTopicGrade,
@@ -94,6 +94,11 @@ export function projectTopicReceipts(topic: string, receipts: RawReceipt[]): Mob
     .slice()
     .sort((a, b) => b.ts.localeCompare(a.ts))
 
+  // The receipt log IS the sibling context here: every node the topic has ever
+  // been graded on. Enough to tell an arc prefix from a first word, which is
+  // the only way to tell them apart.
+  const arcs = arcPrefixesOf(mine.map((r) => r.node))
+
   // Newest-first order means the FIRST row seen for a node is its latest.
   const latestSource = new Map<string, string | null>()
   for (const r of mine) {
@@ -108,7 +113,7 @@ export function projectTopicReceipts(topic: string, receipts: RawReceipt[]): Mob
     topic,
     receipts: mine.slice(0, MAX_RECEIPTS).map((r) => ({
       node: r.node,
-      title: humanizeNodeId(r.node),
+      title: humanizeWithArcs(r.node, arcs),
       ts: r.ts,
       kind: r.kind,
       grade: r.grade,
