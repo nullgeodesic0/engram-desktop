@@ -19,7 +19,7 @@ import { createCardPackStore } from '../src/main/link/cardPackStore'
 import { createLinkServer } from '../src/main/link/LinkServer'
 import { createOutboxStore } from '../src/main/link/outboxStore'
 import { createPairingStore } from '../src/main/link/pairing'
-import { buildMobileOverview } from '../src/main/session/mobileOverview'
+import { buildConstellationGraph, buildMobileOverview } from '../src/main/session/mobileOverview'
 import { networkInterfaces } from 'node:os'
 
 const USER_DATA = join(homedir(), 'Library', 'Application Support', 'Engram Desktop')
@@ -51,6 +51,7 @@ async function main(): Promise<void> {
     // shipped menu shows — a dev server that served different data would be
     // testing itself rather than the product.
     overview: () => buildMobileOverview((topic) => packs.listFor(topic)),
+    graph: (topic) => buildConstellationGraph(topic),
     host: lan ? '0.0.0.0' : '127.0.0.1',
     port,
   })

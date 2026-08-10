@@ -1,4 +1,4 @@
-import { engramRead } from '../engramCli/readOnly'
+import { engramRead, readTopicGraph } from '../engramCli/readOnly'
 import type { DueItem, TopicListEntry } from '../../shared/types'
 
 /**
@@ -33,6 +33,12 @@ export interface MobileTopicOverview {
   due: number
   /** Nodes with a card pack on hand, so the phone can actually walk them. */
   packed: number
+  /** FSRS state counts — the shape the health ring and state chips draw. */
+  states: { new: number; learning: number; review: number }
+  /** App-local filing label. Folders are a VIEW over the list, never a
+   * location: nothing moves on disk and the folder SET is implicit, exactly
+   * the distinct names in use. Null means unfiled. */
+  folder: string | null
 }
 
 export interface MobileOverview {
@@ -69,6 +75,12 @@ export async function buildMobileOverview(
       title: entry.title ?? entry.topic,
       due: dueByTopic.get(entry.topic) ?? 0,
       packed: (await packedFor(entry.topic)).length,
+      states: {
+        new: entry.states?.new ?? 0,
+        learning: entry.states?.learning ?? 0,
+        review: entry.states?.review ?? 0,
+      },
+      folder: entry.folder ?? null,
     })
   }
 
@@ -81,4 +93,62 @@ export async function buildMobileOverview(
     dueTotal: due.length,
     minutesPerItem: null,
   }
+}
+
+/**
+ * One topic's concept graph, stripped to what a figure needs to be drawn.
+ *
+ * ## What is deliberately absent
+ *
+ * `EngramNode` carries `claim`, `rubric`, `probe` and `transfer_probe` — the
+ * expected answers. None of them cross. The phone gets an id, a scheduling
+ * state, a threshold flag, and prerequisite edges: enough to draw a real
+ * figure, and not enough to answer a single probe with.
+ *
+ * The projection is the point. A convenience that shipped whole nodes so the
+ * client could "just render what it needs" would put every answer in the
+ * topic on the device, and the next retrieval would be recognition with a
+ * receipt recording it as memory.
+ */
+export interface ConstellationNode {
+  id: string
+  /** FSRS state: `new`, `learning`, `review`, or whatever the engine reports. */
+  state: string
+  threshold: boolean
+  /** Prerequisite edges, filtered to nodes present in this projection. */
+  requires: string[]
+}
+
+export interface ConstellationGraph {
+  topic: string
+  /** The engine's own teaching sequence, when it has one. */
+  order: string[]
+  nodes: ConstellationNode[]
+}
+
+export async function buildConstellationGraph(topic: string): Promise<ConstellationGraph> {
+  // The read is typed to exactly the fields allowed to cross, and nothing
+  // else. `readTopicGraph` returns `unknown`, so this narrowing is the only
+  // view of the graph this function has — the projection is enforced by the
+  // type rather than promised by a comment. A future edit that wanted `claim`
+  // would have to widen this declaration, which is a visible act.
+  type DrawableNode = {
+    state?: unknown
+    threshold?: unknown
+    edges?: { requires?: string[] }
+  }
+  const graph = (await readTopicGraph(topic)) as {
+    order?: string[]
+    nodes?: Record<string, DrawableNode>
+  }
+  const present = new Set(Object.keys(graph.nodes ?? {}))
+  const nodes: ConstellationNode[] = Object.entries(graph.nodes ?? {}).map(([id, node]) => ({
+    id,
+    state: typeof node.state === 'string' ? node.state : 'new',
+    threshold: node.threshold === true,
+    // Filtered to drawn nodes: an edge to something absent is a line to
+    // nowhere, and the client should not have to guess.
+    requires: (node.edges?.requires ?? []).filter((req) => present.has(req)),
+  }))
+  return { topic, order: graph.order ?? [], nodes }
 }

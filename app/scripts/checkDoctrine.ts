@@ -1034,6 +1034,47 @@ if (overviewText && /\.(probe|claim|rubric|transfer_probe)\b/.test(overviewText)
   )
 }
 
+// (b4) The graph projection stays a projection.
+//
+// buildConstellationGraph narrows the graph read to exactly the fields a
+// figure needs — id, state, threshold, requires — so an edit wanting `claim`
+// has to widen a type declaration, which is a visible act. This asserts the
+// narrowing is still there. Without it, the easiest "fix" for a missing field
+// is to cast the read to the full node type, and every answer in the topic
+// ships to a device the learner carries around.
+if (overviewText && !overviewText.includes('type DrawableNode')) {
+  fail(
+    'D6.graphProjection',
+    'main/session/mobileOverview.ts no longer narrows its graph read to a drawable projection.',
+    'The graph crosses to the phone so a topic can be DRAWN. An EngramNode carries claim, rubric, probe and transfer_probe; a projection typed to id/state/threshold/requires cannot leak one, and a widened read can leak all of them at once. If a figure genuinely needs another field, add that field to the narrow type — do not reach for the full node.',
+  )
+}
+
+// (b5) The one network write outside the outbox stays app-local.
+//
+// /link/topic-folder lets a paired phone file a topic. That is safe only
+// because a folder is presentational grouping in the app's own settings store
+// — nothing moves on disk, no graph is touched, no schedule changes. The
+// composition root must reach it through topicSettings and nothing else; a
+// write that went anywhere near the learning home would make a network peer an
+// author of the record, which is the whole thing §D6 exists to prevent.
+const linkServiceText = TEXT.get('main/link/linkService.ts') ?? ''
+if (codeOnly(linkServiceText).includes('setFolder')) {
+  if (!linkServiceText.includes("from '../session/topicSettings'")) {
+    fail(
+      'D6.filingScope',
+      'main/link/linkService.ts exposes setFolder without going through topicSettings.',
+      'Filing from the phone is licensed because it writes an app-local label in the app’s own settings store. Routing it anywhere else — a graph, the learning home, a second store — turns a presentational convenience into a network peer writing the learner’s record.',
+    )
+  }
+}
+// No second forbidden-substring list here: (b) above already forbids naming
+// the engine, spawning, or reaching the learning home anywhere under
+// main/link/, and it matches CODE rather than prose. A duplicate check that
+// scanned comments too immediately fired on the word "rate" inside a sentence
+// explaining that this module does not rate — a rule that cries wolf teaches
+// people to silence it.
+
 // (c) The wire schema still refuses a client-supplied rating or stamp.
 for (const needle of ['.strict()', 'sourceStampFor']) {
   if (protocolText && !protocolText.includes(needle)) {

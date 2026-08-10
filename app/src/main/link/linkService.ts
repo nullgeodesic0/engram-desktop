@@ -7,7 +7,8 @@ import { createOutboxStore, type OutboxStore } from './outboxStore'
 import { createPairingStore, type PairingStore } from './pairing'
 import { drainOutbox, type DrainResult } from './mobileDrain'
 import { startSession } from '../ipc/sessionHandlers'
-import { buildMobileOverview } from '../session/mobileOverview'
+import { buildConstellationGraph, buildMobileOverview } from '../session/mobileOverview'
+import { getTopicSettings, setTopicSettings } from '../session/topicSettings'
 import { tmpdir } from 'node:os'
 import type { LinkStatus } from '../../shared/types'
 
@@ -79,6 +80,13 @@ export async function startLinkServer(options: { exposeToLan?: boolean } = {}): 
     // Counts only, built outside main/link/ — see mobileOverview.ts for why
     // the engine read lives on the other side of the inertness boundary.
     overview: () => buildMobileOverview((topic) => packs!.listFor(topic)),
+    graph: (topic) => buildConstellationGraph(topic),
+    // Read-modify-write, so filing from the phone cannot clobber a display
+    // title or any other setting the learner set at the desk.
+    setFolder: async (topic, folder) => {
+      const current = await getTopicSettings(topic)
+      await setTopicSettings(topic, { ...current, folder })
+    },
     host,
     // A fixed port so a paired phone keeps working across restarts. An
     // ephemeral port would force re-entry of the host every launch, which is

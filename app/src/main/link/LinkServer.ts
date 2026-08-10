@@ -38,6 +38,18 @@ export interface LinkServerDeps {
    * reports an empty overview rather than failing, which is the right shape
    * for a menu whose data source is not wired yet. */
   overview?: () => Promise<unknown>
+  /** One topic's drawable graph. Injected for the same reason as `overview`.
+   * The projection that strips answer fields lives on the other side of the
+   * inertness boundary, in main/session/mobileOverview.ts. */
+  graph?: (topic: string) => Promise<unknown>
+  /** Files a topic under an app-local folder label.
+   *
+   * The ONLY write this server offers besides the outbox, and it is safe for a
+   * specific reason: a folder is presentational grouping in the app's own
+   * settings store, not engine state. Nothing moves on disk, no graph is
+   * touched, and no schedule changes. If this ever grows into something that
+   * writes learning state, it belongs on the other side of the boundary. */
+  setFolder?: (topic: string, folder: string | null) => Promise<void>
   /** Defaults to all interfaces — the phone is not on loopback. Tests pin it
    * to 127.0.0.1 so a test run never opens a port to the network. */
   host?: string
@@ -116,6 +128,14 @@ export function createLinkServer(deps: LinkServerDeps): LinkServer {
       send(res, 200, deps.overview ? await deps.overview() : { topics: [], dueTotal: 0, minutesPerItem: null })
       return
     }
+    if (url.pathname === '/link/graph') {
+      if (!deps.graph) {
+        send(res, 404, { error: 'no graph provider' })
+        return
+      }
+      send(res, 200, await deps.graph(topic))
+      return
+    }
     const node = url.searchParams.get('node') ?? ''
     const pack = await packs.get(topic, node)
     if (!pack) {
@@ -183,6 +203,43 @@ export function createLinkServer(deps: LinkServerDeps): LinkServer {
     send(res, 200, { accepted, duplicates, rejected })
   }
 
+  async function handleSetFolder(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    if (!(await pairing.verifyToken(bearerToken(req)))) {
+      send(res, 401, { error: 'unauthorized' })
+      return
+    }
+    if (!deps.setFolder) {
+      send(res, 404, { error: 'filing not available' })
+      return
+    }
+    const body = await readBody(req, res)
+    if (body === null) return
+    let parsed: { topic?: unknown; folder?: unknown }
+    try {
+      parsed = JSON.parse(body)
+    } catch {
+      send(res, 400, { error: 'malformed json' })
+      return
+    }
+    if (typeof parsed.topic !== 'string' || !parsed.topic) {
+      send(res, 400, { error: 'topic is required' })
+      return
+    }
+    // A folder is a label the learner typed; anything else is a client bug.
+    const folder =
+      parsed.folder === null || parsed.folder === undefined
+        ? null
+        : typeof parsed.folder === 'string'
+          ? parsed.folder.trim().slice(0, 60) || null
+          : undefined
+    if (folder === undefined) {
+      send(res, 400, { error: 'folder must be a string or null' })
+      return
+    }
+    await deps.setFolder(parsed.topic, folder)
+    send(res, 200, { ok: true })
+  }
+
   return {
     async start() {
       if (server) return { port }
@@ -191,7 +248,10 @@ export function createLinkServer(deps: LinkServerDeps): LinkServer {
         const url = parsedUrl.pathname
         if (
           req.method === 'GET' &&
-          (url === '/link/pack' || url === '/link/packs' || url === '/link/overview')
+          (url === '/link/pack' ||
+            url === '/link/packs' ||
+            url === '/link/overview' ||
+            url === '/link/graph')
         ) {
           void handlePackRead(req, res, parsedUrl)
           return
@@ -209,6 +269,10 @@ export function createLinkServer(deps: LinkServerDeps): LinkServer {
         }
         if (req.method === 'POST' && url === '/link/outbox') {
           void handleOutbox(req, res)
+          return
+        }
+        if (req.method === 'POST' && url === '/link/topic-folder') {
+          void handleSetFolder(req, res)
           return
         }
         send(res, 404, { error: 'no such route' })
