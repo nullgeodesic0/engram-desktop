@@ -113,7 +113,7 @@ describe('validateAgainstOverlay', () => {
       beats,
       eligibility: { nodeKind: 'concept', threshold: true, transferReady: false, lapsed: false, experimentArm: null },
     })
-    expect(reasons(p)).toContain('verify on a carved-out node requires a ladder or a real production')
+    expect(reasons(p)).toContain('verify on a carved-out node requires a ladder, a composed chain, or a real production')
   })
 
   test('VERIFY on a procedure node may not be a checkpoint chain', () => {
@@ -123,7 +123,7 @@ describe('validateAgainstOverlay', () => {
       beats,
       eligibility: { nodeKind: 'procedure', threshold: false, transferReady: false, lapsed: false, experimentArm: null },
     })
-    expect(reasons(p)).toContain('verify on a carved-out node requires a ladder or a real production')
+    expect(reasons(p)).toContain('verify on a carved-out node requires a ladder, a composed chain, or a real production')
   })
 
   test('VERIFY on an ordinary node may be a checkpoint chain', () => {
@@ -156,7 +156,7 @@ describe('validateAgainstOverlay', () => {
       beats,
       eligibility: { nodeKind: 'concept', threshold: false, transferReady: false, lapsed: false, experimentArm: 'B' },
     })
-    expect(reasons(p)).toContain('verify on a carved-out node requires a ladder or a real production')
+    expect(reasons(p)).toContain('verify on a carved-out node requires a ladder, a composed chain, or a real production')
   })
 
   test('a recall verify satisfies a carved-out node', () => {
@@ -218,5 +218,75 @@ describe('prose figures', () => {
 
   it('prose without a figure is unchanged', () => {
     expect(parseCardPack(packWith(undefined))).not.toBeNull()
+  })
+})
+
+describe('the step composer', () => {
+  function compose(beat: string, over: Record<string, unknown> = {}) {
+    return {
+      beat,
+      kind: 'compose',
+      stem: 'Write the derivation.',
+      palette: Array.from({ length: 8 }, (_, i) => ({ id: `t${i}`, label: `token ${i}` })),
+      sealed: {
+        steps: [{ tokens: ['t0', 't1'] }, { tokens: ['t2', 't3'] }],
+        revealMarkdown: 'the chain',
+      },
+      ...over,
+    }
+  }
+
+  it('may carry self_explain, because a token palette is not a menu', () => {
+    const parsed = parseCardPack(
+      pack({ beats: [prose('open_gap'), mc('predict'),
+        { beat: 'struggle', kind: 'hints', rungs: ['a nudge'] }, prose('resolve'),
+        compose('self_explain'), mc('connect'), ladder('verify'), prose('close')] }),
+    )
+    expect(parsed).not.toBeNull()
+    expect(validateAgainstOverlay(parsed!)).toEqual([])
+  })
+
+  it('may carry a carved-out verify, where a cloze may not', () => {
+    // A cloze fills gaps in a template the learner did not write; a composed
+    // chain has no template. That is the whole distinction.
+    const parsed = parseCardPack(
+      pack({
+        eligibility: { nodeKind: 'procedure', threshold: false, transferReady: false, lapsed: false, experimentArm: null },
+        beats: [prose('open_gap'), mc('predict'),
+          { beat: 'struggle', kind: 'hints', rungs: ['a nudge'] }, prose('resolve'),
+          compose('self_explain'), mc('connect'), compose('verify'), prose('close')],
+      }),
+    )
+    expect(parsed).not.toBeNull()
+    expect(validateAgainstOverlay(parsed!)).toEqual([])
+  })
+
+  it('refuses a palette that only holds the answer', () => {
+    // A palette with no spare pieces is a jigsaw: the learner finishes it by
+    // elimination without composing anything. Same reasoning as the ladder's
+    // pool >= 2N rule, applied to the alphabet instead of the lines.
+    expect(
+      parseCardPack(
+        pack({ beats: [prose('open_gap'), mc('predict'),
+          { beat: 'struggle', kind: 'hints', rungs: ['a'] }, prose('resolve'),
+          compose('self_explain', { palette: [
+            { id: 't0', label: 'a' }, { id: 't1', label: 'b' },
+            { id: 't2', label: 'c' }, { id: 't3', label: 'd' }] }),
+          mc('connect'), ladder('verify'), prose('close')] }),
+      ),
+    ).toBeNull()
+  })
+
+  it('refuses a step spelling itself with a token the learner never sees', () => {
+    expect(
+      parseCardPack(
+        pack({ beats: [prose('open_gap'), mc('predict'),
+          { beat: 'struggle', kind: 'hints', rungs: ['a'] }, prose('resolve'),
+          compose('self_explain', { sealed: {
+            steps: [{ tokens: ['t0', 'zzz'] }, { tokens: ['t2'] }],
+            revealMarkdown: 'x' } }),
+          mc('connect'), ladder('verify'), prose('close')] }),
+      ),
+    ).toBeNull()
   })
 })

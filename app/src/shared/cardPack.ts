@@ -203,6 +203,66 @@ const clozeCard = z
     message: 'every filled blank must be drawn from the palette the learner is shown',
   })
 
+/**
+ * The step composer: writing a derivation with a keyboard that only has the
+ * right keys.
+ *
+ * Not an assembly. An assembly hands over whole pre-written lines and asks
+ * which goes where — recognition, with the right answer on screen wearing the
+ * same clothes as the wrong ones, which is why the overlay bans it at L4. A
+ * composer has no pre-written lines: the learner builds each one token by
+ * token from a palette shared across the entire chain, in the order they would
+ * have written it. That is production from a constrained alphabet, which is
+ * what a keyboard is.
+ *
+ * The palette is shared on purpose. Per-step palettes leak the shape of each
+ * line — three tokens offered means a three-token step — and would turn one
+ * composition into a sequence of small multiple choices.
+ *
+ * Weaker than a blank page, and priced as such: still phone-stamped, still
+ * capped. The palette's size is the measure of how much easier it is.
+ */
+const composeCard = z
+  .object({
+    beat: z.enum(BEAT_ORDER),
+    kind: z.literal('compose'),
+    stem: z.string().min(1).max(2000),
+    /** Every token the learner may tap, for the WHOLE chain. */
+    palette: z.array(optionSchema).min(4).max(40),
+    sealed: z.object({
+      /** Each step, as the ordered palette ids that spell it. */
+      steps: z
+        .array(
+          z.object({
+            tokens: z.array(z.string()).min(1).max(24),
+            /** The "why this line" aside, shown only in the reveal. */
+            note: z.string().max(300).optional(),
+          }),
+        )
+        .min(2)
+        .max(10),
+      revealMarkdown: z.string().min(1).max(4000),
+    }),
+  })
+  .refine(
+    (c) => c.sealed.steps.every((s) => s.tokens.every((t) => c.palette.some((o) => o.id === t))),
+    { message: 'every token of every step must exist in the palette the learner is shown' },
+  )
+  .refine(
+    (c) => {
+      // Distractor floor. A palette holding only the tokens the answer needs
+      // is a jigsaw with no spare pieces: the learner can finish it without
+      // composing anything, by elimination. Same reasoning as the ladder's
+      // pool >= 2N rule, applied to the alphabet instead of the lines.
+      const used = new Set(c.sealed.steps.flatMap((s) => s.tokens))
+      return c.palette.length >= used.size + Math.max(3, Math.ceil(used.size / 2))
+    },
+    {
+      message:
+        'the palette must carry competitive distractor tokens — sign flips, wrong operators, symbols from a neighbouring derivation — not only the tokens the answer uses',
+    },
+  )
+
 const recallCard = z.object({
   beat: z.enum(BEAT_ORDER),
   kind: z.literal('recall'),
@@ -210,7 +270,7 @@ const recallCard = z.object({
   sealed: z.object({ revealMarkdown: z.string().min(1).max(4000) }),
 })
 
-const cardSchema = z.union([proseCard, hintsCard, mcCard, ladderCard, clozeCard, recallCard])
+const cardSchema = z.union([proseCard, hintsCard, mcCard, ladderCard, clozeCard, composeCard, recallCard])
 export type Card = z.infer<typeof cardSchema>
 
 const cardPackSchema = z.object({
@@ -267,15 +327,24 @@ export function validateAgainstOverlay(pack: CardPack): string[] {
   // "SELF-EXPLAIN … Never a plain menu" — recognition cannot carry the beat
   // where the learner says why it must be true.
   const selfExplain = byBeat.get('self_explain')
-  if (selfExplain && !['ladder', 'cloze', 'recall'].includes(selfExplain.kind)) {
+  // `compose` joins the permitted set here because it is not a menu: there is
+  // no pre-written line on screen to recognise, only an alphabet to write
+  // with. The rule the overlay states is about menus, and a token palette is
+  // not one.
+  if (selfExplain && !['ladder', 'cloze', 'compose', 'recall'].includes(selfExplain.kind)) {
     reasons.push('self_explain may not be served as a menu')
   }
 
   // "VERIFY, everything else … step assembly or a real production only,
   // never a chain of picks."
   const verify = byBeat.get('verify')
-  if (verify && isCarvedOut(pack.eligibility) && !['ladder', 'recall'].includes(verify.kind)) {
-    reasons.push('verify on a carved-out node requires a ladder or a real production')
+  // A carved-out VERIFY needs production or an assembly — never a menu, and
+  // never a cloze, whose gaps are chosen from a palette shown against a
+  // template the learner did not write. A composed chain has no template: the
+  // learner writes every line. That is why it is admitted here and cloze is
+  // not.
+  if (verify && isCarvedOut(pack.eligibility) && !['ladder', 'compose', 'recall'].includes(verify.kind)) {
+    reasons.push('verify on a carved-out node requires a ladder, a composed chain, or a real production')
   }
 
   // "Pool ≥ 2N for N true steps. A chain that can be guessed is not evidence."
