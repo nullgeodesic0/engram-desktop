@@ -58,6 +58,8 @@ export interface DrainResult {
    * queue by this call. Reported rather than silently retried: a learner whose
    * evidence keeps coming back deserves to know the sittings are failing. */
   itemsRetried: number
+  /** Items no sitting will ever settle, given up on by this call. */
+  itemsAbandoned: number
   failures: Array<{ topic: string; error: string }>
 }
 
@@ -71,6 +73,10 @@ function groupByTopic(items: OutboxItem[]): Map<string, OutboxItem[]> {
   return groups
 }
 
+/** Sittings an item gets before the queue accepts it will never settle. Two,
+ * not one: a single crash should not condemn real evidence. */
+const MAX_HANDOFFS = 2
+
 export async function drainOutbox(deps: MobileDrainDeps): Promise<DrainResult> {
   const { outbox, batchDir, startSession, receiptSince } = deps
   const now = deps.now ?? (() => new Date())
@@ -79,6 +85,7 @@ export async function drainOutbox(deps: MobileDrainDeps): Promise<DrainResult> {
     itemsDrained: 0,
     itemsSettled: 0,
     itemsRetried: 0,
+    itemsAbandoned: 0,
     failures: [],
   }
 
@@ -100,9 +107,36 @@ export async function drainOutbox(deps: MobileDrainDeps): Promise<DrainResult> {
     result.itemsSettled = settled.length
   }
 
-  // Counted before the re-send, so the report distinguishes a retry from a
-  // first attempt. They are already back in `pending` — this only names them.
-  result.itemsRetried = (await outbox.staleInFlight()).length
+  // Give up on what no sitting will settle.
+  //
+  // Not every item CAN produce a receipt. A walk parked after PREDICT carries
+  // a pre-content commitment and no retrieval, so the tutor correctly writes
+  // nothing for it — observed live, in a session note that said exactly that.
+  // Without a stopping rule this queue opens a fresh sitting for the same
+  // ungradeable card forever, which is not persistence but a loop.
+  //
+  // The budget is deliberately blunt. The drain cannot tell "ungradeable" from
+  // "the sitting crashed twice", and guessing would eventually throw away real
+  // work; counting attempts cannot. What it can do is stop, and say so.
+  const stale = await outbox.staleInFlight()
+  const giveUp: Array<{ id: string; reason: string }> = []
+  const retry: OutboxItem[] = []
+  for (const item of stale) {
+    const attempts = await outbox.handoffCount(item.id)
+    if (attempts >= MAX_HANDOFFS) {
+      giveUp.push({
+        id: item.id,
+        reason: `${attempts} sittings produced no receipt — this evidence may not be gradeable on its own`,
+      })
+    } else {
+      retry.push(item)
+    }
+  }
+  if (giveUp.length > 0) {
+    await outbox.markAbandoned(giveUp)
+    result.itemsAbandoned = giveUp.length
+  }
+  result.itemsRetried = retry.length
 
   const pending = await outbox.pending()
   if (pending.length === 0) return result

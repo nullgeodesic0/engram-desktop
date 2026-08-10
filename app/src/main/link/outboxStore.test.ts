@@ -190,3 +190,42 @@ describe('in-flight handoff', () => {
     expect(await store.inFlight()).toHaveLength(1)
   })
 })
+
+describe('items that can never be settled', () => {
+  const T0 = Date.parse('2026-08-10T10:00:00.000Z')
+
+  it('gives up after repeated sittings produce nothing, and says why', async () => {
+    // Not every item CAN produce a receipt. A walk parked after PREDICT
+    // carries a pre-content commitment and no retrieval, so the tutor
+    // correctly writes nothing — and the queue must not keep opening
+    // sittings for it forever.
+    let clock = T0
+    const store = createOutboxStore({ filePath: join(dir, 'outbox.jsonl'), now: () => clock })
+    await store.append([item(ID_A)])
+
+    await store.markInFlight([ID_A], new Date(clock).toISOString())
+    clock += 31 * 60_000
+    await store.markInFlight([ID_A], new Date(clock).toISOString())
+    clock += 31 * 60_000
+
+    expect(await store.handoffCount(ID_A)).toBe(2)
+    await store.markAbandoned([{ id: ID_A, reason: 'two sittings produced no receipt' }])
+
+    expect(await store.pending()).toHaveLength(0)
+    expect(await store.staleInFlight()).toHaveLength(0)
+    const given = await store.abandoned()
+    expect(given).toHaveLength(1)
+    expect(given[0].reason).toContain('no receipt')
+  })
+
+  it('an abandoned item is never resurrected by the grace clock', async () => {
+    let clock = T0
+    const store = createOutboxStore({ filePath: join(dir, 'outbox.jsonl'), now: () => clock })
+    await store.append([item(ID_A)])
+    await store.markInFlight([ID_A], new Date(clock).toISOString())
+    await store.markAbandoned([{ id: ID_A, reason: 'ungradeable' }])
+
+    clock = T0 + 10 * 60 * 60_000
+    expect(await store.pending()).toHaveLength(0)
+  })
+})

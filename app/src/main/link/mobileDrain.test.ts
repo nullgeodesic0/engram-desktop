@@ -128,6 +128,30 @@ describe('drainOutbox', () => {
     expect(await outbox.inFlight()).toHaveLength(1)
   })
 
+  test('gives up after two fruitless sittings rather than looping forever', async () => {
+    // Observed live: the tutor settled a predict-only card and deliberately
+    // wrote no receipt, because a pre-content commitment is not retrieval.
+    // The queue kept opening sittings for it. Persistence, past a point, is
+    // just a loop.
+    await outbox.append([item('a')])
+    const t0 = new Date('2026-08-10T10:00:00.000Z')
+    await drainOutbox(deps({ now: () => t0 }))
+
+    lateClock = t0.getTime() + 31 * 60_000
+    const second = await drainOutbox(deps({ now: () => new Date(lateClock!) }))
+    expect(second.itemsRetried).toBe(1)
+    expect(second.itemsAbandoned).toBe(0)
+
+    lateClock = t0.getTime() + 62 * 60_000
+    const third = await drainOutbox(deps({ now: () => new Date(lateClock!) }))
+    expect(third.itemsAbandoned).toBe(1)
+    expect(third.sessionsStarted).toBe(0)
+    expect(await outbox.pending()).toHaveLength(0)
+
+    const given = await outbox.abandoned()
+    expect(given[0].reason).toContain('no receipt')
+  })
+
   test('a sitting that produced nothing gives the work back', async () => {
     // The defect this whole reconciliation exists for: a session that
     // crashed, was closed, or never rated used to leave the learner's evidence

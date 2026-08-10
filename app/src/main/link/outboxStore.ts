@@ -60,6 +60,12 @@ export interface OutboxStore {
   markInFlight(ids: string[], startedAt: string): Promise<void>
   /** Marks items settled. Permanent: only a receipt earns this. */
   markDrained(ids: string[]): Promise<void>
+  /** How many sittings have taken this item. */
+  handoffCount(id: string): Promise<number>
+  /** Items no sitting will ever settle, with the reason. Terminal, like
+   * drained, but it means something different and must read differently. */
+  abandoned(): Promise<Array<{ item: OutboxItem; reason: string }>>
+  markAbandoned(entries: Array<{ id: string; reason: string }>): Promise<void>
 }
 
 /**
@@ -73,7 +79,11 @@ export interface OutboxStore {
  * to show for it, and no way to notice.
  *
  * So: `pending` → `inflight` → `drained`, and only a receipt earns the last
- * step. An in-flight item is invisible to `pending` while its sitting could
+ * step. There is one more terminal state, `abandoned`, because not every item
+ * CAN be settled: a walk parked after PREDICT carries a pre-content
+ * commitment and no retrieval, so the tutor correctly writes no receipt for
+ * it — and without somewhere for those to go, the queue opens a fresh sitting
+ * for the same ungradeable card forever. An in-flight item is invisible to `pending` while its sitting could
  * still be working, and reappears if the grace passes with nothing written.
  * The failure mode is now a repeat, which the append path already dedupes,
  * instead of a silent loss.
@@ -84,6 +94,7 @@ type LogRecord =
   | { kind: 'item'; item: unknown }
   | { kind: 'inflight'; id: string; at: string }
   | { kind: 'drained'; id: string }
+  | { kind: 'abandoned'; id: string; reason: string }
 
 interface LogState {
   order: string[]
@@ -92,6 +103,9 @@ interface LogState {
   /** Latest handoff time per id. A retry overwrites the earlier one, so a
    * second attempt gets its own grace rather than inheriting a spent one. */
   inflight: Map<string, string>
+  /** How many sittings have taken each id — the retry budget's counter. */
+  handoffs: Map<string, number>
+  abandoned: Map<string, string>
 }
 
 /** Reads the log, skipping any record that does not parse.
@@ -106,6 +120,8 @@ async function readLog(filePath: string): Promise<LogState> {
     items: new Map(),
     drained: new Set(),
     inflight: new Map(),
+    handoffs: new Map(),
+    abandoned: new Map(),
   }
   let raw: string
   try {
@@ -127,6 +143,11 @@ async function readLog(filePath: string): Promise<LogState> {
     }
     if (record.kind === 'inflight' && typeof record.id === 'string' && typeof record.at === 'string') {
       state.inflight.set(record.id, record.at)
+      state.handoffs.set(record.id, (state.handoffs.get(record.id) ?? 0) + 1)
+      continue
+    }
+    if (record.kind === 'abandoned' && typeof record.id === 'string') {
+      state.abandoned.set(record.id, typeof record.reason === 'string' ? record.reason : 'unknown')
       continue
     }
     if (record.kind !== 'item') continue
@@ -196,14 +217,24 @@ export function createOutboxStore(deps: OutboxStoreDeps): OutboxStore {
     async pending() {
       const state = await readLog(filePath)
       return state.order
-        .filter((id) => !state.drained.has(id) && !stillWorking(state.inflight.get(id)))
+        .filter(
+          (id) =>
+            !state.drained.has(id) &&
+            !state.abandoned.has(id) &&
+            !stillWorking(state.inflight.get(id)),
+        )
         .map((id) => state.items.get(id)!)
     },
 
     async inFlight() {
       const state = await readLog(filePath)
       return state.order
-        .filter((id) => !state.drained.has(id) && stillWorking(state.inflight.get(id)))
+        .filter(
+          (id) =>
+            !state.drained.has(id) &&
+            !state.abandoned.has(id) &&
+            stillWorking(state.inflight.get(id)),
+        )
         .map((id) => ({ item: state.items.get(id)!, startedAt: state.inflight.get(id)! }))
     },
 
@@ -213,6 +244,7 @@ export function createOutboxStore(deps: OutboxStoreDeps): OutboxStore {
         .filter(
           (id) =>
             !state.drained.has(id) &&
+            !state.abandoned.has(id) &&
             state.inflight.has(id) &&
             !stillWorking(state.inflight.get(id)),
         )
@@ -223,6 +255,25 @@ export function createOutboxStore(deps: OutboxStoreDeps): OutboxStore {
       await appendRecords(
         filePath,
         ids.map((id) => ({ kind: 'inflight', id, at: startedAt })),
+      )
+    },
+
+    async handoffCount(id) {
+      const state = await readLog(filePath)
+      return state.handoffs.get(id) ?? 0
+    },
+
+    async abandoned() {
+      const state = await readLog(filePath)
+      return state.order
+        .filter((id) => state.abandoned.has(id))
+        .map((id) => ({ item: state.items.get(id)!, reason: state.abandoned.get(id)! }))
+    },
+
+    async markAbandoned(entries) {
+      await appendRecords(
+        filePath,
+        entries.map(({ id, reason }) => ({ kind: 'abandoned', id, reason })),
       )
     },
 

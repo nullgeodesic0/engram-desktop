@@ -707,5 +707,8 @@ export interface DrainSummary {
   itemsSettled: number
   /** Items returned to the queue because their sitting produced nothing. */
   itemsRetried: number
+  /** Items the queue has given up on: repeated sittings settled them and
+   * wrote nothing, which usually means the evidence cannot be graded alone. */
+  itemsAbandoned: number
   failures: Array<{ topic: string; error: string }>
 }

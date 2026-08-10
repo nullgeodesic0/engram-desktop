@@ -557,6 +557,11 @@ function CompanionSection() {
               otherwise is what let failed sittings look like finished ones. */}
           {settled.itemsSettled > 0 && ` ${settled.itemsSettled} earlier item(s) confirmed by a receipt.`}
           {settled.itemsRetried > 0 && ` ${settled.itemsRetried} returned to the queue after a sitting produced nothing.`}
+          {/* Said plainly rather than hidden: this is work the learner did
+              that will never reach the record, and quietly dropping it is
+              exactly what the in-flight state was introduced to stop. */}
+          {settled.itemsAbandoned > 0 &&
+            ` ${settled.itemsAbandoned} given up on after repeated sittings wrote nothing — that evidence may not be gradeable on its own.`}
           {settled.failures.length > 0 &&
             ` ${settled.failures.length} topic(s) could not start and stay queued: ${settled.failures
               .map((f) => f.topic)
