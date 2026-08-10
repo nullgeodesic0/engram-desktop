@@ -227,20 +227,35 @@ const composeCard = z
     beat: z.enum(BEAT_ORDER),
     kind: z.literal('compose'),
     stem: z.string().min(1).max(2000),
-    /** Every token the learner may tap, for the WHOLE chain. */
-    palette: z.array(optionSchema).min(4).max(40),
+    /**
+     * Every token the learner may tap, for the WHOLE chain.
+     *
+     * Twelve, not forty. The first packs allowed a token to be a word, and a
+     * four-line argument then needed sixteen keys on screen at once — which
+     * reads as a word search rather than as writing, and buries the two or
+     * three keys that carry the actual claim among a dozen connectives.
+     *
+     * A token is a CLAUSE. "meet the employer as", "cannot supply a theory of
+     * the whole society" — the unit a person composing a sentence actually
+     * reaches for. Fewer, heavier keys mean each tap is a real decision, and
+     * the distractor floor below still guarantees spare pieces.
+     */
+    palette: z.array(optionSchema).min(6).max(12),
     sealed: z.object({
       /** Each step, as the ordered palette ids that spell it. */
       steps: z
         .array(
           z.object({
-            tokens: z.array(z.string()).min(1).max(24),
+            // Two or three clauses to a line. One is a menu pick wearing a
+            // composer's clothes; four or more is the granularity that made
+            // the palette unreadable.
+            tokens: z.array(z.string()).min(2).max(3),
             /** The "why this line" aside, shown only in the reveal. */
             note: z.string().max(300).optional(),
           }),
         )
         .min(2)
-        .max(10),
+        .max(4),
       revealMarkdown: z.string().min(1).max(4000),
     }),
   })
@@ -260,6 +275,19 @@ const composeCard = z
     {
       message:
         'the palette must carry competitive distractor tokens — sign flips, wrong operators, symbols from a neighbouring derivation — not only the tokens the answer uses',
+    },
+  )
+  .refine(
+    (c) => new Set(c.sealed.steps.flatMap((s) => s.tokens)).size <= 8,
+    {
+      // The ceiling that makes the palette cap reachable. Eight answer tokens
+      // demand twelve keys once the distractor floor is applied, which is
+      // exactly the cap — so a chain wanting a ninth cannot be given its
+      // spare pieces, and the honest failure is here rather than a palette
+      // the learner has to read twice.
+      message:
+        'a composed chain may spend at most 8 distinct tokens: write in clauses, not words — ' +
+        'two or three per line, three or four lines',
     },
   )
 
