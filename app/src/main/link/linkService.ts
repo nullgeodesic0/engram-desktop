@@ -4,7 +4,8 @@ import { networkInterfaces } from 'node:os'
 import { createCardPackStore, type CardPackStore } from './cardPackStore'
 import { createLinkServer, type LinkServer } from './LinkServer'
 import { createOutboxStore, type OutboxStore } from './outboxStore'
-import { createPairingStore, type PairedDevice, type PairingStore } from './pairing'
+import { createPairingStore, type PairingStore } from './pairing'
+import type { LinkStatus } from '../../shared/types'
 
 /**
  * Owns the phone-facing link: its stores, its server, and its lifecycle.
@@ -34,16 +35,9 @@ let outbox: OutboxStore | null = null
 let packs: CardPackStore | null = null
 let boundHost = '127.0.0.1'
 
-export interface LinkStatus {
-  running: boolean
-  port: number
-  /** The address a phone should be pointed at, or null on loopback. */
-  lanUrl: string | null
-  exposed: boolean
-  devices: PairedDevice[]
-  /** Items waiting for a session to settle them. */
-  queued: number
-}
+// The renderer sees this too, so the shape lives in shared/types.ts and this
+// module consumes it rather than declaring a second copy that could drift.
+export type { LinkStatus } from '../../shared/types'
 
 function userDataPath(...parts: string[]): string {
   return join(app.getPath('userData'), ...parts)

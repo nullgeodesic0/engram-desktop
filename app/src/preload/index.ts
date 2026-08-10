@@ -34,6 +34,8 @@ import type {
   RestoreArchiveResult,
   BackupInfo,
   NewTopicPrefill,
+  LinkStatus,
+  PairingOffer,
 } from '../shared/types'
 import type { SessionEvent } from '../shared/sessionEvents'
 import type { BridgeAskRequest, BridgeAskResponse, BridgeBeatRequest, BridgeUiRequest } from '../shared/bridgeProtocol'
@@ -47,6 +49,13 @@ const engramApi = {
   dueCapped: (cap: number, topic?: string): Promise<DueCappedResult> => ipcRenderer.invoke('engram:dueCapped', cap, topic),
   decay: (topic?: string, horizon?: number): Promise<DecayResult> => ipcRenderer.invoke('engram:decay', topic, horizon),
   doctor: (): Promise<DoctorResult> => ipcRenderer.invoke('engram:doctor'),
+
+  // The phone link. Read-only status plus the three actions that change it:
+  // open a pairing window, widen the bind, forget a device.
+  linkStatus: (): Promise<LinkStatus> => ipcRenderer.invoke('link:status'),
+  linkBeginPairing: (): Promise<PairingOffer> => ipcRenderer.invoke('link:beginPairing'),
+  linkExpose: (exposeToLan: boolean): Promise<LinkStatus> => ipcRenderer.invoke('link:expose', exposeToLan),
+  linkRevoke: (deviceId: string): Promise<LinkStatus> => ipcRenderer.invoke('link:revoke', deviceId),
   model: (): Promise<LearnerModel> => ipcRenderer.invoke('engram:model'),
   graderHealth: (): Promise<GraderHealthResult> => ipcRenderer.invoke('engram:graderHealth'),
   graderAuditHistory: (): Promise<GraderAuditFile[]> => ipcRenderer.invoke('engram:graderAuditHistory'),

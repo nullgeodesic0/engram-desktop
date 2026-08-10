@@ -1,3 +1,4 @@
+import type { LinkStatus, PairingOffer } from '../../../shared/types'
 import { useEffect, useState } from 'react'
 import type {
   ApiKeyStatus,
@@ -404,6 +405,121 @@ function ThemePickerRow() {
   )
 }
 
+
+/** The phone link.
+ *
+ * Lives in Settings because that is where people look for it — the menu-bar
+ * item stays, but a capability nobody can find is a capability nobody has.
+ *
+ * States what is true and nothing more: whether the server is up, what a phone
+ * should be pointed at, which devices are trusted, and how much work is
+ * waiting to be settled. The encryption gap is named here rather than buried,
+ * because widening the bind is the one action on this panel that can put a
+ * learner's productions on a network.
+ */
+function CompanionSection() {
+  const [status, setStatus] = useState<LinkStatus | null>(null)
+  const [offer, setOffer] = useState<PairingOffer | null>(null)
+  const [now, setNow] = useState(Date.now())
+
+  useEffect(() => {
+    void window.engram.linkStatus().then(setStatus)
+  }, [])
+
+  // A code that has quietly expired is worse than no code: it reads as broken
+  // rather than as elapsed. Tick so the countdown is honest.
+  useEffect(() => {
+    if (!offer) return
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [offer])
+
+  const secondsLeft = offer ? Math.max(0, Math.round((offer.expiresAt - now) / 1000)) : 0
+
+  async function beginPairing() {
+    setOffer(await window.engram.linkBeginPairing())
+    setNow(Date.now())
+    setStatus(await window.engram.linkStatus())
+  }
+
+  if (!status) return null
+
+  return (
+    <div className="panel px-5 py-5 flex flex-col gap-4">
+      <SectionBanner label="Companion" className="border-t-0" />
+
+      <div className="flex items-start gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="text-sm text-[var(--color-text-primary)]">
+            {status.running ? 'Listening for your phone' : 'Not running'}
+          </div>
+          <div className="label-data text-xs text-[var(--color-text-dim)] mt-1">
+            {status.running ? (status.lanUrl ?? `http://127.0.0.1:${status.port} · this Mac only`) : '—'}
+          </div>
+        </div>
+        <button className="btn-ghost text-xs" onClick={() => void beginPairing()}>
+          Link a phone…
+        </button>
+      </div>
+
+      {offer && (
+        <div className="panel-plate px-4 py-3 flex flex-col gap-1">
+          <div className="label-data text-[10px] text-[var(--color-text-faint)]">PAIRING CODE</div>
+          <div className="text-2xl text-[var(--color-ink-warm)] tracking-widest label-data">{offer.code}</div>
+          <div className="text-xs text-[var(--color-text-dim)]">
+            Enter it with host <span className="label-data">{offer.url}</span>.{' '}
+            {secondsLeft > 0 ? `Single-use, ${secondsLeft}s left.` : 'Expired — ask for another.'}
+          </div>
+          {offer.loopbackOnly && (
+            <div className="text-xs text-[var(--color-text-dim)] mt-1">
+              Reachable from this Mac only, so a simulator will connect and a real phone will not.
+            </div>
+          )}
+        </div>
+      )}
+
+      <PickerRow
+        label="Reachable from"
+        hint="There is no transport encryption yet — only widen this on a network you trust"
+        current={status.exposed ? 'lan' : 'loopback'}
+        onPick={(v) => {
+          void window.engram.linkExpose(v === 'lan').then(setStatus)
+          setOffer(null)
+        }}
+        options={[
+          { value: 'loopback', label: 'This Mac only' },
+          { value: 'lan', label: 'This network' },
+        ]}
+      />
+
+      {status.devices.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          {status.devices.map((device) => (
+            <div key={device.deviceId} className="flex items-center gap-3 text-xs">
+              <span className="text-[var(--color-text-primary)] flex-1 min-w-0 truncate">{device.deviceName}</span>
+              <span className="label-data text-[var(--color-text-faint)]">
+                {new Date(device.pairedAt).toLocaleDateString()}
+              </span>
+              <button
+                className="btn-ghost text-xs"
+                onClick={() => void window.engram.linkRevoke(device.deviceId).then(setStatus)}
+              >
+                Revoke
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {status.queued > 0 && (
+        <div className="fig-caption">
+          {status.queued} item(s) from your phone are queued, waiting for a session to settle them.
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function SettingsView() {
   const [model, setModel] = useState<LearnerModel | null>(null)
   const [sessionActive, setSessionActive] = useState(false)
@@ -640,6 +756,8 @@ export function SettingsView() {
           serializes them safely), this is just a heads-up in case you see the two update at slightly different times.
         </div>
       )}
+
+      <CompanionSection />
 
       <div className="panel px-5 py-5 flex flex-col gap-5">
         <SectionBanner label="Appearance" className="border-t-0" />

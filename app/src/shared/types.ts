@@ -675,3 +675,22 @@ export interface NewTopicPrefill {
    * a count it has no way to compute). */
   droppedContextFileCount?: number
 }
+
+/** Phone-link status, shared by main, preload and the renderer. */
+export interface LinkStatus {
+  running: boolean
+  port: number
+  /** The address a phone should be pointed at, or null while loopback-only. */
+  lanUrl: string | null
+  exposed: boolean
+  devices: Array<{ deviceId: string; deviceName: string; pairedAt: string }>
+  /** Items received from a phone and not yet settled by a session. */
+  queued: number
+}
+
+export interface PairingOffer {
+  code: string
+  expiresAt: number
+  url: string
+  loopbackOnly: boolean
+}
