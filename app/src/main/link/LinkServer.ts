@@ -51,6 +51,14 @@ export interface LinkServerDeps {
    * the other side of the boundary (main/session/mobileReceipts.ts) is a
    * whitelist, so a future engine field cannot leak by being forgotten. */
   receipts?: (topic: string) => Promise<unknown>
+  /** The explorable gallery: what exists, and one page's HTML.
+   *
+   * `artifact` returns null for anything the engine's ledger does not list,
+   * which is what makes a topic/node pair safe to accept from a network peer
+   * — there is no path to traverse, only a lookup that matches a row the
+   * engine wrote or does not. */
+  artifacts?: () => Promise<unknown>
+  artifact?: (topic: string, node: string) => Promise<string | null>
   /** Files a topic under an app-local folder label.
    *
    * The ONLY write this server offers besides the outbox, and it is safe for a
@@ -143,6 +151,31 @@ export function createLinkServer(deps: LinkServerDeps): LinkServer {
         return
       }
       send(res, 200, await deps.graph(topic))
+      return
+    }
+    if (url.pathname === '/link/artifacts') {
+      if (!deps.artifacts) {
+        send(res, 404, { error: 'no artifacts provider' })
+        return
+      }
+      send(res, 200, await deps.artifacts())
+      return
+    }
+    if (url.pathname === '/link/artifact') {
+      if (!deps.artifact) {
+        send(res, 404, { error: 'no artifact provider' })
+        return
+      }
+      const html = await deps.artifact(topic, url.searchParams.get('node') ?? '')
+      if (html === null) {
+        send(res, 404, { error: 'no such artifact' })
+        return
+      }
+      // The one non-JSON response. Served as text/html with nothing else in
+      // the headers: the client renders it in a web view, and a content type
+      // that lied about that would be the client's problem to work around.
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+      res.end(html)
       return
     }
     if (url.pathname === '/link/receipts') {
@@ -269,7 +302,9 @@ export function createLinkServer(deps: LinkServerDeps): LinkServer {
             url === '/link/packs' ||
             url === '/link/overview' ||
             url === '/link/graph' ||
-            url === '/link/receipts')
+            url === '/link/receipts' ||
+            url === '/link/artifacts' ||
+            url === '/link/artifact')
         ) {
           void handlePackRead(req, res, parsedUrl)
           return

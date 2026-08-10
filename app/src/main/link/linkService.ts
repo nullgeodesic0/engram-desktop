@@ -9,6 +9,7 @@ import { drainOutbox, type DrainResult } from './mobileDrain'
 import { startSession } from '../ipc/sessionHandlers'
 import { buildConstellationGraph, buildMobileOverview } from '../session/mobileOverview'
 import { buildTopicReceipts } from '../session/mobileReceipts'
+import { listArtifacts, readArtifact } from '../session/mobileArtifacts'
 import { getTopicSettings, setTopicSettings } from '../session/topicSettings'
 import { tmpdir } from 'node:os'
 import type { LinkStatus } from '../../shared/types'
@@ -86,6 +87,10 @@ export async function startLinkServer(options: { exposeToLan?: boolean } = {}): 
     // Grades, never content — see mobileReceipts.ts for why a receipt may
     // cross a boundary a due item may not.
     receipts: (topic) => buildTopicReceipts(topic),
+    // Explorables. Read-only, resolved through the engine's own ledger, and
+    // outside main/link/ for the same §D6 reason as everything else here.
+    artifacts: () => listArtifacts(),
+    artifact: (topic, node) => readArtifact(topic, node),
     // Read-modify-write, so filing from the phone cannot clobber a display
     // title or any other setting the learner set at the desk.
     setFolder: async (topic, folder) => {
