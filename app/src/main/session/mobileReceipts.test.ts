@@ -57,6 +57,21 @@ describe('projectTopicReceipts', () => {
     expect(byNode).toEqual({ a: false, b: true, c: true, d: false })
   })
 
+  it('recognises the walk-level stamp the tutor actually writes', () => {
+    // Caught by the first real round trip. The overlay stamps each ITEM with
+    // its card kind, but stamps THE NODE'S ENCODE RECEIPT `mobile-walk` — and
+    // that node receipt is the one provisional is computed from. Deriving the
+    // set from the per-kind map alone missed it, so a node walked entirely on
+    // the phone came back looking desk-graded: precisely the failure the §D6
+    // pin exists to prevent, arriving through the one stamp the map does not
+    // contain.
+    const out = projectTopicReceipts('mechanics', [
+      receipt({ node: 'walked', source: 'mobile-walk', kind: 'encode' }),
+    ])
+    expect(out.receipts[0].fromPhone).toBe(true)
+    expect(out.provisional).toEqual(['walked'])
+  })
+
   it('every phone stamp the wire can carry is recognised', () => {
     for (const source of PHONE_SOURCES) {
       const out = projectTopicReceipts('mechanics', [receipt({ source })])

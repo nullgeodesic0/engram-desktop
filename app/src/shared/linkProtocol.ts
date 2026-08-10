@@ -56,20 +56,41 @@ export function isTapDerived(kind: MobileInputKind): boolean {
 }
 
 /**
- * The stamps that mark a rating as recognition-grade, derived from the map
- * above rather than retyped.
+ * The stamp the overlay puts on a NODE's encode receipt when the walk that
+ * produced it used any tap-derived card.
  *
- * `self` is absent by construction, and that absence is the point: a spoken
- * or typed recall on the phone leaves no trace distinguishing it from one at
- * the desk, because there is no distinction to draw. Anything that reads this
- * set to decide "did a phone do this" is really asking "was this recognition",
- * which is the question that matters.
+ * Distinct from the per-item stamps above and easy to overlook because of it:
+ * the items carry their card kind, but the node — the thing FSRS schedules and
+ * the thing "provisional" is a property of — carries this one. Named as a
+ * constant rather than a literal so the set below cannot be assembled without
+ * it again.
+ */
+export const WALK_SOURCE_STAMP = 'mobile-walk'
+
+/**
+ * The stamps that mark a rating as recognition-grade.
+ *
+ * Derived from the map above, PLUS the walk-level stamp. The derived half
+ * alone was a real bug: the first end-to-end settle wrote
+ * `--source mobile-walk` on both encode receipts, this set did not contain it,
+ * and two nodes walked entirely on glass came back reading as desk-graded.
+ * That is exactly the failure §D6.receiptsGradesOnly exists to prevent — a
+ * node looking solidified without anyone having solidified it — arriving
+ * through the one stamp the per-kind map does not hold.
+ *
+ * `self` is absent by construction, and that absence is the point: a spoken or
+ * typed recall on the phone leaves no trace distinguishing it from one at the
+ * desk, because there is no distinction to draw. Anything reading this set to
+ * ask "did a phone do this" is really asking "was this recognition", which is
+ * the question that matters.
  */
 export const PHONE_SOURCE_STAMPS: readonly string[] = Object.freeze(
-  Object.entries(SOURCE_STAMPS)
-    .filter(([kind]) => isTapDerived(kind as MobileInputKind))
-    .map(([, stamp]) => stamp)
-    .sort(),
+  [
+    ...Object.entries(SOURCE_STAMPS)
+      .filter(([kind]) => isTapDerived(kind as MobileInputKind))
+      .map(([, stamp]) => stamp),
+    WALK_SOURCE_STAMP,
+  ].sort(),
 )
 
 const outboxItemSchema = z
