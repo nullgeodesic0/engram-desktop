@@ -1,5 +1,5 @@
 import type { DayActivity, RawReceipt, TopicGraph, WeekRetention } from '../../../shared/types'
-import { feltSure, type ConfidencePick } from './calibrationStore'
+import { feltSure, type ConfidencePick } from '../../../shared/confidence'
 import { mondayOf } from './weekDigest'
 
 // ============================================================================

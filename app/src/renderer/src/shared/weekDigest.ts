@@ -1,5 +1,5 @@
 import type { DayActivity, WeekRetention, ReceiptItem, TopicGraph } from '../../../shared/types'
-import { feltSure as pickFeltSure, type ConfidencePick } from './calibrationStore'
+import { feltSure as pickFeltSure, type ConfidencePick } from '../../../shared/confidence'
 import { humanizeNodeId } from '../../../shared/humanizeId'
 
 /** Monday of the ISO week containing this date — mirrors

@@ -1,5 +1,5 @@
 import type { DayActivity, Misconception, RawReceipt, TopicListEntry } from '../../../shared/types'
-import type { ConfidencePick } from './calibrationStore'
+import type { ConfidencePick } from '../../../shared/confidence'
 import { computeRetentionBuckets, computeCalibration, RETENTION_BUCKET_MIN_N } from './topicMetrics'
 import { humanizeNodeId } from '../../../shared/humanizeId'
 import { mondayOf } from './weekDigest'

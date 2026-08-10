@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { PHONE_SOURCES, projectTopicReceipts, titlesFromGraph } from './mobileReceipts'
+import { PHONE_SOURCES, projectTopicReceipts } from './mobileReceipts'
 import type { RawReceipt } from '../engramCli/receiptsHistory'
 
 function receipt(over: Partial<RawReceipt>): RawReceipt {
@@ -23,14 +23,11 @@ function receipt(over: Partial<RawReceipt>): RawReceipt {
   }
 }
 
-const titles = { lagrangian: 'The Lagrangian', noether: "Noether's theorem" }
-
 describe('projectTopicReceipts', () => {
   it('keeps only the requested topic', () => {
     const out = projectTopicReceipts(
       'mechanics',
       [receipt({}), receipt({ topic: 'electrodynamics', node: 'gauge' })],
-      titles,
     )
     expect(out.receipts.map((r) => r.node)).toEqual(['lagrangian'])
   })
@@ -42,16 +39,8 @@ describe('projectTopicReceipts', () => {
         receipt({ ts: '2026-08-01T10:00:00Z', node: 'lagrangian' }),
         receipt({ ts: '2026-08-03T10:00:00Z', node: 'noether' }),
       ],
-      titles,
     )
     expect(out.receipts.map((r) => r.node)).toEqual(['noether', 'lagrangian'])
-  })
-
-  it('names nodes from the graph, falling back to the id', () => {
-    const out = projectTopicReceipts('mechanics', [receipt({ node: 'unlisted' })], titles)
-    expect(out.receipts[0].title).toBe('unlisted')
-    const named = projectTopicReceipts('mechanics', [receipt({})], titles)
-    expect(named.receipts[0].title).toBe('The Lagrangian')
   })
 
   it('marks phone-sourced receipts, and only those', () => {
@@ -63,7 +52,6 @@ describe('projectTopicReceipts', () => {
         receipt({ node: 'c', source: 'quick-mc' }),
         receipt({ node: 'd', source: null }),
       ],
-      titles,
     )
     const byNode = Object.fromEntries(out.receipts.map((r) => [r.node, r.fromPhone]))
     expect(byNode).toEqual({ a: false, b: true, c: true, d: false })
@@ -71,7 +59,7 @@ describe('projectTopicReceipts', () => {
 
   it('every phone stamp the wire can carry is recognised', () => {
     for (const source of PHONE_SOURCES) {
-      const out = projectTopicReceipts('mechanics', [receipt({ source })], titles)
+      const out = projectTopicReceipts('mechanics', [receipt({ source })])
       expect(out.receipts[0].fromPhone, source).toBe(true)
     }
   })
@@ -85,7 +73,6 @@ describe('projectTopicReceipts', () => {
         // b was later re-done at the desk — that Solidifies it.
         receipt({ node: 'b', ts: '2026-08-02T10:00:00Z', source: 'self' }),
       ],
-      titles,
     )
     expect(out.provisional).toEqual(['a'])
   })
@@ -94,7 +81,7 @@ describe('projectTopicReceipts', () => {
     const many = Array.from({ length: 90 }, (_, i) =>
       receipt({ node: `n${i}`, ts: `2026-08-01T${String(i % 24).padStart(2, '0')}:00:00Z` }),
     )
-    const out = projectTopicReceipts('mechanics', many, titles)
+    const out = projectTopicReceipts('mechanics', many)
     expect(out.receipts.length).toBe(60)
   })
 
@@ -105,43 +92,26 @@ describe('projectTopicReceipts', () => {
     // The oldest node is far outside the 60-receipt window but is still the
     // latest receipt for ITS node, so it is still provisional if phone-sourced.
     many.push(receipt({ node: 'ancient', ts: '2026-01-01T10:00:00Z', source: 'mobile-ladder' }))
-    const out = projectTopicReceipts('mechanics', many, titles)
+    const out = projectTopicReceipts('mechanics', many)
     expect(out.receipts.some((r) => r.node === 'ancient')).toBe(false)
     expect(out.provisional).toContain('ancient')
   })
 
-  it('reads titles out of the graph\'s node MAP, which is how a graph stores them', () => {
-    // Regression: the first implementation expected `nodes` to be an array and
-    // silently returned no titles at all, so every grade on the phone was
-    // labelled with a raw node id.
-    const graph = {
-      nodes: {
-        // The decoy is deliberately NOT named after a real answer field.
-        // §D4 forbids an unpinned file naming one, and pinning a test as an
-        // answer reader to let it assert that it isn't one would be absurd.
-        // The test loses nothing: the assertion is exact equality on the whole
-        // returned object, so ANY surviving field fails it, whatever it is
-        // called.
-        lagrangian: { title: 'The Lagrangian', secret: 'never read', state: 'review' },
-        noether: { title: "Noether's theorem" },
-        untitled: { state: 'new' },
-      },
-    }
-    expect(titlesFromGraph(graph)).toEqual({
-      lagrangian: 'The Lagrangian',
-      noether: "Noether's theorem",
-    })
-  })
-
-  it('survives a graph shaped like nothing it expects', () => {
-    expect(titlesFromGraph(undefined)).toEqual({})
-    expect(titlesFromGraph({ nodes: [] })).toEqual({})
-    expect(titlesFromGraph({ nodes: 'yes' })).toEqual({})
-    expect(titlesFromGraph({})).toEqual({})
+  it('names a node by humanising its id, because the schema has no titles', () => {
+    // engram's graph nodes carry the answer fields, the edges and the FSRS
+    // state — and no title field at all. An earlier version read
+    // `nodes[id].title`, found nothing, and shipped raw ids to the phone.
+    // Deriving is also strictly safer: this path now performs no graph read,
+    // so there is no node object nearby to widen into.
+    const out = projectTopicReceipts(
+      'mechanics',
+      [receipt({ node: 'runge-lenz-vector-dynamical-symmetry' })],
+    )
+    expect(out.receipts[0].title).toBe('Runge Lenz Vector Dynamical Symmetry')
   })
 
   it('carries no answer payload — grades cross the wire, content never does', () => {
-    const out = projectTopicReceipts('mechanics', [receipt({})], titles)
+    const out = projectTopicReceipts('mechanics', [receipt({})])
     const keys = Object.keys(out.receipts[0]).sort()
     expect(keys).toEqual(
       [

@@ -1,6 +1,12 @@
 import { readReceiptsHistory, type RawReceipt } from '../engramCli/receiptsHistory'
-import { readTopicGraph } from '../engramCli/readOnly'
 import { PHONE_SOURCE_STAMPS } from '../../shared/linkProtocol'
+import { humanizeNodeId } from '../../shared/humanizeId'
+import { engramRead } from '../engramCli/readOnly'
+import {
+  computeTopicGrade,
+  type GradeComponentKey,
+} from '../../renderer/src/shared/topicGrade'
+import type { Misconception, TopicListEntry } from '../../shared/types'
 
 /**
  * The grades the phone is allowed to see coming back.
@@ -65,6 +71,9 @@ export interface MobileReceipts {
    * log rather than the window — a node last touched a year ago on the phone
    * is still provisional today, and truncating first would quietly forget it. */
   provisional: string[]
+  /** The topic's standing on the desktop's own S–F scale. Absent only when
+   * the grade could not be computed at all. */
+  grade?: MobileGrade
 }
 
 /** One screen of history, deep enough to scroll and shallow enough that a
@@ -79,11 +88,7 @@ export const PHONE_SOURCES = PHONE_SOURCE_STAMPS
  * The pure part: receipts in, wire shape out. Separated from the I/O below so
  * the projection's rules are testable without a learning home on disk.
  */
-export function projectTopicReceipts(
-  topic: string,
-  receipts: RawReceipt[],
-  titles: Record<string, string>,
-): MobileReceipts {
+export function projectTopicReceipts(topic: string, receipts: RawReceipt[]): MobileReceipts {
   const mine = receipts
     .filter((r) => r.topic === topic)
     .slice()
@@ -103,7 +108,7 @@ export function projectTopicReceipts(
     topic,
     receipts: mine.slice(0, MAX_RECEIPTS).map((r) => ({
       node: r.node,
-      title: titles[r.node] ?? r.node,
+      title: humanizeNodeId(r.node),
       ts: r.ts,
       kind: r.kind,
       grade: r.grade,
@@ -126,39 +131,101 @@ function isPhoneSource(source: string | null): boolean {
  * server as a function of one string, so the server never learns that a
  * learning home exists. */
 export async function buildTopicReceipts(topic: string): Promise<MobileReceipts> {
-  const [history, titles] = await Promise.all([readReceiptsHistory(), readNodeTitles(topic)])
-  return projectTopicReceipts(topic, history.receipts, titles)
+  const history = await readReceiptsHistory()
+  const projected = projectTopicReceipts(topic, history.receipts)
+  // The grade rides along rather than taking a second round trip: the page
+  // shows both at once, and two requests would let the letter and the
+  // receipts it summarises arrive out of step.
+  return { ...projected, grade: await buildTopicGrade(topic).catch(() => undefined) }
 }
+
+// ===========================================================================
+// The letter grade
+// ===========================================================================
 
 /**
- * Node id → title, and nothing else from the graph.
+ * The topic's standing, on the desktop's own S–F scale.
  *
- * The narrow read is deliberate and is the same discipline
- * `buildConstellationGraph` follows: a node object also carries `probe`,
- * `claim` and `rubric`, so a permissive read here would be the answer leak
- * the receipt projection above was careful not to be.
+ * Imported rather than reimplemented. `computeTopicGrade` is the app's single
+ * definition of what a grade means — the weights, the small-n floors, the
+ * renormalisation, the fixed cutoffs — and a second copy in Swift would drift
+ * the first time one of those constants was tuned. A grade that reads B at the
+ * desk and C in your pocket is worse than no grade on the phone at all.
  *
- * `nodes` is a MAP keyed by id, not an array — the same shape
- * `buildConstellationGraph` reads a few lines away in mobileOverview.ts. An
- * earlier version here expected an array and, finding none, returned no
- * titles at all rather than failing: every grade on the phone was labelled
- * with a raw node id and nothing said why. Hence the explicit test.
+ * ## The one component the phone cannot see
+ *
+ * Calibration is computed from confidence picks, which live in the renderer's
+ * localStorage ring buffer and never reach the main process. Passing an empty
+ * array means the model marks that component unavailable and renormalises the
+ * remaining weights across what it does have — its own honest path for a
+ * missing component, not a workaround bolted on here.
+ *
+ * It does mean the phone's composite can differ from the desk's when the desk
+ * has calibration data. So the payload NAMES what was excluded and the phone
+ * prints it. A number that quietly disagrees with the desk would be the bug;
+ * a number that says what it is made of is a measurement.
  */
-export function titlesFromGraph(graph: unknown): Record<string, string> {
-  const nodes = (graph as { nodes?: unknown } | undefined)?.nodes
-  if (typeof nodes !== 'object' || nodes === null || Array.isArray(nodes)) return {}
-  const out: Record<string, string> = {}
-  for (const [id, node] of Object.entries(nodes as Record<string, unknown>)) {
-    const title = (node as { title?: unknown })?.title
-    if (typeof title === 'string') out[id] = title
-  }
-  return out
+export interface MobileComponent {
+  key: GradeComponentKey
+  available: boolean
+  n: number
+  score: number | null
+  letter: string | null
+  weight: number
 }
 
-async function readNodeTitles(topic: string): Promise<Record<string, string>> {
-  try {
-    return titlesFromGraph(await readTopicGraph(topic))
-  } catch {
-    return {}
+export interface MobileGrade {
+  topic: string
+  available: boolean
+  score: number | null
+  letter: string | null
+  components: MobileComponent[]
+  /** Components the phone could not compute, by key. Printed, never hidden. */
+  excluded: GradeComponentKey[]
+}
+
+const COMPONENT_ORDER: GradeComponentKey[] = [
+  'recall',
+  'punctuality',
+  'coverage',
+  'conceptual',
+  'calibration',
+]
+
+export async function buildTopicGrade(topic: string): Promise<MobileGrade> {
+  const [history, topics, misconceptions] = await Promise.all([
+    readReceiptsHistory(),
+    engramRead<TopicListEntry[]>('topics').catch(() => [] as TopicListEntry[]),
+    engramRead<unknown[]>('misconception', ['list']).catch(() => [] as unknown[]),
+  ])
+
+  const result = computeTopicGrade({
+    receipts: history.receipts,
+    topic,
+    topicEntry: topics.find((entry) => entry.topic === topic),
+    misconceptions: misconceptions as Misconception[],
+    days: history.days,
+    picks: [],
+    // `completed` grades the work actually done. `total` folds in how much of
+    // the curriculum is untouched, which on a phone would read as a scolding
+    // for not having finished a course — and the coverage component is still
+    // listed below either way, so nothing is hidden by the choice.
+    mode: 'completed',
+  })
+
+  return {
+    topic,
+    available: result.overall.available,
+    score: result.overall.score,
+    letter: result.overall.letter,
+    components: COMPONENT_ORDER.map((key) => ({
+      key,
+      available: result.components[key].available,
+      n: result.components[key].n,
+      score: result.components[key].score,
+      letter: result.components[key].letter,
+      weight: result.components[key].weight,
+    })),
+    excluded: COMPONENT_ORDER.filter((key) => key === 'calibration'),
   }
 }

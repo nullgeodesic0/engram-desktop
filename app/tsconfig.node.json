@@ -12,5 +12,9 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true
   },
-  "include": ["src/main/**/*", "src/preload/**/*", "src/shared/**/*", "electron.vite.config.ts"]
+  "include": ["src/main/**/*", "src/preload/**/*", "src/shared/**/*",
+    "electron.vite.config.ts",
+    "src/renderer/src/shared/topicGrade.ts",
+    "src/renderer/src/shared/topicMetrics.ts",
+    "src/renderer/src/shared/weekDigest.ts"]
 }
