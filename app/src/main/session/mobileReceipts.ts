@@ -137,21 +137,28 @@ export async function buildTopicReceipts(topic: string): Promise<MobileReceipts>
  * `buildConstellationGraph` follows: a node object also carries `probe`,
  * `claim` and `rubric`, so a permissive read here would be the answer leak
  * the receipt projection above was careful not to be.
+ *
+ * `nodes` is a MAP keyed by id, not an array — the same shape
+ * `buildConstellationGraph` reads a few lines away in mobileOverview.ts. An
+ * earlier version here expected an array and, finding none, returned no
+ * titles at all rather than failing: every grade on the phone was labelled
+ * with a raw node id and nothing said why. Hence the explicit test.
  */
+export function titlesFromGraph(graph: unknown): Record<string, string> {
+  const nodes = (graph as { nodes?: unknown } | undefined)?.nodes
+  if (typeof nodes !== 'object' || nodes === null || Array.isArray(nodes)) return {}
+  const out: Record<string, string> = {}
+  for (const [id, node] of Object.entries(nodes as Record<string, unknown>)) {
+    const title = (node as { title?: unknown })?.title
+    if (typeof title === 'string') out[id] = title
+  }
+  return out
+}
+
 async function readNodeTitles(topic: string): Promise<Record<string, string>> {
-  let graph: unknown
   try {
-    graph = await readTopicGraph(topic)
+    return titlesFromGraph(await readTopicGraph(topic))
   } catch {
     return {}
   }
-  const nodes = (graph as { nodes?: unknown })?.nodes
-  if (!Array.isArray(nodes)) return {}
-  const out: Record<string, string> = {}
-  for (const node of nodes) {
-    const id = (node as { id?: unknown })?.id
-    const title = (node as { title?: unknown })?.title
-    if (typeof id === 'string' && typeof title === 'string') out[id] = title
-  }
-  return out
 }

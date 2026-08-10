@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { PHONE_SOURCES, projectTopicReceipts } from './mobileReceipts'
+import { PHONE_SOURCES, projectTopicReceipts, titlesFromGraph } from './mobileReceipts'
 import type { RawReceipt } from '../engramCli/receiptsHistory'
 
 function receipt(over: Partial<RawReceipt>): RawReceipt {
@@ -108,6 +108,36 @@ describe('projectTopicReceipts', () => {
     const out = projectTopicReceipts('mechanics', many, titles)
     expect(out.receipts.some((r) => r.node === 'ancient')).toBe(false)
     expect(out.provisional).toContain('ancient')
+  })
+
+  it('reads titles out of the graph\'s node MAP, which is how a graph stores them', () => {
+    // Regression: the first implementation expected `nodes` to be an array and
+    // silently returned no titles at all, so every grade on the phone was
+    // labelled with a raw node id.
+    const graph = {
+      nodes: {
+        // The decoy is deliberately NOT named after a real answer field.
+        // §D4 forbids an unpinned file naming one, and pinning a test as an
+        // answer reader to let it assert that it isn't one would be absurd.
+        // The test loses nothing: the assertion is exact equality on the whole
+        // returned object, so ANY surviving field fails it, whatever it is
+        // called.
+        lagrangian: { title: 'The Lagrangian', secret: 'never read', state: 'review' },
+        noether: { title: "Noether's theorem" },
+        untitled: { state: 'new' },
+      },
+    }
+    expect(titlesFromGraph(graph)).toEqual({
+      lagrangian: 'The Lagrangian',
+      noether: "Noether's theorem",
+    })
+  })
+
+  it('survives a graph shaped like nothing it expects', () => {
+    expect(titlesFromGraph(undefined)).toEqual({})
+    expect(titlesFromGraph({ nodes: [] })).toEqual({})
+    expect(titlesFromGraph({ nodes: 'yes' })).toEqual({})
+    expect(titlesFromGraph({})).toEqual({})
   })
 
   it('carries no answer payload — grades cross the wire, content never does', () => {
