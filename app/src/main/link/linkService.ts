@@ -7,9 +7,7 @@ import { createOutboxStore, type OutboxStore } from './outboxStore'
 import { createPairingStore, type PairingStore } from './pairing'
 import { drainOutbox, type DrainResult } from './mobileDrain'
 import { startSession } from '../ipc/sessionHandlers'
-import { buildConstellationGraph, buildMobileOverview } from '../session/mobileOverview'
-import { buildTopicReceipts } from '../session/mobileReceipts'
-import { listArtifacts, readArtifact } from '../session/mobileArtifacts'
+import { mobileProviders } from '../session/mobileProviders'
 import { getTopicSettings, setTopicSettings } from '../session/topicSettings'
 import { tmpdir } from 'node:os'
 import type { LinkStatus } from '../../shared/types'
@@ -79,18 +77,9 @@ export async function startLinkServer(options: { exposeToLan?: boolean } = {}): 
     pairing: pairing!,
     outbox: outbox!,
     packs: packs!,
-    // Counts only, built outside main/link/ — see mobileOverview.ts for why
-    // the engine read lives on the other side of the inertness boundary.
-    overview: () => buildMobileOverview((topic) => packs!.listFor(topic)),
-    graph: (topic) => buildConstellationGraph(topic),
-    // The return leg: what the desk decided about work the phone sent up.
-    // Grades, never content — see mobileReceipts.ts for why a receipt may
-    // cross a boundary a due item may not.
-    receipts: (topic) => buildTopicReceipts(topic),
-    // Explorables. Read-only, resolved through the engine's own ledger, and
-    // outside main/link/ for the same §D6 reason as everything else here.
-    artifacts: () => listArtifacts(),
-    artifact: (topic, node) => readArtifact(topic, node),
+    // Every read the phone gets, defined once in main/session/ and shared
+    // with the dev fixture so the two cannot serve different route tables.
+    ...mobileProviders((topic) => packs!.listFor(topic)),
     // Read-modify-write, so filing from the phone cannot clobber a display
     // title or any other setting the learner set at the desk.
     setFolder: async (topic, folder) => {
