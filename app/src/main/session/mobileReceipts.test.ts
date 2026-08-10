@@ -57,6 +57,20 @@ describe('projectTopicReceipts', () => {
     expect(byNode).toEqual({ a: false, b: true, c: true, d: false })
   })
 
+  it('takes arc prefixes from the whole topic, not just its graded nodes', () => {
+    // Seen on device: one `ce-` node had been graded and seven `fd-` had, so
+    // the graded-only view called `fd` an arc and left `ce` reading as a word.
+    // Which prefixes a topic uses is a fact about the topic, not about how
+    // much of it has been marked.
+    const graded = [receipt({ node: 'ce-partition' }), receipt({ node: 'fd-entropy' })]
+    const allNodes = ['ce-partition', 'ce-free-energy', 'ce-fluctuations', 'fd-entropy']
+    const thin = projectTopicReceipts('mechanics', graded)
+    expect(thin.receipts.find((r) => r.node === 'ce-partition')?.title).toBe('Ce Partition')
+
+    const full = projectTopicReceipts('mechanics', graded, allNodes)
+    expect(full.receipts.find((r) => r.node === 'ce-partition')?.title).toBe('CE · Partition')
+  })
+
   it('recognises the walk-level stamp the tutor actually writes', () => {
     // Caught by the first real round trip. The overlay stamps each ITEM with
     // its card kind, but stamps THE NODE'S ENCODE RECEIPT `mobile-walk` — and

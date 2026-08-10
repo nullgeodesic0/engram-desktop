@@ -1,7 +1,7 @@
 import { readReceiptsHistory, type RawReceipt } from '../engramCli/receiptsHistory'
 import { PHONE_SOURCE_STAMPS } from '../../shared/linkProtocol'
 import { arcPrefixesOf, humanizeWithArcs } from '../../shared/humanizeId'
-import { engramRead } from '../engramCli/readOnly'
+import { engramRead, readTopicGraph } from '../engramCli/readOnly'
 import {
   computeTopicGrade,
   type GradeComponentKey,
@@ -88,16 +88,25 @@ export const PHONE_SOURCES = PHONE_SOURCE_STAMPS
  * The pure part: receipts in, wire shape out. Separated from the I/O below so
  * the projection's rules are testable without a learning home on disk.
  */
-export function projectTopicReceipts(topic: string, receipts: RawReceipt[]): MobileReceipts {
+export function projectTopicReceipts(
+  topic: string,
+  receipts: RawReceipt[],
+  /** Every node id the topic HAS, for arc-prefix detection. Optional: without
+   * it the prefixes are inferred from the graded nodes alone, which is honest
+   * but under-informed — a topic where only one `ce-` node has ever been
+   * graded never reaches the three-sibling threshold, so that node reads "Ce"
+   * while its `fd-` neighbours read "FD ·". The arc vocabulary is a property
+   * of the topic, not of how much of it has been marked. */
+  allNodeIds: string[] = [],
+): MobileReceipts {
   const mine = receipts
     .filter((r) => r.topic === topic)
     .slice()
     .sort((a, b) => b.ts.localeCompare(a.ts))
 
-  // The receipt log IS the sibling context here: every node the topic has ever
-  // been graded on. Enough to tell an arc prefix from a first word, which is
-  // the only way to tell them apart.
-  const arcs = arcPrefixesOf(mine.map((r) => r.node))
+  const arcs = arcPrefixesOf(
+    allNodeIds.length > 0 ? allNodeIds : mine.map((r) => r.node),
+  )
 
   // Newest-first order means the FIRST row seen for a node is its latest.
   const latestSource = new Map<string, string | null>()
@@ -136,8 +145,8 @@ function isPhoneSource(source: string | null): boolean {
  * server as a function of one string, so the server never learns that a
  * learning home exists. */
 export async function buildTopicReceipts(topic: string): Promise<MobileReceipts> {
-  const history = await readReceiptsHistory()
-  const projected = projectTopicReceipts(topic, history.receipts)
+  const [history, nodeIds] = await Promise.all([readReceiptsHistory(), readNodeIds(topic)])
+  const projected = projectTopicReceipts(topic, history.receipts, nodeIds)
   // The grade rides along rather than taking a second round trip: the page
   // shows both at once, and two requests would let the letter and the
   // receipts it summarises arrive out of step.
@@ -232,5 +241,22 @@ export async function buildTopicGrade(topic: string): Promise<MobileGrade> {
       weight: result.components[key].weight,
     })),
     excluded: COMPONENT_ORDER.filter((key) => key === 'calibration'),
+  }
+}
+
+/**
+ * The topic's node ids, and nothing else.
+ *
+ * `Object.keys` — the keys are read and no node object is ever dereferenced,
+ * so unlike the title lookup this replaced there is no field here to widen
+ * into. That narrowness is the whole reason it is safe to reach for the graph
+ * again on this path.
+ */
+async function readNodeIds(topic: string): Promise<string[]> {
+  try {
+    const graph = (await readTopicGraph(topic)) as { nodes?: Record<string, unknown> }
+    return Object.keys(graph?.nodes ?? {})
+  } catch {
+    return []
   }
 }
