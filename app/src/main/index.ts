@@ -4,6 +4,7 @@ import { cp, mkdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
+import { registerLinkHandlers, startLinkServer, stopLinkServer } from './link/linkService'
 import { registerReadHandlers } from './ipc/readHandlers'
 import { registerSessionHandlers, rebindWindow, abortAllSessions } from './ipc/sessionHandlers'
 import { resolveEngramPlugin } from './session/pluginResolver'
@@ -293,6 +294,15 @@ app.whenReady().then(() => {
   ipcMain.handle('engram:environmentCheck', () => checkEnvironment())
 
   registerReadHandlers()
+  registerLinkHandlers()
+  // The phone-facing server comes up with the app so an already-paired device
+  // reaches the Mac with no ceremony — that is the whole point of it being a
+  // service rather than a script. Loopback until the learner opts in: there is
+  // no transport encryption yet, and binding every interface because someone
+  // opened an app is not a choice they made.
+  void startLinkServer().catch((err) => {
+    console.error('[engram-desktop] link server failed to start:', err)
+  })
   installExplorableProtocolHandler()
 
   // Explorable artifacts are self-contained HTML files the artifact-smith wrote to
@@ -539,6 +549,7 @@ app.on('before-quit', () => {
   // gone can race one last doomed HTTP call into the void.
   abortAllSessions()
   bridgeServer.stop()
+  void stopLinkServer()
 })
 
 /** Launch-time orphan sweep — the belt-and-suspenders half of

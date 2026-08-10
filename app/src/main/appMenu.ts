@@ -1,4 +1,5 @@
 import { app, Menu } from 'electron'
+import { showPairingCode } from './link/linkService'
 
 /** The native menu bar — the single loudest "this is a real app" signal on
  * macOS. Actions route through `focusOrCreateWindow`, the same deep-link
@@ -44,6 +45,12 @@ export function installAppMenu(focusOrCreateWindow: (navigateTo?: string) => voi
         { label: 'Review Now', accelerator: 'Shift+Cmd+R', click: () => focusOrCreateWindow('review') },
         { type: 'separator' },
         { label: 'Session History…', accelerator: 'Shift+Cmd+H', click: () => focusOrCreateWindow('history:all') },
+        { type: 'separator' },
+        // The link server is already listening — a paired phone needs nothing
+        // from this menu. This is only for admitting a NEW device, which is
+        // why it opens a short-lived code rather than living in Settings as a
+        // toggle: pairing is an event, not a state.
+        { label: 'Link a Phone…', click: () => void showPairingCode() },
       ],
     },
     {
