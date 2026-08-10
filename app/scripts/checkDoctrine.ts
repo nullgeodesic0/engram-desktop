@@ -639,7 +639,22 @@ for (const f of FILES) {
 // the collector scans test files too, so its expected strings join the set.
 // Nothing the app SENDS changed between (3) and (4); these are assertions
 // about the message, not new message text.
-const PINNED_MESSAGE_HASH = '382a4014aac682b1'
+// 2026-08-09 re-pin: the mobile drain kickoff joins the set
+// (shared/mobileKickoff.ts), plus its test file's expected substring. It is
+// the message that carries a phone sitting's evidence into a real session,
+// and it says exactly three things, all navigational: which skill and topic,
+// that the sitting happened on the companion surface, and where the batch is.
+// Declaring the surface is load-bearing rather than descriptive — the
+// D5-pinned mobile-walk overlay activates ONLY on that declaration, so
+// without it the tutor silently walks the ordinary desk beats over phone
+// evidence. Naming the protocol is licensed exactly as the checkpoint
+// kickoff's naming is: the LEARN skill itself defines it via the overlay, and
+// owns everything pedagogical about it. The evidence is a FILE, not inline
+// text: a sitting's picks and productions do not fit the collector's 400-char
+// net, and inlining a learner's production into a command line is what the
+// plugin's own shell-safety rule forbids. Says nothing about how to teach or
+// judge. Verified captured un-truncated by this check's printed current-set.
+const PINNED_MESSAGE_HASH = 'baab9827fe040c8d'
 if (sha(injectedMessages.sort().join('\n')) !== PINNED_MESSAGE_HASH) {
   fail(
     'D3.kickoff',
