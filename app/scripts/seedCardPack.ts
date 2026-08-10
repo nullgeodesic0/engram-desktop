@@ -126,6 +126,15 @@ async function main(): Promise<void> {
           ...nonNeighbours.map((id, i) => ({ id: `x${i}`, label: id })),
         ]
 
+  // Two true fills plus competitive distractors, so a two-blank cloze is
+  // never a coin flip. Same floor the ladder pool answers to.
+  const clozePalette = [
+    { id: 'c1', label: node.rubric[0] ?? 'the defining property holds' },
+    { id: 'c2', label: node.rubric[1] ?? 'its prerequisite is satisfied' },
+    { id: 'c3', label: 'the result is assumed rather than derived' },
+    { id: 'c4', label: 'the condition is only true in the limit' },
+  ]
+
   const pack: CardPack = {
     packId: randomUUID(),
     topic,
@@ -154,16 +163,32 @@ async function main(): Promise<void> {
         rungs: node.rubric.slice(0, 2).map((c) => `Consider what has to be true for: ${c}`),
       },
       { beat: 'resolve', kind: 'prose', content: node.claim },
-      {
-        beat: 'self_explain',
-        kind: 'ladder',
-        stem: 'In your own order — assemble the argument for why this must hold.',
-        pool,
-        sealed: {
-          orderedStepIds: trueSteps.map((s) => s.id),
-          revealMarkdown: node.rubric.map((c, i) => `${i + 1}. ${c}`).join('\n'),
-        },
-      },
+      // SELF-EXPLAIN takes a ladder for a derivational node and a cloze for a
+      // definitional one — the overlay's own split. The fixture reads the same
+      // signal the protocol does: a node with fewer than three rubric criteria
+      // has no argument to assemble, and asking for one produces a two-step
+      // "chain" that is really a menu wearing a ladder's clothes.
+      trueSteps.length >= 3
+        ? {
+            beat: 'self_explain',
+            kind: 'ladder',
+            stem: 'In your own order — assemble the argument for why this must hold.',
+            pool,
+            sealed: {
+              orderedStepIds: trueSteps.map((s) => s.id),
+              revealMarkdown: node.rubric.map((c, i) => `${i + 1}. ${c}`).join('\n'),
+            },
+          }
+        : {
+            beat: 'self_explain',
+            kind: 'cloze',
+            template: 'This holds because {{1}}, which in turn requires {{2}}.',
+            palette: clozePalette,
+            sealed: {
+              blankOptionIds: ['c1', 'c2'],
+              revealMarkdown: node.rubric.map((c, i) => `${i + 1}. ${c}`).join('\n'),
+            },
+          },
       {
         beat: 'connect',
         kind: 'mc',
