@@ -117,6 +117,13 @@ export interface ConstellationNode {
   threshold: boolean
   /** Prerequisite edges, filtered to nodes present in this projection. */
   requires: string[]
+  /** FSRS stability in days, or null for a node the engine has not scheduled.
+   * These four are what the node table sorts and filters on. */
+  stability: number | null
+  /** Local 'YYYY-MM-DD', as the engine writes it. */
+  due: string | null
+  reps: number | null
+  lapses: number | null
 }
 
 export interface ConstellationGraph {
@@ -136,16 +143,27 @@ export async function buildConstellationGraph(topic: string): Promise<Constellat
     state?: unknown
     threshold?: unknown
     edges?: { requires?: string[] }
+    /** Scheduling only. Widened from state+threshold so the phone can offer
+     * the desktop's node TABLE — stability, due date, reps and lapses are the
+     * columns it sorts and filters on, and without them the table is a list of
+     * names. Still no probe, claim or rubric: this stays a scheduling read,
+     * which is what keeps it off the §D4 answer-reader list. */
+    fsrs?: { s?: unknown; due?: unknown; reps?: unknown; lapses?: unknown }
   }
   const graph = (await readTopicGraph(topic)) as {
     order?: string[]
     nodes?: Record<string, DrawableNode>
   }
   const present = new Set(Object.keys(graph.nodes ?? {}))
+  const num = (v: unknown): number | null => (typeof v === 'number' && isFinite(v) ? v : null)
   const nodes: ConstellationNode[] = Object.entries(graph.nodes ?? {}).map(([id, node]) => ({
     id,
     state: typeof node.state === 'string' ? node.state : 'new',
     threshold: node.threshold === true,
+    stability: num(node.fsrs?.s),
+    due: typeof node.fsrs?.due === 'string' ? node.fsrs.due : null,
+    reps: num(node.fsrs?.reps),
+    lapses: num(node.fsrs?.lapses),
     // Filtered to drawn nodes: an edge to something absent is a line to
     // nowhere, and the client should not have to guess.
     requires: (node.edges?.requires ?? []).filter((req) => present.has(req)),

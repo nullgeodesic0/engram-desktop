@@ -1,6 +1,6 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
+import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { app } from 'electron'
 import type { ConfidencePick } from '../../shared/confidence'
 
 /**
@@ -39,8 +39,26 @@ import type { ConfidencePick } from '../../shared/confidence'
  * topicSettings, on the app's side of the line.
  */
 
-function mirrorPath(): string {
-  return join(app.getPath('userData'), 'calibration-mirror.json')
+/**
+ * Resolved lazily, and without a top-level `electron` import.
+ *
+ * Every other store here imports `app` at module scope, which is fine because
+ * only Electron ever loads them. This one is reachable from the dev fixture —
+ * mobileProviders → mobileReceipts → here — and a static electron import
+ * crashes plain Node at load time, taking the whole harness with it. Found
+ * exactly that way.
+ */
+async function mirrorPath(): Promise<string> {
+  let dir: string
+  try {
+    const { app } = await import('electron')
+    dir = app.getPath('userData')
+  } catch {
+    // Not inside Electron: the dev fixture, which points at the same store the
+    // app uses so both see one set of picks.
+    dir = join(homedir(), 'Library', 'Application Support', 'Engram Desktop')
+  }
+  return join(dir, 'calibration-mirror.json')
 }
 
 let cached: ConfidencePick[] | null = null
@@ -48,8 +66,9 @@ let cached: ConfidencePick[] | null = null
 export async function setCalibrationMirror(picks: ConfidencePick[]): Promise<void> {
   cached = picks
   try {
-    await mkdir(dirname(mirrorPath()), { recursive: true })
-    await writeFile(mirrorPath(), JSON.stringify(picks), 'utf-8')
+    const path = await mirrorPath()
+    await mkdir(dirname(path), { recursive: true })
+    await writeFile(path, JSON.stringify(picks), 'utf-8')
   } catch {
     // A mirror that fails to persist still serves this run from memory, and
     // the next pick rewrites it. Losing it costs one component of a grade
@@ -61,7 +80,7 @@ export async function setCalibrationMirror(picks: ConfidencePick[]): Promise<voi
 export async function getCalibrationMirror(): Promise<ConfidencePick[]> {
   if (cached) return cached
   try {
-    const raw: unknown = JSON.parse(await readFile(mirrorPath(), 'utf-8'))
+    const raw: unknown = JSON.parse(await readFile(await mirrorPath(), 'utf-8'))
     cached = Array.isArray(raw) ? (raw as ConfidencePick[]) : []
   } catch {
     cached = []
