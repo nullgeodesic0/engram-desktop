@@ -34,3 +34,18 @@ export function composeMobileDrainKickoff(options: MobileDrainOptions): string {
   const { topic, evidencePath, itemCount } = options
   return `/engram:learn ${topic} — I worked ${itemCount} card(s) on the Engram companion app, away from my desk, so this sitting is a mobile-surface one. What I picked and produced there is in ${evidencePath}. Please settle it and tell me where those nodes now stand.`
 }
+
+/**
+ * The kickoff that asks a sitting to stock the phone.
+ *
+ * Same collector constraints as the drain kickoff above: ONE template
+ * literal, under 400 characters with `${…}` collapsed, no backtick, and clear
+ * of the §D4 blindness regex. Same voice rule too — it names the topic and
+ * what the learner wants, never how to teach or how to judge. What a pack
+ * must contain is the D5-pinned overlay's business, and `emit_card_pack`'s own
+ * description carries it.
+ */
+export function composePackTopUpKickoff(options: { topic: string; count: number }): string {
+  const { topic, count } = options
+  return `/engram:learn ${topic} — before I next travel, please make sure about ${count} more node(s) here are ready to walk on my phone. Cover nodes I can actually take next, and stop when they are packed.`
+}

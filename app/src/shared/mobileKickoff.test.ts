@@ -1,5 +1,5 @@
-import { describe, expect, test } from 'vitest'
-import { composeMobileDrainKickoff } from './mobileKickoff'
+import { describe, expect, it, test } from 'vitest'
+import { composeMobileDrainKickoff, composePackTopUpKickoff } from './mobileKickoff'
 
 /**
  * A kickoff is a user turn with the app's words in the learner's mouth, so it
@@ -55,5 +55,23 @@ describe('composeMobileDrainKickoff', () => {
 
   test('is a single line', () => {
     expect(sample.split('\n')).toHaveLength(1)
+  })
+})
+
+describe('composePackTopUpKickoff', () => {
+  const kickoff = composePackTopUpKickoff({ topic: 'grad-statistical-mechanics', count: 3 })
+
+  it('stays inside the collector the doctrine gate casts', () => {
+    expect(kickoff.length).toBeLessThan(400)
+    expect(kickoff).not.toContain('`')
+  })
+
+  it('says nothing about how to teach or how to judge', () => {
+    expect(kickoff).not.toMatch(/assessor|rubric|when grading|grade (it|this|the)/i)
+  })
+
+  it('elects the skill and names what the learner wants', () => {
+    expect(kickoff).toContain('/engram:learn grad-statistical-mechanics')
+    expect(kickoff).toContain('3')
   })
 })

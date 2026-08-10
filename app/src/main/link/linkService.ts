@@ -6,7 +6,7 @@ import { createLinkServer, type LinkServer } from './LinkServer'
 import { createOutboxStore, type OutboxStore } from './outboxStore'
 import { createPairingStore, type PairingStore } from './pairing'
 import { drainOutbox, type DrainResult } from './mobileDrain'
-import { startSession } from '../ipc/sessionHandlers'
+import { startSession, anySessionRunning } from '../ipc/sessionHandlers'
 import { mobileProviders } from '../session/mobileProviders'
 import { receiptSince } from '../session/mobileReceipts'
 import { getTopicSettings, setTopicSettings } from '../session/topicSettings'
@@ -219,4 +219,20 @@ export async function settleQueue(): Promise<DrainResult> {
     // why starting a sitting is not the same as it producing a receipt.
     receiptSince: (topic, node, since) => receiptSince(topic, node, since),
   })
+}
+
+/**
+ * The pack scheduler's wiring, assembled here because this is where the pack
+ * store already lives. The scheduler itself learns nothing about how a session
+ * starts or where packs are kept.
+ */
+export function packSchedulerDeps() {
+  return {
+    packedFor: async (topic: string) => {
+      if (!packs) packs = createCardPackStore({ rootDir: userDataPath('card-packs') })
+      return packs.listFor(topic)
+    },
+    sittingRunning: anySessionRunning,
+    startSession: (message: string, topic: string) => startSession(message, 'learn', undefined, topic),
+  }
 }

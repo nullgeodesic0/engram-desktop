@@ -22,6 +22,8 @@ import { getAuthSettings, setAuthMode } from './session/authSettings'
 import { apiKeyStore, isPlausibleApiKey } from './session/auth'
 import { getUnlockedAchievements, recordUnlocked } from './session/achievementsStore'
 import { startReviewNotifier, stopReviewNotifier, checkReviewsNow, refreshDueCount } from './session/reviewNotifier'
+import { startPackScheduler, stopPackScheduler } from './session/packScheduler'
+import { packSchedulerDeps } from './link/linkService'
 import { checkForUpdate, getCachedUpdateCheck, maybeAutoCheckForUpdate } from './session/updateCheck'
 import { restoreWindowState, trackWindowState } from './windowState'
 import { installAppMenu } from './appMenu'
@@ -512,6 +514,10 @@ app.whenReady().then(() => {
   registerSessionHandlers(createWindow())
   createTray()
   startReviewNotifier(() => focusOrCreateWindow('review'), sendDueCount)
+  // Keeps the phone stocked without anyone remembering to. Polls every half
+  // hour, acts at most once every six — see packScheduler.ts on why restraint
+  // is the whole design.
+  startPackScheduler(packSchedulerDeps())
 
   // Drain a deep link that arrived before we were ready to act on it (see
   // deepLinkQueue + handleDeepLink/deliverDeepLink's own comments) — the
@@ -545,6 +551,7 @@ app.on('window-all-closed', () => {})
 
 app.on('before-quit', () => {
   stopReviewNotifier()
+  stopPackScheduler()
   // Children FIRST, then the bridge: a tutor killed after its bridge is
   // gone can race one last doomed HTTP call into the void.
   abortAllSessions()

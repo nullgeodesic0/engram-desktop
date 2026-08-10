@@ -684,7 +684,13 @@ for (const f of FILES) {
 // session, and the collector scans test files too, so its expected substring
 // joins the set. Nothing the app SENDS changed between (1) and (2); this is an
 // assertion about the message, not new message text.
-const PINNED_MESSAGE_HASH = 'd0f3c30ed83e38f9'
+// 2026-08-10 — re-pinned for composePackTopUpKickoff, the message the pack
+// scheduler sends when a topic's phone stock runs low. Read whole: it elects
+// /engram:learn on a named topic and states what the learner wants ("about N
+// more nodes ready to walk"), in the learner's own navigational voice. It says
+// nothing about how to teach or how to judge — what a pack must contain is the
+// D5-pinned overlay's business, carried by emit_card_pack's own description.
+const PINNED_MESSAGE_HASH = '663cfb0b849c639a'
 if (sha(injectedMessages.sort().join('\n')) !== PINNED_MESSAGE_HASH) {
   fail(
     'D3.kickoff',

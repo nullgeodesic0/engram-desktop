@@ -15,6 +15,15 @@ type SessionKind = 'learn' | 'review' | 'coach'
 
 const sessions = new Map<string, SessionManager>()
 
+/** True while any sitting is live.
+ *
+ * The pack scheduler waits on this: two sittings at once compete for the same
+ * engine, and a background top-up should never be the thing that slows down a
+ * learner who is actually sitting there. */
+export function anySessionRunning(): boolean {
+  return sessions.size > 0
+}
+
 // Mutable rather than a captured constructor param — the tray keeps the app running
 // after the window closes, so a later reopen creates a genuinely new BrowserWindow;
 // event forwarding needs to follow it rather than sending into a destroyed window.
