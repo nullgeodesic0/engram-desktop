@@ -1,4 +1,5 @@
 import { packsForMode } from './walkablePacks'
+import { readRecordStamp } from './recordStamp'
 import { engramRead, readTopicGraph } from '../engramCli/readOnly'
 import type { DueItem, TopicListEntry } from '../../shared/types'
 
@@ -52,6 +53,9 @@ export interface MobileTopicOverview {
 export interface MobileOverview {
   topics: MobileTopicOverview[]
   dueTotal: number
+  /** Changes exactly when a receipt lands. The phone drops its caches when it
+   * differs from the one it last saw — see main/session/recordStamp.ts. */
+  recordStamp: string
   /** Measured median minutes per review item, or null before enough history. */
   minutesPerItem: number | null
 }
@@ -121,6 +125,7 @@ export async function buildMobileOverview(
   return {
     topics: overview,
     dueTotal: due.length,
+    recordStamp: await readRecordStamp(),
     minutesPerItem: null,
   }
 }
