@@ -29,6 +29,13 @@ export interface CardPackStore {
   put(pack: CardPack): Promise<void>
   get(topic: string, node: string): Promise<CardPack | null>
   listFor(topic: string): Promise<string[]>
+  /** Each pack's node and when it was written.
+   *
+   * The timestamp is the whole point: a pack is a question about a node in the
+   * state it was in when the pack was written, so "is this pack spent" can
+   * only be answered against its own clock. `listFor` cannot answer it, which
+   * is why every walk of a topic served the same node until this existed. */
+  entriesFor(topic: string): Promise<Array<{ node: string; generatedAt: string }>>
 }
 
 /** Topic and node ids reach this store from a model's tool call, so they are
@@ -85,6 +92,18 @@ export function createCardPackStore(deps: CardPackStoreDeps): CardPackStore {
       } catch {
         return []
       }
+    },
+
+    async entriesFor(topic) {
+      const nodes = await this.listFor(topic)
+      const entries: Array<{ node: string; generatedAt: string }> = []
+      for (const node of nodes) {
+        const pack = await this.get(topic, node)
+        // A pack this build refuses is not walkable either, and dropping it
+        // here means the phone is never offered a node it cannot open.
+        if (pack) entries.push({ node, generatedAt: pack.generatedAt })
+      }
+      return entries
     },
   }
 }

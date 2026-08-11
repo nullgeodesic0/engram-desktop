@@ -5,6 +5,7 @@ import { createCardPackStore, type CardPackStore } from './cardPackStore'
 import { createLinkServer, type LinkServer } from './LinkServer'
 import { createOutboxStore, type OutboxStore } from './outboxStore'
 import { createPairingStore, type PairingStore } from './pairing'
+import { walkablePacks, receiptSinceProvider } from '../session/walkablePacks'
 import { drainOutbox, type DrainResult } from './mobileDrain'
 import { startSession, anySessionRunning } from '../ipc/sessionHandlers'
 import { mobileProviders } from '../session/mobileProviders'
@@ -59,6 +60,32 @@ function lanAddress(): string | null {
   return null
 }
 
+/**
+ * A topic's packs that still have work in them.
+ *
+ * The one definition, shared by the phone's list, the overview's counts and
+ * the scheduler's "does this topic need more packs" question. They must agree:
+ * a scheduler that counts spent packs leaves a topic starved, and a phone that
+ * lists them hands back the node the learner just finished.
+ */
+async function walkableFor(topic: string): Promise<string[]> {
+  ensureStores()
+  return walkablePacks(topic, {
+    entries: (t) => packs!.entriesFor(t),
+    receiptSince: receiptSinceProvider,
+    // Everything the phone has produced for this topic and the Mac has not
+    // finished with — queued, in flight, or handed off and awaiting a grade.
+    banked: async (t) => {
+      const [pending, inFlight] = await Promise.all([outbox!.pending(), outbox!.inFlight()])
+      return new Set(
+        [...pending, ...inFlight.map((f) => f.item)]
+          .filter((item) => item.topic === t)
+          .map((item) => item.node),
+      )
+    },
+  })
+}
+
 function ensureStores(): void {
   pairing ??= createPairingStore({ filePath: userDataPath('paired-devices.json') })
   outbox ??= createOutboxStore({ filePath: userDataPath('outbox.jsonl') })
@@ -80,7 +107,12 @@ export async function startLinkServer(options: { exposeToLan?: boolean } = {}): 
     packs: packs!,
     // Every read the phone gets, defined once in main/session/ and shared
     // with the dev fixture so the two cannot serve different route tables.
-    ...mobileProviders((topic) => packs!.listFor(topic)),
+    // Walkable, not merely present. A pack whose node the desk has already
+    // graded since the pack was written, or whose walk is sitting in the
+    // outbox, is a question about the past — offering it is how every walk of
+    // a topic came to serve the same node.
+    ...mobileProviders(walkableFor),
+    walkablePacks: walkableFor,
     // Read-modify-write, so filing from the phone cannot clobber a display
     // title or any other setting the learner set at the desk.
     setFolder: async (topic, folder) => {
@@ -228,10 +260,11 @@ export async function settleQueue(): Promise<DrainResult> {
  */
 export function packSchedulerDeps() {
   return {
-    packedFor: async (topic: string) => {
-      if (!packs) packs = createCardPackStore({ rootDir: userDataPath('card-packs') })
-      return packs.listFor(topic)
-    },
+    // The scheduler asks how many packs a topic HAS so it can decide whether
+    // to write more. It must be the walkable count for the same reason the
+    // phone's list must be: a topic full of spent packs is a topic with
+    // nothing to walk, and counting the files would leave it starved forever.
+    packedFor: walkableFor,
     sittingRunning: anySessionRunning,
     startSession: (message: string, topic: string) => startSession(message, 'learn', undefined, topic),
   }

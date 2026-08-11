@@ -32,6 +32,11 @@ export interface LinkServerDeps {
   pairing: PairingStore
   outbox: OutboxStore
   packs: CardPackStore
+  /** A topic's packs that still have work in them — see main/session/
+   * walkablePacks.ts. Optional for the same reason the other providers are:
+   * without it this server answers with every pack on disk, which is what it
+   * did before the distinction existed. */
+  walkablePacks?: (topic: string) => Promise<string[]>
   /** Supplies the phone menu's counts. Injected as a plain function so this
    * module gains an ANSWER, never a way to question the engine — the inertness
    * §D6 pins depends on that distinction. Optional: without it the endpoint
@@ -145,7 +150,13 @@ export function createLinkServer(deps: LinkServerDeps): LinkServer {
     }
     const topic = url.searchParams.get('topic') ?? ''
     if (url.pathname === '/link/packs') {
-      send(res, 200, { nodes: await packs.listFor(topic) })
+      // Walkable rather than present, when the composition root supplies the
+      // distinction. Falling back to every file is deliberate: the fixture and
+      // the tests wire a bare store, and a topic that lists nothing is
+      // indistinguishable on the phone from a Mac that is not answering.
+      send(res, 200, {
+        nodes: deps.walkablePacks ? await deps.walkablePacks(topic) : await packs.listFor(topic),
+      })
       return
     }
     if (url.pathname === '/link/overview') {
