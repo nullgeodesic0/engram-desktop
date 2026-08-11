@@ -122,3 +122,67 @@ describe('breadth before depth', () => {
     expect(askFor(packStock([{ topic: 'a', packed: 0, walkable: 1 }])[0])).toBe(1)
   })
 })
+
+/**
+ * Owed retrievals are demand too, and the first version could not see them.
+ *
+ * `deficit` was the gap to PACK_TARGET and nothing else, so a topic holding
+ * five packs read as fully stocked — even with two due nodes none of those
+ * packs covered. It was then filtered out of `hungry` and could never be
+ * chosen again. Observed with real data: eleven due retrievals, eleven packs,
+ * and not one pack in common with a due node; derivatives was exactly this
+ * case, and the topic best placed to serve a review was the one the scheduler
+ * had written off.
+ */
+describe('due work as demand', () => {
+  const idle = { sittingRunning: false, lastRunAt: null, now: Date.parse('2026-08-10T12:00:00Z') }
+
+  it('a topic at full learn stock is still hungry for its unpacked due nodes', () => {
+    const out = packStock([{ topic: 'a', packed: PACK_TARGET, walkable: 40, dueUnpacked: 2 }])
+    expect(out[0].deficit).toBe(2)
+  })
+
+  it('takes the larger of the two demands rather than their sum', () => {
+    // Three packs short of target and one owed retrieval is a three-pack
+    // sitting, not four: the same sitting can cover both.
+    const out = packStock([{ topic: 'a', packed: 2, walkable: 40, dueUnpacked: 1 }])
+    expect(out[0].deficit).toBe(PACK_TARGET - 2)
+  })
+
+  it('still never asks for more than the topic has to pack', () => {
+    const out = packStock([{ topic: 'a', packed: 0, walkable: 1, dueUnpacked: 6 }])
+    expect(out[0].deficit).toBe(1)
+  })
+
+  it('owed retrievals outrank a merely low shelf', () => {
+    // Both are reachable, so neither is urgent by the floor rule. One owes a
+    // retrieval the learner cannot do away from the desk; the other is simply
+    // stocked light. Owed now beats speculative.
+    const chosen = chooseTopUp(
+      packStock([
+        { topic: 'low-shelf', packed: 2, walkable: 40, dueUnpacked: 0 },
+        { topic: 'owes-review', packed: 4, walkable: 40, dueUnpacked: 3 },
+      ]),
+      idle,
+    )
+    expect(chosen?.topic).toBe('owes-review')
+  })
+
+  it('but an unreachable topic still comes first', () => {
+    // Below the floor means the learner cannot open the topic AT ALL, which
+    // is worse than owing a retrieval inside a topic they can open.
+    const chosen = chooseTopUp(
+      packStock([
+        { topic: 'unreachable', packed: 0, walkable: 40, dueUnpacked: 0 },
+        { topic: 'owes-review', packed: 4, walkable: 40, dueUnpacked: 3 },
+      ]),
+      idle,
+    )
+    expect(chosen?.topic).toBe('unreachable')
+  })
+
+  it('asks for enough to cover what is owed', () => {
+    const [t] = packStock([{ topic: 'a', packed: PACK_TARGET, walkable: 40, dueUnpacked: 3 }])
+    expect(askFor(t)).toBe(3)
+  })
+})

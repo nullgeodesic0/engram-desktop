@@ -70,6 +70,10 @@ export interface TopicStock {
   packed: number
   /** Nodes that could be packed but are not — the ceiling on any request. */
   walkable: number
+  /** Due nodes with no pack on the phone — retrievals the learner is owed and
+   * cannot do away from the desk. Optional so a caller that cannot read the
+   * due queue behaves exactly as before. */
+  dueUnpacked?: number
 }
 
 export interface StockedTopic extends TopicStock {
@@ -87,7 +91,21 @@ export interface SchedulerState {
 export function packStock(topics: TopicStock[]): StockedTopic[] {
   return topics.map((t) => ({
     ...t,
-    deficit: Math.max(0, Math.min(PACK_TARGET - t.packed, t.walkable)),
+    // Two demands, and the LARGER of them — not their sum, because one sitting
+    // covers both: three packs short of target and one owed retrieval is a
+    // three-pack sitting.
+    //
+    // The second demand was missing entirely, and its absence was structural.
+    // Deficit measured only the gap to PACK_TARGET, so a topic holding five
+    // packs read as fully stocked and dropped out of `hungry` forever — even
+    // with due nodes none of those five covered. Measured against real data:
+    // eleven due retrievals, eleven packs, and not one pack in common with a
+    // due node. The topic best placed to serve a review was the one the
+    // scheduler had written off.
+    deficit: Math.max(
+      0,
+      Math.min(Math.max(PACK_TARGET - t.packed, t.dueUnpacked ?? 0), t.walkable),
+    ),
   }))
 }
 
@@ -111,7 +129,13 @@ export function chooseTopUp(stocked: StockedTopic[], state: SchedulerState): Sto
   const cooldown = urgent ? URGENT_COOLDOWN_MS : COOLDOWN_MS
   if (state.lastRunAt !== null && state.now - state.lastRunAt < cooldown) return null
 
-  const pool = urgent ? unreachable : hungry
+  // Owed beats speculative. Below the floor still comes first — a topic the
+  // learner cannot open AT ALL is worse than a retrieval they cannot do away
+  // from the desk inside a topic they can — but among reachable topics, a
+  // retrieval the engine has already scheduled outranks stocking a shelf
+  // against a trip nobody has taken yet.
+  const owing = hungry.filter((t) => (t.dueUnpacked ?? 0) > 0)
+  const pool = urgent ? unreachable : owing.length > 0 ? owing : hungry
   // Emptiest first. Ties break on the larger topic, which has more to lose
   // from being unreachable.
   return pool.reduce((worst, t) =>
@@ -187,6 +211,7 @@ export async function topUpPacksNow(
     rows.push({
       topic: entry.topic,
       packed: packed.length,
+      dueUnpacked: dueUnpackedByTopic.get(entry.topic) ?? 0,
       // Unpacked nodes: the ceiling on what a sitting could add.
       walkable: Math.max(0, total - packed.length),
     })
