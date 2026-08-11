@@ -74,4 +74,28 @@ describe('composePackTopUpKickoff', () => {
     expect(kickoff).toContain('/engram:learn grad-statistical-mechanics')
     expect(kickoff).toContain('3')
   })
+
+  it('tells the tutor to skip the interactive clear-reviews-first gate', () => {
+    // skills/learn/SKILL.md: "If due >= 5, offer first (arrow-key choice):
+    // clear reviews first / straight to new material." That gate is meant
+    // for a learner sitting at the desk. This kickoff starts a sitting
+    // nobody is sitting at — the pack scheduler runs on its own clock, and
+    // the phone's ASK button fires with no one watching the Mac's window.
+    // Without this line, a topic with >=5 due items would leave a
+    // background sitting waiting on an answer nobody is there to give, or
+    // worse, defaulting into spending the whole sitting on reviews instead
+    // of producing the new packs the phone actually asked for.
+    expect(kickoff.toLowerCase()).toContain('clear-reviews-first')
+    expect(kickoff.toLowerCase()).toMatch(/straight to new material/)
+  })
+
+  it('says so on the dueUnpacked form too — the gate risk does not depend on it', () => {
+    const withDue = composePackTopUpKickoff({
+      topic: 'grad-statistical-mechanics',
+      count: 3,
+      dueUnpacked: true,
+    })
+    expect(withDue.toLowerCase()).toContain('clear-reviews-first')
+    expect(withDue.length).toBeLessThan(400)
+  })
 })

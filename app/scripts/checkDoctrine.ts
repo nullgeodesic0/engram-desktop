@@ -711,7 +711,25 @@ for (const f of FILES) {
 // could not open them, because top-ups covered whatever came NEXT and never
 // what was already owed — leaving those topics permanently unreviewable away
 // from the desk.
-const PINNED_MESSAGE_HASH = '41728ca480357c6e'
+// 2026-08-11 — both forms gain "Skip the clear-reviews-first gate — no one is
+// at the desk to answer it; go straight to new material." Read literally: it
+// names a real gate the /engram:learn skill itself defines (skills/learn/
+// SKILL.md: "if due >= 5, offer first: clear reviews first / straight to new
+// material") and says which of its own two branches to take — the same
+// licence checkpoint's kickoff already has to name a protocol the skill
+// defines, never to invent one. It does not say how to teach or how to grade
+// either branch.
+// Why it exists: that gate is an interactive arrow-key choice meant for a
+// learner sitting at the desk. Both kickoffs here start a sitting nobody is
+// sitting at — the pack scheduler runs on its own clock, and the phone's ASK
+// button fires with no one watching the Mac's window. Reported live: "on the
+// phone learn should NEVER take node content from reviews... on desktop it
+// currently asks if you want to finish overdue reviews first. The phone
+// should not work like that." Without this line, a topic with >=5 due items
+// left a background sitting waiting on an answer nobody was there to give —
+// or worse, risked a default that spent the whole sitting reviewing instead
+// of producing the new packs the phone actually asked for.
+const PINNED_MESSAGE_HASH = 'e5a969304aad8ba1'
 if (sha(injectedMessages.sort().join('\n')) !== PINNED_MESSAGE_HASH) {
   fail(
     'D3.kickoff',
