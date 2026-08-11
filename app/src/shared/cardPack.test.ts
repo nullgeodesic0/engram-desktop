@@ -113,7 +113,7 @@ describe('validateAgainstOverlay', () => {
       beats,
       eligibility: { nodeKind: 'concept', threshold: true, transferReady: false, lapsed: false, experimentArm: null },
     })
-    expect(reasons(p)).toContain('verify on a carved-out node requires a ladder, a composed chain, or a real production')
+    expect(reasons(p)).toContain('verify on a carved-out node requires a composed chain, an assembly, a production, or one of the priced recognition forms (match, sort, flaw) — never a chain of picks')
   })
 
   test('VERIFY on a procedure node may not be a checkpoint chain', () => {
@@ -123,7 +123,7 @@ describe('validateAgainstOverlay', () => {
       beats,
       eligibility: { nodeKind: 'procedure', threshold: false, transferReady: false, lapsed: false, experimentArm: null },
     })
-    expect(reasons(p)).toContain('verify on a carved-out node requires a ladder, a composed chain, or a real production')
+    expect(reasons(p)).toContain('verify on a carved-out node requires a composed chain, an assembly, a production, or one of the priced recognition forms (match, sort, flaw) — never a chain of picks')
   })
 
   test('VERIFY on an ordinary node may be a checkpoint chain', () => {
@@ -156,7 +156,7 @@ describe('validateAgainstOverlay', () => {
       beats,
       eligibility: { nodeKind: 'concept', threshold: false, transferReady: false, lapsed: false, experimentArm: 'B' },
     })
-    expect(reasons(p)).toContain('verify on a carved-out node requires a ladder, a composed chain, or a real production')
+    expect(reasons(p)).toContain('verify on a carved-out node requires a composed chain, an assembly, a production, or one of the priced recognition forms (match, sort, flaw) — never a chain of picks')
   })
 
   test('a recall verify satisfies a carved-out node', () => {
@@ -374,10 +374,11 @@ describe('match, sort and flaw', () => {
     ).toBeNull()
   })
 
-  it('neither match nor sort may carry a carved-out verify', () => {
-    // They clear the bar for self_explain, where the question is whether
-    // recognition can carry the beat. A carved-out verify is the cold check on
-    // a threshold node and wants an assembly or a production.
+  it('match or sort MAY carry a carved-out verify — the priced widening', () => {
+    // Deliberate loosening. The alternative on a phone is not free recall, it
+    // is nothing at all: a threshold node never checked away from the desk is
+    // not protected by the stricter rule, only skipped. The price is paid in
+    // the evidence (mobile-recognition, hard-at-best), not in the schema.
     const p = parseCardPack({
       ...pack(shell(ladder('self_explain'))),
       eligibility: { nodeKind: 'concept', threshold: true, transferReady: false, lapsed: false, experimentArm: null },
@@ -385,8 +386,21 @@ describe('match, sort and flaw', () => {
         { beat: 'struggle', kind: 'hints', rungs: ['a'] }, prose('resolve'),
         ladder('self_explain'), mc('connect'), match('verify'), prose('close')],
     })
+    expect(validateAgainstOverlay(p!)).toEqual([])
+  })
+
+  it('a plain menu still may not carry a carved-out verify', () => {
+    // The widening admits forms with a real answer space. A four-option pick
+    // stays refused: it is a coin flip wearing a checkmark.
+    const p = parseCardPack({
+      ...pack(shell(ladder('self_explain'))),
+      eligibility: { nodeKind: 'concept', threshold: true, transferReady: false, lapsed: false, experimentArm: null },
+      beats: [prose('open_gap'), mc('predict'),
+        { beat: 'struggle', kind: 'hints', rungs: ['a'] }, prose('resolve'),
+        ladder('self_explain'), mc('connect'), mc('verify'), prose('close')],
+    })
     expect(validateAgainstOverlay(p!)).toContain(
-      'verify on a carved-out node requires a ladder, a composed chain, or a real production',
+      'verify on a carved-out node requires a composed chain, an assembly, a production, or one of the priced recognition forms (match, sort, flaw) — never a chain of picks',
     )
   })
 })

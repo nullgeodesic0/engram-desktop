@@ -19,7 +19,13 @@ import { z } from 'zod'
  * Adding a stamp value is a doctrine change: checkDoctrine pins this table.
  */
 
-export const MOBILE_INPUT_KINDS = ['checkpoint', 'connect', 'cloze', 'compose', 'match', 'sort', 'flaw', 'ladder', 'recall'] as const
+export const MOBILE_INPUT_KINDS = [
+  'checkpoint', 'connect', 'cloze', 'compose', 'match', 'sort', 'flaw', 'ladder', 'recall',
+  // A pairing, partition or find-the-flaw standing in for a carved-out VERIFY
+  // — the overlay's priced widening. Its own kind rather than a flag, so the
+  // stamp and the tighter cap ride the wire rather than being re-derived.
+  'recognition',
+] as const
 export type MobileInputKind = (typeof MOBILE_INPUT_KINDS)[number]
 
 /** The engine's own cap on a stored production (`PRODUCTION_MAX`). Mirrored,
@@ -50,6 +56,11 @@ const SOURCE_STAMPS: Record<MobileInputKind, string> = {
   sort: 'mobile-sort',
   flaw: 'mobile-flaw',
   ladder: 'mobile-ladder',
+  // Findable forever. A threshold node checked by recognition is a real but
+  // WEAKER piece of evidence, and the record has to be able to list every one
+  // of them — for a refit, for an audit, and for the learner asking which of
+  // their thresholds have only ever been recognised.
+  recognition: 'mobile-recognition',
   recall: 'self',
 }
 

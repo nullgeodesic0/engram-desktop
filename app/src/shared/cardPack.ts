@@ -489,17 +489,24 @@ export function validateAgainstOverlay(pack: CardPack): string[] {
   // "VERIFY, everything else … step assembly or a real production only,
   // never a chain of picks."
   const verify = byBeat.get('verify')
-  // A carved-out VERIFY needs production or an assembly — never a menu, and
-  // never a cloze, whose gaps are chosen from a palette shown against a
-  // template the learner did not write. A composed chain has no template: the
-  // learner writes every line. That is why it is admitted here and cloze is
-  // not.
-  // `match` and `sort` are absent here on purpose. They clear the bar for
-  // SELF-EXPLAIN, where the question is whether recognition can carry the
-  // beat — but a carved-out VERIFY is the cold check on a threshold node, and
-  // the overlay wants an assembly or a production there, not a partition.
-  if (verify && isCarvedOut(pack.eligibility) && !['ladder', 'compose', 'recall'].includes(verify.kind)) {
-    reasons.push('verify on a carved-out node requires a ladder, a composed chain, or a real production')
+  // A carved-out VERIFY wants production or an assembly, and a composed chain
+  // counts as production: there is no template on screen, the learner writes
+  // every line from a shared alphabet.
+  //
+  // `match`, `sort` and `flaw` are admitted here as the overlay's PRICED
+  // widening, not as an equal. The alternative on a phone is not free recall,
+  // it is nothing — and a threshold node never checked away from the desk is
+  // not being protected by the stricter rule, only skipped. The price is paid
+  // elsewhere and must be: `mobile-recognition` on the receipt, `hard` at
+  // best, provisional unchanged. A plain menu is still refused, because a
+  // four-option pick is a coin flip wearing a checkmark.
+  if (verify && isCarvedOut(pack.eligibility)) {
+    if (!['ladder', 'compose', 'recall', 'match', 'sort', 'flaw'].includes(verify.kind)) {
+      reasons.push(
+        'verify on a carved-out node requires a composed chain, an assembly, a production, ' +
+          'or one of the priced recognition forms (match, sort, flaw) — never a chain of picks',
+      )
+    }
   }
 
   // "Pool ≥ 2N for N true steps. A chain that can be guessed is not evidence."

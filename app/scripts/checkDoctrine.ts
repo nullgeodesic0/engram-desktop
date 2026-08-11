@@ -844,7 +844,20 @@ const PINNED_OVERLAY_HASHES: Record<string, string> = {
   // pinned before being wired into applyPluginOverlays' OVERLAYS array —
   // a pin is cheap, and an unpinned overlay sitting in this directory is
   // exactly the unaudited voice this section exists to prevent.
-  'learn-skill.mobile-walk-protocol.md': '5f808bedbd581255',
+  // 2026-08-10 (2) — re-pinned for the carve-out's priced widening. The
+  // charter's three terms are unchanged and re-confirmed here: per-sitting
+  // election, source stamps, and the constitutional-exception header. What
+  // moved is narrower than that — a carved-out VERIFY (threshold, procedure,
+  // transfer-ready, lapsed, an experiment arm) may now ALSO be served as a
+  // pairing, a partition, or a find-the-flaw when no composed chain, assembly
+  // or production fits the node, rather than being skipped entirely. That
+  // widening is priced, not free: its own source stamp (mobile-recognition,
+  // findable in the record forever, never folded into mobile-match/sort/flaw)
+  // and a tighter rating cap (hard at best, never good). A plain menu stays
+  // refused outright — the widening admits forms with a real answer space,
+  // not a four-option coin flip. Provisional status is unchanged: this
+  // widens what may be OFFERED, not what counts as solidified.
+  'learn-skill.mobile-walk-protocol.md': 'e23f6e1149e510bb',
   'dialogue-grammar.mobile-walk-exception.md': '9cbbd325856c2c76',
 }
 const overlayFiles = readdirSync(OVERLAY_DIR).filter((f) => f.endsWith('.md'))
@@ -894,7 +907,14 @@ const LOAD_BEARING: Record<string, string[]> = {
   // which is the clause that licenses touching encoding at all.
   'learn-skill.mobile-walk-protocol.md': [
     'Run this protocol ONLY when this sitting\'s opening message declares the mobile surface',
-    'step assembly or a real production only, never a chain of picks',
+    // A menu stays refused at a carved-out VERIFY even under the priced
+    // widening below — this needle is the load-bearing half of that sentence
+    // that survives both the old and the new wording verbatim.
+    'A threshold concept is exactly what recognition flatters',
+    // The widening itself, and its price. Three clauses in one needle so a
+    // future edit cannot keep the permission while quietly dropping what pays
+    // for it — CHANGE the price, and this fails loudly rather than silently.
+    'rated **`hard` at best, never `good`**, it carries `--source mobile-recognition`',
     'Pool ≥ 2N',
     'No backtracking.',
     'L4 cold solve is never an assembly',
