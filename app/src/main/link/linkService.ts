@@ -7,6 +7,8 @@ import { createOutboxStore, type OutboxStore } from './outboxStore'
 import { createPairingStore, type PairingStore } from './pairing'
 import { walkablePacks, receiptSinceProvider, packsForMode } from '../session/walkablePacks'
 import { dueNodeIds } from '../session/mobileOverview'
+import { composePackTopUpKickoff } from '../../shared/mobileKickoff'
+import { PACK_FLOOR } from '../session/packScheduler'
 import { drainOutbox, type DrainResult } from './mobileDrain'
 import { startSession, anySessionRunning } from '../ipc/sessionHandlers'
 import { mobileProviders } from '../session/mobileProviders'
@@ -94,6 +96,58 @@ async function walkableFor(
   return packsForMode(walkable, await dueNodeIds(topic), 'review')
 }
 
+/** The last topic the phone asked to have packed, and when. */
+let lastPackRequest: { topic: string; at: number } | null = null
+
+/** Long enough that tapping an empty topic twice does not queue two sittings,
+ * short enough that a learner who genuinely moved on to another topic is not
+ * told to wait. */
+const PACK_REQUEST_COOLDOWN_MS = 15 * 60_000
+
+/**
+ * "Nothing packed for this topic" is a fact about SUPPLY, and supply is
+ * something the Mac can act on.
+ *
+ * Learn is the one mode with no floor under it. A review can always be served
+ * as free recall on a probe the engine already holds, but eight beats of
+ * teaching cannot be synthesised from the record — and inventing them on the
+ * phone would put this app in the business of writing curriculum, which is the
+ * one line it does not cross. So the honest move is to ask the desk, and say
+ * so.
+ *
+ * Guarded by the same rules as every other sitting: never on top of one that
+ * is running, and never twice for the same topic inside a quarter of an hour.
+ * A learner tapping an empty topic repeatedly is expressing one wish, not
+ * several.
+ */
+async function requestPacksFor(topic: string): Promise<{ started: boolean; reason: string }> {
+  if (anySessionRunning()) {
+    return { started: false, reason: 'Your Mac is mid-sitting. It will pack this when that finishes.' }
+  }
+  const now = Date.now()
+  if (
+    lastPackRequest &&
+    lastPackRequest.topic === topic &&
+    now - lastPackRequest.at < PACK_REQUEST_COOLDOWN_MS
+  ) {
+    return { started: false, reason: 'Already asked — your Mac is working on it.' }
+  }
+  lastPackRequest = { topic, at: now }
+  try {
+    const dueUnpacked = (await dueNodeIds(topic).catch(() => new Set<string>())).size > 0
+    await startSession(
+      composePackTopUpKickoff({ topic, count: PACK_FLOOR, dueUnpacked }),
+      'learn',
+      undefined,
+      topic,
+    )
+    return { started: true, reason: 'Your Mac is writing cards for this now.' }
+  } catch (err) {
+    lastPackRequest = null
+    return { started: false, reason: err instanceof Error ? err.message : 'Could not start a sitting.' }
+  }
+}
+
 function ensureStores(): void {
   pairing ??= createPairingStore({ filePath: userDataPath('paired-devices.json') })
   outbox ??= createOutboxStore({ filePath: userDataPath('outbox.jsonl') })
@@ -122,6 +176,7 @@ export async function startLinkServer(options: { exposeToLan?: boolean } = {}): 
     ...mobileProviders(walkableFor),
     walkablePacks: walkableFor,
     onEvidenceBanked: () => scheduleAutoSettle(SETTLE_QUIET_MS),
+    requestPacks: requestPacksFor,
     // Read-modify-write, so filing from the phone cannot clobber a display
     // title or any other setting the learner set at the desk.
     setFolder: async (topic, folder) => {

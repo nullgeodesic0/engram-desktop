@@ -40,6 +40,14 @@ export interface LinkServerDeps {
    * always openable. Injected like every other read, so this module gains an
    * answer and never a way to ask the engine. */
   reviewQueue?: (topic: string) => Promise<unknown>
+  /** Asks the Mac to author packs for a topic the phone found empty.
+   *
+   * An ACTION, injected exactly like every read here is, because this module
+   * may hold a handle and never the ability itself — it is the thing an
+   * untrusted peer sends bytes to. Whether a sitting actually starts is
+   * decided on the other side of that line, by the same guards that govern
+   * every other sitting. */
+  requestPacks?: (topic: string) => Promise<{ started: boolean; reason: string }>
   /** A topic's packs that still have work in them — see main/session/
    * walkablePacks.ts. Optional for the same reason the other providers are:
    * without it this server answers with every pack on disk, which is what it
@@ -313,6 +321,32 @@ export function createLinkServer(deps: LinkServerDeps): LinkServer {
     if (accepted > 0) deps.onEvidenceBanked?.(accepted)
   }
 
+  /** "There is nothing here to learn" is a fact about supply, and supply is
+   * something the Mac can do something about. Without this the phone's only
+   * honest move was to say no. */
+  async function handlePackRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    if (!(await pairing.verifyToken(bearerToken(req)))) {
+      send(res, 401, { error: 'unauthorized' })
+      return
+    }
+    if (!deps.requestPacks) {
+      send(res, 404, { error: 'packing not available' })
+      return
+    }
+    const body = await readBody(req, res)
+    if (body === null) return
+    // Hand-checked rather than schema-parsed: one field, and the topic is
+    // used only to name a sitting and read the due queue. It never becomes a
+    // path — cardPackStore is the module that treats a topic as a path
+    // segment, and it does its own refusal.
+    const topic = (body as { topic?: unknown }).topic
+    if (typeof topic !== 'string' || topic.length === 0 || topic.length > 120) {
+      send(res, 400, { error: 'bad request' })
+      return
+    }
+    send(res, 200, await deps.requestPacks(topic))
+  }
+
   async function handleSetFolder(req: IncomingMessage, res: ServerResponse): Promise<void> {
     if (!(await pairing.verifyToken(bearerToken(req)))) {
       send(res, 401, { error: 'unauthorized' })
@@ -385,6 +419,10 @@ export function createLinkServer(deps: LinkServerDeps): LinkServer {
         }
         if (req.method === 'POST' && url === '/link/outbox') {
           void handleOutbox(req, res)
+          return
+        }
+        if (req.method === 'POST' && url === '/link/request-packs') {
+          void handlePackRequest(req, res)
           return
         }
         if (req.method === 'POST' && url === '/link/topic-folder') {
