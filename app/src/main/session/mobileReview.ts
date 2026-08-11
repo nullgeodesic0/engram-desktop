@@ -1,4 +1,5 @@
 import { engramRead } from '../engramCli/readOnly'
+import { memoRead } from '../engramCli/readMemo'
 
 /**
  * The floor under Review: what the phone can always open.
@@ -77,9 +78,9 @@ export async function buildReviewQueue(
   topic: string,
   humanize: (id: string) => string,
 ): Promise<ReviewProbe[]> {
-  const due = await engramRead<RawDue[]>('due', ['--topic', topic, '--limit', '200']).catch(
-    () => [] as RawDue[],
-  )
+  const due = await memoRead(`due-topic:${topic}`, () =>
+    engramRead<RawDue[]>('due', ['--topic', topic, '--limit', '200']),
+  ).catch(() => [] as RawDue[])
   return due
     .filter((item) => item.topic === topic)
     .map((item) => ({

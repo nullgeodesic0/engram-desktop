@@ -1,4 +1,5 @@
 import { packsForMode } from './walkablePacks'
+import { memoRead } from '../engramCli/readMemo'
 import { readRecordStamp } from './recordStamp'
 import { engramRead, readTopicGraph } from '../engramCli/readOnly'
 import type { DueItem, TopicListEntry } from '../../shared/types'
@@ -76,7 +77,7 @@ export interface MobileOverview {
  * pack it may open from one it may not.
  */
 export async function dueNodeIds(topic: string): Promise<Set<string>> {
-  const due = await engramRead<DueItem[]>('due', ['--limit', '500']).catch(() => [] as DueItem[])
+  const due = await memoRead('due-all', () => engramRead<DueItem[]>('due', ['--limit', '500'])).catch(() => [] as DueItem[])
   return new Set(due.filter((item) => item.topic === topic).map((item) => item.id))
 }
 
@@ -86,7 +87,7 @@ export async function buildMobileOverview(
   const topics = await engramRead<TopicListEntry[]>('topics')
   // One `due` call for everything, then tally by topic. Per-topic calls would
   // be N spawns of the CLI for a menu that refreshes on every app foreground.
-  const due = await engramRead<DueItem[]>('due', ['--limit', '500'])
+  const due = await memoRead('due-all', () => engramRead<DueItem[]>('due', ['--limit', '500']))
 
   const dueNodesByTopic = new Map<string, Set<string>>()
   for (const item of due) {

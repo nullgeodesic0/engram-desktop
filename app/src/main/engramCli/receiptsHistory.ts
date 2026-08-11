@@ -1,4 +1,5 @@
 import { readdir, readFile } from 'node:fs/promises'
+import { memoRead } from './readMemo'
 import { join } from 'node:path'
 import { engramLearningHome } from './readOnly'
 
@@ -137,6 +138,14 @@ function mondayOf(dateStr: string): string {
  * of how many receipts have accumulated.
  */
 export async function readReceiptsHistory(): Promise<ReceiptsHistory> {
+  // Memoised for a couple of seconds. The phone's menu asks whether each pack
+  // has been graded since it was written, once per pack, and each of those
+  // questions read this whole history — eleven full parses to answer one
+  // menu. See readMemo.ts for why the window is short.
+  return memoRead('receipts-history', readReceiptsHistoryUncached)
+}
+
+async function readReceiptsHistoryUncached(): Promise<ReceiptsHistory> {
   const home = await engramLearningHome()
   const receiptsDir = join(home, 'receipts')
 
