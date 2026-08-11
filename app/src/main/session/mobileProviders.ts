@@ -3,6 +3,7 @@ import { buildTopicReceipts, buildGradeRoster } from './mobileReceipts'
 import { listArtifacts, readArtifact } from './mobileArtifacts'
 import { buildCoach } from './mobileCoach'
 import { buildReviewQueue } from './mobileReview'
+import { readLearnPreview } from './mobileLearnPreview'
 import { arcPrefixesOf, humanizeWithArcs } from '../../shared/humanizeId'
 import { readTopicGraph } from '../engramCli/readOnly'
 
@@ -50,6 +51,17 @@ export function mobileProviders(packedFor: (topic: string) => Promise<string[]>)
         | null
       const arcs = arcPrefixesOf(Object.keys(graph?.nodes ?? {}))
       return buildReviewQueue(topic, (id) => humanizeWithArcs(id, arcs))
+    },
+    // The nearest thing to a floor under Learn — a read-ahead, never a
+    // receipt. See mobileLearnPreview.ts for why this stops at showing the
+    // question and never grades an attempt at it.
+    learnPreview: async (topic: string) => {
+      const graph = (await readTopicGraph(topic).catch(() => null)) as
+        | { nodes?: Record<string, unknown> }
+        | null
+      const arcs = arcPrefixesOf(Object.keys(graph?.nodes ?? {}))
+      const packed = new Set(await packedFor(topic).catch(() => [] as string[]))
+      return readLearnPreview(topic, packed, (id) => humanizeWithArcs(id, arcs))
     },
   }
 }

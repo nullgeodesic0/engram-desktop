@@ -45,6 +45,9 @@ export interface LinkServerDeps {
    * always openable. Injected like every other read, so this module gains an
    * answer and never a way to ask the engine. */
   reviewQueue?: (topic: string) => Promise<unknown>
+  /** A read-ahead for an unpacked Learn topic — the next new node's question,
+   * never graded. See main/session/mobileLearnPreview.ts. */
+  learnPreview?: (topic: string) => Promise<unknown>
   /** Asks the Mac to author packs for a topic the phone found empty.
    *
    * An ACTION, injected exactly like every read here is, because this module
@@ -240,6 +243,14 @@ export function createLinkServer(deps: LinkServerDeps): LinkServer {
         return
       }
       send(res, 200, { items: await deps.reviewQueue(topic) })
+      return
+    }
+    if (url.pathname === '/link/learn-preview') {
+      if (!deps.learnPreview) {
+        send(res, 404, { error: 'no learn preview provider' })
+        return
+      }
+      send(res, 200, { preview: await deps.learnPreview(topic) })
       return
     }
     if (url.pathname === '/link/coach') {
@@ -444,6 +455,7 @@ export function createLinkServer(deps: LinkServerDeps): LinkServer {
             url === '/link/artifacts' ||
             url === '/link/coach' ||
             url === '/link/review' ||
+            url === '/link/learn-preview' ||
             url === '/link/grades' ||
             url === '/link/artifact')
         ) {

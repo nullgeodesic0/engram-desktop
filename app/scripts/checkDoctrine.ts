@@ -767,6 +767,8 @@ const PINNED_ANSWER_READERS: Record<string, string> = {
   'renderer/src/components/GraphView.tsx': 'learner-initiated: in-map text filter',
   'shared/types.ts': 'type declarations only',
   'shared/ritualFromTranscript.ts': 'a comment quoting the plugin’s own stash shape — no field is read',
+  'main/session/mobileLearnPreview.test.ts':
+    'test fixture data carrying claim/rubric/transfer_probe on purpose, asserted ABSENT from the returned preview in the same test (JSON.stringify(preview) must not contain "secret") — proving exclusion, not reading the fields',
 }
 // Property access AND destructuring/shorthand, so `const { claim } = node`
 // can't slip past a check that only looked for `node.claim`.
@@ -1133,6 +1135,52 @@ if (reviewText && !reviewText.includes('interface RawDue {')) {
     'D6.reviewProbeOnly',
     'main/session/mobileReview.ts no longer narrows its due read to a whitelisted shape.',
     'A due item carries claim and rubric. A read typed to exactly the fields wanted cannot forward one by accident; a read cast to the full DueItem can forward all of them at once. Widen the narrow type when a field is genuinely needed — do not reach for the full item.',
+  )
+}
+
+// (b3c) The Learn preview ships a QUESTION, and never grades an attempt at
+// it.
+//
+// mobileLearnPreview.ts is the nearest thing to a floor under Learn: a
+// read-ahead to the next unpacked node's `probe`, for a topic Learn cannot
+// otherwise open. It exists precisely because that field is already
+// legitimate content — the curriculum architect writes it before any
+// teaching sitting runs — and showing a learner the question they are about
+// to be asked is not authoring anything.
+//
+// What it must never become is graded. An encode receipt means "the learner
+// was taught this and it stuck"; a cold guess at an unscaffolded probe,
+// submitted as if it were one, would corrupt that meaning in the permanent
+// FSRS record — a materially worse risk than the review recognition floor,
+// which only widens who may perform an ALREADY-SCHEDULED retrieval. This
+// checks the same two things D6.reviewProbeOnly does, plus a third: no path
+// to MobileWalk or an OutboxItem exists in this file at all.
+const learnPreviewText = TEXT.get('main/session/mobileLearnPreview.ts') ?? ''
+if (learnPreviewText && /\.(claim|rubric|transfer_probe)\b/.test(learnPreviewText)) {
+  fail(
+    'D6.learnPreviewProbeOnly',
+    'main/session/mobileLearnPreview.ts reads a claim/rubric/transfer_probe field — the learn preview must be a question only.',
+    'Showing the question a node will ask is not authoring anything; showing the claim or rubric would be, and would let the phone reveal exactly what a real teaching sitting is supposed to earn.',
+  )
+}
+// The brace matters — see D6.reviewProbeOnly's identical fix above.
+// `includes('interface RawNode')` also matches `interface RawNodeX`.
+if (learnPreviewText && !learnPreviewText.includes('interface RawNode {')) {
+  fail(
+    'D6.learnPreviewProbeOnly',
+    'main/session/mobileLearnPreview.ts no longer narrows its node read to a whitelisted shape.',
+    'A graph node carries claim, rubric and transfer_probe alongside probe. A read typed to exactly the fields wanted cannot forward one by accident; a read cast to the full node type can forward all of them at once.',
+  )
+}
+// codeOnly (function declaration, hoisted — defined later in this file):
+// comments may NAME the forbidden identifiers while explaining their
+// absence, as this module's own doc comment does; only real code use of them
+// should ever fail this check.
+if (learnPreviewText && /MobileWalk|OutboxItem|sourceStamp|\brate\(/.test(codeOnly(learnPreviewText))) {
+  fail(
+    'D6.learnPreviewProbeOnly',
+    'main/session/mobileLearnPreview.ts references walk evidence, an outbox item, a source stamp, or a rate call.',
+    'This module is a read-ahead, not a walk. The moment it can produce evidence, "provisional until a desk sitting solidifies it" starts covering encodes that were never taught at all — a cold guess submitted as a real first exposure. That widening, if it is ever wanted, is a deliberate doctrine change argued on its own, not a helper function added here.',
   )
 }
 
