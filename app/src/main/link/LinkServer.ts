@@ -365,13 +365,25 @@ export function createLinkServer(deps: LinkServerDeps): LinkServer {
       send(res, 404, { error: 'packing not available' })
       return
     }
-    const body = await readBody(req, res)
-    if (body === null) return
+    const raw = await readBody(req, res)
+    if (raw === null) return
+    // `readBody` returns the raw request-body STRING. Every request here came
+    // back 400 on a real device because this used to read `.topic` straight
+    // off that string — which of course has no such property, so the check
+    // below always failed — instead of parsing it first. Nothing caught it:
+    // this route had no test.
+    let body: unknown
+    try {
+      body = JSON.parse(raw)
+    } catch {
+      send(res, 400, { error: 'malformed json' })
+      return
+    }
     // Hand-checked rather than schema-parsed: one field, and the topic is
     // used only to name a sitting and read the due queue. It never becomes a
     // path — cardPackStore is the module that treats a topic as a path
     // segment, and it does its own refusal.
-    const topic = (body as { topic?: unknown }).topic
+    const topic = (body as { topic?: unknown })?.topic
     if (typeof topic !== 'string' || topic.length === 0 || topic.length > 120) {
       send(res, 400, { error: 'bad request' })
       return

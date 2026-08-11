@@ -322,4 +322,92 @@ describe('LinkServer', () => {
 
     expect(res.status).toBe(404)
   })
+
+  describe('/link/request-packs', () => {
+    /**
+     * The route Learn's "ASK" button calls when a topic has nothing packed.
+     * Found broken on a real device: every request came back 400, because the
+     * handler never called JSON.parse on the body — it read `.topic` straight
+     * off the raw request-body STRING, which has no such property, so `topic`
+     * was always `undefined` and the type check always failed. Nothing caught
+     * it because the route had no test at all.
+     */
+    test('accepts a JSON body and asks the injected requestPacks', async () => {
+      const asked: string[] = []
+      const withRequest = createLinkServer({
+        pairing,
+        outbox,
+        packs,
+        host: '127.0.0.1',
+        requestPacks: async (topic) => {
+          asked.push(topic)
+          return { started: true, reason: 'Your Mac is writing cards for this now.' }
+        },
+      })
+      try {
+        const { port } = await withRequest.start()
+        const offer = await pairing.beginPairing()
+        const paired = await fetch(`http://127.0.0.1:${port}/link/pair`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ code: offer.code, deviceName: 'iPhone' }),
+        })
+        const token = (await paired.json()).token
+
+        const res = await fetch(`http://127.0.0.1:${port}/link/request-packs`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+          body: JSON.stringify({ topic: 'grad-classical-mechanics' }),
+        })
+
+        expect(res.status).toBe(200)
+        expect(await res.json()).toEqual({
+          started: true,
+          reason: 'Your Mac is writing cards for this now.',
+        })
+        expect(asked).toEqual(['grad-classical-mechanics'])
+      } finally {
+        await withRequest.stop()
+      }
+    })
+
+    test('refuses with no token', async () => {
+      const res = await post('/link/request-packs', { topic: 'grad-classical-mechanics' })
+      expect(res.status).toBe(401)
+    })
+
+    test('says so plainly when no requestPacks provider is wired', async () => {
+      const token = await pair()
+      const res = await post('/link/request-packs', { topic: 'grad-classical-mechanics' }, token)
+      expect(res.status).toBe(404)
+    })
+
+    test('rejects a missing topic rather than crashing', async () => {
+      const withRequest = createLinkServer({
+        pairing,
+        outbox,
+        packs,
+        host: '127.0.0.1',
+        requestPacks: async () => ({ started: false, reason: 'unreachable' }),
+      })
+      try {
+        const { port } = await withRequest.start()
+        const offer = await pairing.beginPairing()
+        const paired = await fetch(`http://127.0.0.1:${port}/link/pair`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ code: offer.code, deviceName: 'iPhone' }),
+        })
+        const token = (await paired.json()).token
+        const res = await fetch(`http://127.0.0.1:${port}/link/request-packs`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+          body: JSON.stringify({}),
+        })
+        expect(res.status).toBe(400)
+      } finally {
+        await withRequest.stop()
+      }
+    })
+  })
 })
