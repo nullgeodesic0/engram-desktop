@@ -196,6 +196,11 @@ export interface PackSchedulerDeps {
   /** Node ids the engine says are due for a topic. Optional: without it the
    * scheduler behaves as before and simply never mentions owed retrievals. */
   dueNodesFor?: (topic: string) => Promise<Set<string>>
+  /** The topic list. Optional and defaulted to the real engine read — tests
+   * inject a fixture instead of spawning the real CLI, which is also what
+   * exposed the concurrency race: a live spawn is slow enough that two calls
+   * milliseconds apart genuinely overlap. */
+  listTopics?: () => Promise<TopicListEntry[]>
 }
 
 /**
@@ -204,11 +209,33 @@ export interface PackSchedulerDeps {
  * Exported so a Settings button can run it on demand — an automatic thing the
  * learner cannot also trigger by hand is an automatic thing they cannot test.
  */
-export async function topUpPacksNow(
+export function topUpPacksNow(
   deps: PackSchedulerDeps,
   now: number = Date.now(),
 ): Promise<{ ranFor: string | null; stock: StockedTopic[] }> {
-  const topics = await engramRead<TopicListEntry[]>('topics').catch(() => [] as TopicListEntry[])
+  // A concurrency guard, needed once this runs on more than a ten-minute
+  // timer. `lastRunAt` is written partway through — after the topics/packed
+  // reads, right before starting a sitting — so two calls close enough
+  // together both read the OLD value, both pass the cooldown check, and both
+  // start a sitting. Safe on a lone timer; not safe once a phone request can
+  // trigger a check, because opening a menu fires several requests within
+  // milliseconds of each other. The second call joins the first's promise
+  // rather than starting its own pass.
+  if (inFlight) return inFlight
+  inFlight = runTopUpPass(deps, now).finally(() => {
+    inFlight = null
+  })
+  return inFlight
+}
+
+let inFlight: Promise<{ ranFor: string | null; stock: StockedTopic[] }> | null = null
+
+async function runTopUpPass(
+  deps: PackSchedulerDeps,
+  now: number,
+): Promise<{ ranFor: string | null; stock: StockedTopic[] }> {
+  const listTopics = deps.listTopics ?? (() => engramRead<TopicListEntry[]>('topics'))
+  const topics = await listTopics().catch(() => [] as TopicListEntry[])
 
   // Which topics owe a retrieval the phone cannot serve. A top-up that
   // covered only what comes NEXT left those topics permanently unopenable in

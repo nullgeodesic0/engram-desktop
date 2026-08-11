@@ -7,6 +7,7 @@ import {
   FIRST_CHECK_MS,
   PACK_FLOOR,
   PACK_TARGET,
+  topUpPacksNow,
   type TopicStock,
 } from './packScheduler'
 
@@ -216,5 +217,43 @@ describe('firstCheckDelay', () => {
     // link server; adding a topics read and possibly a sitting to that moment
     // is how a scheduler earns a reputation for making the app slow to open.
     expect(FIRST_CHECK_MS).toBeGreaterThanOrEqual(30_000)
+  })
+})
+
+/**
+ * A concurrency guard, needed once this runs on more than a timer.
+ *
+ * `topUpPacksNow` decides whether to start a sitting by reading `lastRunAt`,
+ * then only writes it partway through — after the topics/packed reads, right
+ * before calling `startSession`. Two calls close enough together both read
+ * the old `lastRunAt`, both pass the cooldown check, and both start a
+ * sitting. That was safe while the only caller was a ten-minute timer; it
+ * stops being safe the moment a phone request can trigger a check, because a
+ * menu open fires several requests within milliseconds of each other.
+ */
+describe('topUpPacksNow concurrency', () => {
+  it('two overlapping calls start at most one sitting', async () => {
+    let starts = 0
+    const gate: { resolve: (() => void) | null } = { resolve: null }
+    const deps = {
+      listTopics: async () => [{
+        topic: 't', title: 'T', goal: '', nodes: 5, due: 0,
+        states: { new: 5, learning: 0, review: 0 },
+      }],
+      packedFor: async () => [],
+      sittingRunning: () => false,
+      startSession: async () => {
+        starts += 1
+        // Held open, so the second call's read-decide window overlaps the
+        // first call's write-then-start window — the exact race.
+        await new Promise<void>((resolve) => { gate.resolve = resolve })
+      },
+    }
+    const first = topUpPacksNow(deps, Date.parse('2026-08-10T12:00:00Z'))
+    const second = topUpPacksNow(deps, Date.parse('2026-08-10T12:00:00.010Z'))
+    await new Promise((r) => setTimeout(r, 10))
+    gate.resolve?.()
+    await Promise.all([first, second])
+    expect(starts).toBe(1)
   })
 })

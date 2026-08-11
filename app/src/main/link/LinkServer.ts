@@ -36,6 +36,11 @@ export interface LinkServerDeps {
    * The server does not decide what happens next — it does not know whether a
    * sitting is running or whether the learner is mid-thought at the desk. */
   onEvidenceBanked?: (accepted: number) => void
+  /** Fires on every authenticated read — the phone proving the Mac is
+   * reachable by reaching it. Nudges the pack scheduler rather than deciding
+   * anything: whether a sitting actually starts is still gated by
+   * `sittingRunning` and the scheduler's own cooldowns. */
+  onPhoneSeen?: () => void
   /** Due retrievals for one topic, as QUESTIONS — the floor that makes Review
    * always openable. Injected like every other read, so this module gains an
    * answer and never a way to ask the engine. */
@@ -185,6 +190,12 @@ export function createLinkServer(deps: LinkServerDeps): LinkServer {
       send(res, 401, { error: 'unauthorized' })
       return
     }
+    // A paired phone just proved the Mac is reachable, by reaching it. That
+    // is precisely the condition the pack scheduler was waiting up to ten
+    // minutes to notice on its own timer — "generate mobile packs if the Mac
+    // is accessible" was already the scheduler's whole job, it just never
+    // heard about accessibility except by polling for it.
+    deps.onPhoneSeen?.()
     const topic = url.searchParams.get('topic') ?? ''
     if (url.pathname === '/link/packs') {
       // Walkable rather than present, when the composition root supplies the

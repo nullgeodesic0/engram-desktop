@@ -8,7 +8,7 @@ import { createPairingStore, type PairingStore } from './pairing'
 import { linkReadDeps, makeWalkableFor } from './linkDeps'
 import { dueNodeIds } from '../session/mobileOverview'
 import { composePackTopUpKickoff } from '../../shared/mobileKickoff'
-import { PACK_FLOOR } from '../session/packScheduler'
+import { PACK_FLOOR, topUpPacksNow } from '../session/packScheduler'
 import { drainOutbox, type DrainResult } from './mobileDrain'
 import { startSession, anySessionRunning } from '../ipc/sessionHandlers'
 import { receiptSince } from '../session/mobileReceipts'
@@ -86,6 +86,24 @@ const PACK_REQUEST_COOLDOWN_MS = 15 * 60_000
  * A learner tapping an empty topic repeatedly is expressing one wish, not
  * several.
  */
+/** How rarely a phone-presence nudge may itself trigger a top-up PASS.
+ *
+ * Not a gate on starting a sitting — `topUpPacksNow`'s own cooldowns already
+ * own that decision, tightened for exactly this by the concurrency guard in
+ * packScheduler.ts. This is only about not re-reading the topic list and
+ * every pack directory on every one of a menu's several requests; the memo
+ * layer already collapses the engine reads, so this is a second, cheap
+ * belt for the same buckle. */
+const PHONE_NUDGE_COOLDOWN_MS = 60_000
+let lastNudgeAt = 0
+
+function nudgePackTopUp(): void {
+  const now = Date.now()
+  if (now - lastNudgeAt < PHONE_NUDGE_COOLDOWN_MS) return
+  lastNudgeAt = now
+  void topUpPacksNow(packSchedulerDeps(), now).catch(() => {})
+}
+
 async function requestPacksFor(topic: string): Promise<{ started: boolean; reason: string }> {
   if (anySessionRunning()) {
     return { started: false, reason: 'Your Mac is mid-sitting. It will pack this when that finishes.' }
@@ -139,6 +157,7 @@ export async function startLinkServer(options: { exposeToLan?: boolean } = {}): 
     // broken anyway.
     ...linkReadDeps({ outbox: outbox!, packs: packs! }),
     onEvidenceBanked: () => scheduleAutoSettle(SETTLE_QUIET_MS),
+    onPhoneSeen: nudgePackTopUp,
     requestPacks: requestPacksFor,
     // Read-modify-write, so filing from the phone cannot clobber a display
     // title or any other setting the learner set at the desk.
