@@ -40,12 +40,15 @@ export function mobileProviders(packedFor: (topic: string) => Promise<string[]>)
     reviewQueue: async (topic: string) => {
       // Narrow on purpose: ids are all the arc heuristic needs, and a wider
       // type here would put every node's claim in a local variable.
-      // Narrow on purpose: ids are all the arc heuristic needs, and a wider
-      // type here would put every node's claim in a local variable.
+      // The graph file keys its nodes BY ID rather than listing them, which
+      // an array-shaped read discovered by crashing the whole server on its
+      // first request. Ids are all the arc heuristic needs, so this reads the
+      // keys and never touches a node body — no claim lands in a local
+      // variable here at all.
       const graph = (await readTopicGraph(topic).catch(() => null)) as
-        | { nodes?: { id: string }[] }
+        | { nodes?: Record<string, unknown> }
         | null
-      const arcs = arcPrefixesOf((graph?.nodes ?? []).map((n) => n.id))
+      const arcs = arcPrefixesOf(Object.keys(graph?.nodes ?? {}))
       return buildReviewQueue(topic, (id) => humanizeWithArcs(id, arcs))
     },
   }

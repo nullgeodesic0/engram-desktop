@@ -108,6 +108,27 @@ export interface LinkServer {
   readonly port: number
 }
 
+/**
+ * Runs a handler and refuses to let its failure reach the process.
+ *
+ * Every route used to be dispatched with a bare `void handleX(...)`. A
+ * rejected promise from one of those is an unhandled rejection, which Node
+ * treats as fatal — so ANY provider throwing took the whole link down, and in
+ * the app that is the Electron main process. Found by pointing the dev harness
+ * at the real record: the first `/link/review` request hit a graph file whose
+ * nodes are keyed by id rather than listed, and the server exited.
+ *
+ * A provider that throws is a bug to fix, and it must not also be an outage.
+ * The learner's evidence is durable on the phone either way; a 500 costs them
+ * a retry, and a dead server costs them the surface.
+ */
+function guard(res: ServerResponse, work: Promise<void>): void {
+  void work.catch((err) => {
+    console.error('[link] handler failed:', err)
+    if (!res.headersSent) send(res, 500, { error: 'handler failed' })
+  })
+}
+
 function send(res: ServerResponse, status: number, body: unknown): void {
   const payload = JSON.stringify(body)
   res.writeHead(status, { 'content-type': 'application/json' })
@@ -403,7 +424,7 @@ export function createLinkServer(deps: LinkServerDeps): LinkServer {
             url === '/link/grades' ||
             url === '/link/artifact')
         ) {
-          void handlePackRead(req, res, parsedUrl)
+          guard(res, handlePackRead(req, res, parsedUrl))
           return
         }
         if (req.method === 'GET' && url === '/link/health') {
@@ -414,19 +435,19 @@ export function createLinkServer(deps: LinkServerDeps): LinkServer {
           return
         }
         if (req.method === 'POST' && url === '/link/pair') {
-          void handlePair(req, res)
+          guard(res, handlePair(req, res))
           return
         }
         if (req.method === 'POST' && url === '/link/outbox') {
-          void handleOutbox(req, res)
+          guard(res, handleOutbox(req, res))
           return
         }
         if (req.method === 'POST' && url === '/link/request-packs') {
-          void handlePackRequest(req, res)
+          guard(res, handlePackRequest(req, res))
           return
         }
         if (req.method === 'POST' && url === '/link/topic-folder') {
-          void handleSetFolder(req, res)
+          guard(res, handleSetFolder(req, res))
           return
         }
         send(res, 404, { error: 'no such route' })

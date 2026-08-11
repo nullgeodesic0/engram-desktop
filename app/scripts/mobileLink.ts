@@ -19,7 +19,7 @@ import { createCardPackStore } from '../src/main/link/cardPackStore'
 import { createLinkServer } from '../src/main/link/LinkServer'
 import { createOutboxStore } from '../src/main/link/outboxStore'
 import { createPairingStore } from '../src/main/link/pairing'
-import { mobileProviders } from '../src/main/session/mobileProviders'
+import { linkReadDeps } from '../src/main/link/linkDeps'
 import { networkInterfaces } from 'node:os'
 
 const USER_DATA = join(homedir(), 'Library', 'Application Support', 'Engram Desktop')
@@ -47,10 +47,13 @@ async function main(): Promise<void> {
     pairing,
     outbox,
     packs,
-    // Same provider the app wires, so what this harness shows is what the
-    // shipped menu shows — a dev server that served different data would be
-    // testing itself rather than the product.
-    ...mobileProviders((topic) => packs.listFor(topic)),
+    // The app's own read set, imported rather than re-listed. This line used
+    // to call mobileProviders directly with `packs.listFor`, under a comment
+    // promising it matched the app — and it stopped matching the moment the
+    // app grew walkablePacks, reviewQueue and the rest. A harness that serves
+    // a different contract than the thing it stands in for is worse than no
+    // harness, because it is trusted.
+    ...linkReadDeps({ outbox, packs }),
     host: lan ? '0.0.0.0' : '127.0.0.1',
     port,
   })

@@ -5,13 +5,12 @@ import { createCardPackStore, type CardPackStore } from './cardPackStore'
 import { createLinkServer, type LinkServer } from './LinkServer'
 import { createOutboxStore, type OutboxStore } from './outboxStore'
 import { createPairingStore, type PairingStore } from './pairing'
-import { walkablePacks, receiptSinceProvider, packsForMode } from '../session/walkablePacks'
+import { linkReadDeps, makeWalkableFor } from './linkDeps'
 import { dueNodeIds } from '../session/mobileOverview'
 import { composePackTopUpKickoff } from '../../shared/mobileKickoff'
 import { PACK_FLOOR } from '../session/packScheduler'
 import { drainOutbox, type DrainResult } from './mobileDrain'
 import { startSession, anySessionRunning } from '../ipc/sessionHandlers'
-import { mobileProviders } from '../session/mobileProviders'
 import { receiptSince } from '../session/mobileReceipts'
 import { getTopicSettings, setTopicSettings } from '../session/topicSettings'
 import { tmpdir } from 'node:os'
@@ -61,39 +60,6 @@ function lanAddress(): string | null {
     }
   }
   return null
-}
-
-/**
- * A topic's packs that still have work in them.
- *
- * The one definition, shared by the phone's list, the overview's counts and
- * the scheduler's "does this topic need more packs" question. They must agree:
- * a scheduler that counts spent packs leaves a topic starved, and a phone that
- * lists them hands back the node the learner just finished.
- */
-async function walkableFor(
-  topic: string,
-  mode: 'learn' | 'review' = 'learn',
-): Promise<string[]> {
-  ensureStores()
-  const walkable = await walkablePacks(topic, {
-    entries: (t) => packs!.entriesFor(t),
-    receiptSince: receiptSinceProvider,
-    // Everything the phone has produced for this topic and the Mac has not
-    // finished with — queued, in flight, or handed off and awaiting a grade.
-    banked: async (t) => {
-      const [pending, inFlight] = await Promise.all([outbox!.pending(), outbox!.inFlight()])
-      return new Set(
-        [...pending, ...inFlight.map((f) => f.item)]
-          .filter((item) => item.topic === t)
-          .map((item) => item.node),
-      )
-    },
-  })
-  // Review is narrower: a pack is only openable if the engine says its node is
-  // due. Fetched only when asked for, so the Learn path costs no extra read.
-  if (mode !== 'review') return walkable
-  return packsForMode(walkable, await dueNodeIds(topic), 'review')
 }
 
 /** The last topic the phone asked to have packed, and when. */
@@ -167,14 +133,11 @@ export async function startLinkServer(options: { exposeToLan?: boolean } = {}): 
     pairing: pairing!,
     outbox: outbox!,
     packs: packs!,
-    // Every read the phone gets, defined once in main/session/ and shared
-    // with the dev fixture so the two cannot serve different route tables.
-    // Walkable, not merely present. A pack whose node the desk has already
-    // graded since the pack was written, or whose walk is sitting in the
-    // outbox, is a question about the past — offering it is how every walk of
-    // a topic came to serve the same node.
-    ...mobileProviders(walkableFor),
-    walkablePacks: walkableFor,
+    // Every read the phone gets, assembled in one place and shared with the
+    // dev harness so the two cannot serve different route tables — see
+    // linkDeps.ts for the three times that promise was made by comment and
+    // broken anyway.
+    ...linkReadDeps({ outbox: outbox!, packs: packs! }),
     onEvidenceBanked: () => scheduleAutoSettle(SETTLE_QUIET_MS),
     requestPacks: requestPacksFor,
     // Read-modify-write, so filing from the phone cannot clobber a display
@@ -392,7 +355,10 @@ export function packSchedulerDeps() {
     // to write more. It must be the walkable count for the same reason the
     // phone's list must be: a topic full of spent packs is a topic with
     // nothing to walk, and counting the files would leave it starved forever.
-    packedFor: walkableFor,
+    packedFor: (topic: string) => {
+      ensureStores()
+      return makeWalkableFor({ outbox: outbox!, packs: packs! })(topic)
+    },
     sittingRunning: anySessionRunning,
     dueNodesFor: dueNodeIds,
     startSession: (message: string, topic: string) => startSession(message, 'learn', undefined, topic),
