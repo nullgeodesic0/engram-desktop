@@ -36,6 +36,10 @@ export interface LinkServerDeps {
    * The server does not decide what happens next — it does not know whether a
    * sitting is running or whether the learner is mid-thought at the desk. */
   onEvidenceBanked?: (accepted: number) => void
+  /** Due retrievals for one topic, as QUESTIONS — the floor that makes Review
+   * always openable. Injected like every other read, so this module gains an
+   * answer and never a way to ask the engine. */
+  reviewQueue?: (topic: string) => Promise<unknown>
   /** A topic's packs that still have work in them — see main/session/
    * walkablePacks.ts. Optional for the same reason the other providers are:
    * without it this server answers with every pack on disk, which is what it
@@ -188,6 +192,14 @@ export function createLinkServer(deps: LinkServerDeps): LinkServer {
         return
       }
       send(res, 200, { topics: await deps.gradeRoster(url.searchParams.get('mode') ?? undefined) })
+      return
+    }
+    if (url.pathname === '/link/review') {
+      if (!deps.reviewQueue) {
+        send(res, 404, { error: 'no review provider' })
+        return
+      }
+      send(res, 200, { items: await deps.reviewQueue(topic) })
       return
     }
     if (url.pathname === '/link/coach') {
@@ -353,6 +365,7 @@ export function createLinkServer(deps: LinkServerDeps): LinkServer {
             url === '/link/receipts' ||
             url === '/link/artifacts' ||
             url === '/link/coach' ||
+            url === '/link/review' ||
             url === '/link/grades' ||
             url === '/link/artifact')
         ) {

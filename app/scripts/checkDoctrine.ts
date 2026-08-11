@@ -1084,6 +1084,38 @@ if (overviewText && /\.(probe|claim|rubric|transfer_probe)\b/.test(overviewText)
   )
 }
 
+// (b3b) The review queue ships QUESTIONS, never answers.
+//
+// This is the one module allowed to read a probe, and it is pinned separately
+// from the overview for exactly that reason. A review is a retrieval — probe,
+// production, grade — and a surface that cannot ask a question cannot host
+// one; requiring an authored card pack instead is what left eleven due
+// retrievals unopenable on the phone, since no pack ever covered a due node.
+//
+// The probe is what the learner is shown at the desk. The CLAIM and the RUBRIC
+// are the expected answer, and they do not cross. `transfer_probe` does not
+// cross either: it is the held-back generalisation test, and spending it on a
+// surface that cannot grade it would burn the one probe the node has.
+const reviewText = TEXT.get('main/session/mobileReview.ts') ?? ''
+if (reviewText && /\.(claim|rubric|transfer_probe)\b/.test(reviewText)) {
+  fail(
+    'D6.reviewProbeOnly',
+    'main/session/mobileReview.ts reads a claim/rubric/transfer_probe field — the review queue must be questions only.',
+    'Shipping the question is what asking for a retrieval IS. Shipping the expected answer alongside it turns the next production into recognition, with a receipt recording it as memory. If a review card genuinely needs more, that is a decision about the order of operations (probe → production → confidence → reveal), not a plumbing convenience.',
+  )
+}
+// The brace matters. `includes('interface RawDue')` also matched
+// `interface RawDueAnything`, so renaming the type past the check was a
+// one-character edit — a pin that cannot fail is decoration. Verified red by
+// breaking it.
+if (reviewText && !reviewText.includes('interface RawDue {')) {
+  fail(
+    'D6.reviewProbeOnly',
+    'main/session/mobileReview.ts no longer narrows its due read to a whitelisted shape.',
+    'A due item carries claim and rubric. A read typed to exactly the fields wanted cannot forward one by accident; a read cast to the full DueItem can forward all of them at once. Widen the narrow type when a field is genuinely needed — do not reach for the full item.',
+  )
+}
+
 // (b4) The graph projection stays a projection.
 //
 // buildConstellationGraph narrows the graph read to exactly the fields a

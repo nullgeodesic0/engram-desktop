@@ -2,6 +2,9 @@ import { buildMobileOverview, buildConstellationGraph } from './mobileOverview'
 import { buildTopicReceipts, buildGradeRoster } from './mobileReceipts'
 import { listArtifacts, readArtifact } from './mobileArtifacts'
 import { buildCoach } from './mobileCoach'
+import { buildReviewQueue } from './mobileReview'
+import { arcPrefixesOf, humanizeWithArcs } from '../../shared/humanizeId'
+import { readTopicGraph } from '../engramCli/readOnly'
 
 /**
  * Every answer the phone-facing server is allowed to give, in one place.
@@ -32,5 +35,18 @@ export function mobileProviders(packedFor: (topic: string) => Promise<string[]>)
     artifacts: () => listArtifacts(),
     artifact: (topic: string, node: string) => readArtifact(topic, node),
     coach: () => buildCoach(),
+    // The floor under Review. Questions only — the claim and the rubric never
+    // leave this machine, which main/session/mobileReview.ts is pinned on.
+    reviewQueue: async (topic: string) => {
+      // Narrow on purpose: ids are all the arc heuristic needs, and a wider
+      // type here would put every node's claim in a local variable.
+      // Narrow on purpose: ids are all the arc heuristic needs, and a wider
+      // type here would put every node's claim in a local variable.
+      const graph = (await readTopicGraph(topic).catch(() => null)) as
+        | { nodes?: { id: string }[] }
+        | null
+      const arcs = arcPrefixesOf((graph?.nodes ?? []).map((n) => n.id))
+      return buildReviewQueue(topic, (id) => humanizeWithArcs(id, arcs))
+    },
   }
 }
