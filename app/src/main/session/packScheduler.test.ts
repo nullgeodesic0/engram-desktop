@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { askFor, chooseTopUp, packStock, PACK_FLOOR, PACK_TARGET, type TopicStock } from './packScheduler'
+import {
+  askFor,
+  chooseTopUp,
+  packStock,
+  CHECK_INTERVAL_MS,
+  FIRST_CHECK_MS,
+  PACK_FLOOR,
+  PACK_TARGET,
+  type TopicStock,
+} from './packScheduler'
 
 function stock(over: Partial<TopicStock> = {}): TopicStock {
   return { topic: 't', packed: 0, walkable: 5, ...over }
@@ -184,5 +193,28 @@ describe('due work as demand', () => {
   it('asks for enough to cover what is owed', () => {
     const [t] = packStock([{ topic: 'a', packed: PACK_TARGET, walkable: 40, dueUnpacked: 3 }])
     expect(askFor(t)).toBe(3)
+  })
+})
+
+/**
+ * The first check has to happen near launch.
+ *
+ * `startPackScheduler` set an interval and nothing else, so a freshly launched
+ * app did not look at its stock for ten minutes — the exact window in which
+ * someone who just relaunched is standing there wondering why nothing has
+ * happened. Worse in combination with auto-settle: the tenth-minute check can
+ * land while a settle sitting holds the engine, be correctly skipped, and wait
+ * another ten.
+ */
+describe('firstCheckDelay', () => {
+  it('is far shorter than the polling interval', () => {
+    expect(FIRST_CHECK_MS).toBeLessThan(CHECK_INTERVAL_MS)
+  })
+
+  it('leaves the launch itself alone', () => {
+    // Not zero. Launch is already doing window creation, store reads and the
+    // link server; adding a topics read and possibly a sitting to that moment
+    // is how a scheduler earns a reputation for making the app slow to open.
+    expect(FIRST_CHECK_MS).toBeGreaterThanOrEqual(30_000)
   })
 })

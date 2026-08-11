@@ -163,9 +163,26 @@ import { composePackTopUpKickoff } from '../../shared/mobileKickoff'
 import type { TopicListEntry } from '../../shared/types'
 
 /** Polls often, acts rarely — the cooldown above is what throttles action. */
-const CHECK_INTERVAL_MS = 10 * 60_000
+export const CHECK_INTERVAL_MS = 10 * 60_000
+
+/**
+ * How long after launch the first check happens.
+ *
+ * There was no first check. `startPackScheduler` set an interval and nothing
+ * else, so a freshly launched app did not look at its own stock for ten
+ * minutes — precisely the window in which someone who just relaunched is
+ * watching to see whether anything happens. Worse alongside auto-settle: the
+ * tenth-minute check can land while a settle sitting holds the engine, be
+ * correctly skipped, and wait another ten.
+ *
+ * Not zero. Launch is already creating a window, reading stores and starting
+ * the link server, and adding a topics read — possibly a whole sitting — to
+ * that moment is how a background scheduler earns the blame for a slow open.
+ */
+export const FIRST_CHECK_MS = 45_000
 
 let timer: ReturnType<typeof setInterval> | null = null
+let firstCheck: ReturnType<typeof setTimeout> | null = null
 let lastRunAt: number | null = null
 
 export interface PackSchedulerDeps {
@@ -245,10 +262,16 @@ export async function topUpPacksNow(
 
 export function startPackScheduler(deps: PackSchedulerDeps): void {
   if (timer) return
+  firstCheck = setTimeout(() => {
+    firstCheck = null
+    void topUpPacksNow(deps).catch(() => {})
+  }, FIRST_CHECK_MS)
   timer = setInterval(() => void topUpPacksNow(deps).catch(() => {}), CHECK_INTERVAL_MS)
 }
 
 export function stopPackScheduler(): void {
   if (timer) clearInterval(timer)
+  if (firstCheck) clearTimeout(firstCheck)
   timer = null
+  firstCheck = null
 }
