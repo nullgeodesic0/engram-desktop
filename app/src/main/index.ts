@@ -6,7 +6,7 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { registerLinkHandlers, startLinkServer, stopLinkServer } from './link/linkService'
 import { registerReadHandlers } from './ipc/readHandlers'
-import { registerSessionHandlers, rebindWindow, abortAllSessions } from './ipc/sessionHandlers'
+import { registerSessionHandlers, rebindWindow, abortAllSessions, onIdle } from './ipc/sessionHandlers'
 import { resolveEngramPlugin } from './session/pluginResolver'
 import { resolveClaudeBinary } from './session/claudeResolver'
 import { engramLearningHome } from './engramCli/readOnly'
@@ -22,7 +22,7 @@ import { getAuthSettings, setAuthMode } from './session/authSettings'
 import { apiKeyStore, isPlausibleApiKey } from './session/auth'
 import { getUnlockedAchievements, recordUnlocked } from './session/achievementsStore'
 import { startReviewNotifier, stopReviewNotifier, checkReviewsNow, refreshDueCount } from './session/reviewNotifier'
-import { startPackScheduler, stopPackScheduler } from './session/packScheduler'
+import { startPackScheduler, stopPackScheduler, topUpPacksNow } from './session/packScheduler'
 import { packSchedulerDeps } from './link/linkService'
 import { checkForUpdate, getCachedUpdateCheck, maybeAutoCheckForUpdate } from './session/updateCheck'
 import { restoreWindowState, trackWindowState } from './windowState'
@@ -514,10 +514,14 @@ app.whenReady().then(() => {
   registerSessionHandlers(createWindow())
   createTray()
   startReviewNotifier(() => focusOrCreateWindow('review'), sendDueCount)
-  // Keeps the phone stocked without anyone remembering to. Polls every half
-  // hour, acts at most once every six — see packScheduler.ts on why restraint
-  // is the whole design.
+  // Keeps the phone stocked without anyone remembering to — and now, without
+  // making anyone wait: the poll below is a safety net, but the real trigger
+  // is `onIdle`, firing the instant the desk goes free (a sitting closes, an
+  // abort lands) so a chain of under-stocked topics fills back-to-back rather
+  // than one every ten minutes. See packScheduler.ts's module doc for why
+  // restraint moved from TIME to CONTENTION.
   startPackScheduler(packSchedulerDeps())
+  onIdle(() => void topUpPacksNow(packSchedulerDeps()).catch(() => {}))
 
   // Drain a deep link that arrived before we were ready to act on it (see
   // deepLinkQueue + handleDeepLink/deliverDeepLink's own comments) — the

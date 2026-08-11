@@ -1,5 +1,6 @@
 /**
- * Keeping the phone stocked, without anyone remembering to.
+ * Keeping the phone stocked, without anyone remembering to — and keeping it
+ * that way, the moment the desk is free to do it.
  *
  * A pack has to exist before a node can be walked away from the desk, and
  * until now packs existed only because someone ran a script. That makes the
@@ -14,13 +15,28 @@
  * can only decide that stock is low enough to be worth one sitting, and pick
  * which topic.
  *
- * That makes restraint the whole design:
+ * ## What changed: restraint used to mean waiting; now it means yielding
+ *
+ * The first design's restraint was TIME — a six-hour cooldown between
+ * top-ups, on the theory that stock falls slowly (one pack per walk) so
+ * acting often was never necessary. That theory was correct about the RATE
+ * stock falls at and wrong about what the learner wants: "eventually
+ * restocked" read as "broken" the moment someone actually used the phone
+ * surface for a real session and watched the shelf stay empty for hours
+ * after. The redesign's restraint is CONTENTION, not time — one sitting at a
+ * time, still, because two competing for the same engine is real — but the
+ * moment the desk goes idle (a sitting closes, any sitting, anywhere) is
+ * exactly the moment to check again, not a ten-minute or six-hour wait for
+ * permission. `sessionHandlers.ts`'s `onIdle` hook is what makes "the moment"
+ * real rather than aspirational — see `startPackScheduler`'s caller in
+ * `linkService.ts`.
  *
  * - **One at a time.** Packing spawns a sitting, and two at once compete for
  *   the same engine. It also doubles the chance of the hang that stranded a
  *   sitting for 96 minutes with nothing to show for it.
- * - **A long cooldown.** Stock falls slowly — a topic loses one pack per walk
- *   — so checking often is fine but ACTING often is not.
+ * - **A short debounce, not a long cooldown.** `MIN_GAP_MS` exists only to
+ *   stop a busy-loop re-entering itself, not to ration how often the phone is
+ *   allowed to be useful. An unreachable topic ignores it outright.
  * - **Never past what the topic has.** A topic with two unpacked nodes cannot
  *   yield five packs; asking for five would leave it permanently in deficit
  *   and permanently chosen, which is a loop with a sitting on the end of it.
@@ -28,11 +44,14 @@
  * The cheaper path runs alongside this one and needs no scheduler at all: a
  * sitting that has just taught a node is already being asked to pack it, so
  * ordinary desk work keeps the shelf stocked on its own. This exists for the
- * topic you have not sat with in a while.
+ * topic you have not sat with in a while — and now runs it down to zero
+ * deficit across every topic, one sitting after another, whenever the engine
+ * is free to give it the time.
  */
 
-/** Packs per topic worth having on hand. Roughly a week of phone walks at the
- * pace the app measures, and small enough that topping up is one sitting. */
+/** Packs per topic worth having on hand, always. Roughly a week of phone
+ * walks at the pace the app measures, and small enough that topping up is
+ * one sitting. */
 export const PACK_TARGET = 5
 
 /**
@@ -40,8 +59,8 @@ export const PACK_TARGET = 5
  *
  * BREADTH BEFORE DEPTH, and the first version had it backwards. It chose the
  * emptiest topic and filled it toward the target, which sounds right and is
- * not: with five topics at zero and a six-hour cooldown, the fifth of them
- * would have waited thirty hours. Observed exactly that way — a learner
+ * not: with five topics at zero, the fifth of them waited far longer than the
+ * first for no reason but turn order. Observed exactly that way — a learner
  * reached for classical mechanics on the phone and it was not there, because
  * the scheduler had spent its one turn on derivatives.
  *
@@ -51,18 +70,18 @@ export const PACK_TARGET = 5
  */
 export const PACK_FLOOR = 2
 
-/** Between top-up sittings once every topic is reachable. Long on purpose:
- * stock drains one pack per walk, so there is no version of urgent. */
-export const COOLDOWN_MS = 6 * 60 * 60_000
-
 /**
- * Between sittings while a topic is still unreachable.
+ * The only throttle left, and it is not rationing — it is a debounce.
  *
- * Shorter, because "you cannot open this topic away from your desk" is a real
- * gap rather than a low shelf, and thirty hours to close it is not automatic
- * in any sense the word usually carries.
+ * Multiple triggers can fire close together (a sitting closing, the phone
+ * polling, a ten-minute safety-net tick), and without SOME gap two of them
+ * could both read "nothing running yet" and both act. Short on purpose:
+ * long enough to not be a busy-loop, nowhere near long enough to be felt as
+ * a wait. An unreachable topic (see `chooseTopUp`) ignores this gap entirely
+ * — "you cannot open this topic away from your desk at all" outranks even a
+ * busy-loop guard.
  */
-export const URGENT_COOLDOWN_MS = 45 * 60_000
+export const MIN_GAP_MS = 15_000
 
 export interface TopicStock {
   topic: string
@@ -123,11 +142,11 @@ export function chooseTopUp(stocked: StockedTopic[], state: SchedulerState): Sto
 
   // Below the floor is a topic the learner cannot open away from the desk at
   // all. That is a different condition from a low shelf, and it gets both the
-  // priority and the shorter clock.
+  // priority and a pass on the debounce below — "you cannot open this at all"
+  // does not wait on a busy-loop guard meant for the ordinary case.
   const unreachable = hungry.filter((t) => t.packed < PACK_FLOOR && t.walkable > 0)
   const urgent = unreachable.length > 0
-  const cooldown = urgent ? URGENT_COOLDOWN_MS : COOLDOWN_MS
-  if (state.lastRunAt !== null && state.now - state.lastRunAt < cooldown) return null
+  if (!urgent && state.lastRunAt !== null && state.now - state.lastRunAt < MIN_GAP_MS) return null
 
   // Owed beats speculative. Below the floor still comes first — a topic the
   // learner cannot open AT ALL is worse than a retrieval they cannot do away
@@ -163,8 +182,13 @@ import { composePackTopUpKickoff } from '../../shared/mobileKickoff'
 import { withSessionStartLock } from './sessionStartLock'
 import type { TopicListEntry } from '../../shared/types'
 
-/** Polls often, acts rarely — the cooldown above is what throttles action. */
-export const CHECK_INTERVAL_MS = 10 * 60_000
+/** A safety net, not the primary trigger any more — `onIdle` (wired in
+ * linkService.ts) is what actually catches "the desk just went free."  This
+ * poll exists only to notice stock changes `onIdle` cannot see on its own
+ * (a topic's due queue grew since the last check, say), so it stays short
+ * without needing to, since it is no longer the thing standing between a
+ * learner and a restocked shelf. */
+export const CHECK_INTERVAL_MS = 2 * 60_000
 
 /**
  * How long after launch the first check happens.

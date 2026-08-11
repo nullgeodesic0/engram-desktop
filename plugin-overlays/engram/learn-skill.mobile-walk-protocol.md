@@ -27,6 +27,8 @@ Run this protocol ONLY when this sitting's opening message declares the mobile s
 
 **What it is.** All eight beats still run, in order, and nothing is skipped. What changes is the *form the learner's turn may take*: on this surface a turn may be a card interaction — a pick, a cloze fill, or an assembled sequence of steps — instead of typed prose. Recognition is weaker retrieval than production, and encoding by recognition is weaker still. This mode trades evidence quality for a sitting that can happen at all. If asked, say that plainly, once; never present the two surfaces as equal.
 
+**A pack written for a node the learner already knows** — one that is already encoded and due, packed so the phone can serve its review away from the desk rather than to teach it for the first time — keeps all eight beats but may write OPEN A GAP, PREDICT, STRUGGLE, RESOLVE, SELF-EXPLAIN, and CONNECT tersely: a one-line restatement of the retrieval cue is enough, not fresh teaching of material this sitting is not introducing. VERIFY is exactly where this pack earns its keep and gets full weight, exactly as it would for a new node. The pack scheduler's own kickoff names which nodes these are; nothing about the beat grammar, the kind restrictions, or the rating rules above changes for them.
+
 **The beats, and what each may accept:**
 
 | Beat | May be served as | Never |

@@ -51,6 +51,12 @@ export function composePackTopUpKickoff(options: {
   /** True when this topic owes retrievals the phone has no pack for. */
   dueUnpacked?: boolean
 }): string {
+  // 2026-08-11 — the dueUnpacked form now also names those retrievals
+  // "brief, already known", citing the overlay's own new allowance
+  // (learn-skill.mobile-walk-protocol.md: a pack for an already-encoded due
+  // node may write its six non-VERIFY beats tersely). Same licence as the
+  // clear-reviews-first line: this NAMES which of the overlay's defined
+  // behaviors applies, and says nothing about how brief means what.
   const { topic, count, dueUnpacked } = options
   // Written as two WHOLE messages rather than one with a clause spliced in.
   // checkDoctrine's collector reduces every interpolation to `${}`, so a
@@ -72,7 +78,7 @@ export function composePackTopUpKickoff(options: {
   // plainly, in both forms, rather than leaving a background sitting to
   // discover the gate on its own.
   if (dueUnpacked) {
-    return `/engram:learn ${topic} — before I next travel, please make sure about ${count} more node(s) here are ready to walk on my phone. I also have retrievals due here that I would like to be able to do away from the desk. Cover nodes I can actually take next, and stop when they are packed. Skip the clear-reviews-first gate — no one is at the desk to answer it; go straight to new material.`
+    return `/engram:learn ${topic} — before I next travel, please make sure about ${count} more node(s) here are ready to walk on my phone. I also have retrievals due here I would like away from the desk — brief, already known. Cover nodes I can actually take next, and stop when they are packed. Skip the clear-reviews-first gate — no one is at the desk to answer it; go straight to new material.`
   }
   return `/engram:learn ${topic} — before I next travel, please make sure about ${count} more node(s) here are ready to walk on my phone. Cover nodes I can actually take next, and stop when they are packed. Skip the clear-reviews-first gate — no one is at the desk to answer it; go straight to new material.`
 }

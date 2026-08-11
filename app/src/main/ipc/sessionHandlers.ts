@@ -24,6 +24,31 @@ export function anySessionRunning(): boolean {
   return sessions.size > 0
 }
 
+/** Fired the moment the engine goes from "one or more sittings live" to
+ * "none" — a sitting closed, or was aborted, and nothing replaced it. This is
+ * what makes the pack scheduler EVENT-driven rather than poll-driven: the
+ * previous design waited up to ten minutes (or six hours, under the old
+ * cooldown) to notice the desk was free; this notices on the same tick the
+ * desk becomes free, whether that sitting was a pack top-up itself (so the
+ * NEXT under-stocked topic starts immediately, chaining sittings back-to-back
+ * until every topic reaches its target) or an ordinary desk `/learn`/`/review`
+ * (so the scheduler resumes exactly where an interruption paused it, rather
+ * than waiting out a poll interval first). */
+const idleListeners: Array<() => void> = []
+
+/** Registers a callback for the idle transition. Not a single slot — nothing
+ * stops a second subscriber existing later, and a `Set`-of-one now is cheaper
+ * than a breaking change later. */
+export function onIdle(fn: () => void): void {
+  idleListeners.push(fn)
+}
+
+function notifyIfIdle(): void {
+  if (sessions.size === 0) {
+    for (const fn of idleListeners) fn()
+  }
+}
+
 // Mutable rather than a captured constructor param — the tray keeps the app running
 // after the window closes, so a later reopen creates a genuinely new BrowserWindow;
 // event forwarding needs to follow it rather than sending into a destroyed window.
@@ -84,7 +109,10 @@ export async function startSession(
   sessions.set(manager.sessionId, manager)
   manager.on('event', (event: SessionEvent) => {
     activeWindow?.webContents.send('session:event', { sessionId: manager.sessionId, event })
-    if (event.type === 'closed') sessions.delete(manager.sessionId)
+    if (event.type === 'closed') {
+      sessions.delete(manager.sessionId)
+      notifyIfIdle()
+    }
   })
   // Resuming rides the prior turn's system prompt already in effect — --resume
   // doesn't accept a new one, so a topic's extra instructions (and its initial-context
@@ -140,6 +168,7 @@ export function registerSessionHandlers(win: BrowserWindow): void {
   ipcMain.handle('session:abort', (_e, sessionId: string) => {
     sessions.get(sessionId)?.abort()
     sessions.delete(sessionId)
+    notifyIfIdle()
   })
 
   ipcMain.handle('bridge:answer', (_e, requestId: string, response: BridgeAskResponse) => {

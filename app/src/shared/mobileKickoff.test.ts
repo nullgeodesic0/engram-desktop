@@ -98,4 +98,18 @@ describe('composePackTopUpKickoff', () => {
     expect(withDue.toLowerCase()).toContain('clear-reviews-first')
     expect(withDue.length).toBeLessThan(400)
   })
+
+  it('names due nodes as already known, licensing the overlay\'s brief-beats allowance', () => {
+    // The kickoff may only NAME which of the overlay's own defined behaviors
+    // applies (same licence as the clear-reviews-first line above) — the
+    // overlay itself (learn-skill.mobile-walk-protocol.md) is what defines
+    // what "brief" means procedurally.
+    const withDue = composePackTopUpKickoff({
+      topic: 'grad-statistical-mechanics',
+      count: 3,
+      dueUnpacked: true,
+    })
+    expect(withDue.toLowerCase()).toContain('already known')
+    expect(withDue).not.toMatch(/assessor|rubric|when grading|grade (it|this|the)/i)
+  })
 })

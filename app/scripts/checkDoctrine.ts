@@ -729,7 +729,14 @@ for (const f of FILES) {
 // left a background sitting waiting on an answer nobody was there to give —
 // or worse, risked a default that spent the whole sitting reviewing instead
 // of producing the new packs the phone actually asked for.
-const PINNED_MESSAGE_HASH = 'e5a969304aad8ba1'
+// 2026-08-11 (2) — re-pinned: the dueUnpacked form now also names those
+// retrievals "brief, already known", citing the learn-skill.mobile-walk-
+// protocol.md overlay's own new allowance (a pack for an already-encoded due
+// node may write its six non-VERIFY beats tersely). Same licence as the
+// clear-reviews-first line already on this form: NAMES which of the
+// overlay's own defined behaviors applies, says nothing about how "brief"
+// is achieved — that stays the overlay's business, not this message's.
+const PINNED_MESSAGE_HASH = 'fa2697d3a67910df'
 if (sha(injectedMessages.sort().join('\n')) !== PINNED_MESSAGE_HASH) {
   fail(
     'D3.kickoff',
@@ -892,7 +899,17 @@ const PINNED_OVERLAY_HASHES: Record<string, string> = {
   // carrying a `recall`-kind card at ANY beat, not only SELF_EXPLAIN and
   // VERIFY — a pack authored before this pin that still carries one fails
   // validation and gets rewritten by its next sitting.
-  'learn-skill.mobile-walk-protocol.md': '9f41dac24633b276',
+  // 2026-08-11 (4) — re-pinned for the pack scheduler's redesign from a
+  // long-cooldown poll to an eager, event-driven one (packScheduler.ts,
+  // sessionHandlers.ts's onIdle). A pack written for an already-encoded,
+  // due node — packed for REVIEW away from the desk, not to teach the node
+  // for the first time — may now write its six non-VERIFY beats tersely,
+  // a one-line restatement rather than fresh teaching. Nothing else moves:
+  // all eight beats still run, VERIFY still gets full weight and the same
+  // kind/rating rules as any other pack, and this applies only to nodes the
+  // pack scheduler itself identifies as already-encoded-and-due — a tutor
+  // never infers "this one can be brief" on its own.
+  'learn-skill.mobile-walk-protocol.md': '4f85d56bd5c0b370',
   'dialogue-grammar.mobile-walk-exception.md': '9cbbd325856c2c76',
 }
 const overlayFiles = readdirSync(OVERLAY_DIR).filter((f) => f.endsWith('.md'))

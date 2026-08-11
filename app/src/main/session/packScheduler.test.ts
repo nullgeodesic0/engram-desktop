@@ -6,6 +6,7 @@ import {
   packStock,
   CHECK_INTERVAL_MS,
   FIRST_CHECK_MS,
+  MIN_GAP_MS,
   PACK_FLOOR,
   PACK_TARGET,
   topUpPacksNow,
@@ -60,21 +61,22 @@ describe('chooseTopUp', () => {
     expect(choice).toBeNull()
   })
 
-  it('refuses inside the long cooldown once every topic is reachable', () => {
-    // A topic AT the floor is low, not unreachable, so it waits on the long
-    // clock. An unreachable one would have run an hour in — see the
-    // breadth-before-depth suite for that half.
+  it('refuses inside the debounce gap for a merely-low, reachable topic', () => {
+    // A topic AT the floor is low, not unreachable, so a re-entry a moment
+    // ago still blocks it — the debounce exists to stop a busy-loop, not to
+    // ration a scarce resource. An unreachable one is never blocked by this
+    // at all — see the breadth-before-depth suite for that half.
     const choice = chooseTopUp(packStock([{ topic: 'a', packed: PACK_FLOOR, walkable: 9 }]), {
       ...idle,
-      lastRunAt: idle.now - 60 * 60_000,
+      lastRunAt: idle.now - 1_000,
     })
     expect(choice).toBeNull()
   })
 
-  it('runs again once the cooldown has passed', () => {
+  it('runs again the moment the debounce gap has passed', () => {
     const choice = chooseTopUp(packStock([{ topic: 'a', packed: PACK_FLOOR, walkable: 9 }]), {
       ...idle,
-      lastRunAt: idle.now - 7 * 60 * 60_000,
+      lastRunAt: idle.now - MIN_GAP_MS,
     })
     expect(choice?.topic).toBe('a')
   })
@@ -113,10 +115,13 @@ describe('breadth before depth', () => {
     expect(choice?.topic).toBe('unreachable')
   })
 
-  it('uses the short clock while anything is unreachable', () => {
-    const state = { ...idle, lastRunAt: idle.now - 50 * 60_000 }
+  it('an unreachable topic ignores the debounce gap entirely', () => {
+    // "You cannot open this topic away from your desk at all" outranks even
+    // the busy-loop guard — the moment a prior sitting ends, the next one for
+    // an unreachable topic may start immediately.
+    const state = { ...idle, lastRunAt: idle.now - 1 }
     expect(chooseTopUp(packStock([{ topic: 'a', packed: 0, walkable: 9 }]), state)?.topic).toBe('a')
-    // The same gap is far too soon once everything is merely low.
+    // The same near-zero gap is still too soon for a topic that is merely low.
     expect(chooseTopUp(packStock([{ topic: 'a', packed: PACK_FLOOR, walkable: 9 }]), state)).toBeNull()
   })
 
