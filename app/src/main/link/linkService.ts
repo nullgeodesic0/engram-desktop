@@ -11,6 +11,7 @@ import { composePackTopUpKickoff } from '../../shared/mobileKickoff'
 import { PACK_FLOOR, topUpPacksNow } from '../session/packScheduler'
 import { drainOutbox, type DrainResult } from './mobileDrain'
 import { startSession, anySessionRunning } from '../ipc/sessionHandlers'
+import { withSessionStartLock } from '../session/sessionStartLock'
 import { receiptSince } from '../session/mobileReceipts'
 import { getTopicSettings, setTopicSettings } from '../session/topicSettings'
 import { tmpdir } from 'node:os'
@@ -105,31 +106,39 @@ function nudgePackTopUp(): void {
 }
 
 async function requestPacksFor(topic: string): Promise<{ started: boolean; reason: string }> {
-  if (anySessionRunning()) {
-    return { started: false, reason: 'Your Mac is mid-sitting. It will pack this when that finishes.' }
-  }
-  const now = Date.now()
-  if (
-    lastPackRequest &&
-    lastPackRequest.topic === topic &&
-    now - lastPackRequest.at < PACK_REQUEST_COOLDOWN_MS
-  ) {
-    return { started: false, reason: 'Already asked — your Mac is working on it.' }
-  }
-  lastPackRequest = { topic, at: now }
-  try {
-    const dueUnpacked = (await dueNodeIds(topic).catch(() => new Set<string>())).size > 0
-    await startSession(
-      composePackTopUpKickoff({ topic, count: PACK_FLOOR, dueUnpacked }),
-      'learn',
-      undefined,
-      topic,
-    )
-    return { started: true, reason: 'Your Mac is writing cards for this now.' }
-  } catch (err) {
-    lastPackRequest = null
-    return { started: false, reason: err instanceof Error ? err.message : 'Could not start a sitting.' }
-  }
+  // The whole decide-then-start sequence, not just the `anySessionRunning()`
+  // read, is behind the lock. `dueNodeIds` below is a real async gap — an
+  // engine read — and a second call (from another ASK tap, or the
+  // background scheduler landing at the same moment) that raced in during
+  // that gap used to see the same "nothing running" this call sees, because
+  // nothing was registered in `sessions` yet. See sessionStartLock.ts.
+  return withSessionStartLock(async () => {
+    if (anySessionRunning()) {
+      return { started: false, reason: 'Your Mac is mid-sitting. It will pack this when that finishes.' }
+    }
+    const now = Date.now()
+    if (
+      lastPackRequest &&
+      lastPackRequest.topic === topic &&
+      now - lastPackRequest.at < PACK_REQUEST_COOLDOWN_MS
+    ) {
+      return { started: false, reason: 'Already asked — your Mac is working on it.' }
+    }
+    lastPackRequest = { topic, at: now }
+    try {
+      const dueUnpacked = (await dueNodeIds(topic).catch(() => new Set<string>())).size > 0
+      await startSession(
+        composePackTopUpKickoff({ topic, count: PACK_FLOOR, dueUnpacked }),
+        'learn',
+        undefined,
+        topic,
+      )
+      return { started: true, reason: 'Your Mac is writing cards for this now.' }
+    } catch (err) {
+      lastPackRequest = null
+      return { started: false, reason: err instanceof Error ? err.message : 'Could not start a sitting.' }
+    }
+  })
 }
 
 function ensureStores(): void {
@@ -325,14 +334,22 @@ function scheduleAutoSettle(delayMs: number): void {
 }
 
 async function autoSettle(): Promise<void> {
-  // The learner is at the desk doing the real thing. Their sitting owns the
-  // engine; the queue can wait for the sweep.
-  if (anySessionRunning()) return
-  ensureStores()
-  const waiting = await outbox!.pending().catch(() => [])
-  const stale = await outbox!.staleInFlight().catch(() => [])
-  if (waiting.length === 0 && stale.length === 0) return
-  await settleQueue().catch(() => undefined)
+  // The whole check-then-drain sequence, locked — not just the
+  // `anySessionRunning()` read. This is a third automatic trigger (the
+  // phone's ASK button and the pack scheduler are the other two) with the
+  // identical shape: a synchronous guard, then real async work (the pending/
+  // staleInFlight reads below) before anything is actually started. See
+  // sessionStartLock.ts.
+  return withSessionStartLock(async () => {
+    // The learner is at the desk doing the real thing. Their sitting owns the
+    // engine; the queue can wait for the sweep.
+    if (anySessionRunning()) return
+    ensureStores()
+    const waiting = await outbox!.pending().catch(() => [])
+    const stale = await outbox!.staleInFlight().catch(() => [])
+    if (waiting.length === 0 && stale.length === 0) return
+    await settleQueue().catch(() => undefined)
+  })
 }
 
 /**

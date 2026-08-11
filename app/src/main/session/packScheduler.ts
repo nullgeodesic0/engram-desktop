@@ -160,6 +160,7 @@ export function askFor(topic: StockedTopic): number {
 
 import { engramRead } from '../engramCli/readOnly'
 import { composePackTopUpKickoff } from '../../shared/mobileKickoff'
+import { withSessionStartLock } from './sessionStartLock'
 import type { TopicListEntry } from '../../shared/types'
 
 /** Polls often, acts rarely — the cooldown above is what throttles action. */
@@ -262,29 +263,39 @@ async function runTopUpPass(
   }
 
   const stock = packStock(rows)
-  const choice = chooseTopUp(stock, {
-    sittingRunning: deps.sittingRunning(),
-    lastRunAt,
-    now,
-  })
-  if (!choice) return { ranFor: null, stock }
 
-  // Stamped BEFORE the attempt, not after. A start that throws still counts
-  // against the cooldown — otherwise a topic whose sittings keep failing gets
-  // retried every poll, which is the loop the outbox already had to be taught
-  // not to run.
-  lastRunAt = now
-  await deps
-    .startSession(
-      composePackTopUpKickoff({
-        topic: choice.topic,
-        count: askFor(choice),
-        dueUnpacked: (dueUnpackedByTopic.get(choice.topic) ?? 0) > 0,
-      }),
-      choice.topic,
-    )
-    .catch(() => {})
-  return { ranFor: choice.topic, stock }
+  // The decision and the start are one locked unit, not just this pass's own
+  // `inFlight` dedup above — that only serializes `topUpPacksNow` against
+  // ITSELF. `deps.sittingRunning()` here reads the very same `sessions.size`
+  // the phone's ASK button checks (linkService.ts's requestPacksFor), and a
+  // call from THAT path can land in the gap between this read and this
+  // pass's own `startSession` call. See sessionStartLock.ts — reproduced
+  // live, 2026-08-11, as two concurrent sittings for the same topic.
+  return withSessionStartLock(async () => {
+    const choice = chooseTopUp(stock, {
+      sittingRunning: deps.sittingRunning(),
+      lastRunAt,
+      now,
+    })
+    if (!choice) return { ranFor: null, stock }
+
+    // Stamped BEFORE the attempt, not after. A start that throws still counts
+    // against the cooldown — otherwise a topic whose sittings keep failing gets
+    // retried every poll, which is the loop the outbox already had to be taught
+    // not to run.
+    lastRunAt = now
+    await deps
+      .startSession(
+        composePackTopUpKickoff({
+          topic: choice.topic,
+          count: askFor(choice),
+          dueUnpacked: (dueUnpackedByTopic.get(choice.topic) ?? 0) > 0,
+        }),
+        choice.topic,
+      )
+      .catch(() => {})
+    return { ranFor: choice.topic, stock }
+  })
 }
 
 export function startPackScheduler(deps: PackSchedulerDeps): void {

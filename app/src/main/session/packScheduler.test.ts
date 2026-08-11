@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { withSessionStartLock } from './sessionStartLock'
 import {
   askFor,
   chooseTopUp,
@@ -254,6 +255,64 @@ describe('topUpPacksNow concurrency', () => {
     await new Promise((r) => setTimeout(r, 10))
     gate.resolve?.()
     await Promise.all([first, second])
+    expect(starts).toBe(1)
+  })
+
+  /**
+   * The gap `inFlight` above cannot close: it only serializes `topUpPacksNow`
+   * against ITSELF. The actual incident (2026-08-11) was two DIFFERENT call
+   * paths — the phone's ASK button (linkService.ts's requestPacksFor) and
+   * this scheduler — each independently reading "nothing running" and both
+   * starting a sitting for the same topic. `sittingRunning` is live here
+   * (checks a real flag flipped by the other path's stand-in), proving the
+   * fix is the shared `withSessionStartLock`, not a smarter read of the
+   * running flag — no read survives being taken twice across an await.
+   */
+  it('a scheduler pass cannot act while a concurrent phone ASK holds the decision', async () => {
+    let sessionRunning = false
+    let starts = 0
+
+    // Stands in for requestPacksFor mid-flight: past its own "nothing
+    // running" check, holding the lock, NOT YET having flipped
+    // `sessionRunning` — the exact window in which an unlocked scheduler
+    // pass used to be free to barge in and read the same stale "false".
+    const askGate: { resolve: (() => void) | null } = { resolve: null }
+    const askHeld = new Promise<void>((resolve) => { askGate.resolve = resolve })
+    const ask = withSessionStartLock(async () => {
+      if (sessionRunning) return
+      await askHeld
+      starts += 1
+      sessionRunning = true
+    })
+
+    const deps = {
+      listTopics: async () => [{
+        topic: 't', title: 'T', goal: '', nodes: 5, due: 0,
+        states: { new: 5, learning: 0, review: 0 },
+      }],
+      packedFor: async () => [],
+      sittingRunning: () => sessionRunning,
+      startSession: async () => {
+        starts += 1
+        sessionRunning = true
+      },
+    }
+
+    // Fires while `ask` is still holding the lock open. Its own topic-stock
+    // scan (listTopics/packedFor above) resolves in a couple of microtasks —
+    // long before this test releases `ask` — so an unlocked scheduler
+    // decision reaches `chooseTopUp` well within the held window.
+    const scheduler = topUpPacksNow(deps, Date.parse('2026-08-10T12:00:00Z'))
+    await new Promise((r) => setTimeout(r, 5))
+    // Correctly still 0: `ask` hasn't released, so nothing has actually
+    // started yet — the scheduler's own decision is queued behind it, not
+    // running unlocked. An unfixed `runTopUpPass` fails HERE, at 1: its
+    // decision ran the moment its (much faster) topic-stock scan resolved,
+    // never having waited on `ask`'s held lock at all.
+    expect(starts).toBe(0)
+
+    askGate.resolve?.()
+    await Promise.all([scheduler, ask])
     expect(starts).toBe(1)
   })
 })
