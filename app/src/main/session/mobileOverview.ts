@@ -1,3 +1,4 @@
+import { packsForMode } from './walkablePacks'
 import { engramRead, readTopicGraph } from '../engramCli/readOnly'
 import type { DueItem, TopicListEntry } from '../../shared/types'
 
@@ -33,6 +34,13 @@ export interface MobileTopicOverview {
   due: number
   /** Nodes with a card pack on hand, so the phone can actually walk them. */
   packed: number
+  /** Of those, the ones the engine says are DUE — what Review can open.
+   *
+   * Separate from `due` on purpose, and the gap between them is the honest
+   * fact this menu has to show. `due` is what the desk owes; `reviewReady` is
+   * what the phone can actually hand you. A register that showed only the
+   * first offered work it could not open. */
+  reviewReady: number
   /** FSRS state counts — the shape the health ring and state chips draw. */
   states: { new: number; learning: number; review: number }
   /** App-local filing label. Folders are a VIEW over the list, never a
@@ -55,6 +63,19 @@ export interface MobileOverview {
  * knowledge of the pack store — the composition root owns that wiring, and
  * this stays a pure question about the engine plus one lookup.
  */
+/**
+ * The node ids the engine says are due for one topic.
+ *
+ * Ids only. A due ITEM carries probe, claim and rubric — the expected answers
+ * — which is the whole reason this module hands the phone counts rather than
+ * items; returning the ids keeps that boundary while letting Review tell a
+ * pack it may open from one it may not.
+ */
+export async function dueNodeIds(topic: string): Promise<Set<string>> {
+  const due = await engramRead<DueItem[]>('due', ['--limit', '500']).catch(() => [] as DueItem[])
+  return new Set(due.filter((item) => item.topic === topic).map((item) => item.id))
+}
+
 export async function buildMobileOverview(
   packedFor: (topic: string) => Promise<string[]>,
 ): Promise<MobileOverview> {
@@ -63,6 +84,12 @@ export async function buildMobileOverview(
   // be N spawns of the CLI for a menu that refreshes on every app foreground.
   const due = await engramRead<DueItem[]>('due', ['--limit', '500'])
 
+  const dueNodesByTopic = new Map<string, Set<string>>()
+  for (const item of due) {
+    const set = dueNodesByTopic.get(item.topic) ?? new Set<string>()
+    set.add(item.id)
+    dueNodesByTopic.set(item.topic, set)
+  }
   const dueByTopic = new Map<string, number>()
   for (const item of due) {
     dueByTopic.set(item.topic, (dueByTopic.get(item.topic) ?? 0) + 1)
@@ -70,11 +97,14 @@ export async function buildMobileOverview(
 
   const overview: MobileTopicOverview[] = []
   for (const entry of topics) {
+    const packedNodes = await packedFor(entry.topic)
     overview.push({
       topic: entry.topic,
       title: entry.title ?? entry.topic,
       due: dueByTopic.get(entry.topic) ?? 0,
-      packed: (await packedFor(entry.topic)).length,
+      packed: packedNodes.length,
+      reviewReady: packsForMode(
+        packedNodes, dueNodesByTopic.get(entry.topic) ?? new Set(), 'review').length,
       states: {
         new: entry.states?.new ?? 0,
         learning: entry.states?.learning ?? 0,

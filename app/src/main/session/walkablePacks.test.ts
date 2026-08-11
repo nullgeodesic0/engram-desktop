@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { walkablePacks, receiptRetiresPack } from './walkablePacks'
+import { walkablePacks, receiptRetiresPack, packsForMode } from './walkablePacks'
 
 /**
  * The phone asked "what is packed for this topic" and got back every pack
@@ -91,5 +91,33 @@ describe('receiptRetiresPack', () => {
 
   it('does not retire on a date-only receipt from before the pack', () => {
     expect(receiptRetiresPack('2026-08-09', '2026-08-10T08:03:28.635Z')).toBe(false)
+  })
+})
+
+/**
+ * Review mode asks a narrower question than Learn.
+ *
+ * A pack existing is enough to LEARN a node. It is not enough to REVIEW one:
+ * a review is a retrieval the engine has scheduled, so walking a node that is
+ * not due would write a review receipt for work nobody was owed.
+ *
+ * The Review register listed every topic with due work regardless, so tapping
+ * Classical Mechanics — 7 due, no packs — did nothing at all. Reported from
+ * the device: "I can't open certain reviews."
+ */
+describe('packsForMode', () => {
+  const walkable = ['ensembles', 'partition-function', 'free-energy']
+  const due = new Set(['partition-function'])
+
+  it('learn takes any pack with work left in it', () => {
+    expect(packsForMode(walkable, due, 'learn')).toEqual(walkable)
+  })
+
+  it('review takes only packs whose node the engine says is due', () => {
+    expect(packsForMode(walkable, due, 'review')).toEqual(['partition-function'])
+  })
+
+  it('review with nothing due is empty rather than falling back to learn', () => {
+    expect(packsForMode(walkable, new Set(), 'review')).toEqual([])
   })
 })

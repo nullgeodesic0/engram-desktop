@@ -94,3 +94,23 @@ export async function receiptSinceProvider(
   const stamps = await readTopicReceiptStamps(topic, node)
   return stamps.some((ts) => receiptRetiresPack(ts, since))
 }
+
+/**
+ * Narrows a topic's walkable packs to what the requested mode may open.
+ *
+ * A pack existing is enough to LEARN a node. It is not enough to REVIEW one:
+ * a review is a retrieval the engine has scheduled, so walking a node that is
+ * not due would write a review receipt for work nobody was owed, and would
+ * quietly reschedule a node the engine had placed weeks out.
+ *
+ * Review with nothing due returns EMPTY rather than falling back to the learn
+ * list. A phone that offered "review" and handed over an unscheduled node
+ * would be inventing the queue it claims to be working through.
+ */
+export function packsForMode(
+  walkable: string[],
+  dueNodes: Set<string>,
+  mode: 'learn' | 'review',
+): string[] {
+  return mode === 'review' ? walkable.filter((n) => dueNodes.has(n)) : walkable
+}

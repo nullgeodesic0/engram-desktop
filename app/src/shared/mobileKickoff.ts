@@ -45,7 +45,20 @@ export function composeMobileDrainKickoff(options: MobileDrainOptions): string {
  * must contain is the D5-pinned overlay's business, and `emit_card_pack`'s own
  * description carries it.
  */
-export function composePackTopUpKickoff(options: { topic: string; count: number }): string {
-  const { topic, count } = options
+export function composePackTopUpKickoff(options: {
+  topic: string
+  count: number
+  /** True when this topic owes retrievals the phone has no pack for. */
+  dueUnpacked?: boolean
+}): string {
+  const { topic, count, dueUnpacked } = options
+  // Written as two WHOLE messages rather than one with a clause spliced in.
+  // checkDoctrine's collector reduces every interpolation to `${}`, so a
+  // sentence assembled into a variable would never appear in the pinned set —
+  // a load-bearing line hidden from the audit that exists to read it. Both
+  // forms are printed in full by the check, which is the point.
+  if (dueUnpacked) {
+    return `/engram:learn ${topic} — before I next travel, please make sure about ${count} more node(s) here are ready to walk on my phone. I also have retrievals due here that I would like to be able to do away from the desk. Cover nodes I can actually take next, and stop when they are packed.`
+  }
   return `/engram:learn ${topic} — before I next travel, please make sure about ${count} more node(s) here are ready to walk on my phone. Cover nodes I can actually take next, and stop when they are packed.`
 }

@@ -696,7 +696,22 @@ for (const f of FILES) {
 // more nodes ready to walk"), in the learner's own navigational voice. It says
 // nothing about how to teach or how to judge — what a pack must contain is the
 // D5-pinned overlay's business, carried by emit_card_pack's own description.
-const PINNED_MESSAGE_HASH = '663cfb0b849c639a'
+// 2026-08-10 (2) — composePackTopUpKickoff gains a SECOND form, sent when the
+// topic owes retrievals the phone has no pack for. Read whole: it adds one
+// sentence in the learner's own navigational voice — "I also have retrievals
+// due here that I would like to be able to do away from the desk" — which
+// states WHAT they want available, exactly as naming a topic does. It does not
+// say how to teach it, what to skip, or how to grade.
+// Written as two complete literals rather than one message with the clause
+// interpolated, deliberately: this collector reduces every `${...}` to `${}`,
+// so a sentence assembled into a variable would never reach the pinned set. A
+// load-bearing line invisible to the audit that exists to read it is worse
+// than no line. Both forms are printed above in full.
+// Why it exists: the phone's Review register listed topics with due work and
+// could not open them, because top-ups covered whatever came NEXT and never
+// what was already owed — leaving those topics permanently unreviewable away
+// from the desk.
+const PINNED_MESSAGE_HASH = '41728ca480357c6e'
 if (sha(injectedMessages.sort().join('\n')) !== PINNED_MESSAGE_HASH) {
   fail(
     'D3.kickoff',

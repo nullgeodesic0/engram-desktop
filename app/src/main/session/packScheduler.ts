@@ -152,6 +152,9 @@ export interface PackSchedulerDeps {
   /** Opens the top-up sitting. Injected so this is testable and so the
    * scheduler never learns how a session is started. */
   startSession: (message: string, topic: string) => Promise<unknown>
+  /** Node ids the engine says are due for a topic. Optional: without it the
+   * scheduler behaves as before and simply never mentions owed retrievals. */
+  dueNodesFor?: (topic: string) => Promise<Set<string>>
 }
 
 /**
@@ -166,9 +169,19 @@ export async function topUpPacksNow(
 ): Promise<{ ranFor: string | null; stock: StockedTopic[] }> {
   const topics = await engramRead<TopicListEntry[]>('topics').catch(() => [] as TopicListEntry[])
 
+  // Which topics owe a retrieval the phone cannot serve. A top-up that
+  // covered only what comes NEXT left those topics permanently unopenable in
+  // Review — due work at the desk, nothing on the phone, forever.
+  const dueUnpackedByTopic = new Map<string, number>()
+
   const rows: TopicStock[] = []
   for (const entry of topics) {
     const packed = await deps.packedFor(entry.topic).catch(() => [] as string[])
+    const due = await deps.dueNodesFor?.(entry.topic).catch(() => new Set<string>())
+    if (due) {
+      const packedSet = new Set(packed)
+      dueUnpackedByTopic.set(entry.topic, [...due].filter((n) => !packedSet.has(n)).length)
+    }
     const total =
       (entry.states?.new ?? 0) + (entry.states?.learning ?? 0) + (entry.states?.review ?? 0)
     rows.push({
@@ -193,7 +206,14 @@ export async function topUpPacksNow(
   // not to run.
   lastRunAt = now
   await deps
-    .startSession(composePackTopUpKickoff({ topic: choice.topic, count: askFor(choice) }), choice.topic)
+    .startSession(
+      composePackTopUpKickoff({
+        topic: choice.topic,
+        count: askFor(choice),
+        dueUnpacked: (dueUnpackedByTopic.get(choice.topic) ?? 0) > 0,
+      }),
+      choice.topic,
+    )
     .catch(() => {})
   return { ranFor: choice.topic, stock }
 }

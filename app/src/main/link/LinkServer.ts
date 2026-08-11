@@ -40,7 +40,7 @@ export interface LinkServerDeps {
    * walkablePacks.ts. Optional for the same reason the other providers are:
    * without it this server answers with every pack on disk, which is what it
    * did before the distinction existed. */
-  walkablePacks?: (topic: string) => Promise<string[]>
+  walkablePacks?: (topic: string, mode?: 'learn' | 'review') => Promise<string[]>
   /** Supplies the phone menu's counts. Injected as a plain function so this
    * module gains an ANSWER, never a way to question the engine — the inertness
    * §D6 pins depends on that distinction. Optional: without it the endpoint
@@ -158,8 +158,15 @@ export function createLinkServer(deps: LinkServerDeps): LinkServer {
       // distinction. Falling back to every file is deliberate: the fixture and
       // the tests wire a bare store, and a topic that lists nothing is
       // indistinguishable on the phone from a Mac that is not answering.
+      // `mode` narrows it: Learn may open any pack with work left, Review
+      // only a pack whose node the engine has scheduled. Unknown values read
+      // as 'learn' rather than erroring — an older phone asking without the
+      // parameter must keep working.
+      const mode = url.searchParams.get('mode') === 'review' ? 'review' : 'learn'
       send(res, 200, {
-        nodes: deps.walkablePacks ? await deps.walkablePacks(topic) : await packs.listFor(topic),
+        nodes: deps.walkablePacks
+          ? await deps.walkablePacks(topic, mode)
+          : await packs.listFor(topic),
       })
       return
     }

@@ -5,7 +5,8 @@ import { createCardPackStore, type CardPackStore } from './cardPackStore'
 import { createLinkServer, type LinkServer } from './LinkServer'
 import { createOutboxStore, type OutboxStore } from './outboxStore'
 import { createPairingStore, type PairingStore } from './pairing'
-import { walkablePacks, receiptSinceProvider } from '../session/walkablePacks'
+import { walkablePacks, receiptSinceProvider, packsForMode } from '../session/walkablePacks'
+import { dueNodeIds } from '../session/mobileOverview'
 import { drainOutbox, type DrainResult } from './mobileDrain'
 import { startSession, anySessionRunning } from '../ipc/sessionHandlers'
 import { mobileProviders } from '../session/mobileProviders'
@@ -68,9 +69,12 @@ function lanAddress(): string | null {
  * a scheduler that counts spent packs leaves a topic starved, and a phone that
  * lists them hands back the node the learner just finished.
  */
-async function walkableFor(topic: string): Promise<string[]> {
+async function walkableFor(
+  topic: string,
+  mode: 'learn' | 'review' = 'learn',
+): Promise<string[]> {
   ensureStores()
-  return walkablePacks(topic, {
+  const walkable = await walkablePacks(topic, {
     entries: (t) => packs!.entriesFor(t),
     receiptSince: receiptSinceProvider,
     // Everything the phone has produced for this topic and the Mac has not
@@ -84,6 +88,10 @@ async function walkableFor(topic: string): Promise<string[]> {
       )
     },
   })
+  // Review is narrower: a pack is only openable if the engine says its node is
+  // due. Fetched only when asked for, so the Learn path costs no extra read.
+  if (mode !== 'review') return walkable
+  return packsForMode(walkable, await dueNodeIds(topic), 'review')
 }
 
 function ensureStores(): void {
@@ -331,6 +339,7 @@ export function packSchedulerDeps() {
     // nothing to walk, and counting the files would leave it starved forever.
     packedFor: walkableFor,
     sittingRunning: anySessionRunning,
+    dueNodesFor: dueNodeIds,
     startSession: (message: string, topic: string) => startSession(message, 'learn', undefined, topic),
   }
 }
