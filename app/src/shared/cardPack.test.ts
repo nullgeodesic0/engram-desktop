@@ -103,7 +103,7 @@ describe('validateAgainstOverlay', () => {
   test('SELF_EXPLAIN may never be a plain menu', () => {
     const beats = pack().beats as unknown[]
     beats[4] = mc('self_explain')
-    expect(reasons(pack({ beats }))).toContain('self_explain may not be served as a menu')
+    expect(reasons(pack({ beats }))).toContain('self_explain may not be served as a menu, or as free recall')
   })
 
   test('VERIFY on a threshold node may not be a checkpoint chain', () => {
@@ -113,7 +113,7 @@ describe('validateAgainstOverlay', () => {
       beats,
       eligibility: { nodeKind: 'concept', threshold: true, transferReady: false, lapsed: false, experimentArm: null },
     })
-    expect(reasons(p)).toContain('verify on a carved-out node requires a composed chain, an assembly, a production, or one of the priced recognition forms (match, sort, flaw) — never a chain of picks')
+    expect(reasons(p)).toContain('verify on a carved-out node requires a composed chain, an assembly, or one of the priced recognition forms (match, sort, flaw) — never free recall or a chain of picks')
   })
 
   test('VERIFY on a procedure node may not be a checkpoint chain', () => {
@@ -123,7 +123,7 @@ describe('validateAgainstOverlay', () => {
       beats,
       eligibility: { nodeKind: 'procedure', threshold: false, transferReady: false, lapsed: false, experimentArm: null },
     })
-    expect(reasons(p)).toContain('verify on a carved-out node requires a composed chain, an assembly, a production, or one of the priced recognition forms (match, sort, flaw) — never a chain of picks')
+    expect(reasons(p)).toContain('verify on a carved-out node requires a composed chain, an assembly, or one of the priced recognition forms (match, sort, flaw) — never free recall or a chain of picks')
   })
 
   test('VERIFY on an ordinary node may be a checkpoint chain', () => {
@@ -156,17 +156,40 @@ describe('validateAgainstOverlay', () => {
       beats,
       eligibility: { nodeKind: 'concept', threshold: false, transferReady: false, lapsed: false, experimentArm: 'B' },
     })
-    expect(reasons(p)).toContain('verify on a carved-out node requires a composed chain, an assembly, a production, or one of the priced recognition forms (match, sort, flaw) — never a chain of picks')
+    expect(reasons(p)).toContain('verify on a carved-out node requires a composed chain, an assembly, or one of the priced recognition forms (match, sort, flaw) — never free recall or a chain of picks')
   })
 
-  test('a recall verify satisfies a carved-out node', () => {
+  test('recall never satisfies a carved-out verify — no typed input, ever', () => {
+    // Reversed from this suite's own prior expectation: free recall used to
+    // be an accepted, priced way to carry a carved-out VERIFY. The mobile
+    // companion product decision removed the keyboard from the surface
+    // entirely, so the same fixture that once passed clean now fails.
     const beats = pack().beats as unknown[]
     beats[6] = recall('verify')
     const p = pack({
       beats,
       eligibility: { nodeKind: 'procedure', threshold: true, transferReady: false, lapsed: false, experimentArm: null },
     })
-    expect(reasons(p)).toEqual([])
+    expect(reasons(p)).toContain('verify may not be served as free recall — no typed or spoken input on mobile')
+  })
+
+  test('recall never satisfies self_explain either', () => {
+    const beats = pack().beats as unknown[]
+    beats[4] = recall('self_explain')
+    expect(reasons(pack({ beats }))).toContain(
+      'self_explain may not be served as free recall — no typed or spoken input on mobile',
+    )
+  })
+
+  test('recall is refused at a beat with no kind-specific rule of its own', () => {
+    // predict and connect have no per-beat kind restriction — proving the
+    // universal check catches recall everywhere, not just at the two beats
+    // this suite happened to exercise before.
+    const beats = pack().beats as unknown[]
+    beats[1] = recall('predict')
+    expect(reasons(pack({ beats }))).toContain(
+      'predict may not be served as free recall — no typed or spoken input on mobile',
+    )
   })
 })
 
@@ -400,7 +423,7 @@ describe('match, sort and flaw', () => {
         ladder('self_explain'), mc('connect'), mc('verify'), prose('close')],
     })
     expect(validateAgainstOverlay(p!)).toContain(
-      'verify on a carved-out node requires a composed chain, an assembly, a production, or one of the priced recognition forms (match, sort, flaw) — never a chain of picks',
+      'verify on a carved-out node requires a composed chain, an assembly, or one of the priced recognition forms (match, sort, flaw) — never free recall or a chain of picks',
     )
   })
 })

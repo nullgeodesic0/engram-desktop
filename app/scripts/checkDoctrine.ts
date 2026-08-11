@@ -877,7 +877,22 @@ const PINNED_OVERLAY_HASHES: Record<string, string> = {
   // refused outright — the widening admits forms with a real answer space,
   // not a four-option coin flip. Provisional status is unchanged: this
   // widens what may be OFFERED, not what counts as solidified.
-  'learn-skill.mobile-walk-protocol.md': 'e23f6e1149e510bb',
+  // 2026-08-11 (3) — re-pinned to remove free recall (spoken or typed
+  // production) as a servable form anywhere on this surface, at any beat.
+  // Product decision, not a doctrine loosening: a phone keyboard is friction
+  // this companion app exists to remove, and every beat that once reached
+  // for production already had a tap-based alternative that carries a real
+  // answer space (a composed chain, a step assembly, or the priced
+  // recognition widening) — recall was never the only path, only the
+  // heaviest one. The charter's three terms are unchanged: per-sitting
+  // election, source stamps, provisional status. What is now IMPOSSIBLE
+  // rather than merely discouraged: `--source self` uncapped production
+  // ever appearing on a mobile-declared sitting's receipt. `validateAgainstOverlay`
+  // (app/src/shared/cardPack.ts) and its Swift mirror both refuse a pack
+  // carrying a `recall`-kind card at ANY beat, not only SELF_EXPLAIN and
+  // VERIFY — a pack authored before this pin that still carries one fails
+  // validation and gets rewritten by its next sitting.
+  'learn-skill.mobile-walk-protocol.md': '9f41dac24633b276',
   'dialogue-grammar.mobile-walk-exception.md': '9cbbd325856c2c76',
 }
 const overlayFiles = readdirSync(OVERLAY_DIR).filter((f) => f.endsWith('.md'))

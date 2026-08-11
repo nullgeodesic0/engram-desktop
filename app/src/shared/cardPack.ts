@@ -475,6 +475,18 @@ export function validateAgainstOverlay(pack: CardPack): string[] {
   const expected = BEAT_ORDER.filter((b) => present.includes(b))
   if (present.join(',') !== expected.join(',')) reasons.push('beats are not in grammar order')
 
+  // No typed or spoken input on this surface, at any beat — not just at
+  // SELF_EXPLAIN and VERIFY, the only two beats a tutor has ever actually
+  // reached for `recall` in practice. A phone keyboard is friction this
+  // product exists to remove, and it is a rule about the SURFACE, not about
+  // which beat happens to be asking. Checked once, up front, rather than
+  // trusting every future beat-specific rule below to remember it.
+  for (const card of pack.beats) {
+    if (card.kind === 'recall') {
+      reasons.push(`${card.beat} may not be served as free recall — no typed or spoken input on mobile`)
+    }
+  }
+
   // "SELF-EXPLAIN … Never a plain menu" — recognition cannot carry the beat
   // where the learner says why it must be true.
   const selfExplain = byBeat.get('self_explain')
@@ -482,16 +494,24 @@ export function validateAgainstOverlay(pack: CardPack): string[] {
   // no pre-written line on screen to recognise, only an alphabet to write
   // with. The rule the overlay states is about menus, and a token palette is
   // not one.
-  if (selfExplain && !['ladder', 'cloze', 'compose', 'match', 'sort', 'recall'].includes(selfExplain.kind)) {
-    reasons.push('self_explain may not be served as a menu')
+  //
+  // `recall` does NOT — a mobile-companion product decision, not a doctrine
+  // reversal: a phone keyboard (or its dictation) is friction this surface
+  // exists to remove, and every one of these five kinds already reaches
+  // production-or-better without it. A pack authored before this rule that
+  // still carries a recall card fails validation here and gets rewritten by
+  // its next sitting, same as any other overlay violation.
+  if (selfExplain && !['ladder', 'cloze', 'compose', 'match', 'sort'].includes(selfExplain.kind)) {
+    reasons.push('self_explain may not be served as a menu, or as free recall')
   }
 
   // "VERIFY, everything else … step assembly or a real production only,
   // never a chain of picks."
   const verify = byBeat.get('verify')
-  // A carved-out VERIFY wants production or an assembly, and a composed chain
-  // counts as production: there is no template on screen, the learner writes
-  // every line from a shared alphabet.
+  // A carved-out VERIFY wants an assembly or a composed chain — a token
+  // alphabet, not a template on screen to recognise — or one of the priced
+  // recognition forms below. `recall` is excluded for the same reason as
+  // SELF_EXPLAIN above: no typed or spoken input on this surface, ever.
   //
   // `match`, `sort` and `flaw` are admitted here as the overlay's PRICED
   // widening, not as an equal. The alternative on a phone is not free recall,
@@ -501,10 +521,10 @@ export function validateAgainstOverlay(pack: CardPack): string[] {
   // best, provisional unchanged. A plain menu is still refused, because a
   // four-option pick is a coin flip wearing a checkmark.
   if (verify && isCarvedOut(pack.eligibility)) {
-    if (!['ladder', 'compose', 'recall', 'match', 'sort', 'flaw'].includes(verify.kind)) {
+    if (!['ladder', 'compose', 'match', 'sort', 'flaw'].includes(verify.kind)) {
       reasons.push(
-        'verify on a carved-out node requires a composed chain, an assembly, a production, ' +
-          'or one of the priced recognition forms (match, sort, flaw) — never a chain of picks',
+        'verify on a carved-out node requires a composed chain, an assembly, ' +
+          'or one of the priced recognition forms (match, sort, flaw) — never free recall or a chain of picks',
       )
     }
   }
