@@ -1,4 +1,4 @@
-import { receiptSince as readReceiptSince } from './mobileReceipts'
+import { readTopicReceiptStamps } from './mobileReceipts'
 
 /**
  * Which of a topic's card packs still have work in them.
@@ -44,6 +44,28 @@ export interface WalkablePackDeps {
   banked: (topic: string) => Promise<Set<string>>
 }
 
+/**
+ * Does this receipt mean the pack has been spent?
+ *
+ * engram writes some receipts date-only ('2026-08-10') and some as full ISO.
+ * A date-only stamp is read as covering its WHOLE day, so a pack generated at
+ * 08:03 and walked at 21:00 the same day is retired. An exact string compare
+ * put '2026-08-10' before '2026-08-10T08:03:28.635Z' and concluded the node
+ * had not been touched since — and since the pack's timestamp never moves, it
+ * would have concluded that forever. The repeat this module exists to fix,
+ * surviving inside the fix.
+ *
+ * The drain's `receiptSince` keeps the exact compare deliberately: there,
+ * reading a date-only receipt as the START of its day can only fail to settle
+ * something, never settle something that has not happened, and that is the
+ * safe direction for marking work done. Retirement wants the opposite reading,
+ * so it gets its own predicate rather than a flag on the shared one.
+ */
+export function receiptRetiresPack(receiptTs: string, packGeneratedAt: string): boolean {
+  const dateOnly = !receiptTs.includes('T')
+  return dateOnly ? receiptTs >= packGeneratedAt.slice(0, 10) : receiptTs >= packGeneratedAt
+}
+
 export async function walkablePacks(topic: string, deps: WalkablePackDeps): Promise<string[]> {
   const entries = await deps.entries(topic).catch(() => [])
   if (entries.length === 0) return []
@@ -61,7 +83,14 @@ export async function walkablePacks(topic: string, deps: WalkablePackDeps): Prom
   return kept
 }
 
-/** The real reader, for the composition root. Kept beside the pure function so
- * the wiring cannot pick a different definition of "graded" than the tests
- * pinned. */
-export const receiptSinceProvider = readReceiptSince
+/** The real reader, for the composition root. Kept beside the pure predicate
+ * so the wiring cannot pick a different definition of "graded" than the tests
+ * pinned — which is exactly what happened when it borrowed the drain's. */
+export async function receiptSinceProvider(
+  topic: string,
+  node: string,
+  since: string,
+): Promise<boolean> {
+  const stamps = await readTopicReceiptStamps(topic, node)
+  return stamps.some((ts) => receiptRetiresPack(ts, since))
+}

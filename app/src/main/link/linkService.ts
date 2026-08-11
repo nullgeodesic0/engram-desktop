@@ -113,6 +113,7 @@ export async function startLinkServer(options: { exposeToLan?: boolean } = {}): 
     // a topic came to serve the same node.
     ...mobileProviders(walkableFor),
     walkablePacks: walkableFor,
+    onEvidenceBanked: () => scheduleAutoSettle(SETTLE_QUIET_MS),
     // Read-modify-write, so filing from the phone cannot clobber a display
     // title or any other setting the learner set at the desk.
     setFolder: async (topic, folder) => {
@@ -125,6 +126,14 @@ export async function startLinkServer(options: { exposeToLan?: boolean } = {}): 
     // exactly the friction this service exists to remove.
     port: 8787,
   })
+
+  // The sweep lives with the server: no link, no phone evidence, nothing to
+  // settle. Cleared on stop so a rebind does not leave two running.
+  if (settleSweep) clearInterval(settleSweep)
+  settleSweep = setInterval(() => void autoSettle(), SETTLE_SWEEP_MS)
+  // And once now, because the queue that prompted this had been waiting since
+  // the last launch.
+  scheduleAutoSettle(SETTLE_QUIET_MS)
   try {
     await server.start()
   } catch (err) {
@@ -138,6 +147,12 @@ export async function startLinkServer(options: { exposeToLan?: boolean } = {}): 
 }
 
 export async function stopLinkServer(): Promise<void> {
+  // Both timers die with the link. A sweep outliving the server would start
+  // sittings for a surface that is no longer listening.
+  if (settleSweep) clearInterval(settleSweep)
+  if (settleTimer) clearTimeout(settleTimer)
+  settleSweep = null
+  settleTimer = null
   await server?.stop()
   server = null
 }
@@ -223,14 +238,64 @@ export async function showPairingCode(): Promise<void> {
   }
 }
 
+/** How long to wait after the last push before settling.
+ *
+ * A walk arrives as a burst of five or six items over a second or two, and
+ * settling on the first would start a sitting while the rest were still in the
+ * air. Long enough to swallow a burst, short enough that a learner who put the
+ * phone down and looked at the Mac sees the grade land. */
+const SETTLE_QUIET_MS = 20_000
+
+/** The safety net. Catches evidence that arrived while a sitting was running,
+ * and in-flight items the grace period has since released. */
+const SETTLE_SWEEP_MS = 5 * 60_000
+
+let settleTimer: NodeJS.Timeout | null = null
+let settleSweep: NodeJS.Timeout | null = null
+
+/**
+ * Settles queued evidence on its own, once the desk is free.
+ *
+ * This used to be strictly learner-initiated, and the reason was good: a
+ * sitting is the unit of work, and starting one because a phone finished
+ * syncing would interrupt whatever the learner was doing. That reason is kept
+ * — `sittingRunning` is the gate — but the rule it produced was too strong.
+ *
+ * What it cost is only visible now that packs retire when their node has work
+ * waiting: twenty items sat in flight for a day, every pack in the topic read
+ * as spent, and the phone said "Nothing packed" for a topic with three packs
+ * on disk. Evidence nobody settles is not merely ungraded, it is a queue that
+ * quietly closes the surface that produced it.
+ *
+ * So: settle when nothing is running, after the burst has landed, and sweep
+ * periodically for whatever the gate turned away. Nothing here settles ON TOP
+ * of a sitting; a busy desk simply defers to the next sweep.
+ */
+function scheduleAutoSettle(delayMs: number): void {
+  if (settleTimer) clearTimeout(settleTimer)
+  settleTimer = setTimeout(() => {
+    settleTimer = null
+    void autoSettle()
+  }, delayMs)
+}
+
+async function autoSettle(): Promise<void> {
+  // The learner is at the desk doing the real thing. Their sitting owns the
+  // engine; the queue can wait for the sweep.
+  if (anySessionRunning()) return
+  ensureStores()
+  const waiting = await outbox!.pending().catch(() => [])
+  const stale = await outbox!.staleInFlight().catch(() => [])
+  if (waiting.length === 0 && stale.length === 0) return
+  await settleQueue().catch(() => undefined)
+}
+
 /**
  * Hands queued phone evidence to real sittings.
  *
- * **Learner-initiated, never automatic.** The queue could drain the moment a
- * push lands, and that would be wrong: a sitting is the unit of work here, and
- * starting one because a phone finished syncing would interrupt whatever the
- * learner was actually doing. So the Companion panel reports what is waiting
- * and this runs when they say so.
+ * Runs on its own now (see `scheduleAutoSettle`) and still on request: the
+ * Companion panel's button calls exactly this, so a learner who wants their
+ * grade now does not have to wait out the quiet period.
  *
  * One session per topic, because a kickoff names one topic and a sitting that
  * hopped between them would be the mixed-queue problem the desktop already

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { walkablePacks } from './walkablePacks'
+import { walkablePacks, receiptRetiresPack } from './walkablePacks'
 
 /**
  * The phone asked "what is packed for this topic" and got back every pack
@@ -54,5 +54,42 @@ describe('walkablePacks', () => {
     // learner can never reach.
     expect(await walkablePacks('sm', { entries, receiptSince, banked: nothingBanked }))
       .toHaveLength(3)
+  })
+})
+
+/**
+ * engram writes some receipts date-only ('2026-08-10') and some full ISO.
+ *
+ * That matters here and nowhere else. A pack generated at 08:03 and walked at
+ * 21:00 the SAME day gets a receipt stamped '2026-08-10', which as a string
+ * sorts before '2026-08-10T08:03:28.635Z' — so an exact comparison says the
+ * node has not been touched since the pack was written, and never will, since
+ * the pack's timestamp does not move. The node would come back forever: the
+ * exact bug this module exists to fix, surviving inside the fix.
+ *
+ * The drain's `receiptSince` keeps the exact comparison on purpose — there,
+ * reading a date-only receipt as the start of its day can only fail to settle
+ * something, which is the safe direction. Retirement wants the opposite
+ * reading, so it gets its own predicate rather than a flag on the shared one.
+ */
+describe('receiptRetiresPack', () => {
+  it('retires on a later full timestamp', () => {
+    expect(receiptRetiresPack('2026-08-10T21:00:00.000Z', '2026-08-10T08:03:28.635Z')).toBe(true)
+  })
+
+  it('does not retire on an earlier full timestamp', () => {
+    expect(receiptRetiresPack('2026-08-10T07:00:00.000Z', '2026-08-10T08:03:28.635Z')).toBe(false)
+  })
+
+  it('retires on a date-only receipt from the same day as the pack', () => {
+    expect(receiptRetiresPack('2026-08-10', '2026-08-10T08:03:28.635Z')).toBe(true)
+  })
+
+  it('retires on a date-only receipt from after the pack', () => {
+    expect(receiptRetiresPack('2026-08-11', '2026-08-10T08:03:28.635Z')).toBe(true)
+  })
+
+  it('does not retire on a date-only receipt from before the pack', () => {
+    expect(receiptRetiresPack('2026-08-09', '2026-08-10T08:03:28.635Z')).toBe(false)
   })
 })

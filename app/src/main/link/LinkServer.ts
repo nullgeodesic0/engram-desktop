@@ -32,6 +32,10 @@ export interface LinkServerDeps {
   pairing: PairingStore
   outbox: OutboxStore
   packs: CardPackStore
+  /** Called after phone evidence lands durably, with how many items arrived.
+   * The server does not decide what happens next — it does not know whether a
+   * sitting is running or whether the learner is mid-thought at the desk. */
+  onEvidenceBanked?: (accepted: number) => void
   /** A topic's packs that still have work in them — see main/session/
    * walkablePacks.ts. Optional for the same reason the other providers are:
    * without it this server answers with every pack on disk, which is what it
@@ -285,6 +289,9 @@ export function createLinkServer(deps: LinkServerDeps): LinkServer {
     }
     const { accepted, duplicates } = await outbox.append(valid)
     send(res, 200, { accepted, duplicates, rejected })
+    // Told AFTER the reply, so a slow settle never holds the phone's push
+    // open. The phone's job ends when its work is durable here.
+    if (accepted > 0) deps.onEvidenceBanked?.(accepted)
   }
 
   async function handleSetFolder(req: IncomingMessage, res: ServerResponse): Promise<void> {

@@ -337,6 +337,20 @@ async function readNodeIds(topic: string): Promise<string[]> {
  * conservative direction — it can only fail to settle something, never settle
  * something that has not happened.
  */
+/**
+ * Every receipt timestamp the record holds for one node.
+ *
+ * Raw, and deliberately so: some are date-only and some are full ISO, and what
+ * that difference MEANS depends on the question being asked. The drain reads
+ * it one way and pack retirement the other — see receiptRetiresPack — so this
+ * hands back the stamps rather than a verdict.
+ */
+export async function readTopicReceiptStamps(topic: string, node: string): Promise<string[]> {
+  const history = await readReceiptsHistory().catch(() => null)
+  if (!history) return []
+  return history.receipts.filter((r) => r.topic === topic && r.node === node).map((r) => r.ts)
+}
+
 export async function receiptSince(
   topic: string,
   node: string,
