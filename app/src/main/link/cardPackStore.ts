@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, unlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { parseCardPack, validateAgainstOverlay, type CardPack } from '../../shared/cardPack'
 
@@ -29,6 +29,10 @@ export interface CardPackStore {
   put(pack: CardPack): Promise<void>
   get(topic: string, node: string): Promise<CardPack | null>
   listFor(topic: string): Promise<string[]>
+  /** Deletes a pack. Not an error if it never existed — a stale-pack sweep
+   * that raced with the learner walking the last copy on the phone should
+   * not itself become the thing that fails a topUp pass. */
+  remove(topic: string, node: string): Promise<void>
   /** Each pack's node and when it was written.
    *
    * The timestamp is the whole point: a pack is a question about a node in the
@@ -81,6 +85,15 @@ export function createCardPackStore(deps: CardPackStoreDeps): CardPackStore {
         return parsed
       } catch {
         return null
+      }
+    },
+
+    async remove(topic, node) {
+      if (!isSafe(topic) || !isSafe(node)) return
+      try {
+        await unlink(join(rootDir, topic, `${node}.json`))
+      } catch {
+        // Already gone — the outcome the caller wanted either way.
       }
     },
 

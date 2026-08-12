@@ -221,6 +221,13 @@ export interface PackSchedulerDeps {
   /** Node ids the engine says are due for a topic. Optional: without it the
    * scheduler behaves as before and simply never mentions owed retrievals. */
   dueNodesFor?: (topic: string) => Promise<Set<string>>
+  /** Deletes any pack for this topic the desk has already graded since it was
+   * written, and returns the nodes it removed. Optional and additive — a
+   * caller that omits it just never sweeps, exactly today's behavior. Run
+   * BEFORE `packedFor` reads this pass's stock, so a node solidified at the
+   * desk frees its slot and can be re-topped-up in the very same pass rather
+   * than waiting for the next trigger to notice. */
+  cleanupStaleFor?: (topic: string) => Promise<string[]>
   /** The topic list. Optional and defaulted to the real engine read — tests
    * inject a fixture instead of spawning the real CLI, which is also what
    * exposed the concurrency race: a live spawn is slow enough that two calls
@@ -269,6 +276,7 @@ async function runTopUpPass(
 
   const rows: TopicStock[] = []
   for (const entry of topics) {
+    await deps.cleanupStaleFor?.(entry.topic).catch(() => [] as string[])
     const packed = await deps.packedFor(entry.topic).catch(() => [] as string[])
     const due = await deps.dueNodesFor?.(entry.topic).catch(() => new Set<string>())
     if (due) {

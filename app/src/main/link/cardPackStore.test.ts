@@ -134,6 +134,21 @@ describe('createCardPackStore', () => {
     ])
   })
 
+  test('removes a pack, so it no longer lists or reads back', async () => {
+    const s = store()
+    await s.put(pack())
+    await s.put(pack({ packId: '6f1c2a10-0000-4000-8000-0000000000f5', node: 'ergodic-hypothesis' }))
+
+    await s.remove('grad-statistical-mechanics', 'liouville-theorem')
+
+    expect(await s.get('grad-statistical-mechanics', 'liouville-theorem')).toBeNull()
+    expect(await s.listFor('grad-statistical-mechanics')).toEqual(['ergodic-hypothesis'])
+  })
+
+  test('removing a pack that was never there is not an error', async () => {
+    await expect(store().remove('grad-statistical-mechanics', 'nothing-here')).resolves.toBeUndefined()
+  })
+
   test('refuses a topic or node name that would escape the store directory', async () => {
     const s = store()
 

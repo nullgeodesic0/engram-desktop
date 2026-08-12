@@ -83,6 +83,36 @@ export async function walkablePacks(topic: string, deps: WalkablePackDeps): Prom
   return kept
 }
 
+/**
+ * Which of a topic's packs the DESK has already made stale — the nodes a
+ * `cleanupStalePacks` pass should delete, not merely stop offering.
+ *
+ * A narrower question than `walkablePacks`'s exclusion list: that one also
+ * drops a pack the phone itself just banked, and a banked node has not been
+ * graded yet — its pack is still the record of what was asked, and deleting
+ * it would be premature. This only names a node once a real desk receipt
+ * postdates its pack, which is exactly the condition under which the phone
+ * should stop being handed a question about work that is already done.
+ *
+ * Fails CLOSED, the opposite direction from `walkablePacks`: an unreadable
+ * receipt history there means "offer it anyway" (a wasted walk is cheap), but
+ * here it must mean "delete nothing" (an unread record cannot prove a live
+ * pack was ever graded, and a deleted pack is a node the phone cannot reach
+ * again until the next sitting repacks it).
+ */
+export async function deskGradedPacks(
+  topic: string,
+  deps: Pick<WalkablePackDeps, 'entries' | 'receiptSince'>,
+): Promise<string[]> {
+  const entries = await deps.entries(topic).catch(() => [])
+  const stale: string[] = []
+  for (const entry of entries) {
+    const graded = await deps.receiptSince(topic, entry.node, entry.generatedAt).catch(() => false)
+    if (graded) stale.push(entry.node)
+  }
+  return stale
+}
+
 /** The real reader, for the composition root. Kept beside the pure predicate
  * so the wiring cannot pick a different definition of "graded" than the tests
  * pinned — which is exactly what happened when it borrowed the drain's. */

@@ -321,3 +321,70 @@ describe('topUpPacksNow concurrency', () => {
     expect(starts).toBe(1)
   })
 })
+
+/**
+ * A node completed at the desk after its pack was already on the phone
+ * should not just stop being OFFERED (walkablePacks already does that) — the
+ * stale file should be gone, and the topic's next node should take its place
+ * the same pass. Reported: solidifying a node at the desk left its old
+ * mobile pack sitting on disk forever, uncounted but never cleared, and
+ * nothing ever asked for what should have replaced it.
+ */
+describe('topUpPacksNow cleans up desk-graded packs', () => {
+  it('removes a stale pack before counting stock, freeing a slot to refill', async () => {
+    const removed: Array<[string, string]> = []
+    const deps = {
+      listTopics: async () => [{
+        topic: 't', title: 'T', goal: '', nodes: 5, due: 0,
+        states: { new: 3, learning: 0, review: 2 },
+      }],
+      // Reports the pack as already gone — the cleanup ran first and this is
+      // the store's own count reflecting it, not a second source of truth.
+      packedFor: async () => ['b'],
+      cleanupStaleFor: async (topic: string) => {
+        removed.push([topic, 'a'])
+        return ['a']
+      },
+      sittingRunning: () => false,
+      startSession: async () => {},
+    }
+    const result = await topUpPacksNow(deps, Date.parse('2026-08-10T12:00:00Z'))
+    expect(removed).toEqual([['t', 'a']])
+    // packed=1 is below PACK_FLOOR, so the topic is still hungry — a fresh
+    // top-up fires for it in this very pass, the "repopulates" half of the
+    // feature, not merely "removes".
+    expect(result.ranFor).toBe('t')
+  })
+
+  it('a topic with nothing stale is untouched', async () => {
+    let called = false
+    const deps = {
+      listTopics: async () => [{
+        topic: 't', title: 'T', goal: '', nodes: 2, due: 0,
+        states: { new: 0, learning: 0, review: 2 },
+      }],
+      packedFor: async () => ['a', 'b'],
+      cleanupStaleFor: async () => {
+        called = true
+        return []
+      },
+      sittingRunning: () => false,
+      startSession: async () => {},
+    }
+    await topUpPacksNow(deps, Date.parse('2026-08-10T12:00:00Z'))
+    expect(called).toBe(true)
+  })
+
+  it('missing cleanupStaleFor is fine — cleanup is additive, not required', async () => {
+    const deps = {
+      listTopics: async () => [{
+        topic: 't', title: 'T', goal: '', nodes: 2, due: 0,
+        states: { new: 0, learning: 0, review: 2 },
+      }],
+      packedFor: async () => ['a', 'b'],
+      sittingRunning: () => false,
+      startSession: async () => {},
+    }
+    await expect(topUpPacksNow(deps, Date.parse('2026-08-10T12:00:00Z'))).resolves.toBeDefined()
+  })
+})

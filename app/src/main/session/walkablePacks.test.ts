@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { walkablePacks, receiptRetiresPack, packsForMode } from './walkablePacks'
+import { walkablePacks, receiptRetiresPack, packsForMode, deskGradedPacks } from './walkablePacks'
 
 /**
  * The phone asked "what is packed for this topic" and got back every pack
@@ -54,6 +54,44 @@ describe('walkablePacks', () => {
     // learner can never reach.
     expect(await walkablePacks('sm', { entries, receiptSince, banked: nothingBanked }))
       .toHaveLength(3)
+  })
+})
+
+/**
+ * Which packs a desk session has made stale — a different question from
+ * `walkablePacks`'s "what can the phone still open". The phone list also
+ * drops a pack the phone itself just banked, which is not this: the desk
+ * has not graded that node yet, so deleting the file would be premature —
+ * the outbox item is what carries the evidence forward, but the pack itself
+ * is still the record of what was asked. This only fires once a real
+ * receipt exists, exactly the condition that should free the slot on the
+ * phone for the next node in the topic.
+ */
+describe('deskGradedPacks', () => {
+  const entries = async () => [
+    { node: 'ensembles', generatedAt: '2026-08-10T10:00:00.000Z' },
+    { node: 'partition-function', generatedAt: '2026-08-10T10:00:00.000Z' },
+    { node: 'free-energy', generatedAt: '2026-08-10T10:00:00.000Z' },
+  ]
+  const noReceipts = async () => false
+
+  it('names a node the desk graded since its pack was written', async () => {
+    const receiptSince = async (_t: string, node: string) => node === 'ensembles'
+    expect(await deskGradedPacks('sm', { entries, receiptSince })).toEqual(['ensembles'])
+  })
+
+  it('names nothing when no desk receipt postdates any pack', async () => {
+    expect(await deskGradedPacks('sm', { entries, receiptSince: noReceipts })).toEqual([])
+  })
+
+  it('fails CLOSED — an unreadable record names nothing, never everything', async () => {
+    // The opposite direction from walkablePacks on purpose: offering a stale
+    // pack again costs one wasted walk, but deleting a live one stole a node
+    // from the phone the record cannot prove was ever graded.
+    const receiptSince = async () => {
+      throw new Error('history unreadable')
+    }
+    expect(await deskGradedPacks('sm', { entries, receiptSince })).toEqual([])
   })
 })
 

@@ -9,6 +9,7 @@ import { linkReadDeps, makeWalkableFor } from './linkDeps'
 import { dueNodeIds } from '../session/mobileOverview'
 import { composePackTopUpKickoff } from '../../shared/mobileKickoff'
 import { PACK_FLOOR, topUpPacksNow } from '../session/packScheduler'
+import { deskGradedPacks, receiptSinceProvider } from '../session/walkablePacks'
 import { drainOutbox, type DrainResult } from './mobileDrain'
 import { startSession, anySessionRunning } from '../ipc/sessionHandlers'
 import { withSessionStartLock } from '../session/sessionStartLock'
@@ -408,6 +409,23 @@ export function packSchedulerDeps() {
     },
     sittingRunning: anySessionRunning,
     dueNodesFor: dueNodeIds,
+    // A node solidified at the desk after its pack was already on the phone
+    // leaves that pack asking about work already done. `packedFor` above
+    // already stops OFFERING it (walkablePacks' own exclusion), but nothing
+    // ever deleted the file — it sat on disk forever, uncounted but never
+    // cleared, the exact confusion that made a stale stat-mech pack read as
+    // "still there" during a live debugging session. Deleting it here, ahead
+    // of this same pass's `packedFor` read, is what lets the topic's deficit
+    // reflect the free slot immediately — repopulating, not merely clearing.
+    cleanupStaleFor: async (topic: string) => {
+      ensureStores()
+      const stale = await deskGradedPacks(topic, {
+        entries: (t) => packs!.entriesFor(t),
+        receiptSince: receiptSinceProvider,
+      })
+      for (const node of stale) await packs!.remove(topic, node)
+      return stale
+    },
     // Headless top-up sitting — same reasoning as requestPacksFor's own
     // autoCloseAfterTurn: no one is at the desk to send a next turn.
     startSession: (message: string, topic: string) => startSession(message, 'learn', undefined, topic, true),
