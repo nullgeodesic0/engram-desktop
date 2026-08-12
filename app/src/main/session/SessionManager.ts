@@ -87,20 +87,19 @@ export class SessionManager extends EventEmitter {
       '--permission-mode', 'bypassPermissions',
       '--mcp-config', this.permissions.mcpConfigPath,
       '--strict-mcp-config',
-      // Every hook this machine has configured (any project's PostToolUse,
-      // any global Stop hook) loads by default for ANY session run from
-      // $HOME, which this one is. A sitting here never edits a UI file and
-      // has no user watching a design-review hook's output, so there is no
-      // hook that could legitimately fire — only ones that can wedge the
-      // turn. Observed live, 2026-08-11: a global Stop hook (an unrelated
-      // project's design-detector) errored on `node: command not found` in
-      // this spawn's stripped PATH, and the session never emitted its final
-      // `result` afterward — the child sat resident for 19+ minutes past its
-      // last real output, holding a slot `anySessionRunning()` and the pack
-      // scheduler both treat as "still busy." An empty source list is a
-      // clean cut, not a narrower allowlist: nothing here is meant to run
-      // with settings from a directory the sitting never touches.
-      '--setting-sources', '',
+      // 'local' only — cwd is $HOME, so 'project' and 'user' both resolve to
+      // ~/.claude/settings.json (the same file, holding enabledPlugins —
+      // WITHOUT it "/engram:learn" is "Unknown command" and the sitting dies
+      // in three lines flat, confirmed live the hard way). 'local' resolves
+      // to ~/.claude/settings.local.json, which carries an unrelated
+      // project's global Stop hook (a design-detector). That hook shells out
+      // to `node`, missing from this spawn's stripped PATH, and the error
+      // left the session never emitting its final `result` — the child sat
+      // resident for 19+ minutes past its last real output, holding the
+      // slot `anySessionRunning()` and the pack scheduler both treat as
+      // "still busy." Nothing at the 'local' tier is meant to touch a
+      // sitting with no UI edits and no one at the desk to see hook output.
+      '--setting-sources', 'user,project',
       '--append-system-prompt', this.permissions.appendSystemPrompt,
       ...(this.isResume ? ['--resume', this.sessionId] : ['--session-id', this.sessionId]),
     ]
