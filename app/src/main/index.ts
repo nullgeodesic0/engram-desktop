@@ -4,7 +4,7 @@ import { cp, mkdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { registerLinkHandlers, startLinkServer, stopLinkServer } from './link/linkService'
+import { registerLinkHandlers, startLinkServer, stopLinkServer, autoSettle } from './link/linkService'
 import { registerReadHandlers } from './ipc/readHandlers'
 import { registerSessionHandlers, rebindWindow, abortAllSessions, onIdle } from './ipc/sessionHandlers'
 import { resolveEngramPlugin } from './session/pluginResolver'
@@ -521,7 +521,15 @@ app.whenReady().then(() => {
   // than one every ten minutes. See packScheduler.ts's module doc for why
   // restraint moved from TIME to CONTENTION.
   startPackScheduler(packSchedulerDeps())
-  onIdle(() => void topUpPacksNow(packSchedulerDeps()).catch(() => {}))
+  // Settle first, every tick — see autoSettle's own doc comment for the
+  // starvation this fixes. A topic's speculative stock can always wait one
+  // more tick; evidence the learner already produced should not wait on a
+  // pack-topup chain that has no natural stopping point.
+  onIdle(() => {
+    void autoSettle()
+      .then((settled) => (settled ? undefined : topUpPacksNow(packSchedulerDeps())))
+      .catch(() => {})
+  })
 
   // Drain a deep link that arrived before we were ready to act on it (see
   // deepLinkQueue + handleDeepLink/deliverDeepLink's own comments) — the

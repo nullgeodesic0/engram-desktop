@@ -337,7 +337,27 @@ function scheduleAutoSettle(delayMs: number): void {
   }, delayMs)
 }
 
-async function autoSettle(): Promise<void> {
+/**
+ * Returns whether it actually started a settle — `onIdle` in main/index.ts
+ * reads this to decide whether the pack scheduler gets to run at all on this
+ * tick.
+ *
+ * That read is the fix for a real starvation bug: `onIdle` used to go
+ * straight to `topUpPacksNow`, which almost never returns null — there is
+ * nearly always ANOTHER topic below its floor or owed a due retrieval, so a
+ * chain of top-ups can run for as long as the learner keeps producing more
+ * to review. Evidence settling had its own trigger (a 20s-debounced timer on
+ * `onEvidenceBanked`, plus a 5-minute sweep), but both gate on
+ * `anySessionRunning()`, and a topic-topup chain that never lets `sessions`
+ * sit at zero for more than an instant means that gate almost never opens.
+ * Observed live, 2026-08-11: a walk's evidence sat in the outbox for 39
+ * minutes and multiple pack-topup sittings before ever being graded — not
+ * stuck, just permanently outrun. Settling first, every idle tick, is what
+ * actually fixes it: a topic's speculative stock can always wait one more
+ * tick, but evidence already produced should not wait on speculation ever
+ * finishing.
+ */
+export async function autoSettle(): Promise<boolean> {
   // The whole check-then-drain sequence, locked — not just the
   // `anySessionRunning()` read. This is a third automatic trigger (the
   // phone's ASK button and the pack scheduler are the other two) with the
@@ -347,12 +367,13 @@ async function autoSettle(): Promise<void> {
   return withSessionStartLock(async () => {
     // The learner is at the desk doing the real thing. Their sitting owns the
     // engine; the queue can wait for the sweep.
-    if (anySessionRunning()) return
+    if (anySessionRunning()) return false
     ensureStores()
     const waiting = await outbox!.pending().catch(() => [])
     const stale = await outbox!.staleInFlight().catch(() => [])
-    if (waiting.length === 0 && stale.length === 0) return
+    if (waiting.length === 0 && stale.length === 0) return false
     await settleQueue().catch(() => undefined)
+    return true
   })
 }
 
