@@ -132,6 +132,9 @@ async function requestPacksFor(topic: string): Promise<{ started: boolean; reaso
         'learn',
         undefined,
         topic,
+        // Headless — nobody is at the desk to send a next turn. See
+        // startSession's own doc comment on why this must not be left off.
+        true,
       )
       return { started: true, reason: 'Your Mac is writing cards for this now.' }
     } catch (err) {
@@ -371,7 +374,15 @@ export async function settleQueue(): Promise<DrainResult> {
     outbox: outbox!,
     batchDir: join(tmpdir(), 'engram-mobile-batches'),
     startSession: async (message, kind, topic) => {
-      const { sessionId } = await startSession(message, kind as 'learn' | 'review' | 'coach', undefined, topic)
+      // Headless drain sitting — same reasoning as the pack top-up's own
+      // autoCloseAfterTurn: no one is at the desk to send a next turn.
+      const { sessionId } = await startSession(
+        message,
+        kind as 'learn' | 'review' | 'coach',
+        undefined,
+        topic,
+        true,
+      )
       return sessionId
     },
     // The record decides what counts as settled — see mobileDrain's note on
@@ -397,6 +408,8 @@ export function packSchedulerDeps() {
     },
     sittingRunning: anySessionRunning,
     dueNodesFor: dueNodeIds,
-    startSession: (message: string, topic: string) => startSession(message, 'learn', undefined, topic),
+    // Headless top-up sitting — same reasoning as requestPacksFor's own
+    // autoCloseAfterTurn: no one is at the desk to send a next turn.
+    startSession: (message: string, topic: string) => startSession(message, 'learn', undefined, topic, true),
   }
 }

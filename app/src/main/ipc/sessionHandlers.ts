@@ -104,6 +104,20 @@ export async function startSession(
   kind: SessionKind,
   resumeSessionId?: string,
   topicId?: string,
+  // A background kickoff (pack top-up, the phone's ASK button, the mobile
+  // drain) sends one message and expects the sitting to finish the whole
+  // job unattended, then get out of the way. Nothing was ever telling it to
+  // get out of the way: `turn_ended` fired, the process sat there holding
+  // stdin open for a reply nobody was going to send, `sessions` never
+  // dropped back to zero, and `anySessionRunning()`/`notifyIfIdle()` — the
+  // whole point of the event-driven scheduler — went permanently stuck
+  // after the FIRST background sitting. Observed live, 2026-08-11: a
+  // derivatives top-up finished, logged its receipt, and then sat resident
+  // for 19+ minutes, silently refusing every later ASK tap and never
+  // chaining to the next under-stocked topic. An interactive desk sitting
+  // (the renderer's `session:start`) must never pass this — the learner is
+  // still there to send the next turn.
+  autoCloseAfterTurn = false,
 ): Promise<{ sessionId: string }> {
   const manager = new SessionManager(resumeSessionId)
   sessions.set(manager.sessionId, manager)
@@ -112,6 +126,8 @@ export async function startSession(
     if (event.type === 'closed') {
       sessions.delete(manager.sessionId)
       notifyIfIdle()
+    } else if (autoCloseAfterTurn && event.type === 'turn_ended') {
+      manager.abort()
     }
   })
   // Resuming rides the prior turn's system prompt already in effect — --resume
