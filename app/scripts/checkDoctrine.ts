@@ -589,7 +589,17 @@ const flags = [...argsBlock.matchAll(/'(--[a-zA-Z-]+)'/g)].map((m) => m[1])
 const PINNED_FLAGS = [
   '--input-format', '--output-format', '--include-partial-messages', '--verbose',
   '--tools', '--disallowedTools', '--allowedTools', '--permission-mode',
-  '--mcp-config', '--strict-mcp-config', '--append-system-prompt', '--resume', '--session-id',
+  '--mcp-config', '--strict-mcp-config',
+  // 2026-08-11 — added --setting-sources '' after a global Stop hook (an
+  // unrelated project's design-detector, configured in the user's own
+  // ~/.claude/settings.local.json) loaded into every headless sitting
+  // because they all spawn with cwd: homedir(), errored on a missing `node`
+  // in this spawn's stripped PATH, and left the session never emitting its
+  // final `result` — observed live as a 19+ minute stall after real work was
+  // already done and logged. No hook anywhere is meant to fire on a sitting
+  // with no UI edits and no one watching its output.
+  '--setting-sources',
+  '--append-system-prompt', '--resume', '--session-id',
 ]
 if (!eq(flags, PINNED_FLAGS)) {
   fail(

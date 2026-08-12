@@ -87,6 +87,20 @@ export class SessionManager extends EventEmitter {
       '--permission-mode', 'bypassPermissions',
       '--mcp-config', this.permissions.mcpConfigPath,
       '--strict-mcp-config',
+      // Every hook this machine has configured (any project's PostToolUse,
+      // any global Stop hook) loads by default for ANY session run from
+      // $HOME, which this one is. A sitting here never edits a UI file and
+      // has no user watching a design-review hook's output, so there is no
+      // hook that could legitimately fire — only ones that can wedge the
+      // turn. Observed live, 2026-08-11: a global Stop hook (an unrelated
+      // project's design-detector) errored on `node: command not found` in
+      // this spawn's stripped PATH, and the session never emitted its final
+      // `result` afterward — the child sat resident for 19+ minutes past its
+      // last real output, holding a slot `anySessionRunning()` and the pack
+      // scheduler both treat as "still busy." An empty source list is a
+      // clean cut, not a narrower allowlist: nothing here is meant to run
+      // with settings from a directory the sitting never touches.
+      '--setting-sources', '',
       '--append-system-prompt', this.permissions.appendSystemPrompt,
       ...(this.isResume ? ['--resume', this.sessionId] : ['--session-id', this.sessionId]),
     ]
