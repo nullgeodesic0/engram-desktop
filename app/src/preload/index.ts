@@ -14,6 +14,7 @@ import type {
   NotifierSettings,
   AuthMode,
   AuthSettings,
+  LocalModelProbe,
   ApiKeyStatus,
   UpdateCheckResult,
   ReceiptsHistory,
@@ -97,6 +98,11 @@ const engramApi = {
   // Dual-mode auth — the API key never crosses this boundary outward.
   getAuthSettings: (): Promise<AuthSettings> => ipcRenderer.invoke('auth:getSettings'),
   setAuthMode: (mode: AuthMode): Promise<AuthSettings> => ipcRenderer.invoke('auth:setMode', mode),
+  setLocalModel: (baseUrl: string, model: string): Promise<AuthSettings> =>
+    ipcRenderer.invoke('auth:setLocalModel', baseUrl, model),
+  listLocalModels: (baseUrl: string): Promise<string[]> => ipcRenderer.invoke('auth:listLocalModels', baseUrl),
+  probeLocalModel: (baseUrl: string, model: string): Promise<LocalModelProbe> =>
+    ipcRenderer.invoke('auth:probeLocalModel', baseUrl, model),
   authKeyStatus: (): Promise<ApiKeyStatus> => ipcRenderer.invoke('auth:keyStatus'),
   authSetApiKey: (key: string): Promise<ApiKeyStatus> => ipcRenderer.invoke('auth:setApiKey', key),
   authClearApiKey: (): Promise<ApiKeyStatus> => ipcRenderer.invoke('auth:clearApiKey'),

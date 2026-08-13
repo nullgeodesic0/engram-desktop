@@ -105,12 +105,28 @@ export class SessionManager extends EventEmitter {
     ]
 
     const claudeBin = await resolveClaudeBinary()
-    // Dual-mode auth, resolved per session start so a mode/key change in
+    // Auth mode, resolved per session start so a mode/key change in
     // Settings applies to the very next sitting. `buildSessionEnv` throws
-    // an actionable error when apiKey mode has no stored key — the session
-    // fails to start rather than running on ambient billing.
-    const { authMode } = await getAuthSettings()
-    const sessionEnv = buildSessionEnv(process.env, engramRoot, authMode, authMode === 'apiKey' ? apiKeyStore().get() : null)
+    // an actionable error when apiKey mode has no stored key, or local mode
+    // has no server — the session fails to start rather than running on
+    // ambient billing or against an endpoint nobody chose.
+    const { authMode, localBaseUrl, localModel } = await getAuthSettings()
+    // `--model` ONLY in local mode. In subscription/apiKey mode the CLI's
+    // own default is the right answer and pinning a name here would silently
+    // outlive whatever model the user actually selected in Claude Code.
+    if (authMode === 'local') {
+      if (localModel.trim() === '') {
+        throw new Error('Local-model mode is selected but no model is chosen — pick one in Settings → Authentication, or switch back to subscription mode.')
+      }
+      args.push('--model', localModel.trim())
+    }
+    const sessionEnv = buildSessionEnv(
+      process.env,
+      engramRoot,
+      authMode,
+      authMode === 'apiKey' ? apiKeyStore().get() : null,
+      authMode === 'local' ? localBaseUrl : null,
+    )
     this.child = spawn(claudeBin, args, {
       cwd: homedir(),
       stdio: ['pipe', 'pipe', 'pipe'],

@@ -1,4 +1,4 @@
-import type { DrainSummary, LinkStatus, PairingOffer } from '../../../shared/types'
+import type { DrainSummary, LinkStatus, LocalModelProbe, PairingOffer } from '../../../shared/types'
 import { useEffect, useState } from 'react'
 import type {
   ApiKeyStatus,
@@ -13,6 +13,7 @@ import type {
 } from '../../../shared/types'
 import { AchievementsPanel } from '../components/AchievementsPanel'
 import { SegmentedControl } from '../components/ui/SegmentedControl'
+import { describeProbe as describeProbeVerdict } from '../../../shared/localModelVerdict'
 import { Button } from '../components/ui/Button'
 import { Modal } from '../components/ui/Modal'
 import { DendriteDivider } from '../components/ui/DendriteDivider'
@@ -608,6 +609,12 @@ export function SettingsView() {
   // on them shouldn't have to know to ask for the reason.
   const [crashLog, setCrashLog] = useState<CrashLogEntry[]>([])
 
+  // Local models. `probe` is null until asked: a capability check costs a
+  // real generation on the learner's own hardware, so it runs on demand.
+  const [localModels, setLocalModels] = useState<string[]>([])
+  const [probe, setProbe] = useState<LocalModelProbe | null>(null)
+  const [probing, setProbing] = useState(false)
+
   function refresh() {
     window.engram.model().then(setModel)
     window.engram.anySessionActive().then(setSessionActive)
@@ -624,7 +631,39 @@ export function SettingsView() {
   useEffect(refresh, [])
 
   async function pickAuthMode(v: string) {
-    setAuth(await window.engram.setAuthMode(v === 'apiKey' ? 'apiKey' : 'subscription'))
+    const mode = v === 'apiKey' ? 'apiKey' : v === 'local' ? 'local' : 'subscription'
+    const next = await window.engram.setAuthMode(mode)
+    setAuth(next)
+    // A mode switch invalidates any previous verdict — it was about a
+    // different runtime.
+    setProbe(null)
+    if (mode === 'local') setLocalModels(await window.engram.listLocalModels(next.localBaseUrl))
+  }
+
+  async function pickLocalModel(model: string) {
+    if (!auth) return
+    setProbe(null)
+    setAuth(await window.engram.setLocalModel(auth.localBaseUrl, model))
+  }
+
+  async function runProbe() {
+    if (!auth) return
+    setProbing(true)
+    setProbe(null)
+    try {
+      setProbe(await window.engram.probeLocalModel(auth.localBaseUrl, auth.localModel))
+    } catch (err) {
+      setProbe({
+        reachable: false,
+        text: false,
+        toolUse: false,
+        toolUseImitation: false,
+        models: [],
+        error: err instanceof Error ? err.message : String(err),
+      })
+    } finally {
+      setProbing(false)
+    }
   }
 
   async function saveApiKey() {
@@ -1121,13 +1160,16 @@ export function SettingsView() {
           hint={
             (auth?.authMode ?? 'subscription') === 'apiKey'
               ? 'Sessions run with your Anthropic API key under the Commercial Terms, pay per token. The key is encrypted with the system keychain, stored outside any settings file, and never leaves this machine.'
-              : 'Engram drives the Claude Code binary you already installed and pay for. The CLI authenticates from its own login; a stray ANTHROPIC_API_KEY in your shell is ignored so it can never flip sessions onto per-token billing.'
+              : (auth?.authMode ?? 'subscription') === 'local'
+                ? 'Sessions run against a model on this machine — nothing billed, nothing sent anywhere. Ollama 0.32+ serves the Anthropic API directly, so no proxy is involved. Check the model before you rely on it: a tutor drives the sitting with tool calls, and a model that cannot make them will appear to work while recording nothing.'
+                : 'Engram drives the Claude Code binary you already installed and pay for. The CLI authenticates from its own login; a stray ANTHROPIC_API_KEY in your shell is ignored so it can never flip sessions onto per-token billing.'
           }
           current={auth?.authMode ?? 'subscription'}
           onPick={pickAuthMode}
           options={[
             { value: 'subscription', label: 'Claude Code subscription' },
             { value: 'apiKey', label: 'API key' },
+            { value: 'local', label: 'Local model' },
           ]}
         />
         {(auth?.authMode ?? 'subscription') === 'apiKey' && (
@@ -1162,6 +1204,61 @@ export function SettingsView() {
               </Button>
             </div>
             {authError && <div className="text-xs text-[var(--color-ink-danger)]">{authError}</div>}
+          </div>
+        )}
+        {auth?.authMode === 'local' && (
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between gap-3">
+              <span className="label-data text-[11px] text-[var(--color-text-dim)]">
+                Server · {auth.localBaseUrl}
+              </span>
+              <Button variant="ghost" onClick={async () => setLocalModels(await window.engram.listLocalModels(auth.localBaseUrl))}>
+                Refresh models
+              </Button>
+            </div>
+
+            {localModels.length === 0 ? (
+              <div className="text-xs text-[var(--color-ink-danger)]">
+                No models found at {auth.localBaseUrl} — is the runtime running? Start it, then Refresh.
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {localModels.map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => pickLocalModel(m)}
+                    className={`focus-ring label-data text-[11px] px-2.5 py-1.5 border transition-colors duration-[var(--dur-fast)] ${
+                      auth.localModel === m
+                        ? 'border-[var(--color-ink-warm)] text-[var(--color-text-primary)]'
+                        : 'border-[var(--color-hairline)] text-[var(--color-text-dim)] hover:text-[var(--color-text-primary)]'
+                    }`}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="flex items-center gap-3">
+              <Button variant="ghost" onClick={runProbe} disabled={probing || !auth.localModel}>
+                {probing ? 'Checking…' : 'Check this model'}
+              </Button>
+              {!auth.localModel && (
+                <span className="text-xs text-[var(--color-text-faint)]">Pick a model first.</span>
+              )}
+            </div>
+
+            {probe && (
+              <div className="flex flex-col gap-1">
+                <span
+                  className="label-data text-[11px]"
+                  style={{ color: describeProbeVerdict(probe).ok ? 'var(--color-ink-warm)' : 'var(--color-ink-danger)' }}
+                >
+                  {describeProbeVerdict(probe).headline}
+                </span>
+                <span className="text-xs text-[var(--color-text-dim)]">{describeProbeVerdict(probe).detail}</span>
+              </div>
+            )}
           </div>
         )}
       </div>

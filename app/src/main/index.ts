@@ -18,7 +18,8 @@ import {
 } from './explorableProtocol'
 import { bridgeServer } from './bridge/bridgeServer'
 import { getNotifierSettings, setNotifierSettings } from './session/notifierState'
-import { getAuthSettings, setAuthMode } from './session/authSettings'
+import { getAuthSettings, setAuthMode, setLocalModelSettings } from './session/authSettings'
+import { isLoopbackUrl, listLocalModels, probeLocalModel } from './session/localModel'
 import { apiKeyStore, isPlausibleApiKey } from './session/auth'
 import { getUnlockedAchievements, recordUnlocked } from './session/achievementsStore'
 import { startReviewNotifier, stopReviewNotifier, checkReviewsNow, refreshDueCount } from './session/reviewNotifier'
@@ -445,8 +446,30 @@ app.whenReady().then(() => {
   // never crosses this boundary outward — status carries presence + last4.
   ipcMain.handle('auth:getSettings', () => getAuthSettings())
   ipcMain.handle('auth:setMode', (_e, mode: unknown) => {
-    if (mode !== 'subscription' && mode !== 'apiKey') throw new Error(`auth:setMode: invalid mode: ${JSON.stringify(mode)}`)
+    if (mode !== 'subscription' && mode !== 'apiKey' && mode !== 'local') throw new Error(`auth:setMode: invalid mode: ${JSON.stringify(mode)}`)
     return setAuthMode(mode)
+  })
+  // Local models. The base URL is confined to loopback on purpose: this
+  // setting picks where TUTORING goes, and a remote address here would
+  // quietly turn a "100% local, nothing leaves the machine" app into one
+  // that streams a learner's productions to a third party. Anyone wanting a
+  // remote endpoint can say so explicitly; it should not be reachable by
+  // typing a hostname into a box labelled "local model".
+  ipcMain.handle('auth:setLocalModel', (_e, baseUrl: unknown, model: unknown) => {
+    if (typeof baseUrl !== 'string' || typeof model !== 'string') throw new Error('auth:setLocalModel: baseUrl and model must be strings')
+    if (baseUrl.trim() !== '' && !isLoopbackUrl(baseUrl)) {
+      throw new Error('Local-model server must be on this machine (localhost or 127.0.0.1).')
+    }
+    return setLocalModelSettings(baseUrl, model)
+  })
+  ipcMain.handle('auth:listLocalModels', (_e, baseUrl: unknown) => {
+    if (typeof baseUrl !== 'string' || !isLoopbackUrl(baseUrl)) return []
+    return listLocalModels(baseUrl)
+  })
+  ipcMain.handle('auth:probeLocalModel', (_e, baseUrl: unknown, model: unknown) => {
+    if (typeof baseUrl !== 'string' || typeof model !== 'string') throw new Error('auth:probeLocalModel: baseUrl and model must be strings')
+    if (!isLoopbackUrl(baseUrl)) throw new Error('Local-model server must be on this machine (localhost or 127.0.0.1).')
+    return probeLocalModel(baseUrl, model)
   })
   ipcMain.handle('auth:keyStatus', () => apiKeyStore().status())
   ipcMain.handle('auth:setApiKey', (_e, key: unknown) => {

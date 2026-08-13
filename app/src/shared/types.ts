@@ -312,10 +312,45 @@ export interface NotifierSettings {
  * export can never silently flip tutoring onto per-token billing.
  * `apiKey` = same binary billed against the key in the encrypted store
  * (`session/apiKeyStore.ts` — never plaintext, never in a settings file). */
-export type AuthMode = 'subscription' | 'apiKey'
+/** `local` = the same Claude Code binary pointed at an OpenAI-style local
+ * runtime that speaks the Anthropic Messages API. Ollama 0.32+ serves
+ * `/v1/messages` natively (it ships its own Anthropic middleware — this is
+ * what `ollama launch claude` wires up), so no translating proxy exists in
+ * this app and none is needed. Zero tokens billed, and nothing leaves the
+ * machine. */
+export type AuthMode = 'subscription' | 'apiKey' | 'local'
 
 export interface AuthSettings {
   authMode: AuthMode
+  /** Origin of the local Anthropic-compatible server. Ollama's default. */
+  localBaseUrl: string
+  /** Tag passed to `claude --model`, e.g. `muse-glimmer:30b-mlx`. Empty
+   * means "not chosen yet" and blocks starting a local sitting. */
+  localModel: string
+}
+
+/** What a local model can actually be trusted to drive.
+ *
+ * The tutor loop is not prose — it is tool calls. A model that cannot emit
+ * real `tool_use` blocks will open a sitting and then fail to render a
+ * ticket, ask a question, or run `engram rate`, which means a sitting that
+ * LOOKS like it is working while writing no receipts. Measured, not
+ * assumed: `probeLocalModel` sends one real tool and reports what came
+ * back. Verified against Ollama 0.32.9 + nemotron-nano, which answers
+ * prose fine and returns a fenced JSON blob instead of a tool_use block. */
+export interface LocalModelProbe {
+  reachable: boolean
+  /** The model answered a plain prompt. */
+  text: boolean
+  /** The model emitted a real `tool_use` content block — the gate that
+   * decides whether a sitting can be driven at all. */
+  toolUse: boolean
+  /** Populated when `toolUse` is false but the model clearly TRIED, e.g. a
+   * ```json fenced call in a text block. Distinguishes "cannot call tools"
+   * from "wrong shape", which are different fixes. */
+  toolUseImitation: boolean
+  models: string[]
+  error: string | null
 }
 
 /** What the renderer may know about the stored API key: presence and the

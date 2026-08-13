@@ -36,3 +36,33 @@ describe('buildSessionEnv', () => {
     expect(env.ANTHROPIC_API_KEY).toBeUndefined()
   })
 })
+
+describe('local-model mode', () => {
+  it('points the CLI at the local server and satisfies its auth requirement', () => {
+    const env = buildSessionEnv({ PATH: '/usr/bin' }, '/root', 'local', null, 'http://localhost:11434')
+    expect(env.ANTHROPIC_BASE_URL).toBe('http://localhost:11434')
+    // The CLI refuses to start unauthenticated even against an endpoint that
+    // ignores credentials; this placeholder is not a secret.
+    expect(env.ANTHROPIC_AUTH_TOKEN).toBe('local-no-auth')
+    expect(env.ANTHROPIC_API_KEY).toBeUndefined()
+  })
+
+  it('trims a trailing slash so the CLI never builds a double-slashed path', () => {
+    const env = buildSessionEnv({}, '/root', 'local', null, 'http://localhost:11434/')
+    expect(env.ANTHROPIC_BASE_URL).toBe('http://localhost:11434')
+  })
+
+  it('refuses to start rather than falling back to a billed endpoint', () => {
+    expect(() => buildSessionEnv({}, '/root', 'local', null, '')).toThrow(/no server address/i)
+    expect(() => buildSessionEnv({}, '/root', 'local', null, null)).toThrow(/no server address/i)
+  })
+
+  it('strips an ambient ANTHROPIC_BASE_URL in every other mode', () => {
+    // A shell that exports it (another launcher, a proxy experiment) must
+    // never silently redirect tutoring to an endpoint nobody chose here.
+    const stray = { PATH: '/usr/bin', ANTHROPIC_BASE_URL: 'http://somewhere-else:9999' }
+    expect(buildSessionEnv(stray, '/root', 'subscription').ANTHROPIC_BASE_URL).toBeUndefined()
+    expect(buildSessionEnv(stray, '/root', 'apiKey', 'sk-real').ANTHROPIC_BASE_URL).toBeUndefined()
+    expect(stray.ANTHROPIC_BASE_URL).toBe('http://somewhere-else:9999') // caller's env untouched
+  })
+})
