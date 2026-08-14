@@ -1190,9 +1190,7 @@ export function SettingsView() {
               ? 'Sessions run with your Anthropic API key under the Commercial Terms, pay per token. The key is encrypted with the system keychain, stored outside any settings file, and never leaves this machine.'
               : (auth?.authMode ?? 'subscription') === 'local'
                 ? 'Sessions run against a model on this machine — nothing billed, nothing sent anywhere. Ollama 0.32+ serves the Anthropic API directly, so no proxy is involved. Check the model before you rely on it: a tutor drives the sitting with tool calls, and a model that cannot make them will appear to work while recording nothing.'
-                : (auth?.authMode ?? 'subscription') === 'opencodeCursor'
-                  ? "Sessions run through OpenCode's cursor-acp provider, billed against your own Cursor plan. No proxy — OpenCode serves a real HTTP API this app talks to directly. Requires OpenCode with the cursor-acp plugin already set up and Cursor itself open and signed in; resuming a past sitting starts a fresh conversation rather than truly continuing it, since OpenCode's own session ids can't be chosen ahead of time the way Claude's can."
-                  : 'Engram drives the Claude Code binary you already installed and pay for. The CLI authenticates from its own login; a stray ANTHROPIC_API_KEY in your shell is ignored so it can never flip sessions onto per-token billing.'
+                : 'Engram drives the Claude Code binary you already installed and pay for. The CLI authenticates from its own login; a stray ANTHROPIC_API_KEY in your shell is ignored so it can never flip sessions onto per-token billing.'
           }
           current={auth?.authMode ?? 'subscription'}
           onPick={pickAuthMode}
@@ -1200,7 +1198,11 @@ export function SettingsView() {
             { value: 'subscription', label: 'Claude Code subscription' },
             { value: 'apiKey', label: 'API key' },
             { value: 'local', label: 'Local model' },
-            { value: 'opencodeCursor', label: 'OpenCode + Cursor' },
+            // 'OpenCode + Cursor' TEMPORARILY REMOVED (2026-08-14) — confirmed
+            // live that bridge tools never reach cursor-acp's models, so a
+            // sitting in this mode cannot actually be taught (see
+            // OpencodeSessionManager.start()'s doctrine comment). The backend
+            // is otherwise intact; this is only the picker entry point.
           ]}
         />
         {(auth?.authMode ?? 'subscription') === 'apiKey' && (

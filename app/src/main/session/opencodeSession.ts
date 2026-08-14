@@ -81,7 +81,39 @@ export class OpencodeSessionManager extends EventEmitter {
     })
   }
 
-  async start(initialMessage: string, extraInstructions?: string): Promise<void> {
+  async start(_initialMessage: string, _extraInstructions?: string): Promise<void> {
+    // TEMPORARILY DISABLED (2026-08-14). Confirmed live against a real
+    // sitting: the engram-ui-bridge MCP server connects successfully at the
+    // OpenCode server level (GET /mcp reports "connected", the session's own
+    // permission list allows every mcp__engram_ui_bridge__* tool) — but
+    // those tool schemas never reach the model's actual function-calling
+    // interface through the cursor-acp provider specifically. Across a real
+    // 6-turn sitting the model never once called a bridge tool, only fell
+    // back to its own bash/read, and — because the system prompt still names
+    // tools it doesn't actually have — repeatedly (and reasonably) flagged
+    // the setup as a prompt injection attempt.
+    //
+    // The rest of the class (session lifecycle, event mapping, MCP
+    // registration) is otherwise verified working — the gap is specifically
+    // MCP-tool delivery through cursor-acp, which likely needs a different
+    // mechanism entirely (routing bridge interactions through Bash rather
+    // than MCP) rather than a config fix. `startWhenBridgeWorks` below keeps
+    // the working implementation live (compiled, type-checked) rather than
+    // commented out to bit-rot, ready for whoever picks the redesign back
+    // up to call instead of this guard.
+    throw new Error(
+      'OpenCode + Cursor mode is temporarily disabled: the bridge tools that drive tickets, questions and grading do not reach cursor-acp’s models, so a sitting cannot actually be taught. Switch to Claude Code subscription, API key, or a local model in Settings → Authentication.',
+    )
+  }
+
+  /** The real implementation, preserved but unreachable from `start()` above
+   * — see its doctrine comment. Everything from here down (port resolution,
+   * SSE subscription, the httpJson helper, event dispatch) is verified
+   * working and unrelated to the disabled gate; only the entry point moved.
+   * Not `private`: an unused private method is dead code by definition and
+   * the compiler says so (TS6133) — this one is deliberately unused FOR NOW,
+   * kept type-checked and callable rather than commented out to bit-rot. */
+  async startWhenBridgeWorks(initialMessage: string, extraInstructions?: string): Promise<void> {
     const port = await bridgeServer.start()
     const { opencodeModel } = await getAuthSettings()
     if (opencodeModel.trim() === '') {

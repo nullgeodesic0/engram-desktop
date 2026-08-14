@@ -61,7 +61,29 @@ export async function checkOpencodeSetup(): Promise<OpencodeSetupStatus> {
  * setup (bridge MCP, tool allow-map, system prompt) a live sitting would use
  * — the only difference from a real sitting is the prompt and that it always
  * runs to exactly one turn. Costs real money; see this file's header. */
-export async function probeOpencodeModel(model: string, timeoutMs = 60_000): Promise<OpencodeProbe> {
+export async function probeOpencodeModel(_model: string, _timeoutMs = 60_000): Promise<OpencodeProbe> {
+  // TEMPORARILY DISABLED, same gate and same reason as
+  // OpencodeSessionManager.start() — see its doctrine comment. Short-circuit
+  // here too rather than relying solely on the Settings UI not offering this
+  // mode, so a probe can never spend real money confirming what's already
+  // known: cursor-acp doesn't deliver MCP tool schemas to the model.
+  return {
+    ok: false,
+    toolUse: false,
+    costUsd: null,
+    error:
+      'OpenCode + Cursor mode is temporarily disabled: bridge tools do not reach cursor-acp’s models. See OpencodeSessionManager.start()’s doctrine comment for what was verified live.',
+  }
+}
+
+/** The real probe, preserved but unreachable from `probeOpencodeModel` above
+ * — see its doctrine comment. Not left inline as dead code after an early
+ * return: TypeScript's control-flow narrowing (the `if (cleanup)` /
+ * `catch (err)` guards below rely on it) visibly degrades for code it
+ * considers unreachable, which is exactly what happened when this was tried
+ * that way — two real type errors appeared in code that hadn't changed.
+ * A separate, still-reachable function avoids that entirely. */
+export async function probeOpencodeModelWhenBridgeWorks(model: string, timeoutMs = 60_000): Promise<OpencodeProbe> {
   if (model.trim() === '') return { ok: false, toolUse: false, costUsd: null, error: 'No model selected.' }
 
   let child: ReturnType<typeof spawn> | null = null
