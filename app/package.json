@@ -22,8 +22,9 @@
     "apply:plugin-overlay": "tsx scripts/applyPluginOverlays.ts",
     "icons": "./scripts/build-icons.sh",
     "bundle:bridge-worker": "esbuild src/main/bridge/mcpBridgeWorker.mjs --bundle --platform=node --format=esm --outfile=resources/mcpBridgeWorker.mjs",
-    "dist": "npm run bundle:bridge-worker && npm run build && electron-builder",
-    "dist:mac": "npm run bundle:bridge-worker && npm run build && electron-builder --mac"
+    "bundle:opencode-plugin": "cd vendor/opencode-plugin && npm install --omit=dev",
+    "dist": "npm run bundle:bridge-worker && npm run bundle:opencode-plugin && npm run build && electron-builder",
+    "dist:mac": "npm run bundle:bridge-worker && npm run bundle:opencode-plugin && npm run build && electron-builder --mac"
   },
   "dependencies": {
     "@fontsource/fraunces": "^5.3.0",
@@ -75,6 +76,10 @@
       {
         "from": "resources",
         "to": "."
+      },
+      {
+        "from": "vendor/opencode-plugin/node_modules",
+        "to": "opencode-plugin"
       }
     ],
     "mac": {

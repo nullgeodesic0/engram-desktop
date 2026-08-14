@@ -15,6 +15,8 @@ import type {
   AuthMode,
   AuthSettings,
   LocalModelProbe,
+  OpencodeSetupStatus,
+  OpencodeProbe,
   ApiKeyStatus,
   UpdateCheckResult,
   ReceiptsHistory,
@@ -103,6 +105,9 @@ const engramApi = {
   listLocalModels: (baseUrl: string): Promise<string[]> => ipcRenderer.invoke('auth:listLocalModels', baseUrl),
   probeLocalModel: (baseUrl: string, model: string): Promise<LocalModelProbe> =>
     ipcRenderer.invoke('auth:probeLocalModel', baseUrl, model),
+  opencodeSetup: (): Promise<OpencodeSetupStatus> => ipcRenderer.invoke('auth:opencodeSetup'),
+  setOpencodeModel: (model: string): Promise<AuthSettings> => ipcRenderer.invoke('auth:setOpencodeModel', model),
+  probeOpencodeModel: (model: string): Promise<OpencodeProbe> => ipcRenderer.invoke('auth:probeOpencodeModel', model),
   authKeyStatus: (): Promise<ApiKeyStatus> => ipcRenderer.invoke('auth:keyStatus'),
   authSetApiKey: (key: string): Promise<ApiKeyStatus> => ipcRenderer.invoke('auth:setApiKey', key),
   authClearApiKey: (): Promise<ApiKeyStatus> => ipcRenderer.invoke('auth:clearApiKey'),

@@ -223,6 +223,17 @@ const PINNED_SUBPROCESS_FILES: Record<string, string> = {
   'main/session/backup.ts': 'tar, for backup archives',
   'main/session/updateCheck.ts': 'gh api, for the update banner',
   'main/index.ts': 'claude --version, for the environment check',
+  // 2026-08-14 — the OpenCode provider. All three exist for exactly the
+  // reasons SessionManager.ts/claudeResolver.ts do above (spawns the driven
+  // session's own child process / locates its binary), for OpenCode instead
+  // of Claude Code. None of the three invokes python3/engram.py — verified
+  // by the same window-scan the loop below already runs on every pinned
+  // file, not asserted here — so the D1.mutationGate / D1.bespoke story
+  // (every engram.py call goes through readOnly.ts's allowlist) is
+  // unaffected by a second provider existing at all.
+  'main/session/opencodeSession.ts': 'spawns `opencode serve` — the driven session itself, OpenCode’s analog of SessionManager.ts',
+  'main/session/opencodeResolver.ts': 'locates the opencode binary and the vendored opencode-engram-learning plugin path',
+  'main/session/opencodeCapability.ts': 'opencode models cursor-acp (setup check) + a throwaway `opencode serve` (the user-triggered, real-money capability probe — see OpencodeProbe’s own doctrine comment for why it is never run automatically)',
 }
 const SPAWN_CALL = /\b(execFile|execFileSync|execSync|exec|spawn|spawnSync|fork)\s*(?:Async)?\s*\(/g
 for (const f of FILES) {
@@ -277,6 +288,13 @@ const PINNED_WRITERS: Record<string, string> = {
   'main/session/sessionIndex.ts': 'app userData',
   'main/session/updateCheck.ts': 'app userData — update-check cache',
   'main/session/permissionConfig.ts': 'os tmpdir — per-session MCP config',
+  // 2026-08-14 — OpenCode provider, opencodePermissions.ts's exact sibling of
+  // permissionConfig.ts above: same os tmpdir per-session config file, same
+  // reused mcpBridgeWorker.mjs, same never-touches-the-learning-home shape.
+  // workspaceDir is app userData too — see the D1.subprocess pin below for
+  // why a stable directory exists at all (the opencode-engram-learning
+  // plugin's own self-extraction step, not this app writing learning state).
+  'main/session/opencodePermissions.ts': 'os tmpdir — per-session opencode.json; app userData — the opencode-workspace directory the opencode-engram-learning plugin self-extracts its skills/agents into on first use',
   'main/session/exportSitting.ts': 'user-chosen export path (dialog) + os tmpdir',
   'main/session/exportMap.ts': 'user-chosen export path (dialog) + os tmpdir — the map-as-PDF sibling of exportSitting.ts, reusing its renderPrintHtmlToPdf pipeline',
   'main/session/backup.ts': 'THE blessed exception: backup archives, and restore into the learning home (see D2.backupGate)',
@@ -451,7 +469,16 @@ const injectedStrings = [...permissionTs.matchAll(/`([^`]{40,})`|'([^']{40,})'/g
 // mobile-walk overlay's own load-bearing lines, restated where the tool that
 // must obey them is named. The prompt still only describes UI plumbing and
 // still ends by deferring to the installed skills.
-const PINNED_PROMPT_HASH = 'db937934d0276f9c'
+// 2026-08-14 — re-pinned for the OpenCode provider. The prompt's WORDS did
+// not change; the SOURCE did — the tool-name prefix was pulled out of the
+// template (mcp__${BRIDGE_SERVER_NAME}__ -> ${toolPrefix}) so a second
+// provider (OpenCode's own mcp__engram_ui_bridge__ convention, underscored
+// rather than hyphenated — confirmed against a real opencode serve) can
+// render the identical prompt through its own prefix instead of maintaining
+// a second ~4000-word copy that could drift. Diffed the rendered output for
+// CLAUDE_TOOL_PREFIX against the pre-refactor prompt byte for byte before
+// re-pinning: identical.
+const PINNED_PROMPT_HASH = 'e69dc3c6d49e9ecc'
 if (sha(injectedStrings) !== PINNED_PROMPT_HASH) {
   fail(
     'D3.systemPrompt',
@@ -555,8 +582,23 @@ const PINNED_BRIDGE_TOOLS = [
 ]
 const workerMjs = read('main/bridge/mcpBridgeWorker.mjs')
 const registered = [...workerMjs.matchAll(/registerTool\(\s*'([a-z_]+)'/g)].map((m) => m[1])
-const allowedLine = permissionTs.match(/allowedTools: `([^`]*)`/)?.[1] ?? ''
-const allowlisted = [...allowedLine.matchAll(/__\$\{BRIDGE_SERVER_NAME\}__([a-z_]+)/g)].map((m) => m[1])
+// 2026-08-14 — allowedTools stopped being a hand-written backtick string
+// (dropped `mcp__${BRIDGE_SERVER_NAME}__toolname` per tool) and became
+// `BRIDGE_TOOL_NAMES.map((name) => \`${toolPrefix}${name}\`).join(' ')` — one
+// list, rendered through whichever provider's prefix, instead of a second
+// hand-copied one a new provider could silently omit a tool from. The
+// allowlist check below now reads that array directly (the SAME array both
+// prepareSessionPermissions (Claude) and prepareOpencodeSession (OpenCode) —
+// see opencodePermissions.ts — build their tools map from), which is a
+// stronger guarantee than parsing the old rendered string ever was.
+if (!permissionTs.includes('allowedTools: BRIDGE_TOOL_NAMES.map(')) {
+  fail(
+    'D3.bridgeTools',
+    'allowedTools is no longer mechanically derived from BRIDGE_TOOL_NAMES.',
+    'The allowlist and the registered set must match exactly: a registered-but-unallowed tool fails mid-session, and an allowed-but-unregistered one is a promise the app cannot keep. Deriving both from one array is what makes that true by construction instead of by remembering to keep two lists in sync.',
+  )
+}
+const allowlisted = literalsIn(blockAfter(permissionTs, 'export const BRIDGE_TOOL_NAMES') ?? '')
 
 if (!eq(registered, PINNED_BRIDGE_TOOLS)) {
   fail(
@@ -573,7 +615,12 @@ if (!eq(allowlisted, PINNED_BRIDGE_TOOLS)) {
   )
 }
 for (const tool of registered) {
-  if (!permissionTs.includes(`__${tool}`)) {
+  // '${toolPrefix}' + tool — the literal source text of every disclosure
+  // site since the prompt template stopped hardcoding the provider prefix
+  // (see the D3.systemPrompt re-pin comment above). Every disclosure in the
+  // prompt is generated this exact way; a tool that only appears as, say, a
+  // bare name in a comment does not count.
+  if (!permissionTs.includes('${toolPrefix}' + tool)) {
     fail(
       'D3.bridgeTools',
       `bridge tool "${tool}" is registered but never disclosed in the appended system prompt.`,

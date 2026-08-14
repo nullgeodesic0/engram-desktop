@@ -1,5 +1,7 @@
 import { ipcMain, type BrowserWindow } from 'electron'
 import { SessionManager } from '../session/SessionManager'
+import { OpencodeSessionManager } from '../session/opencodeSession'
+import { getAuthSettings } from '../session/authSettings'
 import { bridgeServer } from '../bridge/bridgeServer'
 import type { BridgeAskResponse } from '../../shared/bridgeProtocol'
 import type { SessionEvent } from '../../shared/sessionEvents'
@@ -13,7 +15,22 @@ import type { ExportSittingRequest, ExportSittingResult, ExportMapRequest } from
 
 type SessionKind = 'learn' | 'review' | 'coach'
 
-const sessions = new Map<string, SessionManager>()
+/** The one contract both drivers satisfy — structural, not `implements`, so
+ * neither class needs to import the other's module. `SessionManager` (Claude)
+ * and `OpencodeSessionManager` (OpenCode + Cursor) are otherwise unrelated:
+ * different child process, different wire protocol, different provider —
+ * everything downstream of `startSession` below (the sessions registry, IPC,
+ * the renderer, mark derivation, replay) only ever needs this much. */
+interface DrivenSession {
+  readonly sessionId: string
+  start(initialMessage: string, extraInstructions?: string): Promise<void>
+  sendUserMessage(text: string): void
+  sendUserMessageWhenReady(text: string): Promise<void>
+  abort(): void
+  on(event: 'event', listener: (event: SessionEvent) => void): unknown
+}
+
+const sessions = new Map<string, DrivenSession>()
 
 /** True while any sitting is live.
  *
@@ -119,7 +136,13 @@ export async function startSession(
   // still there to send the next turn.
   autoCloseAfterTurn = false,
 ): Promise<{ sessionId: string }> {
-  const manager = new SessionManager(resumeSessionId)
+  // Provider dispatch — the only place a sitting's driver is chosen. Both
+  // classes satisfy `DrivenSession` above, so nothing past this line (the
+  // registry, event forwarding, resume bookkeeping) branches on which one
+  // this is.
+  const { authMode } = await getAuthSettings()
+  const manager: DrivenSession =
+    authMode === 'opencodeCursor' ? new OpencodeSessionManager(resumeSessionId) : new SessionManager(resumeSessionId)
   sessions.set(manager.sessionId, manager)
   manager.on('event', (event: SessionEvent) => {
     activeWindow?.webContents.send('session:event', { sessionId: manager.sessionId, event })

@@ -18,8 +18,9 @@ import {
 } from './explorableProtocol'
 import { bridgeServer } from './bridge/bridgeServer'
 import { getNotifierSettings, setNotifierSettings } from './session/notifierState'
-import { getAuthSettings, setAuthMode, setLocalModelSettings } from './session/authSettings'
+import { getAuthSettings, setAuthMode, setLocalModelSettings, setOpencodeModelSettings } from './session/authSettings'
 import { isLoopbackUrl, listLocalModels, probeLocalModel } from './session/localModel'
+import { checkOpencodeSetup, probeOpencodeModel } from './session/opencodeCapability'
 import { apiKeyStore, isPlausibleApiKey } from './session/auth'
 import { getUnlockedAchievements, recordUnlocked } from './session/achievementsStore'
 import { startReviewNotifier, stopReviewNotifier, checkReviewsNow, refreshDueCount } from './session/reviewNotifier'
@@ -446,7 +447,9 @@ app.whenReady().then(() => {
   // never crosses this boundary outward — status carries presence + last4.
   ipcMain.handle('auth:getSettings', () => getAuthSettings())
   ipcMain.handle('auth:setMode', (_e, mode: unknown) => {
-    if (mode !== 'subscription' && mode !== 'apiKey' && mode !== 'local') throw new Error(`auth:setMode: invalid mode: ${JSON.stringify(mode)}`)
+    if (mode !== 'subscription' && mode !== 'apiKey' && mode !== 'local' && mode !== 'opencodeCursor') {
+      throw new Error(`auth:setMode: invalid mode: ${JSON.stringify(mode)}`)
+    }
     return setAuthMode(mode)
   })
   // Local models. The base URL is confined to loopback on purpose: this
@@ -470,6 +473,20 @@ app.whenReady().then(() => {
     if (typeof baseUrl !== 'string' || typeof model !== 'string') throw new Error('auth:probeLocalModel: baseUrl and model must be strings')
     if (!isLoopbackUrl(baseUrl)) throw new Error('Local-model server must be on this machine (localhost or 127.0.0.1).')
     return probeLocalModel(baseUrl, model)
+  })
+  // OpenCode + Cursor. `checkOpencodeSetup` is free (shells out to `opencode
+  // models`, no server); `probeOpencodeModel` is NOT — it runs one real turn
+  // through the user's own Cursor plan and reports the real cost back, so it
+  // is a Settings button the learner presses, never something this app runs
+  // on their behalf automatically.
+  ipcMain.handle('auth:opencodeSetup', () => checkOpencodeSetup())
+  ipcMain.handle('auth:setOpencodeModel', (_e, model: unknown) => {
+    if (typeof model !== 'string') throw new Error('auth:setOpencodeModel: model must be a string')
+    return setOpencodeModelSettings(model)
+  })
+  ipcMain.handle('auth:probeOpencodeModel', (_e, model: unknown) => {
+    if (typeof model !== 'string') throw new Error('auth:probeOpencodeModel: model must be a string')
+    return probeOpencodeModel(model)
   })
   ipcMain.handle('auth:keyStatus', () => apiKeyStore().status())
   ipcMain.handle('auth:setApiKey', (_e, key: unknown) => {

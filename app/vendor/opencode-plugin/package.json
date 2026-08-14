@@ -1,0 +1,8 @@
+{
+  "name": "engram-desktop-opencode-vendor",
+  "private": true,
+  "description": "Isolated install root for the opencode-engram-learning plugin and its own dependency tree (Effect, the OpenCode plugin SDK, a private zod@4 — distinct from the app's own zod@3). Vendored here rather than left in the app's top-level node_modules so electron-builder's extraResources step can copy exactly this subtree into the packaged app, unbundled, for OpenCode's own Bun-based plugin loader to resolve at runtime. Never imported by app code directly.",
+  "dependencies": {
+    "opencode-engram-learning": "1.11.2"
+  }
+}

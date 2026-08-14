@@ -8,9 +8,16 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import type { AuthMode, AuthSettings } from '../../shared/types'
 import { DEFAULT_LOCAL_BASE_URL } from './localModel'
 
-const DEFAULTS: AuthSettings = { authMode: 'subscription', localBaseUrl: DEFAULT_LOCAL_BASE_URL, localModel: '' }
+export const DEFAULT_OPENCODE_MODEL = 'auto'
 
-const MODES: AuthMode[] = ['subscription', 'apiKey', 'local']
+const DEFAULTS: AuthSettings = {
+  authMode: 'subscription',
+  localBaseUrl: DEFAULT_LOCAL_BASE_URL,
+  localModel: '',
+  opencodeModel: DEFAULT_OPENCODE_MODEL,
+}
+
+const MODES: AuthMode[] = ['subscription', 'apiKey', 'local', 'opencodeCursor']
 
 function statePath(): string {
   return join(app.getPath('userData'), 'auth-settings.json')
@@ -26,6 +33,10 @@ export async function getAuthSettings(): Promise<AuthSettings> {
       authMode: MODES.includes(parsed.authMode as AuthMode) ? (parsed.authMode as AuthMode) : DEFAULTS.authMode,
       localBaseUrl: typeof parsed.localBaseUrl === 'string' && parsed.localBaseUrl.trim() !== '' ? parsed.localBaseUrl : DEFAULTS.localBaseUrl,
       localModel: typeof parsed.localModel === 'string' ? parsed.localModel : DEFAULTS.localModel,
+      opencodeModel:
+        typeof parsed.opencodeModel === 'string' && parsed.opencodeModel.trim() !== ''
+          ? parsed.opencodeModel.trim()
+          : DEFAULTS.opencodeModel,
     }
   } catch {
     return { ...DEFAULTS }
@@ -50,5 +61,14 @@ export async function setLocalModelSettings(baseUrl: string, model: string): Pro
     ...current,
     localBaseUrl: baseUrl.trim() === '' ? DEFAULTS.localBaseUrl : baseUrl.trim(),
     localModel: model.trim(),
+  })
+}
+
+export async function setOpencodeModelSettings(model: string): Promise<AuthSettings> {
+  const current = await getAuthSettings()
+  const trimmed = model.trim()
+  return persist({
+    ...current,
+    opencodeModel: trimmed === '' ? DEFAULT_OPENCODE_MODEL : trimmed,
   })
 }

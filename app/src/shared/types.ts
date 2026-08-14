@@ -317,8 +317,14 @@ export interface NotifierSettings {
  * `/v1/messages` natively (it ships its own Anthropic middleware — this is
  * what `ollama launch claude` wires up), so no translating proxy exists in
  * this app and none is needed. Zero tokens billed, and nothing leaves the
- * machine. */
-export type AuthMode = 'subscription' | 'apiKey' | 'local'
+ * machine.
+ *
+ * `opencodeCursor` = sittings run through `opencode serve` (a real HTTP+SSE
+ * API, confirmed live — no proxy here either) with the `cursor-acp` provider
+ * and the `opencode-engram-learning` plugin, so the tutor runs on Cursor's
+ * models while the same bridge drives cards/asks. Billed against the user's
+ * own Cursor plan; see `OpencodeProbe` below. */
+export type AuthMode = 'subscription' | 'apiKey' | 'local' | 'opencodeCursor'
 
 export interface AuthSettings {
   authMode: AuthMode
@@ -327,6 +333,9 @@ export interface AuthSettings {
   /** Tag passed to `claude --model`, e.g. `muse-glimmer:30b-mlx`. Empty
    * means "not chosen yet" and blocks starting a local sitting. */
   localModel: string
+  /** Cursor ACP model id without the `cursor-acp/` prefix (e.g. `auto`).
+   * Passed to OpenCode as `-m cursor-acp/<id>`. */
+  opencodeModel: string
 }
 
 /** What a local model can actually be trusted to drive.
@@ -350,6 +359,26 @@ export interface LocalModelProbe {
    * from "wrong shape", which are different fixes. */
   toolUseImitation: boolean
   models: string[]
+  error: string | null
+}
+
+/** Free to run (no server, shells out to `opencode models`) — whether
+ * OpenCode is installed and the `cursor-acp` provider has any models to
+ * offer at all. Distinct from `OpencodeProbe`, which costs real money. */
+export interface OpencodeSetupStatus {
+  binaryFound: boolean
+  binaryPath: string | null
+  models: string[]
+  error: string | null
+}
+
+/** A real turn through a real `opencode serve` + the user's own Cursor plan
+ * — NOT free, confirmed live (a one-word reply cost $0.036 real). User-
+ * triggered only; see `probeOpencodeModel`'s own doctrine comment. */
+export interface OpencodeProbe {
+  ok: boolean
+  toolUse: boolean
+  costUsd: number | null
   error: string | null
 }
 
