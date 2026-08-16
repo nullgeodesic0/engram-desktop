@@ -582,12 +582,14 @@ export function LearnSessionView({
         }
       }
     }
-    // Closing summary: bottom edge reveals once any grades exist — the
-    // mirror of Review's own bottom-edge branch (its height holds it open).
+    // Closing summary: bottom edge reveals once the sitting has actually
+    // ENDED (sittingEnded — see its own doctrine comment), not merely once a
+    // grade exists — the mirror of Review's own bottom-edge branch (its
+    // height holds it open, gated on its queue being empirically empty).
     // Pinned ignores the cursor. State/controller are declared at the END of
     // the hook list (KeepMounted append rule); this handler only runs on
     // real pointer events, long after every declaration has evaluated.
-    if (sessionGrades.length > 0 && !summaryPinned) {
+    if (sittingEnded && !summaryPinned) {
       const yFromBottom = rect.bottom - e.clientY
       if (yFromBottom <= (summaryPeek ? 360 : 28)) summaryCtl.peek()
       else summaryCtl.tuck()
@@ -754,6 +756,7 @@ export function LearnSessionView({
     setTicketPeek(false)
     setTicketPinned(false)
     setMastheadPinned(false)
+    setSittingEnded(false)
     intentionalStopRef.current = false
     // NeuralField is app-global and this view stays mounted — a new session must not
     // inherit the previous topic's leftover warmth.
@@ -873,6 +876,18 @@ export function LearnSessionView({
           }
           if (prevPhase !== nextPhase) pushMark({ kind: 'phase', phase: nextPhase })
           setSessionPhase(nextPhase)
+          // The one signal that unlocks the closing summary from the tutor's
+          // own side — see `sittingEnded`'s doctrine comment. `session_phase`
+          // is documented to the tutor as advisory/best-effort (permissionConfig.ts),
+          // so this alone isn't airtight, but it's the only structured way
+          // the tutor can say "the planned walk is done" or "the learner
+          // asked me to wrap up" — both collapse to the same 'closing' call.
+          // Auto-peek once, same moment: an unattended reveal is the whole
+          // point of a closing ceremony, not something to wait on a hover for.
+          if (nextPhase === 'closing') {
+            setSittingEnded(true)
+            setSummaryPeek(true)
+          }
           // Chat Presence Wave D — the batch has moved into grading, ahead
           // of the assessor's own spawn tool_use (which promotes this to
           // `grading:assessing` — see tutorActivity.ts's doctrine comment).
@@ -1394,6 +1409,14 @@ export function LearnSessionView({
         if (intentionalStopRef.current) {
           intentionalStopRef.current = false
           setBusy(false)
+          // The learner hit Stop — the other way a sitting legitimately ends
+          // besides the tutor's own `session_phase(closing)` (see
+          // `sittingEnded`'s doctrine comment). Whatever nodes WERE graded
+          // this sitting still earn their closing ceremony; an unexpected
+          // disconnect (the `else` branch below) does not — that's a
+          // reconnect/error state, not something to celebrate.
+          setSittingEnded(true)
+          setSummaryPeek(true)
         } else if (sessionIdRef.current != null) {
           setClosedUnexpectedly(true)
           setBusy(false)
@@ -1874,6 +1897,20 @@ export function LearnSessionView({
   // hooks may only ever be added after every existing one, never between.
   const [summaryPeek, setSummaryPeek] = useState(false)
   const [summaryPinned, setSummaryPinned] = useState(false)
+  // Gates the closing summary on the SITTING actually being over, not on a
+  // grade merely existing. Before this flag, the overlay's only condition
+  // was `sessionGrades.length > 0` — true the instant node 1 of a planned
+  // 2-3 node walk is graded, so "the walk, recorded" appeared mid-walk, with
+  // two nodes still to come. There is no app-side node-count picker to
+  // compare against (a Learn sitting's length is a conversational decision
+  // the tutor makes, not a structured value the app is ever given — unlike
+  // Review, which can tell it's done because its own queue is empirically
+  // empty), so "done" here is defined by the two ways the WALK can actually
+  // end: the tutor calling `session_phase(closing)` (it decided the planned
+  // nodes are taught, or the learner told it to wrap up) below, or the
+  // learner hitting Stop (`intentionalStopRef`, see the `'closed'` case
+  // below) — never a bare grade count.
+  const [sittingEnded, setSittingEnded] = useState(false)
   const summaryLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(
     () => () => {
@@ -2543,12 +2580,17 @@ export function LearnSessionView({
                 )}
               </div>
             </ChatScrollRegion>
-            {/* The walk's running ceremony — no longer an inline shrink-0
+            {/* The walk's closing ceremony — no longer an inline shrink-0
                 block stealing transcript height: the shared bottom-edge
                 overlay (ritual/SummaryOverlay, same grammar as Review's
                 closing summary) holds it, revealed by the container's
-                bottom strip or the nub, pinned to stay out. */}
-            {sessionGrades.length > 0 && (
+                bottom strip or the nub, pinned to stay out.
+                Gated on `sittingEnded`, not `sessionGrades.length > 0` — see
+                that flag's own doctrine comment. Requiring BOTH here (grades
+                exist AND the sitting ended) rather than folding sittingEnded
+                alone into the mount condition means an explicit Stop with
+                zero nodes graded yet never mounts an empty ceremony. */}
+            {sessionGrades.length > 0 && sittingEnded && (
               <SummaryOverlay
                 accent="warm"
                 pinned={summaryPinned}
