@@ -96,8 +96,11 @@ const LINE_H = 13
 const MAX_CHARS = 26
 
 /** However much room there is, a plate stops being a figure past this many
- * names. */
-const MAX_LABELS = 32
+ * names. Lowered from 32 — even with cursor-aware clearance (below), that
+ * many simultaneous names read as clutter on a normally-sized plate; a
+ * reader who wants more can always zoom or move the cursor to reveal them,
+ * per `placeLabels`'s own "zooming in makes room" design. */
+const MAX_LABELS = 18
 
 export function labelFontSize(n: Pick<AtlasNode, 'capstone' | 'isHub'>): number {
   return n.capstone ? 14 : n.isHub ? 13 : 12
@@ -115,20 +118,29 @@ function overlaps(a: LabelBox, b: LabelBox): boolean {
 }
 
 /** Inside this radius of the cursor, a name needs no more clearance than its
- * own box — full density right where the reader is looking. */
-const CURSOR_NEAR = 140
+ * own box — full density right where the reader is looking. Small on
+ * purpose: this is "practically under the pointer," not "somewhere in the
+ * general area," so most of a normally-zoomed plate sits in the falloff
+ * band below rather than the fully-dense zone. */
+const CURSOR_NEAR = 110
 /** Past this radius, a name needs the full extra `MAX_CLEARANCE` around it —
  * the plate thins itself out the farther a neighbourhood sits from whatever
- * the reader is actually attending to. Linear falloff between the two. */
-const CURSOR_FAR = 480
+ * the reader is actually attending to. Linear falloff between the two.
+ * Tightened from an earlier 480 — at that radius, most of a normal viewport
+ * still counted as "near" and the effect barely thinned anything; a reader
+ * reported the plate still read as cluttered, which is this radius being
+ * too generous, not the mechanism being wrong. */
+const CURSOR_FAR = 300
 /** Extra margin added to every side of a far candidate's box before testing
  * it against names already placed — this is what makes a crowded but
  * unattended corner of the plate quietly drop names instead of packing them
  * in as tightly as the area right under the cursor does. Never applied to
  * hover/selected/trail names, or (under the due lens) an overdue/due-today
  * one — those already always get a spot if any berth has room; this only
- * governs how much room an ordinary name needs to be allowed one. */
-const MAX_CLEARANCE = 34
+ * governs how much room an ordinary name needs to be allowed one. Doubled
+ * from an earlier 34 for the same reason CURSOR_FAR tightened — the first
+ * pass under-corrected. */
+const MAX_CLEARANCE = 70
 /** Applied when there is no cursor position at all to measure distance
  * from (off-canvas, or a caller — including every pre-existing test — that
  * never reports one). Half of `MAX_CLEARANCE`, not the full amount: "no
@@ -174,6 +186,15 @@ export function placeLabels(input: LabelInput): LabelBox[] {
     .sort((a, b) => a.rank - b.rank || a.n.id.localeCompare(b.n.id))
 
   const placed: LabelBox[] = []
+  // Parallel to `placed` — each already-placed label's OWN clearance
+  // requirement, so a far-from-cursor label that placed first still
+  // enforces its full personal space against whatever tries to place near
+  // it afterward. Padding only the incoming candidate (and not also
+  // re-checking what a placed label itself needed) let two far-but-not-
+  // mutually-overlapping labels sit closer together than either one's own
+  // clearance called for — the mutual max below is what actually holds
+  // clutter down instead of only ever thinning towards one side.
+  const placedClearance: number[] = []
   for (const { n, rank } of candidates) {
     if (placed.length >= MAX_LABELS) break
     const text = clipLabel(input.labelFor(n))
@@ -203,14 +224,29 @@ export function placeLabels(input: LabelInput): LabelBox[] {
       if (candidate.y > maxY || candidate.y + candidate.h < minY) continue
       // Clearance inflates the TEST box only — the rendered label keeps its
       // true size, it just needs more empty neighbourhood before it earns a
-      // spot the farther it sits from the reader's own attention.
-      const padded: LabelBox = { ...candidate, x: candidate.x - clearance, y: candidate.y - clearance, w: w + clearance * 2, h: h + clearance * 2 }
-      if (placed.some((other) => overlaps(padded, other))) continue
+      // spot the farther it sits from the reader's own attention. Each
+      // comparison uses whichever of the two labels' own clearance is
+      // larger, so a far label's personal space holds even against a
+      // candidate that itself needs none — UNLESS the candidate is itself
+      // `alwaysClear` (hover/selected/trail, or overdue/due-today under the
+      // due lens), which ignores every neighbour's personal space outright.
+      // Without that exception, a ring of low-priority-but-far walls could
+      // wall off their own generous clearance and block an always-clear
+      // name from ever squeezing into the one gap between them — exactly
+      // the unconditional "always gets a spot if any berth has room"
+      // guarantee this tier existed to make in the first place.
+      const collides = placed.some((other, idx) => {
+        const pad = alwaysClear ? 0 : Math.max(clearance, placedClearance[idx])
+        const padded: LabelBox = { ...candidate, x: candidate.x - pad, y: candidate.y - pad, w: w + pad * 2, h: h + pad * 2 }
+        return overlaps(padded, other)
+      })
+      if (collides) continue
       box = candidate
       break
     }
     if (!box) continue
     placed.push(box)
+    placedClearance.push(clearance)
   }
   return placed
 }
