@@ -38,6 +38,7 @@ import {
 import { DEFAULT_FORCE_PARAMS, type EdgeKind, type ForceParams, type SimEdge } from '../graph3d/types'
 import { regionName, settlePlate, type PlateNode } from '../graph2d/plate'
 import { DEFAULT_GRAPH_SETTINGS, type DisplaySettings, type ForceSettings } from './settings'
+import type { ConceptKind } from './marks'
 
 export interface AtlasNode {
   id: string
@@ -71,6 +72,10 @@ export interface AtlasNode {
    * already scales node radius by, reused here as the label-priority
    * "burden" (see `labels.ts`). */
   degree: number
+  /** `viz.kind` — `null` for a node with no `viz` block, which the painter
+   * reads as "no badge," not as a seventh, fallback shape. See `marks.ts`'s
+   * `conceptKindMarkPath` for what each value draws. */
+  kind: ConceptKind | null
 }
 
 export interface AtlasEdge {
@@ -161,6 +166,7 @@ export function buildLayout(
         lapses: n.fsrs.lapses,
         due: n.fsrs.due,
         degree: degree.get(id) ?? 0,
+        kind: n.viz?.kind ?? null,
       }
     })
 

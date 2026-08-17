@@ -7,6 +7,7 @@ import { NodeTable } from '../components/NodeTable'
 import { GrowthScrubber } from '../components/GrowthScrubber'
 import { PressureReadout } from '../components/PressureReadout'
 import { ringMarkPath, diamondMarkPath, plateStats, ancestorClosure, descendantPath, regionGroups, regionName } from '../components/graph2d/plate'
+import { conceptKindMarkPath, type ConceptKind } from '../components/atlas/marks'
 import { mapToPrintHtml } from '../shared/mapToPrintHtml'
 import { layersOf, computeHubNodeIds } from '../components/graph3d/layout'
 import { humanizeNodeId } from '../../../shared/humanizeId'
@@ -43,6 +44,19 @@ function formatProvenanceDate(date: string): string {
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1)
 }
+
+/** Short Key labels for the `viz.kind` corner badge — see
+ * `components/atlas/marks.ts`'s `conceptKindMarkPath` for the shapes
+ * themselves. Order matches nothing in particular; it is just a stable,
+ * readable list. */
+const CONCEPT_KIND_LEGEND: Array<{ kind: ConceptKind; label: string }> = [
+  { kind: 'causal-parameter', label: 'parameter' },
+  { kind: 'dynamic-process', label: 'process' },
+  { kind: 'structural', label: 'structural' },
+  { kind: 'distributional', label: 'distributional' },
+  { kind: 'procedural', label: 'procedural' },
+  { kind: 'comparative', label: 'comparative' },
+]
 
 /** Local YYYY-MM-DD for a Date object — getFullYear/Month/Date, never
  * toISOString, matching the local-date discipline every other due/date
@@ -1099,6 +1113,26 @@ export function TopicMapView({
                   </div>
                 </div>
               )}
+              {/* Concept-kind badges — the corner mark drawn alongside the
+                  ring/diamond for any node with a `viz.kind` (see
+                  components/atlas/marks.ts's `conceptKindMarkPath`). A
+                  compact 2-column grid rather than six more full-width Key
+                  rows: this signal is supplementary (not every topic sets
+                  `viz`), so it earns a quieter, denser treatment than the
+                  primary state/threshold/capstone rows above. */}
+              <div className="border-t border-[var(--color-hairline)] mt-1 pt-1.5">
+                <div className="mb-1 text-[9px] uppercase tracking-[0.14em] opacity-60">concept kind</div>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+                  {CONCEPT_KIND_LEGEND.map(({ kind, label }) => (
+                    <div key={kind} className="flex items-center gap-1.5">
+                      <svg width={14} height={14} viewBox="-8 -8 16 16" aria-hidden="true">
+                        <path d={conceptKindMarkPath(kind, 6)} fill="none" stroke="var(--color-text-dim)" strokeWidth={1} />
+                      </svg>
+                      <span className="truncate">{label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
               <div className="border-t border-[var(--color-hairline)] mt-1 pt-1.5">
                 <span className="kbd-hint">2×click — open</span>
               </div>

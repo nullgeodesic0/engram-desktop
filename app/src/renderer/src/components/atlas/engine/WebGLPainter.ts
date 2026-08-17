@@ -43,6 +43,7 @@ import { hullPath, hullTopAnchor } from '../../graph2d/plate'
 import {
   ARROWHEAD_PATH,
   arrowheadPlacement,
+  conceptKindMarkPath,
   cornerTicks,
   halfDiscMarkPath,
   lapseStippleDots,
@@ -338,6 +339,20 @@ export class WebGLPainter implements PlatePainter {
         for (const dot of lapseStippleDots(n.r)) {
           this.batch.push(discTriangles(dot.x, dot.y, 1.1 * invZoom, 8), dotRgb, 0.8, n.x, n.y)
         }
+      }
+
+      // `viz.kind` badge — see marks.ts's own doctrine comment on why this
+      // is a small stroke-only corner mark rather than a replacement for
+      // the ring/diamond glyph above. Dim ink, not a new hue: the SHAPE is
+      // what carries "which kind of concept," the same restraint the
+      // Off-Axis Violet Rule already holds color to elsewhere on this
+      // plate — a badge does not need to double-encode its own meaning in
+      // colour too.
+      if (n.kind) {
+        const badgeR = Math.min(7, Math.max(3, n.r * 0.38))
+        const badgeOffset = n.r * 0.72
+        const badgeD = conceptKindMarkPath(n.kind, badgeR)
+        this.batch.push(this.cache.stroke(badgeD, 1 * invZoom), parseColor(frame.tokens.textDim), 0.8, n.x + badgeOffset, n.y + badgeOffset)
       }
 
       if (n.isFrontier) {

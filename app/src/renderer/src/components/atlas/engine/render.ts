@@ -15,6 +15,7 @@ import { hullPath, hullTopAnchor } from '../../graph2d/plate'
 import {
   ARROWHEAD_PATH,
   arrowheadPlacement,
+  conceptKindMarkPath,
   cornerTicks,
   halfDiscMarkPath,
   lapseStippleDots,
@@ -223,6 +224,22 @@ export class Canvas2DPainter implements PlatePainter {
           ctx.fill()
         }
         ctx.globalAlpha = 1
+      }
+
+      // `viz.kind` badge — see marks.ts's own doctrine comment (and
+      // WebGLPainter's matching block) on why this is a small stroke-only
+      // corner mark in a dim, not a new, ink.
+      if (n.kind) {
+        const badgeR = Math.min(7, Math.max(3, n.r * 0.38))
+        const badgeOffset = n.r * 0.72
+        ctx.save()
+        ctx.translate(badgeOffset, badgeOffset)
+        ctx.strokeStyle = col(frame.tokens.textDim)
+        ctx.lineWidth = 1 * invZoom
+        ctx.globalAlpha = 0.8
+        ctx.stroke(new Path2D(conceptKindMarkPath(n.kind, badgeR)))
+        ctx.globalAlpha = 1
+        ctx.restore()
       }
 
       if (n.isFrontier) {

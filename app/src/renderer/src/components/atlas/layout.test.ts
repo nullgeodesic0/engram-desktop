@@ -19,6 +19,7 @@ function node(overrides: Partial<AtlasNode> & { id: string }): AtlasNode {
     lapses: 0,
     due: null,
     degree: 0,
+    kind: null,
     ...overrides,
   }
 }
