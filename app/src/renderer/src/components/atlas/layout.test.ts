@@ -32,6 +32,7 @@ function layoutOf(nodes: AtlasNode[], regions: AtlasRegion[] = []): AtlasLayout 
     width: 800,
     height: 600,
     hubNodeIds: new Set(),
+    capstoneIds: new Set(),
     forwardAdjacency: new Map(),
   }
 }

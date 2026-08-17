@@ -97,6 +97,11 @@ export interface AtlasLayout {
   width: number
   height: number
   hubNodeIds: ReadonlySet<string>
+  /** Nodes with `capstone: true` — a strict subset of `hubNodeIds`
+   * (`computeHubNodeIds` always includes every capstone), broken out on its
+   * own because `frame.ts`'s `isEdgeVisible` treats capstone edges more
+   * strictly than an ordinary structural hub's. */
+  capstoneIds: ReadonlySet<string>
   forwardAdjacency: ReadonlyMap<string, string[]>
 }
 
@@ -139,6 +144,7 @@ export function buildLayout(
     regionInput.size > 0 ? new Map(regionInput) : undefined,
   )
   const hubNodeIds = computeHubNodeIds(graph)
+  const capstoneIds = new Set(graph.order.filter((id) => graph.nodes[id]?.capstone))
   const forwardAdjacency = computeForwardAdjacency(edges)
   const degree = computeDegree(edges)
   const frontierIds = computeFrontierIds(graph)
@@ -183,7 +189,7 @@ export function buildLayout(
     }))
     .filter((r) => r.memberIds.length > 0)
 
-  return { nodes, edges: atlasEdges, regions, width, height, hubNodeIds, forwardAdjacency }
+  return { nodes, edges: atlasEdges, regions, width, height, hubNodeIds, capstoneIds, forwardAdjacency }
 }
 
 /** Apply the Display panel's node-scale multiplier to every node's radius,

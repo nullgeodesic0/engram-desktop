@@ -228,7 +228,7 @@ export class WebGLPainter implements PlatePainter {
     const byId = new Map(layout.nodes.map((n) => [n.id, n]))
     const invZoom = 1 / frame.view.zoom
     for (const e of layout.edges) {
-      if (!atlasEdgeVisible(e, layout.hubNodeIds, layout.forwardAdjacency)) continue
+      if (!atlasEdgeVisible(e, layout.hubNodeIds, layout.forwardAdjacency, layout.capstoneIds)) continue
       const a = byId.get(e.source)
       const b = byId.get(e.target)
       if (!a || !b) continue

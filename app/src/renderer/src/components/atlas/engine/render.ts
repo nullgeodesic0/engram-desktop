@@ -131,7 +131,7 @@ export class Canvas2DPainter implements PlatePainter {
     const byId = new Map(frame.layout.nodes.map((n) => [n.id, n]))
     const invZoom = 1 / frame.view.zoom
     for (const e of frame.layout.edges) {
-      if (!atlasEdgeVisible(e, frame.layout.hubNodeIds, frame.layout.forwardAdjacency)) continue
+      if (!atlasEdgeVisible(e, frame.layout.hubNodeIds, frame.layout.forwardAdjacency, frame.layout.capstoneIds)) continue
       const a = byId.get(e.source)
       const b = byId.get(e.target)
       if (!a || !b) continue

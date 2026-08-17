@@ -96,12 +96,24 @@ export function fillStyleFor(state: EngramNode['state']): FillStyle {
 /** Hides any edge touching a hub (a capstone, or a capstone-like
  * "synthesis" node nearly everything requires into) except a genuine
  * "final" requires edge — the hub's only dependent is this source, i.e.
- * the natural last step before mastery. Ported verbatim from `GraphView.tsx`. */
+ * the natural last step before mastery. Ported from `GraphView.tsx`, with
+ * one deliberate change: a CAPSTONE specifically drops that exception too
+ * and hides unconditionally. A capstone requires nearly every other node by
+ * definition, so even the "only dependent" carve-out still let a real
+ * capstone accumulate one converging line per near-finished branch — on a
+ * topic with several branches that reads as a hairball fanning into one
+ * point, which is exactly the clutter a reader has to see PAST to read the
+ * rest of the map. A non-capstone structural hub (a node that merely has a
+ * lot of requires, `computeHubNodeIds`'s other qualifying case) keeps the
+ * old exception — it isn't the thing every branch of the topic converges
+ * on, so its "one real last step" edge still carries real information. */
 export function isEdgeVisible(
   e: Pick<SimEdge, 'source' | 'target' | 'kind'>,
   hubNodeIds: ReadonlySet<string>,
   forwardAdjacency: ReadonlyMap<string, string[]>,
+  capstoneIds: ReadonlySet<string> = new Set(),
 ): boolean {
+  if (capstoneIds.has(e.source) || capstoneIds.has(e.target)) return false
   if (hubNodeIds.size === 0) return true
   const touchesHub = hubNodeIds.has(e.source) || hubNodeIds.has(e.target)
   if (!touchesHub) return true
@@ -148,6 +160,7 @@ export function atlasEdgeVisible(
   e: AtlasEdge,
   hubNodeIds: ReadonlySet<string>,
   forwardAdjacency: ReadonlyMap<string, string[]>,
+  capstoneIds: ReadonlySet<string> = new Set(),
 ): boolean {
-  return isEdgeVisible(e, hubNodeIds, forwardAdjacency)
+  return isEdgeVisible(e, hubNodeIds, forwardAdjacency, capstoneIds)
 }
