@@ -45,6 +45,16 @@ export interface EngineCallbacks {
   onSelect: (id: string) => void
   onOpen: (id: string) => void
   onFocusRegion: (seed: string | null) => void
+  /** Fired once per paint with the subset of this frame's labels whose node
+   * has an `annotate_node` `latexLabel` — never with the rest. Canvas text
+   * (both painters) has no way to host real KaTeX, the same limitation the
+   * retired SVG renderer had (see `frame.ts`'s doctrine comment history) —
+   * so a math label is drawn twice: once here, as a real positioned DOM
+   * overlay the host component renders via `renderMathHtml`, and NOT at all
+   * by the canvas text pass, which excludes exactly this id set (see
+   * `paint()` below) rather than drawing the same name underneath in
+   * unrendered plain text. */
+  onMathLabelsChange: (labels: LabelBox[]) => void
 }
 
 export interface EngineProps {
@@ -554,6 +564,16 @@ export class GraphEngine {
       dueLens: p.dueLens,
     })
 
+    // Canvas fillText cannot host real KaTeX — split off any label whose
+    // node carries a `latexLabel` annotation so the host component can
+    // render THOSE as a real positioned DOM overlay (see EngineCallbacks'
+    // own doctrine comment) instead of the plain, unrendered math source
+    // the canvas painters would otherwise draw.
+    const canvasLabels: LabelBox[] = []
+    const mathLabels: LabelBox[] = []
+    for (const label of labels) (p.annotations?.[label.id]?.latexLabel ? mathLabels : canvasLabels).push(label)
+    this.callbacks.onMathLabelsChange(mathLabels)
+
     const frame: RenderFrame = {
       layout: this.layout,
       view: this.view,
@@ -574,7 +594,7 @@ export class GraphEngine {
       query: p.query,
       nowSec: (t - this.startedAt) / 1000,
       reducedMotion: this.reducedMotion,
-      labels,
+      labels: canvasLabels,
       linkThickness: this.settings.display.linkThickness,
     }
     this.painter.paint(frame)
