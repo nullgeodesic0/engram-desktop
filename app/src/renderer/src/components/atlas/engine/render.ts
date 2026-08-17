@@ -30,8 +30,13 @@ import {
   markKind,
   nodeFillOpacity,
   nodeInk,
+  OFF_TRAIL_DIM,
+  SELECT_BLOOM_MS,
   TRAIL_ANCESTOR_COLOR,
   TRAIL_DESCENDANT_COLOR,
+  TRAIL_FLOW_DASH,
+  TRAIL_FLOW_GAP,
+  TRAIL_FLOW_SPEED,
   type TrailRole,
 } from '../frame'
 import type { AtlasNode } from '../layout'
@@ -171,6 +176,9 @@ export class Canvas2DPainter implements PlatePainter {
       const opacity = nodeFillOpacity(frame.retrievability?.get(n.id))
       const kind = markKind(n)
       const strokeW = (n.threshold ? 1.4 : 1.2) * invZoom
+      // See WebGLPainter's matching doctrine comment — a real selection
+      // (never bare hover) dims everything off its own trail.
+      const dim = frame.selected !== null && !frame.dueLens && trailRole === null ? OFF_TRAIL_DIM : 1
 
       ctx.save()
       ctx.translate(n.x, n.y)
@@ -179,7 +187,7 @@ export class Canvas2DPainter implements PlatePainter {
         const grad = ctx.createRadialGradient(0, 0, n.r * 0.7, 0, 0, n.r * 2.2)
         grad.addColorStop(0, col('var(--color-ink-danger)'))
         grad.addColorStop(1, 'transparent')
-        ctx.globalAlpha = 0.5
+        ctx.globalAlpha = 0.5 * dim
         ctx.fillStyle = grad
         ctx.beginPath()
         ctx.arc(0, 0, n.r * 2.2, 0, Math.PI * 2)
@@ -188,7 +196,7 @@ export class Canvas2DPainter implements PlatePainter {
       }
 
       if (kind === 'capstone') {
-        this.paintCapstoneNode(n, frame, col, invZoom)
+        this.paintCapstoneNode(n, frame, col, invZoom, dim)
         ctx.restore()
         continue
       }
@@ -199,25 +207,25 @@ export class Canvas2DPainter implements PlatePainter {
       ctx.lineWidth = strokeW
       if (style === 'filled') {
         ctx.fillStyle = ink
-        ctx.globalAlpha = opacity * 0.92
+        ctx.globalAlpha = opacity * 0.92 * dim
         ctx.fill(d)
-        ctx.globalAlpha = 0.9
+        ctx.globalAlpha = 0.9 * dim
         ctx.stroke(d)
       } else if (style === 'half') {
         ctx.fillStyle = ink
-        ctx.globalAlpha = opacity * 0.85
+        ctx.globalAlpha = opacity * 0.85 * dim
         ctx.fill(new Path2D(halfDiscMarkPath(n.r)))
-        ctx.globalAlpha = opacity
+        ctx.globalAlpha = opacity * dim
         ctx.stroke(d)
       } else {
-        ctx.globalAlpha = opacity
+        ctx.globalAlpha = opacity * dim
         ctx.stroke(d)
       }
       ctx.globalAlpha = 1
 
       if (n.lapses > 0) {
         ctx.fillStyle = col(frame.tokens.dangerDim)
-        ctx.globalAlpha = 0.8
+        ctx.globalAlpha = 0.8 * dim
         for (const dot of lapseStippleDots(n.r)) {
           ctx.beginPath()
           ctx.arc(dot.x, dot.y, 1.1 * invZoom, 0, Math.PI * 2)
@@ -236,7 +244,7 @@ export class Canvas2DPainter implements PlatePainter {
         ctx.translate(badgeOffset, badgeOffset)
         ctx.strokeStyle = col(frame.tokens.textDim)
         ctx.lineWidth = 1 * invZoom
-        ctx.globalAlpha = 0.8
+        ctx.globalAlpha = 0.8 * dim
         ctx.stroke(new Path2D(conceptKindMarkPath(n.kind, badgeR)))
         ctx.globalAlpha = 1
         ctx.restore()
@@ -244,7 +252,7 @@ export class Canvas2DPainter implements PlatePainter {
 
       if (n.isFrontier) {
         const pulse = frame.reducedMotion ? 0.6 : 0.4 + 0.3 * Math.sin(frame.nowSec * 1.6)
-        ctx.globalAlpha = pulse
+        ctx.globalAlpha = pulse * dim
         ctx.strokeStyle = col(frame.tokens.warm)
         ctx.lineWidth = 1.4 * invZoom
         ctx.stroke(new Path2D(nodeMarkPath(n.threshold, n.r + 3)))
@@ -259,36 +267,56 @@ export class Canvas2DPainter implements PlatePainter {
         ctx.arc(0, 0, n.r + 4, 0, Math.PI * 2)
         ctx.stroke()
         ctx.globalAlpha = 1
+        this.paintSelectBloom(frame, col, invZoom, n.r + 4)
       }
       ctx.restore()
     }
   }
 
-  private paintCapstoneNode(n: AtlasNode, frame: RenderFrame, col: (c: string) => string, invZoom: number): void {
+  /** Canvas2D counterpart to `WebGLPainter`'s `paintSelectBloom` — same
+   * window (`SELECT_BLOOM_MS`), same falloff, same `--color-ink-hot`. See
+   * its doctrine comment for why the reduced-motion/window guard lives
+   * here too rather than only in `GraphEngine`'s paint gate. Caller has
+   * already `ctx.translate`d to the node's own origin. */
+  private paintSelectBloom(frame: RenderFrame, col: (c: string) => string, invZoom: number, baseR: number): void {
+    if (frame.reducedMotion || frame.selectBloomT === null) return
+    const t = frame.selectBloomT / (SELECT_BLOOM_MS / 1000)
+    if (t >= 1) return
+    const ctx = this.ctx
+    ctx.strokeStyle = col(frame.tokens.hot)
+    ctx.lineWidth = (1.6 - t * 1.2) * invZoom
+    ctx.globalAlpha = (1 - t) * 0.7
+    ctx.beginPath()
+    ctx.arc(0, 0, baseR + t * 22, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.globalAlpha = 1
+  }
+
+  private paintCapstoneNode(n: AtlasNode, frame: RenderFrame, col: (c: string) => string, invZoom: number, dim: number): void {
     const ctx = this.ctx
     const outerR = n.r + 3
     const ink = col(nodeInk(n.state, null, this.trailRoleFor(n, frame)))
     ctx.strokeStyle = col(frame.tokens.warm)
     ctx.lineWidth = 1.2 * invZoom
-    ctx.globalAlpha = 0.9
+    ctx.globalAlpha = 0.9 * dim
     ctx.beginPath()
     ctx.arc(0, 0, outerR, 0, Math.PI * 2)
     ctx.stroke()
 
     ctx.fillStyle = ink
-    ctx.globalAlpha = 0.75
+    ctx.globalAlpha = 0.75 * dim
     ctx.beginPath()
     ctx.arc(0, 0, n.r * 0.62, 0, Math.PI * 2)
     ctx.fill()
 
-    ctx.globalAlpha = 0.9
+    ctx.globalAlpha = 0.9 * dim
     ctx.lineWidth = 1 * invZoom
     ctx.beginPath()
     ctx.arc(0, 0, n.r, 0, Math.PI * 2)
     ctx.stroke()
 
     const fraction = Math.max(0, Math.min(1, frame.retrievability?.get(n.id) ?? (n.state === 'review' ? 1 : 0)))
-    ctx.globalAlpha = 0.95
+    ctx.globalAlpha = 0.95 * dim
     ctx.lineWidth = 1.6 * invZoom
     ctx.beginPath()
     ctx.arc(0, 0, outerR + 3, -Math.PI / 2, -Math.PI / 2 + fraction * Math.PI * 2)
@@ -301,6 +329,7 @@ export class Canvas2DPainter implements PlatePainter {
       ctx.beginPath()
       ctx.arc(0, 0, outerR + 6, 0, Math.PI * 2)
       ctx.stroke()
+      this.paintSelectBloom(frame, col, invZoom, outerR + 6)
     }
     ctx.globalAlpha = 1
   }
@@ -314,19 +343,29 @@ export class Canvas2DPainter implements PlatePainter {
     const anchorNode = anchor ? byId.get(anchor) : null
     if (!anchorNode) return
 
-    const draw = (ids: ReadonlySet<string> | null, color: string): void => {
+    // Native `setLineDash`/`lineDashOffset` give Canvas2D the flowing-dash
+    // effect for free — no arc-length walking needed the way WebGL's
+    // triangle batch requires (see WebGLPainter's own `paintTrail`).
+    // Direction convention matches it exactly: ancestors flow AGAINST the
+    // drawn path (back toward the selection), descendants flow WITH it.
+    const draw = (ids: ReadonlySet<string> | null, color: string, direction: 1 | -1): void => {
       if (!ids) return
       ctx.strokeStyle = col(color)
-      ctx.lineWidth = 2 * invZoom
-      ctx.globalAlpha = 0.9
+      ctx.lineWidth = frame.reducedMotion ? 2 * invZoom : 2.2 * invZoom
+      ctx.globalAlpha = frame.reducedMotion ? 0.9 : 0.95
+      if (!frame.reducedMotion) {
+        ctx.setLineDash([TRAIL_FLOW_DASH * invZoom, TRAIL_FLOW_GAP * invZoom])
+        ctx.lineDashOffset = direction * -(frame.nowSec * TRAIL_FLOW_SPEED * invZoom)
+      }
       for (const id of ids) {
         const other = byId.get(id)
         if (!other) continue
         ctx.stroke(new Path2D(stringEdgePath(anchorNode.id, id, anchorNode, other, 'other')))
       }
+      ctx.setLineDash([])
     }
-    draw(frame.ancestorSet, TRAIL_ANCESTOR_COLOR)
-    draw(frame.descendantSet, TRAIL_DESCENDANT_COLOR)
+    draw(frame.ancestorSet, TRAIL_ANCESTOR_COLOR, -1)
+    draw(frame.descendantSet, TRAIL_DESCENDANT_COLOR, 1)
     ctx.globalAlpha = 1
   }
 

@@ -153,6 +153,26 @@ export function edgeInk(kind: EdgeKind): EdgeInkSpec {
 export const TRAIL_ANCESTOR_COLOR = '#a78bda'
 export const TRAIL_DESCENDANT_COLOR = '#e8a857'
 
+/** How long the selection bloom (a one-shot expanding/fading ring, both
+ * painters) plays after a NEW node is selected — not on hover, not on
+ * reselecting the same node. Short and singular on purpose: a burst that
+ * lingers or repeats reads as a loading spinner, not a moment of emphasis. */
+export const SELECT_BLOOM_MS = 420
+
+/** Off-trail dim — how much an ordinary node's own opacity is multiplied by
+ * while a REAL selection (not hover) is active and this node is neither the
+ * selection nor on its ancestor/descendant trail. Never applied under the
+ * due lens, which already owns the plate's ink for a different purpose. */
+export const OFF_TRAIL_DIM = 0.35
+
+/** Trail-spoke dash geometry and march speed, screen-px (both painters
+ * divide by zoom themselves, the same discipline every other stroke width
+ * on this plate uses) — a "flowing toward the reader's attention" cue
+ * instead of the trail's old static solid line. */
+export const TRAIL_FLOW_DASH = 6
+export const TRAIL_FLOW_GAP = 5
+export const TRAIL_FLOW_SPEED = 26
+
 /** Whether an `AtlasEdge` survives the current hub-hiding rule — the
  * `AtlasEdge`-shaped convenience wrapper `WebGLPainter.ts` actually calls,
  * since its edges come from `layout.ts` rather than `graph3d/types.ts`. */

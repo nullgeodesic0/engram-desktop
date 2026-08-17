@@ -44,6 +44,13 @@ export interface RenderFrame {
   reducedMotion: boolean
   /** Display panel's edge-stroke multiplier — see `settings.ts`. */
   linkThickness: number
+  /** Seconds since `selected` last changed to a new non-null id — `null`
+   * when nothing is selected. Drives the selection-bloom burst (see
+   * `frame.ts`'s `SELECT_BLOOM_MS`); once elapsed past that duration the
+   * value keeps counting up (the painter is what checks the window, not
+   * this field), so a painter never has to special-case "still selected,
+   * bloom long over" versus "just selected." */
+  selectBloomT: number | null
 }
 
 export interface PlatePainter {

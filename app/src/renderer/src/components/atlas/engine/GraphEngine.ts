@@ -40,6 +40,7 @@ import { readPlateTokens, type PlateTokens } from './tokens'
 import type { PlatePainter, RenderFrame } from './paint'
 import { ancestorClosure, descendantPath } from '../../graph2d/plate'
 import { DEFAULT_GRAPH_SETTINGS, readGraphSettings, type AtlasGraphSettings } from '../settings'
+import { SELECT_BLOOM_MS } from '../frame'
 
 export interface EngineCallbacks {
   onSelect: (id: string) => void
@@ -113,6 +114,12 @@ export class GraphEngine {
   private simAlpha = IDLE_ALPHA
   private simHot = false
   private settings: AtlasGraphSettings = DEFAULT_GRAPH_SETTINGS
+  /** `performance.now()` of the most recent NEW selection — set in
+   * `update()`, read (and its window checked) by both painters via
+   * `RenderFrame.selectBloomT`. Own clock rather than `nowSec` (the RAF
+   * loop's own relative timer) because a selection can arrive from a React
+   * prop update between frames, not just inside `paint()`. */
+  private selectedAtMs: number | null = null
 
   /** Set whenever something happened that the NEXT frame must actually
    * paint for — a prop update, a hover change, a keypress. Checked
@@ -228,7 +235,10 @@ export class GraphEngine {
       invalidateHullCache(this.layout)
       if (graphChanged) this.fitToContent(true)
     }
-    if (prev && prev.selected !== props.selected && props.selected) this.flyToSelected(props.selected)
+    if (prev && prev.selected !== props.selected && props.selected) {
+      this.flyToSelected(props.selected)
+      this.selectedAtMs = performance.now()
+    }
     if (prev && prev.focusedRegion !== props.focusedRegion) this.flyToRegion(props.focusedRegion)
     this.dirty = true
   }
@@ -466,7 +476,25 @@ export class GraphEngine {
   // ---- frame loop -----------------------------------------------------
 
   private needsPaint(): boolean {
-    return Boolean(this.flight) || this.simHot || this.panning || this.draggingNode !== null || Math.hypot(this.view.vx, this.view.vy) > 0.001
+    const bloomPlaying = this.selectedAtMs !== null && performance.now() - this.selectedAtMs < SELECT_BLOOM_MS
+    // The trail's flowing dashes (paintTrail, both painters) march
+    // continuously off `nowSec` while a selection or hover has a trail to
+    // show — a STATIONARY pointer resting on a node must not freeze that
+    // animation the instant the one-off dirty flag from the hover change
+    // clears. Approximated by "something is selected or hovered" rather
+    // than recomputing the real ancestor/descendant sets here (cheap and
+    // close enough — hovering a leaf with no trail just repaints one frame
+    // for nothing, never the reverse).
+    const trailFlowing = !this.reducedMotion && (this.props?.selected != null || this.hovered !== null)
+    return (
+      Boolean(this.flight) ||
+      this.simHot ||
+      this.panning ||
+      this.draggingNode !== null ||
+      Math.hypot(this.view.vx, this.view.vy) > 0.001 ||
+      (bloomPlaying && !this.reducedMotion) ||
+      trailFlowing
+    )
   }
 
   private loop = (t: number): void => {
@@ -580,6 +608,7 @@ export class GraphEngine {
       reducedMotion: this.reducedMotion,
       labels,
       linkThickness: this.settings.display.linkThickness,
+      selectBloomT: this.selectedAtMs !== null ? (performance.now() - this.selectedAtMs) / 1000 : null,
     }
     this.painter.paint(frame)
   }

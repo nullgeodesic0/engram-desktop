@@ -58,8 +58,13 @@ import {
   markKind,
   nodeFillOpacity,
   nodeInk,
+  OFF_TRAIL_DIM,
+  SELECT_BLOOM_MS,
   TRAIL_ANCESTOR_COLOR,
   TRAIL_DESCENDANT_COLOR,
+  TRAIL_FLOW_DASH,
+  TRAIL_FLOW_GAP,
+  TRAIL_FLOW_SPEED,
   type TrailRole,
 } from '../frame'
 import type { AtlasNode } from '../layout'
@@ -301,14 +306,19 @@ export class WebGLPainter implements PlatePainter {
       const opacity = nodeFillOpacity(frame.retrievability?.get(n.id))
       const kind = markKind(n)
       const strokeW = (n.threshold ? 1.4 : 1.2) * invZoom
+      // A REAL selection (never bare hover) pulls focus onto the trail —
+      // everything else on the plate quietly recedes so the reader's eye
+      // has one clear path to follow. Off under the due lens, which
+      // already owns this plate's ink for its own purpose.
+      const dim = frame.selected !== null && !frame.dueLens && trailRole === null ? OFF_TRAIL_DIM : 1
 
       if (dueStatus === 'overdue') {
         const glow = glowRing(0, 0, n.r * 0.7, n.r * 2.2)
-        this.batch.pushVarying(glow.tris, parseColor(frame.tokens.danger), glow.alphas.map((a) => a * 0.5), n.x, n.y)
+        this.batch.pushVarying(glow.tris, parseColor(frame.tokens.danger), glow.alphas.map((a) => a * 0.5 * dim), n.x, n.y)
       }
 
       if (kind === 'capstone') {
-        this.paintCapstone(n, frame, rgb, invZoom)
+        this.paintCapstone(n, frame, rgb, invZoom, dim)
         continue
       }
 
@@ -324,20 +334,20 @@ export class WebGLPainter implements PlatePainter {
       const d = nodeMarkPath(n.threshold, n.r)
       const style = fillStyleFor(n.state)
       if (style === 'filled') {
-        this.batch.push(this.cache.fill(d), rgb, opacity * 0.92, n.x, n.y)
-        this.batch.push(this.cache.stroke(d, strokeW), rgb, 0.9, n.x, n.y)
+        this.batch.push(this.cache.fill(d), rgb, opacity * 0.92 * dim, n.x, n.y)
+        this.batch.push(this.cache.stroke(d, strokeW), rgb, 0.9 * dim, n.x, n.y)
       } else if (style === 'half') {
         const half = halfDiscMarkPath(n.r)
-        this.batch.push(transformTriangles(fillTriangles(half), 0, 0, 1), rgb, opacity * 0.85, n.x, n.y)
-        this.batch.push(this.cache.stroke(d, strokeW), rgb, opacity, n.x, n.y)
+        this.batch.push(transformTriangles(fillTriangles(half), 0, 0, 1), rgb, opacity * 0.85 * dim, n.x, n.y)
+        this.batch.push(this.cache.stroke(d, strokeW), rgb, opacity * dim, n.x, n.y)
       } else {
-        this.batch.push(this.cache.stroke(d, strokeW), rgb, opacity, n.x, n.y)
+        this.batch.push(this.cache.stroke(d, strokeW), rgb, opacity * dim, n.x, n.y)
       }
 
       if (n.lapses > 0) {
         const dotRgb = parseColor(frame.tokens.dangerDim)
         for (const dot of lapseStippleDots(n.r)) {
-          this.batch.push(discTriangles(dot.x, dot.y, 1.1 * invZoom, 8), dotRgb, 0.8, n.x, n.y)
+          this.batch.push(discTriangles(dot.x, dot.y, 1.1 * invZoom, 8), dotRgb, 0.8 * dim, n.x, n.y)
         }
       }
 
@@ -352,25 +362,26 @@ export class WebGLPainter implements PlatePainter {
         const badgeR = Math.min(7, Math.max(3, n.r * 0.38))
         const badgeOffset = n.r * 0.72
         const badgeD = conceptKindMarkPath(n.kind, badgeR)
-        this.batch.push(this.cache.stroke(badgeD, 1 * invZoom), parseColor(frame.tokens.textDim), 0.8, n.x + badgeOffset, n.y + badgeOffset)
+        this.batch.push(this.cache.stroke(badgeD, 1 * invZoom), parseColor(frame.tokens.textDim), 0.8 * dim, n.x + badgeOffset, n.y + badgeOffset)
       }
 
       if (n.isFrontier) {
         const pulse = frame.reducedMotion ? 0.6 : 0.4 + 0.3 * Math.sin(frame.nowSec * 1.6)
-        this.batch.push(this.cache.stroke(nodeMarkPath(n.threshold, n.r + 3), 1.4 * invZoom), parseColor(frame.tokens.warm), pulse, n.x, n.y)
+        this.batch.push(this.cache.stroke(nodeMarkPath(n.threshold, n.r + 3), 1.4 * invZoom), parseColor(frame.tokens.warm), pulse * dim, n.x, n.y)
       }
 
       if (trailRole === 'selected') {
         this.batch.push(ringTriangles(0, 0, n.r + 4, 1.6 * invZoom, 40), parseColor(frame.tokens.textPrimary), 0.9, n.x, n.y)
+        this.paintSelectBloom(n, frame, invZoom)
       }
     }
   }
 
-  private paintCapstone(n: AtlasNode, frame: RenderFrame, rgb: readonly [number, number, number], invZoom: number): void {
+  private paintCapstone(n: AtlasNode, frame: RenderFrame, rgb: readonly [number, number, number], invZoom: number, dim: number): void {
     const outerR = n.r + 3
-    this.batch.push(ringTriangles(0, 0, outerR, 1.2 * invZoom, 48), parseColor(frame.tokens.warm), 0.9, n.x, n.y)
-    this.batch.push(discTriangles(0, 0, n.r * 0.62, 40), rgb, 0.75, n.x, n.y)
-    this.batch.push(ringTriangles(0, 0, n.r, 1 * invZoom, 40), parseColor(frame.tokens.warm), 0.9, n.x, n.y)
+    this.batch.push(ringTriangles(0, 0, outerR, 1.2 * invZoom, 48), parseColor(frame.tokens.warm), 0.9 * dim, n.x, n.y)
+    this.batch.push(discTriangles(0, 0, n.r * 0.62, 40), rgb, 0.75 * dim, n.x, n.y)
+    this.batch.push(ringTriangles(0, 0, n.r, 1 * invZoom, 40), parseColor(frame.tokens.warm), 0.9 * dim, n.x, n.y)
     // Progress sweep — fraction of dependents already reviewed. `degree` is
     // fan-in+fan-out (see `layout.ts`), so a plain requires-fan-in count
     // isn't available here; the sweep instead reads the SAME retrievability-
@@ -378,10 +389,29 @@ export class WebGLPainter implements PlatePainter {
     // proxy for "how settled is what feeds this" without inventing a second
     // statistic the rest of the plate does not show.
     const fraction = Math.max(0, Math.min(1, frame.retrievability?.get(n.id) ?? (n.state === 'review' ? 1 : 0)))
-    this.batch.push(arcTriangles(0, 0, outerR + 3, 1.6 * invZoom, fraction, 48), parseColor(frame.tokens.warm), 0.95, n.x, n.y)
+    this.batch.push(arcTriangles(0, 0, outerR + 3, 1.6 * invZoom, fraction, 48), parseColor(frame.tokens.warm), 0.95 * dim, n.x, n.y)
     if (this.trailRoleFor(n, frame) === 'selected') {
       this.batch.push(ringTriangles(0, 0, outerR + 6, 1.4 * invZoom, 48), parseColor(frame.tokens.textPrimary), 0.9, n.x, n.y)
+      this.paintSelectBloom(n, frame, invZoom, outerR + 6)
     }
+  }
+
+  /** A one-shot expanding, fading ring on the node just selected — the
+   * "cinematic focus" moment: `SELECT_BLOOM_MS` of a burst outward from the
+   * static selection ring, in `--color-ink-hot` (the ramp's brightest
+   * point, reserved for exactly this — see `PlateTokens`' own doctrine
+   * comment). Never fires under reduced motion; `GraphEngine`'s
+   * `needsPaint` gate already excludes the bloom window there, so this
+   * guard is what keeps a STALE `selectBloomT` (the field keeps counting up
+   * past the window, see `RenderFrame`'s own doctrine comment) from ever
+   * drawing a phantom burst if reduced motion is toggled mid-window. */
+  private paintSelectBloom(n: AtlasNode, frame: RenderFrame, invZoom: number, baseR = n.r + 4): void {
+    if (frame.reducedMotion || frame.selectBloomT === null) return
+    const t = frame.selectBloomT / (SELECT_BLOOM_MS / 1000)
+    if (t >= 1) return
+    const bloomR = baseR + t * 22
+    const bloomAlpha = (1 - t) * 0.7
+    this.batch.push(ringTriangles(0, 0, bloomR, (1.6 - t * 1.2) * invZoom, 40), parseColor(frame.tokens.hot), bloomAlpha, n.x, n.y)
   }
 
   // ---- trail ----------------------------------------------------------------
@@ -396,18 +426,48 @@ export class WebGLPainter implements PlatePainter {
     const anchorNode = anchor ? byId.get(anchor) : null
     if (!anchorNode) return
 
-    const draw = (ids: ReadonlySet<string> | null, color: string): void => {
+    // Static (no motion) under reduced motion — a plain solid spoke, the
+    // trail's original treatment, just still colored by role.
+    if (frame.reducedMotion) {
+      const draw = (ids: ReadonlySet<string> | null, color: string): void => {
+        if (!ids) return
+        const rgb = parseColor(color)
+        for (const id of ids) {
+          const other = byId.get(id)
+          if (!other) continue
+          const d = stringEdgePath(anchorNode.id, id, anchorNode, other, 'other')
+          this.batch.push(strokeTriangles(d, 2 * invZoom), rgb, 0.9)
+        }
+      }
+      draw(frame.ancestorSet, TRAIL_ANCESTOR_COLOR)
+      draw(frame.descendantSet, TRAIL_DESCENDANT_COLOR)
+      return
+    }
+
+    // Flowing dashes, marching toward the reader's actual attention — an
+    // ancestor's line (`anchorNode` → ancestor in path-space, but the
+    // PREREQUISITE relationship reads the other way) flows AGAINST the
+    // path direction, back toward the selection; a descendant's flows
+    // WITH it, out from the thing that unlocked it. `direction` just flips
+    // the phase's sign — the geometry (`d`) is identical either way.
+    const dashW = TRAIL_FLOW_DASH * invZoom
+    const gapW = TRAIL_FLOW_GAP * invZoom
+    const draw = (ids: ReadonlySet<string> | null, color: string, direction: 1 | -1): void => {
       if (!ids) return
       const rgb = parseColor(color)
+      const phase = direction * -(frame.nowSec * TRAIL_FLOW_SPEED * invZoom)
       for (const id of ids) {
         const other = byId.get(id)
         if (!other) continue
         const d = stringEdgePath(anchorNode.id, id, anchorNode, other, 'other')
-        this.batch.push(strokeTriangles(d, 2 * invZoom), rgb, 0.9)
+        const flat = this.samplePath(d)
+        for (const [x0, y0, x1, y1] of flowDashes(flat, dashW, gapW, phase)) {
+          this.batch.push(strokeTriangles(`M ${x0} ${y0} L ${x1} ${y1}`, 2.2 * invZoom), rgb, 0.95)
+        }
       }
     }
-    draw(frame.ancestorSet, TRAIL_ANCESTOR_COLOR)
-    draw(frame.descendantSet, TRAIL_DESCENDANT_COLOR)
+    draw(frame.ancestorSet, TRAIL_ANCESTOR_COLOR, -1)
+    draw(frame.descendantSet, TRAIL_DESCENDANT_COLOR, 1)
   }
 
   // ---- furniture --------------------------------------------------------
