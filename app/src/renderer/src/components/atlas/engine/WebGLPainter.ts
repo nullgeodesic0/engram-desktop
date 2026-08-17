@@ -63,6 +63,34 @@ import {
 } from '../frame'
 import type { AtlasNode } from '../layout'
 import type { PlatePainter, RenderFrame } from './paint'
+import type { PlateTokens } from './tokens'
+
+/** `frame.ts`'s ink helpers (`nodeInk`, `edgeInk`, `DUE_LENS_COLOR`) return
+ * raw `var(--color-ink-*)` strings — correct CSS, but `parseColor`
+ * (gl/color.ts) only understands resolved color functions and hex, since
+ * GL has no notion of a custom property. Every one of these names is
+ * already resolved once per theme change in `frame.tokens` (`tokens.ts`'s
+ * `readPlateTokens`) — this maps the var name back to that resolved value
+ * instead of a `getComputedStyle` call per node per frame, which is what
+ * the Canvas2D fallback's own `resolveVar` does (fine at its lower call
+ * volume, not at this one). Passing an already-resolved string through
+ * (hex, `TRAIL_ANCESTOR_COLOR`, etc.) is a no-op. */
+const INK_TOKEN_BY_VAR: Record<string, keyof PlateTokens> = {
+  '--color-ink-warm': 'warm',
+  '--color-ink-hot': 'hot',
+  '--color-ink-warm-dim': 'warmDim',
+  '--color-ink-cool': 'cool',
+  '--color-ink-cool-dim': 'coolDim',
+  '--color-ink-violet': 'violet',
+  '--color-ink-danger': 'danger',
+  '--color-ink-danger-dim': 'dangerDim',
+}
+
+function resolveInk(css: string, tokens: PlateTokens): string {
+  if (!css.startsWith('var(')) return css
+  const key = INK_TOKEN_BY_VAR[css.slice(4, -1).trim()]
+  return key ? tokens[key] : css
+}
 
 /** Path-string → triangle-list memo, keyed by the string itself (fills) or
  * a stroke width quantised to 1/20px (strokes) so a zoom-varying stroke
@@ -197,7 +225,7 @@ export class WebGLPainter implements PlatePainter {
       if (!a || !b) continue
       if (!this.nodeVisible(a, frame) && !this.nodeVisible(b, frame)) continue
       const spec = edgeInk(e.kind)
-      const rgb = parseColor(spec.color)
+      const rgb = parseColor(resolveInk(spec.color, frame.tokens))
       const kind: 'requires' | 'other' = e.kind === 'requires' ? 'requires' : 'other'
       const d = stringEdgePath(e.source, e.target, a, b, kind)
       const width = spec.width * frame.linkThickness * invZoom
@@ -260,14 +288,14 @@ export class WebGLPainter implements PlatePainter {
       const dueStatus = frame.dueLens ? dueStatusFor(n) : null
       const trailRole = frame.dueLens ? null : this.trailRoleFor(n, frame)
       const ink = nodeInk(n.state, dueStatus, trailRole)
-      const rgb = parseColor(ink)
+      const rgb = parseColor(resolveInk(ink, frame.tokens))
       const opacity = nodeFillOpacity(frame.retrievability?.get(n.id))
       const kind = markKind(n)
       const strokeW = (n.threshold ? 1.4 : 1.2) * invZoom
 
       if (dueStatus === 'overdue') {
         const glow = glowRing(0, 0, n.r * 0.7, n.r * 2.2)
-        this.batch.pushVarying(glow.tris, parseColor('var(--color-ink-danger)'), glow.alphas.map((a) => a * 0.5), n.x, n.y)
+        this.batch.pushVarying(glow.tris, parseColor(frame.tokens.danger), glow.alphas.map((a) => a * 0.5), n.x, n.y)
       }
 
       if (kind === 'capstone') {
