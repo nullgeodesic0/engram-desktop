@@ -250,10 +250,11 @@ export function tickLayout(
   forces: ForceSettings = DEFAULT_GRAPH_SETTINGS.forces,
 ): boolean {
   let hot = false
+  let cohesionHot = false
   // Physics off: the plate reads exactly like the old frozen-after-settle
-  // renderer — no spring/repulsion/centering — but `resolveCrowding` still
-  // runs below so a manual drag still displaces a crowded neighbour rather
-  // than overlapping it.
+  // renderer — no spring/repulsion/centering/cohesion — but `resolveCrowding`
+  // still runs below so a manual drag still displaces a crowded neighbour
+  // rather than overlapping it.
   if (forces.enabled) {
     const sim = new Map<string, SimNode3D>()
     for (const n of layout.nodes) {
@@ -281,9 +282,53 @@ export function tickLayout(
       n.vy = s.vy
       if (Math.hypot(n.vx, n.vy) > REST_SPEED) hot = true
     }
+    cohesionHot = applyRegionCohesion(layout)
   }
 
   resolveCrowding(layout)
+  return hot || cohesionHot
+}
+
+/** How much of a region's own gap-to-centroid closes per tick. Deliberately
+ * NOT scaled by `alpha` (unlike `stepSimulation`'s forces) — the same
+ * reasoning as `resolveCrowding`: this is a geometric correction layered on
+ * top of the alpha-gated sim, not part of it, and it needs to hold its
+ * strength at rest, not fade to nothing at IDLE_ALPHA the way a spring
+ * force would. `settleClustered` (graph2d/plate.ts) already builds a clean
+ * cluster-first layout once, but the live sim's generic pairwise repulsion
+ * has no notion of "these belong together" and was letting inter-region
+ * repulsion (and MAX_SPEED-clamped reheats) drift that grouping apart over
+ * many frames — the reported "tangled mess." This closes that gap every
+ * tick against each region's OWN current centroid, so cohesion and
+ * repulsion/`resolveCrowding` settle at a real equilibrium (a comfortably
+ * packed cluster) rather than the pull ever winning outright and collapsing
+ * a region to a point. */
+const REGION_COHESION = 0.05
+
+function applyRegionCohesion(layout: AtlasLayout): boolean {
+  if (layout.regions.length === 0) return false
+  let hot = false
+  const byId = new Map(layout.nodes.map((n) => [n.id, n]))
+  for (const region of layout.regions) {
+    const members = region.memberIds.map((id) => byId.get(id)).filter((n): n is AtlasNode => Boolean(n))
+    if (members.length < 2) continue
+    let cx = 0
+    let cy = 0
+    for (const m of members) {
+      cx += m.x
+      cy += m.y
+    }
+    cx /= members.length
+    cy /= members.length
+    for (const m of members) {
+      if (m.fx !== null) continue // dragged — the reader is placing it, cohesion must not fight the hand
+      const dx = (cx - m.x) * REGION_COHESION
+      const dy = (cy - m.y) * REGION_COHESION
+      m.x += dx
+      m.y += dy
+      if (Math.hypot(dx, dy) > REST_SPEED) hot = true
+    }
+  }
   return hot
 }
 
