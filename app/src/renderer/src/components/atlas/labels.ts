@@ -96,11 +96,11 @@ const LINE_H = 13
 const MAX_CHARS = 26
 
 /** However much room there is, a plate stops being a figure past this many
- * names. Lowered from 32 — even with cursor-aware clearance (below), that
- * many simultaneous names read as clutter on a normally-sized plate; a
- * reader who wants more can always zoom or move the cursor to reveal them,
- * per `placeLabels`'s own "zooming in makes room" design. */
-const MAX_LABELS = 18
+ * names. Lowered twice now (32 → 18 → 10) — a reader reported the plate
+ * still read as cluttered even at 18. A reader who wants more can always
+ * zoom or move the cursor to reveal them, per `placeLabels`'s own "zooming
+ * in makes room" design. */
+const MAX_LABELS = 10
 
 export function labelFontSize(n: Pick<AtlasNode, 'capstone' | 'isHub'>): number {
   return n.capstone ? 14 : n.isHub ? 13 : 12
@@ -121,26 +121,27 @@ function overlaps(a: LabelBox, b: LabelBox): boolean {
  * own box — full density right where the reader is looking. Small on
  * purpose: this is "practically under the pointer," not "somewhere in the
  * general area," so most of a normally-zoomed plate sits in the falloff
- * band below rather than the fully-dense zone. */
-const CURSOR_NEAR = 110
+ * band below rather than the fully-dense zone. Tightened twice now
+ * (140 → 110 → 70) alongside `CURSOR_FAR`/`MAX_CLEARANCE` below — a reader
+ * reported the plate still read as cluttered after the first tightening. */
+const CURSOR_NEAR = 70
 /** Past this radius, a name needs the full extra `MAX_CLEARANCE` around it —
  * the plate thins itself out the farther a neighbourhood sits from whatever
  * the reader is actually attending to. Linear falloff between the two.
- * Tightened from an earlier 480 — at that radius, most of a normal viewport
- * still counted as "near" and the effect barely thinned anything; a reader
- * reported the plate still read as cluttered, which is this radius being
- * too generous, not the mechanism being wrong. */
-const CURSOR_FAR = 300
+ * Tightened twice now (480 → 300 → 220): at the wider radii, most of a
+ * normal viewport still counted as "near" and the effect barely thinned
+ * anything. */
+const CURSOR_FAR = 220
 /** Extra margin added to every side of a far candidate's box before testing
  * it against names already placed — this is what makes a crowded but
  * unattended corner of the plate quietly drop names instead of packing them
  * in as tightly as the area right under the cursor does. Never applied to
  * hover/selected/trail names, or (under the due lens) an overdue/due-today
  * one — those already always get a spot if any berth has room; this only
- * governs how much room an ordinary name needs to be allowed one. Doubled
- * from an earlier 34 for the same reason CURSOR_FAR tightened — the first
- * pass under-corrected. */
-const MAX_CLEARANCE = 70
+ * governs how much room an ordinary name needs to be allowed one. Raised
+ * again (34 → 70 → 130) for the same reason the radii tightened — the
+ * second pass still under-corrected. */
+const MAX_CLEARANCE = 130
 /** Applied when there is no cursor position at all to measure distance
  * from (off-canvas, or a caller — including every pre-existing test — that
  * never reports one). Half of `MAX_CLEARANCE`, not the full amount: "no
