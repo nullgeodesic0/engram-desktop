@@ -133,8 +133,6 @@ const engramApi = {
     ipcRenderer.invoke('engram:visuals', mode),
   focus: (mode: 'on' | 'off' | 'status'): Promise<unknown> => ipcRenderer.invoke('engram:focus', mode),
   modelSet: (path: string, value: string): Promise<unknown> => ipcRenderer.invoke('engram:modelSet', path, value),
-  modelSetCheckpointAllNodes: (value: 'on' | 'off'): Promise<unknown> =>
-    ipcRenderer.invoke('engram:modelSetCheckpointAllNodes', value),
   modelAddInterest: (interest: string): Promise<unknown> => ipcRenderer.invoke('engram:modelAddInterest', interest),
   commit: (cue: string, action: string): Promise<unknown> => ipcRenderer.invoke('engram:commit', cue, action),
 

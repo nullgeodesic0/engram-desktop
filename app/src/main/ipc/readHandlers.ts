@@ -179,18 +179,6 @@ export function registerReadHandlers(): void {
   ipcMain.handle('engram:modelSet', (_e, path: string, value: string) =>
     engramDirectMutate('model', ['--set', `${path}=${value}`]),
   )
-  // `settings.checkpoint_all_nodes` is not one of the vendored engine's own
-  // DEFAULT_MODEL leaves (vendor/engram/scripts/engram.py's `settings` dict
-  // is a fixed, enumerated set — the engine is never edited to add app-only
-  // keys to it), so `model --set` refuses it as an "unknown model key"
-  // without `--allow-new-key`. A single narrow handler for this ONE known
-  // key — rather than widening `engram:modelSet` to accept the flag for
-  // ANY path — keeps the footgun scoped: a compromised or buggy renderer
-  // call still cannot mint arbitrary new engine-model keys through the
-  // general settings path, only this one, explicitly named here.
-  ipcMain.handle('engram:modelSetCheckpointAllNodes', (_e, value: 'on' | 'off') =>
-    engramDirectMutate('model', ['--set', `settings.checkpoint_all_nodes=${value}`, '--allow-new-key']),
-  )
   ipcMain.handle('engram:modelAddInterest', (_e, interest: string) =>
     engramDirectMutate('model', ['--add-interest', interest]),
   )

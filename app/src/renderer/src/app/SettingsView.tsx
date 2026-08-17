@@ -18,6 +18,7 @@ import { describeOpencodeProbe as describeOpencodeProbeVerdict } from '../../../
 import { Button } from '../components/ui/Button'
 import { Modal } from '../components/ui/Modal'
 import { DendriteDivider } from '../components/ui/DendriteDivider'
+import { loadCheckpointAllNodes, saveCheckpointAllNodes } from '../shared/checkpointAllNodesPref'
 import { CopyButton } from '../components/ui/CopyButton'
 import { PageHeader } from '../components/ui/PageHeader'
 import { SectionBanner } from '../components/ui/SectionBanner'
@@ -584,6 +585,7 @@ export function SettingsView() {
   const [rhythmKeyInput, setRhythmKeyInput] = useState('')
   const [rhythmValueInput, setRhythmValueInput] = useState('')
   const [sounds, setSounds] = useState(soundOn())
+  const [checkpointAllNodesOn, setCheckpointAllNodesOn] = useState(loadCheckpointAllNodes())
   const [exporting, setExporting] = useState(false)
   const [exportResult, setExportResult] = useState<string | null>(null)
   const [notifier, setNotifier] = useState<NotifierSettings | null>(null)
@@ -771,9 +773,10 @@ export function SettingsView() {
     refresh()
   }
 
-  async function setCheckpointAllNodes(v: string) {
-    await window.engram.modelSetCheckpointAllNodes(v === 'on' ? 'on' : 'off')
-    refresh()
+  function setCheckpointAllNodes(v: string) {
+    const on = v === 'on'
+    saveCheckpointAllNodes(on)
+    setCheckpointAllNodesOn(on)
   }
 
   async function submitCommitment() {
@@ -954,7 +957,7 @@ export function SettingsView() {
         <PickerRow
           label="Checkpoints on every node"
           hint="Off by default. When on, an elected Checkpoint sitting may walk ANY node as a chain of picks — including threshold, lapsed, transfer-ready, and procedure nodes normally held to free recall. The recall floor still applies: two checkpoint reviews in a row still force the next one back to real production."
-          current={model.settings.checkpoint_all_nodes ?? 'off'}
+          current={checkpointAllNodesOn ? 'on' : 'off'}
           onPick={(v) => setCheckpointAllNodes(v)}
           options={[
             { value: 'off', label: 'Off' },

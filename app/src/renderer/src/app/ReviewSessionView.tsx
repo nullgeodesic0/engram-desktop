@@ -43,6 +43,7 @@ import { ErrorPanel } from '../components/ErrorPanel'
 import { recordConfidence, latestPickFor } from '../shared/calibrationStore'
 import { extractTicketFromMessages, type ParsedTicket } from '../shared/ticketParser'
 import { composeReviewKickoff, composeResumeNudge, detectResumeState, capForMins } from '../shared/reviewKickoff'
+import { loadCheckpointAllNodes } from '../shared/checkpointAllNodesPref'
 import { loadSittingPrefs, saveSittingMins, type SittingPrefs } from '../shared/sittingPrefs'
 import { useDateRollover } from '../shared/dateRollover'
 import { recallDueNodes, quickShare, type RecallDueEntry } from '../shared/checkpointEvidence'
@@ -293,12 +294,16 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
   // itself; this just tracks whether it has fired.
   const [honestBlankReady, setHonestBlankReady] = useState(false)
   const [momentumOn, setMomentumOn] = useState(true)
-  // Settings-level "checkpoints on every node" (off by default) — read once
-  // on mount, same fetch/fallback discipline as momentumOn above. Threaded
-  // into the checkpoint kickoff below; the kickoff text is what actually
-  // activates the widened protocol (see reviewKickoff.ts's own doctrine
-  // comment on `allNodeTypes`), this is just where the app learns whether to.
-  const [checkpointAllNodesOn, setCheckpointAllNodesOn] = useState(false)
+  // Settings-level "checkpoints on every node" (off by default) — a local
+  // app preference (checkpointAllNodesPref.ts), NOT read from the engine's
+  // own model.json (see that module's own doctrine comment for why: the
+  // engine never reads this value, and `model --set --allow-new-key` hits
+  // a real upstream defect on the installed engine's argparse setup).
+  // Threaded into the checkpoint kickoff below; the kickoff text is what
+  // actually activates the widened protocol (reviewKickoff.ts's own
+  // doctrine comment on `allNodeTypes`), this is just where the app reads
+  // whether to.
+  const [checkpointAllNodesOn] = useState(loadCheckpointAllNodes())
   // The 14-day horizon figure + holding count — fetched whenever the queue
   // empties (both `empty` and `done`, the two phases with no queue left to
   // read from), null until the first refreshHorizon() resolves so the
@@ -481,16 +486,11 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
       setTopicTitles(Object.fromEntries(list.map((t) => [t.topic, t.title])))
     })
     // Momentum opt-out gates the cosmetic inkwell (dialogue-grammar.md's
-    // opt-out, honored beyond the dialogue itself). Same read also carries
-    // the checkpoint-all-nodes setting — one fetch, two flags, both off by
-    // a safe default (momentum defaults ON, checkpoint-all-nodes defaults
-    // OFF) if the read fails.
+    // opt-out, honored beyond the dialogue itself). checkpointAllNodesOn is
+    // a local pref (see its own useState above), not read from here.
     window.engram
       .model()
-      .then((m) => {
-        setMomentumOn(m.settings.momentum !== 'off')
-        setCheckpointAllNodesOn(m.settings.checkpoint_all_nodes === 'on')
-      })
+      .then((m) => setMomentumOn(m.settings.momentum !== 'off'))
       .catch(() => setMomentumOn(true))
   }, [])
 
