@@ -68,7 +68,17 @@ const CLICK_SLOP = 4
  * neighbours visibly resettle, low enough that a plate at rest looks at
  * rest rather than perpetually trembling. Reheated higher on drag. */
 const IDLE_ALPHA = 0.02
-const DRAG_ALPHA = 0.5
+/** Lowered from an initial 0.5 — a reader reported "very large shaking
+ * effects" on other nodes while dragging. Traced (layout.test.ts's own
+ * diagnostic sweep) to `stepSimulation`'s repulsion term: force scales
+ * linearly with alpha and with 1/d² of the distance to the dragged node,
+ * so whenever a fast drag passes CLOSE to a neighbour — routine in a
+ * packed cluster — the force spikes hard for that one frame. At 0.5 a
+ * close pass in a densely packed grid produced an ~18px single-tick jump
+ * in an untouched neighbour; at 0.15 the same pass produced ~12–15px, and
+ * the plate is still visibly alive under drag (Cairn's own intent for
+ * this constant), just without the violent spike on a close approach. */
+const DRAG_ALPHA = 0.15
 
 export class GraphEngine {
   private readonly host: HTMLElement

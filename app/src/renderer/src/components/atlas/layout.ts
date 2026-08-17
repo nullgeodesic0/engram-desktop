@@ -323,17 +323,27 @@ function applyRegionCohesion(layout: AtlasLayout): boolean {
   const byId = new Map(layout.nodes.map((n) => [n.id, n]))
   for (const region of layout.regions) {
     const members = region.memberIds.map((id) => byId.get(id)).filter((n): n is AtlasNode => Boolean(n))
-    if (members.length < 2) continue
+    // The centroid must come from the region's SETTLED members only. A
+    // dragged member's position is a pointer coordinate updated every
+    // frame, not a settled position — folding it into the average makes
+    // the whole region's centroid track the pointer, so every OTHER member
+    // gets cohesion-pulled toward wherever the drag currently is, on top
+    // of `resolveCrowding` independently pushing them back out of the
+    // dragged node's way. Two systems chasing (and fighting over) the same
+    // fast-moving target is exactly the "large shaking effects" a reader
+    // reported while dragging — confirmed by a test that measured an 87px
+    // single-tick jump in an undragged member before this exclusion.
+    const settled = members.filter((m) => m.fx === null)
+    if (settled.length < 2) continue
     let cx = 0
     let cy = 0
-    for (const m of members) {
+    for (const m of settled) {
       cx += m.x
       cy += m.y
     }
-    cx /= members.length
-    cy /= members.length
-    for (const m of members) {
-      if (m.fx !== null) continue // dragged — the reader is placing it, cohesion must not fight the hand
+    cx /= settled.length
+    cy /= settled.length
+    for (const m of settled) {
       const dx = (cx - m.x) * REGION_COHESION
       const dy = (cy - m.y) * REGION_COHESION
       m.x += dx
@@ -384,6 +394,17 @@ const MAX_CROWD_NODES = 240
  * only chance it got. */
 const CROWD_SWEEPS = 4
 
+/** Per-sweep displacement ceiling for a push AWAY FROM A PINNED (dragged)
+ * node specifically — see its call site's own doctrine comment for why
+ * only that branch is capped, never the mutual (both-free) one. `CROWD_
+ * SWEEPS` runs 4 of these every tick, so this is really a per-tick budget
+ * of `4 × 1.5 = 6` world units from crowding alone (plus whatever
+ * `stepSimulation`'s own repulsion adds at that range) — small enough that
+ * a close graze visibly steps out over a handful of frames instead of
+ * snapping in one, the same "converges within a few frames, not one"
+ * reasoning `CROWD_SWEEPS` itself already rests on. */
+const PINNED_CROWD_PUSH_CAP = 1.5
+
 function resolveCrowding(layout: AtlasLayout): void {
   const nodes = layout.nodes
   if (nodes.length > MAX_CROWD_NODES) return
@@ -410,11 +431,23 @@ function resolveCrowdingSweep(nodes: AtlasNode[]): void {
       const bPinned = b.fx !== null
       if (aPinned && bPinned) continue
       if (aPinned) {
-        b.x += ux * overlap
-        b.y += uy * overlap
+        // Capped, unlike the mutual case below: a pinned node's position
+        // comes straight from the pointer, which can graze a neighbour at
+        // any distance from one frame to the next. An UNCAPPED push here
+        // resolves the entire overlap of a close graze in one instant
+        // jump — a reader reported this as "very large shaking" while
+        // dragging. The mutual case has no such external jolt (both sides
+        // only ever move by what THIS sweep already computed), so it keeps
+        // resolving in full — that path is what the "never lets crowding
+        // creep back in" guarantee actually depends on, and a cap here
+        // does not touch it.
+        const push = Math.min(overlap, PINNED_CROWD_PUSH_CAP)
+        b.x += ux * push
+        b.y += uy * push
       } else if (bPinned) {
-        a.x -= ux * overlap
-        a.y -= uy * overlap
+        const push = Math.min(overlap, PINNED_CROWD_PUSH_CAP)
+        a.x -= ux * push
+        a.y -= uy * push
       } else {
         a.x -= ux * overlap * 0.5
         a.y -= uy * overlap * 0.5

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { tickLayout, type AtlasLayout, type AtlasNode, type AtlasRegion } from './layout'
+import { pinNode, tickLayout, type AtlasLayout, type AtlasNode, type AtlasRegion } from './layout'
 
 function node(overrides: Partial<AtlasNode> & { id: string }): AtlasNode {
   return {
@@ -166,5 +166,57 @@ describe('tickLayout — region cohesion (the "tangled mess" regression)', () =>
     for (let i = 0; i < 50; i++) tickLayout(layout, 0.5, 400, 300)
     expect(dragged.x).toBe(900)
     expect(dragged.y).toBe(900)
+  })
+
+  it('does not yank a region\'s other members toward a fast-moving drag — the reported "shaking"', () => {
+    // A region of comfortably-spaced (not pre-overlapping) members; one is
+    // then dragged from far away, sweeping through the cluster one tick at
+    // a time, the way a real fast mouse drag delivers a new pinned position
+    // every frame. The OTHER members should keep settling smoothly, not
+    // lurch toward wherever the drag currently is — a region's live
+    // centroid must not include a pinned member's position, or every other
+    // member chases it every tick.
+    const dragged = node({ id: 'held', x: -400, y: 300, r: 8, fx: -400, fy: 300 })
+    const others = [
+      node({ id: 'o0', x: 400, y: 300, r: 8 }),
+      node({ id: 'o1', x: 460, y: 300, r: 8 }),
+      node({ id: 'o2', x: 400, y: 360, r: 8 }),
+    ]
+    const region: AtlasRegion = { seed: 'held', name: 'Sub-topic', memberIds: ['held', ...others.map((m) => m.id)] }
+    const layout = layoutOf([dragged, ...others], [region])
+
+    let worstJump = 0
+    for (let i = 0; i < 80; i++) {
+      pinNode(layout, 'held', -400 + i * 10, 300)
+      const before = others.map((o) => ({ x: o.x, y: o.y }))
+      tickLayout(layout, 0.15, 400, 300)
+      for (let k = 0; k < others.length; k++) {
+        worstJump = Math.max(worstJump, Math.hypot(others[k].x - before[k].x, others[k].y - before[k].y))
+      }
+    }
+    // A centroid dragged along by the pinned node's own fast motion would
+    // produce jumps well past this; a settled region only ever nudges.
+    expect(worstJump).toBeLessThan(15)
+  })
+
+  it('spreads a close drag-graze over a few ticks instead of one instant snap', () => {
+    // A dragged node parked deep inside a single neighbour's clearance —
+    // the "brief close graze" a fast drag produces routinely. Uncapped,
+    // resolveCrowding's pinned-push branch closes the ENTIRE overlap in
+    // one sweep; capped, the neighbour steps out over a few ticks instead.
+    const dragged = node({ id: 'held', x: 400, y: 300, r: 10, fx: 400, fy: 300 })
+    const grazed = node({ id: 'n', x: 408, y: 300, r: 10 }) // centres 8 apart; minDist = 50
+    const layout = layoutOf([dragged, grazed])
+    const firstTickJump = (() => {
+      const before = { x: grazed.x, y: grazed.y }
+      tickLayout(layout, 0.15, 400, 300)
+      return Math.hypot(grazed.x - before.x, grazed.y - before.y)
+    })()
+    // The overlap here is 42 — an uncapped sweep resolves the whole thing
+    // in one tick; the capped push must not.
+    expect(firstTickJump).toBeLessThan(20)
+    // ...but it still fully resolves within a handful of frames.
+    for (let i = 0; i < 20; i++) tickLayout(layout, 0.15, 400, 300)
+    expect(Math.hypot(grazed.x - dragged.x, grazed.y - dragged.y)).toBeGreaterThanOrEqual(dragged.r + grazed.r + 29)
   })
 })
