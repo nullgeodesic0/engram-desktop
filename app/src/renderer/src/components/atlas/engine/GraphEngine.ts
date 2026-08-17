@@ -45,16 +45,6 @@ export interface EngineCallbacks {
   onSelect: (id: string) => void
   onOpen: (id: string) => void
   onFocusRegion: (seed: string | null) => void
-  /** Fired once per paint with the subset of this frame's labels whose node
-   * has an `annotate_node` `latexLabel` — never with the rest. Canvas text
-   * (both painters) has no way to host real KaTeX, the same limitation the
-   * retired SVG renderer had (see `frame.ts`'s doctrine comment history) —
-   * so a math label is drawn twice: once here, as a real positioned DOM
-   * overlay the host component renders via `renderMathHtml`, and NOT at all
-   * by the canvas text pass, which excludes exactly this id set (see
-   * `paint()` below) rather than drawing the same name underneath in
-   * unrendered plain text. */
-  onMathLabelsChange: (labels: LabelBox[]) => void
 }
 
 export interface EngineProps {
@@ -545,10 +535,14 @@ export class GraphEngine {
     const ancestorSet = p.dueLens ? null : anchor ? this.ancestryFor(anchor, selected !== null) : null
     const descendantSet = p.dueLens ? null : anchor ? this.descendancyFor(anchor, selected !== null) : null
 
-    const labelFor = (n: { id: string }): string => {
-      const latex = p.annotations?.[n.id]?.latexLabel
-      return latex ? latex.replace(/\$\$?/g, '') : humanizeNodeId(n.id)
-    }
+    // Always the humanized id — never `annotations[id].latexLabel`. A node's
+    // MAP TITLE identifies which node this is; that job belongs to the id,
+    // not to whatever math notation a tutor happened to attach. (An earlier
+    // pass here rendered latexLabel as the title, via a real KaTeX DOM
+    // overlay since canvas fillText can't host it — reverted on request:
+    // the plate's node names read as clutter/confusion once a title could
+    // silently become a bare LaTeX expression instead of a name.)
+    const labelFor = (n: { id: string }): string => humanizeNodeId(n.id)
     const labels: LabelBox[] = placeLabels({
       nodes: this.layout.nodes,
       toScreen: (x, y) => ({ x: x * this.view.zoom + this.view.x, y: y * this.view.zoom + this.view.y }),
@@ -563,16 +557,6 @@ export class GraphEngine {
       cursor: this.pointerInside ? { x: this.lastPointerX, y: this.lastPointerY } : null,
       dueLens: p.dueLens,
     })
-
-    // Canvas fillText cannot host real KaTeX — split off any label whose
-    // node carries a `latexLabel` annotation so the host component can
-    // render THOSE as a real positioned DOM overlay (see EngineCallbacks'
-    // own doctrine comment) instead of the plain, unrendered math source
-    // the canvas painters would otherwise draw.
-    const canvasLabels: LabelBox[] = []
-    const mathLabels: LabelBox[] = []
-    for (const label of labels) (p.annotations?.[label.id]?.latexLabel ? mathLabels : canvasLabels).push(label)
-    this.callbacks.onMathLabelsChange(mathLabels)
 
     const frame: RenderFrame = {
       layout: this.layout,
@@ -594,7 +578,7 @@ export class GraphEngine {
       query: p.query,
       nowSec: (t - this.startedAt) / 1000,
       reducedMotion: this.reducedMotion,
-      labels: canvasLabels,
+      labels,
       linkThickness: this.settings.display.linkThickness,
     }
     this.painter.paint(frame)

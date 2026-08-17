@@ -1,4 +1,4 @@
-import type { TopicGraph, MapAnnotations } from '../../../shared/types'
+import type { TopicGraph } from '../../../shared/types'
 import { humanizeNodeId } from '../../../shared/humanizeId'
 import { EDGE_STYLE } from '../components/graph3d/types'
 import { buildEdges, computeForwardAdjacency, computeFrontierIds, computeHubNodeIds } from '../components/graph3d/layout'
@@ -21,7 +21,6 @@ import {
   isEdgeVisible,
   cornerTicks,
   ARROWHEAD_PATH,
-  stripMathDelimiters,
 } from '../components/GraphView'
 
 /** Physical page geometry — US Letter, landscape, at the 96 CSS-px/inch
@@ -202,7 +201,6 @@ function planLabels(
   graph: TopicGraph,
   plate: Map<string, PlateNode>,
   frontierIds: Set<string>,
-  annotations: MapAnnotations | null,
   /** Fixed obstacles no per-node label may land on, beyond cells and other
    * labels — the territory washes' faint italic root captions, currently
    * (see the call site's own comment for why these earned a dedicated
@@ -234,8 +232,11 @@ function planLabels(
   const placed = new Map<string, PlannedLabel>()
   const placedRects: Rect[] = []
   for (const { id, pos } of order) {
-    const latexLabel = annotations?.[id]?.latexLabel
-    const label = latexLabel ? stripMathDelimiters(latexLabel) : humanizeNodeId(id)
+    // Always the humanized id — a printed plate's node names identify which
+    // node this is, the same job the live map's own label carries (see
+    // atlas/engine/GraphEngine.ts's `labelFor`). `latexLabel` no longer
+    // overrides the title on either surface.
+    const label = humanizeNodeId(id)
     for (const candidate of labelCandidates(pos.r)) {
       const rect = labelRect(pos, label, candidate)
       if (rect.x0 < 0 || rect.y0 < 0 || rect.x1 > PLATE_W || rect.y1 > PLATE_H) continue
@@ -351,7 +352,6 @@ function legendRow(y: number, glyph: string, label: string): string {
 export function mapToPrintHtml(
   graph: TopicGraph,
   retrievability: Map<string, number> | null,
-  annotations: MapAnnotations | null,
 ): string {
   // Regions feed BOTH the settle geometry and the printed sectors/captions
   // themselves — a pure function of `graph`, so this is bit-identical to
@@ -521,7 +521,7 @@ export function mapToPrintHtml(
   // pixels) — but WHERE each one lands (or whether it lands at all) is now a
   // collision-checked plan, not an unconditional `r + 6`; see `planLabels`'s
   // own header comment for F2(a)'s full reasoning.
-  const labelPlan = planLabels(graph, plate, frontierIds, annotations, territoryLabelRects)
+  const labelPlan = planLabels(graph, plate, frontierIds, territoryLabelRects)
   for (const id of graph.order) {
     const pos = plate.get(id)
     const planned = labelPlan.get(id)

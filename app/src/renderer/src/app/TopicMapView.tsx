@@ -439,7 +439,7 @@ export function TopicMapView({
     setExportingMap(true)
     setMapExportStatus(null)
     try {
-      const printHtml = mapToPrintHtml(graph, retrievability, annotations)
+      const printHtml = mapToPrintHtml(graph, retrievability)
       const result = await window.engram.exportMap({ title: graph.title, printHtml })
       if (result.ok) setMapExportStatus({ text: `Saved to ${result.path}`, failed: false })
       else if (result.reason !== 'canceled') setMapExportStatus({ text: `Export failed: ${result.reason}`, failed: true })

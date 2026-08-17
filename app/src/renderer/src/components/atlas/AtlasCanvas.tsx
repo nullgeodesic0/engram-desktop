@@ -4,11 +4,9 @@ import { GraphEngine, type EngineCallbacks } from './engine/GraphEngine'
 import { WebGLPainter } from './engine/WebGLPainter'
 import { Canvas2DPainter } from './engine/render'
 import type { PlatePainter } from './engine/paint'
-import type { LabelBox } from './labels'
 import { GraphSettings } from './GraphSettings'
 import { readGraphSettings, saveGraphSettings, type AtlasGraphSettings } from './settings'
 import { CTRL_QUIET } from '../../shared/controlChrome'
-import { renderMathHtml } from '../MathRenderer'
 
 /** The Topic Map's WebGL host — replaces the retired `GraphView.tsx`'s SVG
  * root with two stacked `<canvas>` elements (drawing, and a text overlay
@@ -50,11 +48,6 @@ export function AtlasCanvas(props: AtlasCanvasProps) {
   callbacksRef.current = props
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settings, setSettings] = useState<AtlasGraphSettings>(readGraphSettings)
-  // Node names carrying a `latexLabel` annotation — canvas fillText can't
-  // host real KaTeX, so the engine hands these back separately (see
-  // GraphEngine's `onMathLabelsChange`) and they're drawn below as real
-  // positioned DOM, not by either canvas painter.
-  const [mathLabels, setMathLabels] = useState<LabelBox[]>([])
 
   useEffect(() => {
     const host = hostRef.current
@@ -66,7 +59,6 @@ export function AtlasCanvas(props: AtlasCanvasProps) {
       onSelect: (id) => callbacksRef.current.onSelect(id),
       onOpen: (id) => callbacksRef.current.onOpen(id),
       onFocusRegion: (seed) => callbacksRef.current.onFocusRegion(seed),
-      onMathLabelsChange: (labels) => setMathLabels(labels),
     }
 
     let painter: PlatePainter
@@ -130,26 +122,6 @@ export function AtlasCanvas(props: AtlasCanvasProps) {
     <div ref={hostRef} className="relative h-full w-full overflow-hidden" aria-label={`Topic map — ${props.graph.title}`}>
       <canvas ref={canvasRef} className="absolute inset-0 h-full w-full touch-none" tabIndex={0} />
       <canvas ref={textRef} className="absolute inset-0 h-full w-full pointer-events-none" aria-hidden="true" />
-
-      {/* Math-annotated node names — real KaTeX via renderMathHtml, since
-          neither canvas painter can host it (see GraphEngine's
-          `onMathLabelsChange` doctrine comment). Positioned in the exact
-          same screen-space `placeLabels` already computed for these ids;
-          non-interactive, so dragging/hovering the node underneath still
-          goes through the canvas exactly as it does for any other label. */}
-      {mathLabels.map((label) => {
-        const latex = props.annotations?.[label.id]?.latexLabel
-        if (!latex) return null
-        return (
-          <div
-            key={label.id}
-            aria-hidden="true"
-            className="absolute pointer-events-none overflow-hidden whitespace-nowrap flex items-center text-[var(--color-text-primary)]"
-            style={{ left: label.x, top: label.y, width: label.w, height: label.h, fontSize: label.h - 1 }}
-            dangerouslySetInnerHTML={{ __html: renderMathHtml(latex) }}
-          />
-        )
-      })}
 
       {/* Bottom-right — the one corner the plate's other floating chrome
           (search top-left, territory/pressure readouts top-right, Key
