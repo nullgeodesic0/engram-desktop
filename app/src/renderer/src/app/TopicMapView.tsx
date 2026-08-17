@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { TopicListEntry, TopicGraph, MapAnnotations, NodeProvenance, ProvenanceEvent, Misconception, RawReceipt } from '../../../shared/types'
 import { RetentionCurve } from '../components/RetentionCurve'
-import { GraphView, EDGE_STYLE } from '../components/GraphView'
+import { EDGE_STYLE } from '../components/GraphView'
+import { AtlasCanvas } from '../components/atlas/AtlasCanvas'
 import { NodeTable } from '../components/NodeTable'
 import { GrowthScrubber } from '../components/GrowthScrubber'
 import { PressureReadout } from '../components/PressureReadout'
@@ -920,7 +921,7 @@ export function TopicMapView({
 
             {plateView === 'map' && (
             <div className="relative flex-1 min-h-0">
-            <GraphView
+            <AtlasCanvas
               graph={graph}
               selected={selectedNode}
               onSelect={setSelectedNode}
