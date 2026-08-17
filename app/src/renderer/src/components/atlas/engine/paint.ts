@@ -31,6 +31,7 @@ export interface RenderFrame {
   visibleNodes: ReadonlySet<string> | null
   retrievability: ReadonlyMap<string, number> | null
   focusedRegion: string | null
+  hoveredRegion: string | null
   query: string
   /** Computed once per frame by `GraphEngine` (via `labels.ts`'s
    * `placeLabels`) and handed to the painter already positioned — the

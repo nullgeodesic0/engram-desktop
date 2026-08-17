@@ -11,7 +11,7 @@
  * answers. A genuine, if visually simpler, degradation path — not a
  * placeholder. */
 
-import { hullPath } from '../../graph2d/plate'
+import { hullPath, hullTopAnchor } from '../../graph2d/plate'
 import {
   ARROWHEAD_PATH,
   arrowheadPlacement,
@@ -104,17 +104,22 @@ export class Canvas2DPainter implements PlatePainter {
   private paintRegions(frame: RenderFrame, col: (c: string) => string): void {
     const ctx = this.ctx
     const byId = new Map(frame.layout.nodes.map((n) => [n.id, n]))
+    // Warm ink — see WebGLPainter's own doctrine comment on this same wash
+    // (`--color-ink-hairline` read as "no color at all," not neutral chrome).
+    const washColor = col(frame.tokens.warm)
     for (const region of frame.layout.regions) {
       const pts = region.memberIds.map((id) => byId.get(id)).filter((n): n is AtlasNode => Boolean(n))
       if (pts.length < 3) continue
       const focused = frame.focusedRegion === region.seed
       const dimmed = frame.focusedRegion !== null && !focused
+      const consolidatedFraction = pts.filter((n) => n.state === 'review').length / pts.length
       const path = new Path2D(hullPath(pts, 26))
-      ctx.fillStyle = col(frame.tokens.hairline)
-      ctx.globalAlpha = focused ? 0.09 : dimmed ? 0.015 : 0.045
+      ctx.fillStyle = washColor
+      ctx.globalAlpha = (focused ? 0.09 : dimmed ? 0.015 : 0.045) * (consolidatedFraction * 0.6 + 0.4)
       ctx.fill(path)
       ctx.globalAlpha = focused ? 0.35 : dimmed ? 0.06 : 0.16
       ctx.lineWidth = 1 / frame.view.zoom
+      ctx.strokeStyle = washColor
       ctx.stroke(path)
     }
     ctx.globalAlpha = 1
@@ -328,14 +333,54 @@ export class Canvas2DPainter implements PlatePainter {
   private paintText(frame: RenderFrame, col: (c: string) => string): void {
     const ctx = this.ctx
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0)
-    if (frame.labels.length === 0) return
     ctx.textBaseline = 'middle'
+    this.paintRegionLabels(frame, col)
+    if (frame.labels.length === 0) return
     ctx.fillStyle = col(frame.tokens.textPrimary)
     for (const label of frame.labels) {
       ctx.font = `${label.h - 1}px ${frame.tokens.fontData}`
       ctx.globalAlpha = label.id === frame.selected || label.id === frame.hovered ? 1 : 0.85
       ctx.fillText(label.text, label.x, label.y + label.h / 2)
     }
+    ctx.globalAlpha = 1
+  }
+
+  /** Region name captions — see `WebGLPainter`'s own doctrine comment on
+   * this same restoration. Same anchor math, same hover/focus rule, drawn
+   * with Canvas2D text instead of a GL batch. */
+  private paintRegionLabels(frame: RenderFrame, col: (c: string) => string): void {
+    const ctx = this.ctx
+    const { layout, view } = frame
+    if (layout.regions.length === 0) return
+    const byId = new Map(layout.nodes.map((n) => [n.id, n]))
+    const toScreen = (x: number, y: number): { x: number; y: number } => ({ x: x * view.zoom + view.x, y: y * view.zoom + view.y })
+    for (const region of layout.regions) {
+      const pts = region.memberIds.map((id) => byId.get(id)).filter((n): n is AtlasNode => Boolean(n))
+      const anchor = hullTopAnchor(pts, 26)
+      if (!anchor) continue
+      const isHovered = !frame.visibleNodes && frame.hoveredRegion === region.seed
+      const isFocused = frame.focusedRegion === region.seed
+      const overlapsMember = pts.some((p) => Math.hypot(p.x - anchor.x, p.y - anchor.y) < p.r + 10)
+      const anchorScreen = toScreen(anchor.x, overlapsMember ? anchor.y - 12 : anchor.y)
+
+      ctx.textAlign = 'center'
+      ctx.font = `10px ${frame.tokens.fontData}`
+      ctx.fillStyle = col(frame.tokens.textDim)
+      ctx.globalAlpha = frame.visibleNodes ? 0.25 : isHovered || isFocused ? 0.85 : 0.25
+      ctx.fillText(region.name.toUpperCase(), anchorScreen.x, anchorScreen.y)
+
+      if (isHovered) {
+        const consolidated = pts.filter((n) => n.state === 'review').length
+        const due = pts.filter((n) => {
+          const status = dueStatusFor(n)
+          return status === 'overdue' || status === 'today'
+        }).length
+        ctx.font = `9px ${frame.tokens.fontData}`
+        ctx.globalAlpha = 0.85
+        ctx.fillText(`consolidated ${consolidated}/${pts.length} · due ${due}`, anchorScreen.x, anchorScreen.y + 11)
+      }
+    }
+    ctx.textAlign = 'left'
     ctx.globalAlpha = 1
   }
 }

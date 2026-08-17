@@ -89,6 +89,10 @@ export class GraphEngine {
   private hovered: string | null = null
   private hoveredRegion: string | null = null
   private draggingNode: string | null = null
+  /** A node hit on pointerdown, held here (not yet pinned/dragging) until
+   * the pointer actually crosses CLICK_SLOP — see `onPointerDown`'s own
+   * doctrine comment for why this exists. */
+  private pointerDownNode: string | null = null
   private panning = false
   private downX = 0
   private downY = 0
@@ -322,10 +326,15 @@ export class GraphEngine {
     if (!this.layout) return
     const world = this.screenToWorld(p.x, p.y)
     const hit = hitNode(this.layout, world.x, world.y)
+    // A hit node does NOT start a drag immediately — pinning on the same
+    // frame as pointerdown meant a plain click's pointerup always landed in
+    // the "release a drag" branch below (zero-distance, but still a drag),
+    // which never fires onSelect. Held here until onPointerMove sees real
+    // movement past CLICK_SLOP; onPointerUp fires the click if it never
+    // does, the same slop-and-`moved` discipline background panning already
+    // uses to tell a click from a fling.
     if (hit) {
-      this.draggingNode = hit.id
-      pinNode(this.layout, hit.id, world.x, world.y)
-      this.simAlpha = DRAG_ALPHA
+      this.pointerDownNode = hit.id
     } else {
       this.panning = true
     }
@@ -340,6 +349,14 @@ export class GraphEngine {
     this.lastMoveVY = ((p.y - this.lastPointerY) / dt) * 16.67
 
     if (Math.hypot(p.x - this.downX, p.y - this.downY) > CLICK_SLOP) this.moved = true
+
+    // Promote a held-down node into an actual drag only once the pointer
+    // has genuinely moved — see `onPointerDown`'s doctrine comment.
+    if (this.pointerDownNode && this.moved && this.layout) {
+      this.draggingNode = this.pointerDownNode
+      this.pointerDownNode = null
+      this.simAlpha = DRAG_ALPHA
+    }
 
     if (this.draggingNode && this.layout) {
       const world = this.screenToWorld(p.x, p.y)
@@ -362,6 +379,7 @@ export class GraphEngine {
   }
 
   private onPointerUp = (e: PointerEvent): void => {
+    this.pointerDownNode = null
     if (this.draggingNode) {
       if (this.layout) {
         pinNode(this.layout, this.draggingNode, null, null)
@@ -405,6 +423,7 @@ export class GraphEngine {
   private onMouseLeave = (): void => {
     this.hovered = null
     this.hoveredRegion = null
+    this.dirty = true
   }
 
   private onWheel = (e: WheelEvent): void => {
@@ -540,6 +559,7 @@ export class GraphEngine {
       visibleNodes: p.visibleNodes,
       retrievability: p.retrievability,
       focusedRegion: p.focusedRegion,
+      hoveredRegion: this.hoveredRegion,
       query: p.query,
       nowSec: (t - this.startedAt) / 1000,
       reducedMotion: this.reducedMotion,

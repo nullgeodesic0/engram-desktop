@@ -39,7 +39,7 @@ import {
   transformTriangles,
   triangulateFan,
 } from './gl/geometry'
-import { hullPath } from '../../graph2d/plate'
+import { hullPath, hullTopAnchor } from '../../graph2d/plate'
 import {
   ARROWHEAD_PATH,
   arrowheadPlacement,
@@ -192,7 +192,15 @@ export class WebGLPainter implements PlatePainter {
     const { layout } = frame
     if (layout.regions.length === 0) return
     const byId = new Map(layout.nodes.map((n) => [n.id, n]))
-    const washRgb = parseColor(frame.tokens.hairline)
+    // Warm ink, matching the retired SVG renderer's own region wash — the
+    // Consolidation Axis reads a region's own survived fraction through the
+    // SAME warm hue every node uses for "review" state, not a per-region
+    // identity color (DESIGN.md's Off-Axis Violet Rule bars a color from
+    // existing "because a surface needs one"). Colorizing this from the
+    // engine's flat hairline gray IS the fix: the wash already tracked
+    // consolidatedFraction in its alpha, it just drew that signal in the
+    // wrong ink.
+    const washRgb = parseColor(frame.tokens.warm)
     for (const region of layout.regions) {
       const pts = region.memberIds.map((id) => byId.get(id)).filter((n): n is AtlasNode => Boolean(n))
       if (pts.length < 3) continue
@@ -408,8 +416,9 @@ export class WebGLPainter implements PlatePainter {
     if (!ctx || !this.textCanvas) return
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0)
     ctx.clearRect(0, 0, this.width, this.height)
-    if (frame.labels.length === 0) return
     ctx.textBaseline = 'middle'
+    this.paintRegionLabels(frame, ctx)
+    if (frame.labels.length === 0) return
     ctx.fillStyle = frame.tokens.textPrimary
     for (const label of frame.labels) {
       const size = /** matches `labels.ts`'s own `labelFontSize` scale */ label.h - 1
@@ -417,6 +426,51 @@ export class WebGLPainter implements PlatePainter {
       ctx.globalAlpha = label.id === frame.selected || label.id === frame.hovered ? 1 : 0.85
       ctx.fillText(label.text, label.x, label.y + label.h / 2)
     }
+    ctx.globalAlpha = 1
+  }
+
+  /** Region name captions — the retired SVG renderer had these
+   * (`regionName(seed)` at `hullTopAnchor`, plus a consolidated/due readout
+   * on hover) and the WebGL port silently dropped them along with the
+   * hull's color, leaving a plate of unlabeled node clusters. Restoring
+   * these IS the "bring back the segmenting" fix: a hull with no caption
+   * reads as clutter, the same hull with a caption reads as a charted
+   * sub-topic. Drawn on the text canvas (screen space, via the same
+   * world→screen projection `GraphEngine`'s `placeLabels` uses) rather than
+   * batched into the GL triangle pass, for the same reason node labels are:
+   * crisp text at any zoom without a font atlas. */
+  private paintRegionLabels(frame: RenderFrame, ctx: CanvasRenderingContext2D): void {
+    const { layout, view } = frame
+    if (layout.regions.length === 0) return
+    const byId = new Map(layout.nodes.map((n) => [n.id, n]))
+    const toScreen = (x: number, y: number): { x: number; y: number } => ({ x: x * view.zoom + view.x, y: y * view.zoom + view.y })
+    for (const region of layout.regions) {
+      const pts = region.memberIds.map((id) => byId.get(id)).filter((n): n is AtlasNode => Boolean(n))
+      const anchor = hullTopAnchor(pts, 26)
+      if (!anchor) continue
+      const isHovered = !frame.visibleNodes && frame.hoveredRegion === region.seed
+      const isFocused = frame.focusedRegion === region.seed
+      const overlapsMember = pts.some((p) => Math.hypot(p.x - anchor.x, p.y - anchor.y) < p.r + 10)
+      const anchorScreen = toScreen(anchor.x, overlapsMember ? anchor.y - 12 : anchor.y)
+
+      ctx.textAlign = 'center'
+      ctx.font = `10px ${frame.tokens.fontData}`
+      ctx.fillStyle = frame.tokens.textDim
+      ctx.globalAlpha = frame.visibleNodes ? 0.25 : isHovered || isFocused ? 0.85 : 0.25
+      ctx.fillText(region.name.toUpperCase(), anchorScreen.x, anchorScreen.y)
+
+      if (isHovered) {
+        const consolidated = pts.filter((n) => n.state === 'review').length
+        const due = pts.filter((n) => {
+          const status = dueStatusFor(n)
+          return status === 'overdue' || status === 'today'
+        }).length
+        ctx.font = `9px ${frame.tokens.fontData}`
+        ctx.globalAlpha = 0.85
+        ctx.fillText(`consolidated ${consolidated}/${pts.length} · due ${due}`, anchorScreen.x, anchorScreen.y + 11)
+      }
+    }
+    ctx.textAlign = 'left'
     ctx.globalAlpha = 1
   }
 }
