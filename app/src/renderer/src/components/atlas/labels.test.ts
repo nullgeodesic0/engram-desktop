@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { clipLabel, labelPriority, placeLabels, type LabelInput } from './labels'
+import { clearanceFor, clipLabel, labelPriority, placeLabels, type LabelInput } from './labels'
 import type { AtlasNode } from './layout'
 
 function node(overrides: Partial<AtlasNode> & { id: string }): AtlasNode {
@@ -20,6 +20,7 @@ function node(overrides: Partial<AtlasNode> & { id: string }): AtlasNode {
     lapses: 0,
     due: null,
     degree: 0,
+    kind: null,
     ...overrides,
   }
 }
@@ -129,5 +130,78 @@ describe('placeLabels', () => {
     const first = placeLabels(input).map((l) => l.id)
     const second = placeLabels(input).map((l) => l.id)
     expect(first).toEqual(second)
+  })
+})
+
+describe('clearanceFor — cursor-aware decluttering', () => {
+  it('needs no clearance at all for an always-clear name, regardless of the cursor', () => {
+    expect(clearanceFor(500, 400, true, null)).toBe(0)
+    expect(clearanceFor(500, 400, true, { x: 5000, y: 5000 })).toBe(0)
+  })
+
+  it('needs no extra clearance right under the cursor', () => {
+    expect(clearanceFor(500, 400, false, { x: 500, y: 400 })).toBe(0)
+  })
+
+  it('needs the full clearance far from the cursor', () => {
+    expect(clearanceFor(500, 400, false, { x: 5000, y: 5000 })).toBeGreaterThan(30)
+  })
+
+  it('falls back to a middle-ground clearance when there is no cursor to read at all', () => {
+    const noCursor = clearanceFor(500, 400, false, null)
+    const nearCursor = clearanceFor(500, 400, false, { x: 500, y: 400 })
+    const farCursor = clearanceFor(500, 400, false, { x: 5000, y: 5000 })
+    // Not fully attended (stricter than sitting right under a known
+    // cursor) and not fully unattended either (looser than a name the
+    // cursor is known to be far from) — a real middle ground, not a copy
+    // of either extreme.
+    expect(noCursor).toBeGreaterThan(nearCursor)
+    expect(noCursor).toBeLessThan(farCursor)
+  })
+})
+
+describe('placeLabels — cursor and due-lens as contextual clutter signals', () => {
+  // Four names ringed tightly around a shared centre — identical to the
+  // "drops a label" geometry above, just parameterised by an offset so the
+  // same crowded neighbourhood can be reproduced at two different points on
+  // the plate.
+  function crowdedCluster(idPrefix: string, cx: number, cy: number): AtlasNode[] {
+    return [
+      node({ id: `${idPrefix}-c`, x: cx, y: cy, degree: 5 }),
+      node({ id: `${idPrefix}-r`, x: cx + 12, y: cy, degree: 5 }),
+      node({ id: `${idPrefix}-l`, x: cx - 12, y: cy, degree: 5 }),
+      node({ id: `${idPrefix}-u`, x: cx, y: cy - 12, degree: 5 }),
+      node({ id: `${idPrefix}-d`, x: cx, y: cy + 12, degree: 5 }),
+    ]
+  }
+
+  it('names more of a crowded neighbourhood under the cursor than the identical neighbourhood far away', () => {
+    const near = crowdedCluster('near', 200, 200)
+    const far = crowdedCluster('far', 900, 700)
+    const input = baseInput([...near, ...far], { cursor: { x: 200, y: 200 } })
+    const placed = new Set(placeLabels(input).map((l) => l.id))
+    const nearCount = near.filter((n) => placed.has(n.id)).length
+    const farCount = far.filter((n) => placed.has(n.id)).length
+    expect(nearCount).toBeGreaterThan(farCount)
+  })
+
+  it('keeps an overdue node named under the due lens even far from the cursor, though it would lose that same crowd unaided', () => {
+    // Same ring-of-walls shape as the plain "drops a label" test above:
+    // 'center' is outranked by its four walls on structure alone, so
+    // without the due lens it loses the crowd exactly like 'target' did.
+    const walls = [
+      node({ id: 'wall-r', x: 912, y: 700, degree: 10 }),
+      node({ id: 'wall-l', x: 888, y: 700, degree: 10 }),
+      node({ id: 'wall-u', x: 900, y: 688, degree: 10 }),
+      node({ id: 'wall-d', x: 900, y: 712, degree: 10 }),
+    ]
+    const center = node({ id: 'center', x: 900, y: 700, degree: 0, state: 'learning', due: '2020-01-01' })
+    const cursorFar = { cursor: { x: 200, y: 200 } }
+
+    const withoutLens = new Set(placeLabels(baseInput([center, ...walls], cursorFar)).map((l) => l.id))
+    expect(withoutLens.has('center')).toBe(false)
+
+    const withLens = new Set(placeLabels(baseInput([center, ...walls], { ...cursorFar, dueLens: true })).map((l) => l.id))
+    expect(withLens.has('center')).toBe(true)
   })
 })

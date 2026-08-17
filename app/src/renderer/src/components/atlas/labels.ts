@@ -32,6 +32,7 @@
  * tiers — capstone/hub vs. ordinary, then degree, stand in for Cairn's
  * structural-layer rank). */
 
+import { dueStatusFor } from './frame'
 import type { AtlasNode } from './layout'
 
 export interface LabelBox {
@@ -63,6 +64,25 @@ export interface LabelInput {
   height: number
   /** Panels floating over the plate; labels under them are not visible. */
   insets?: { left: number; right: number; top: number; bottom: number }
+  /** Pointer position, screen-space (same frame `toScreen` outputs into) —
+   * `null`/omitted when the pointer is off the canvas (or on a caller that
+   * never reports one — every existing test keeps working undisturbed).
+   * Lets the reader's own attention thin the plate: a name near the cursor
+   * competes for its space at normal density, the same name far from the
+   * cursor needs generously more clearance from its neighbours before it is
+   * allowed to place at all. See `clearanceFor`'s own doctrine comment for
+   * why this is "how much room a name needs," not "who wins a priority
+   * tie" — cursor proximity never promotes a name past hover, selection,
+   * the trail, or (under the due lens) an overdue/due-today node; it only
+   * decides how crowded its own neighbourhood is allowed to be before it
+   * gives up its spot. */
+  cursor?: { x: number; y: number } | null
+  /** Whether the due lens is on — the other piece of "contextual
+   * information" this module reads, alongside cursor position. Under the
+   * lens, an overdue/due-today node is exactly what the reader is here to
+   * see, so it earns the same always-clear-space treatment as the trail,
+   * regardless of where the cursor happens to be. */
+  dueLens?: boolean
 }
 
 /** Approximate advance width per character for the plate's data face.
@@ -94,6 +114,44 @@ function overlaps(a: LabelBox, b: LabelBox): boolean {
   return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
 }
 
+/** Inside this radius of the cursor, a name needs no more clearance than its
+ * own box — full density right where the reader is looking. */
+const CURSOR_NEAR = 140
+/** Past this radius, a name needs the full extra `MAX_CLEARANCE` around it —
+ * the plate thins itself out the farther a neighbourhood sits from whatever
+ * the reader is actually attending to. Linear falloff between the two. */
+const CURSOR_FAR = 480
+/** Extra margin added to every side of a far candidate's box before testing
+ * it against names already placed — this is what makes a crowded but
+ * unattended corner of the plate quietly drop names instead of packing them
+ * in as tightly as the area right under the cursor does. Never applied to
+ * hover/selected/trail names, or (under the due lens) an overdue/due-today
+ * one — those already always get a spot if any berth has room; this only
+ * governs how much room an ordinary name needs to be allowed one. */
+const MAX_CLEARANCE = 34
+/** Applied when there is no cursor position at all to measure distance
+ * from (off-canvas, or a caller — including every pre-existing test — that
+ * never reports one). Half of `MAX_CLEARANCE`, not the full amount: "no
+ * known focus" argues for a touch more room than the fully-attended case,
+ * not for treating the whole plate as maximally unattended before the
+ * reader has so much as moved the mouse. */
+const NO_CURSOR_CLEARANCE = MAX_CLEARANCE / 2
+
+/** How much extra clearance (each side) a name at this priority tier and
+ * screen position needs before it may claim a berth. `alwaysClear` names
+ * (hover/selected/trail, or overdue/due-today under the due lens) get none
+ * — the same unconditional treatment they already had before cursor
+ * awareness existed. Everything else scales linearly with distance from the
+ * cursor between `CURSOR_NEAR` and `CURSOR_FAR`, or falls back to
+ * `NO_CURSOR_CLEARANCE` when there is no cursor position to read at all. */
+export function clearanceFor(screenX: number, screenY: number, alwaysClear: boolean, cursor: { x: number; y: number } | null): number {
+  if (alwaysClear) return 0
+  if (!cursor) return NO_CURSOR_CLEARANCE
+  const dist = Math.hypot(screenX - cursor.x, screenY - cursor.y)
+  const t = Math.min(1, Math.max(0, (dist - CURSOR_NEAR) / (CURSOR_FAR - CURSOR_NEAR)))
+  return t * MAX_CLEARANCE
+}
+
 /** Rank: lower sorts first and therefore wins its space. */
 export function labelPriority(n: AtlasNode, input: LabelInput): number {
   if (n.id === input.hovered || n.id === input.selected) return -2
@@ -116,7 +174,7 @@ export function placeLabels(input: LabelInput): LabelBox[] {
     .sort((a, b) => a.rank - b.rank || a.n.id.localeCompare(b.n.id))
 
   const placed: LabelBox[] = []
-  for (const { n } of candidates) {
+  for (const { n, rank } of candidates) {
     if (placed.length >= MAX_LABELS) break
     const text = clipLabel(input.labelFor(n))
     if (!text) continue
@@ -125,6 +183,9 @@ export function placeLabels(input: LabelInput): LabelBox[] {
     const w = text.length * size * CHAR_W
     const h = LINE_H
     const gap = n.r * input.zoom + 6
+
+    const alwaysClear = rank <= -1 || Boolean(input.dueLens && (dueStatusFor(n) === 'overdue' || dueStatusFor(n) === 'today'))
+    const clearance = clearanceFor(p.x, p.y, alwaysClear, input.cursor ?? null)
 
     // Four berths, tried in order — the same discipline as trying the
     // other three sides of a paper map's place name before giving up on it.
@@ -140,7 +201,11 @@ export function placeLabels(input: LabelInput): LabelBox[] {
       const candidate: LabelBox = { id: n.id, x: berth.x, y: berth.y, w, h, text }
       if (candidate.x > maxX || candidate.x + candidate.w < minX) continue
       if (candidate.y > maxY || candidate.y + candidate.h < minY) continue
-      if (placed.some((other) => overlaps(candidate, other))) continue
+      // Clearance inflates the TEST box only — the rendered label keeps its
+      // true size, it just needs more empty neighbourhood before it earns a
+      // spot the farther it sits from the reader's own attention.
+      const padded: LabelBox = { ...candidate, x: candidate.x - clearance, y: candidate.y - clearance, w: w + clearance * 2, h: h + clearance * 2 }
+      if (placed.some((other) => overlaps(padded, other))) continue
       box = candidate
       break
     }

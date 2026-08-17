@@ -102,6 +102,12 @@ export class GraphEngine {
   private lastMoveVX = 0
   private lastMoveVY = 0
   private moved = false
+  /** Whether the pointer is currently over the canvas — set on
+   * pointerdown/pointermove, cleared on mouseleave. Read by `placeLabels`'s
+   * `cursor` input: a stale `lastPointerX/Y` from before the pointer left
+   * (or before it has ever entered) must not be mistaken for "the reader is
+   * looking here." */
+  private pointerInside = false
 
   private flight: { plan: ReturnType<typeof planFlight>; start: number } | null = null
   private simAlpha = IDLE_ALPHA
@@ -317,6 +323,7 @@ export class GraphEngine {
     this.downY = p.y
     this.lastPointerX = p.x
     this.lastPointerY = p.y
+    this.pointerInside = true
     this.lastPointerT = performance.now()
     this.lastMoveVX = 0
     this.lastMoveVY = 0
@@ -342,6 +349,7 @@ export class GraphEngine {
 
   private onPointerMove = (e: PointerEvent): void => {
     this.dirty = true
+    this.pointerInside = true
     const p = this.localPoint(e)
     const now = performance.now()
     const dt = Math.max(1, now - this.lastPointerT)
@@ -423,6 +431,7 @@ export class GraphEngine {
   private onMouseLeave = (): void => {
     this.hovered = null
     this.hoveredRegion = null
+    this.pointerInside = false
     this.dirty = true
   }
 
@@ -541,6 +550,8 @@ export class GraphEngine {
       width: this.width,
       height: this.height,
       insets: this.insets,
+      cursor: this.pointerInside ? { x: this.lastPointerX, y: this.lastPointerY } : null,
+      dueLens: p.dueLens,
     })
 
     const frame: RenderFrame = {
