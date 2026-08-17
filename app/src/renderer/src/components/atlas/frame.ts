@@ -171,8 +171,8 @@ export const OFF_TRAIL_DIM = 0.35
  * instead of the trail's old static solid line. */
 export const TRAIL_FLOW_DASH = 6
 export const TRAIL_FLOW_GAP = 5
-/** Slowed twice now (26 -> 10 -> 4) on direct request. */
-export const TRAIL_FLOW_SPEED = 4
+/** Slowed three times now (26 -> 10 -> 4 -> 2) on direct request. */
+export const TRAIL_FLOW_SPEED = 2
 
 /** Whether an `AtlasEdge` survives the current hub-hiding rule — the
  * `AtlasEdge`-shaped convenience wrapper `WebGLPainter.ts` actually calls,
