@@ -293,6 +293,12 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
   // itself; this just tracks whether it has fired.
   const [honestBlankReady, setHonestBlankReady] = useState(false)
   const [momentumOn, setMomentumOn] = useState(true)
+  // Settings-level "checkpoints on every node" (off by default) — read once
+  // on mount, same fetch/fallback discipline as momentumOn above. Threaded
+  // into the checkpoint kickoff below; the kickoff text is what actually
+  // activates the widened protocol (see reviewKickoff.ts's own doctrine
+  // comment on `allNodeTypes`), this is just where the app learns whether to.
+  const [checkpointAllNodesOn, setCheckpointAllNodesOn] = useState(false)
   // The 14-day horizon figure + holding count — fetched whenever the queue
   // empties (both `empty` and `done`, the two phases with no queue left to
   // read from), null until the first refreshHorizon() resolves so the
@@ -475,10 +481,16 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
       setTopicTitles(Object.fromEntries(list.map((t) => [t.topic, t.title])))
     })
     // Momentum opt-out gates the cosmetic inkwell (dialogue-grammar.md's
-    // opt-out, honored beyond the dialogue itself).
+    // opt-out, honored beyond the dialogue itself). Same read also carries
+    // the checkpoint-all-nodes setting — one fetch, two flags, both off by
+    // a safe default (momentum defaults ON, checkpoint-all-nodes defaults
+    // OFF) if the read fails.
     window.engram
       .model()
-      .then((m) => setMomentumOn(m.settings.momentum !== 'off'))
+      .then((m) => {
+        setMomentumOn(m.settings.momentum !== 'off')
+        setCheckpointAllNodesOn(m.settings.checkpoint_all_nodes === 'on')
+      })
       .catch(() => setMomentumOn(true))
   }, [])
 
@@ -1153,6 +1165,7 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
       retest: resume ? null : (retest ?? null),
       digestLines,
       focusTopic: resume ? null : sittingPrefs.focusTopic,
+      allNodeTypes: checkpointAllNodesOn,
       // Measured, not assumed — see shared/sittingPace.ts.
       plannedItems: pace
         ? planSitting(

@@ -263,6 +263,17 @@ export interface LearnerModelSettings {
   profile: 'adhd' | null
   commitment: { cue: string; action: string; set: string } | null
   decay_notice: 'on' | 'off'
+  /** Opt-in, off by default, absent entirely on a learner-model.json written
+   * before this setting existed — read as `'off'` in that case. NOT one of
+   * the vendored engine's own DEFAULT_MODEL leaves (see
+   * `engram:modelSetCheckpointAllNodes` in main/ipc/readHandlers.ts for why
+   * it needs its own narrow IPC door). When `'on'`, the checkpoint review
+   * protocol's node-type carve-outs (threshold, lapsed/effectively_relearn,
+   * transfer_ready, procedure-kind, experiment-arm) are waived for a sitting
+   * that elects checkpoint style — the recall floor is the one exception
+   * that stays absolute regardless (see the plugin overlay's own doctrine
+   * comment for the full bargain this widens). */
+  checkpoint_all_nodes?: 'on' | 'off'
 }
 
 export interface LearnerModel {

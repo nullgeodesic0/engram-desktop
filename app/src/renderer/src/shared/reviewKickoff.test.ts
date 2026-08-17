@@ -33,10 +33,12 @@ function allVariants(): Array<{ label: string; kickoff: string }> {
       for (const digestLines of [[], DIGEST]) {
         for (const retest of [null, RETEST]) {
           for (const recallDueNodes of [[], ['binet-equation', 'virial-theorem']]) {
-            out.push({
-              label: `${style}/${mins}/${digestLines.length ? 'digest' : 'no-digest'}/${retest ? 'retest' : 'no-retest'}/${recallDueNodes.length ? 'floor' : 'no-floor'}`,
-              kickoff: composeReviewKickoff({ style, mins, totalDue: 43, recallDueNodes, retest, digestLines }),
-            })
+            for (const allNodeTypes of [false, true]) {
+              out.push({
+                label: `${style}/${mins}/${digestLines.length ? 'digest' : 'no-digest'}/${retest ? 'retest' : 'no-retest'}/${recallDueNodes.length ? 'floor' : 'no-floor'}/${allNodeTypes ? 'all-nodes' : 'triage'}`,
+                kickoff: composeReviewKickoff({ style, mins, totalDue: 43, recallDueNodes, retest, digestLines, allNodeTypes }),
+              })
+            }
           }
         }
       }
@@ -75,6 +77,32 @@ It is filed open; "misconception resolve --id ${RETEST.id}" records a demonstrat
   it('checkpoint without a floor omits the floor sentence entirely', () => {
     const kickoff = composeReviewKickoff({ style: 'checkpoint', mins: 10, totalDue: 43, recallDueNodes: [], retest: null, digestLines: [] })
     expect(kickoff).not.toContain('normal style this time')
+  })
+
+  it('checkpoint + allNodeTypes names the settings override explicitly and still carries the recall floor', () => {
+    const kickoff = composeReviewKickoff({
+      style: 'checkpoint',
+      mins: 5,
+      totalDue: 43,
+      recallDueNodes: ['binet-equation'],
+      retest: null,
+      digestLines: DIGEST,
+      allNodeTypes: true,
+    })
+    expect(kickoff.startsWith(MARKER + ' quick')).toBe(true)
+    expect(kickoff).toContain('I have turned on checkpoints for every node in Settings')
+    expect(kickoff).toContain('including threshold, lapsed, transfer-ready, and procedure nodes')
+    expect(kickoff).toContain('These nodes need the normal style this time: binet-equation.')
+    expect(kickoff).not.toContain('Open misconceptions')
+    // Must NOT fall back to the plain-triage sentence — the two branches are
+    // mutually exclusive, never both present in one kickoff.
+    expect(kickoff).not.toContain('anything threshold, lapsed, or effectively past quick review should stay normal free recall')
+  })
+
+  it('checkpoint without allNodeTypes never mentions the settings override', () => {
+    const kickoff = composeReviewKickoff({ style: 'checkpoint', mins: 5, totalDue: 43, recallDueNodes: [], retest: null, digestLines: [] })
+    expect(kickoff).not.toContain('Settings')
+    expect(kickoff).not.toContain('every node')
   })
 
   it('time-adjusted standard names the cap in the skill vocabulary and suppresses the digest', () => {

@@ -793,7 +793,18 @@ for (const f of FILES) {
 // clear-reviews-first line already on this form: NAMES which of the
 // overlay's own defined behaviors applies, says nothing about how "brief"
 // is achieved — that stays the overlay's business, not this message's.
-const PINNED_MESSAGE_HASH = 'fa2697d3a67910df'
+// 2026-08-17 re-pin: the checkpoint kickoff gains a SECOND literal, sent
+// only when `allNodeTypes` is true (the Settings-level "checkpoints on
+// every node" toggle — off by default). Read whole: it states a fact about
+// a preference the learner turned on in the app ("I have turned on
+// checkpoints for every node in Settings") and names which node types are
+// now in scope for the checkpoint style — the D5-pinned overlay's own
+// "all-node-types widening" subsection activates ONLY on this exact
+// declaration, same licence the base checkpoint literal already has to
+// name a protocol the review skill itself defines. It says nothing about
+// how the widened protocol works, and the recall-floor sentence (`floor`)
+// is unchanged and still interpolated exactly as in the plain branch.
+const PINNED_MESSAGE_HASH = '06a657139fa0361a'
 if (sha(injectedMessages.sort().join('\n')) !== PINNED_MESSAGE_HASH) {
   fail(
     'D3.kickoff',
@@ -917,7 +928,22 @@ const PINNED_OVERLAY_HASHES: Record<string, string> = {
   // 2026-08-03 second pin (first live sitting's lessons): step 2 gains the
   // ask-fields-are-not-markdown LaTeX rule and the never-reference-options-
   // by-position rule (the app shuffles checkpoint option display order).
-  'review-skill.quick-checkpoint-protocol.md': 'dd49fcd70b6ee8c8',
+  // 2026-08-17 pin: a new "all-node-types widening" subsection, gated on a
+  // SECOND explicit per-sitting declaration (the learner's opening message
+  // must ALSO name the new Settings-level "checkpoints on every node" toggle
+  // — see shared/types.ts's `checkpoint_all_nodes` and reviewKickoff.ts's
+  // `allNodeTypes`). When elected, it waives five of the six Eligibility
+  // carve-outs (threshold, lapsed/effectively_relearn, transfer_ready,
+  // procedure, experiment-arm) — the sixth, the recall floor, is written to
+  // stay absolute regardless, load-bearing per the LOAD_BEARING needle
+  // below. Every other clause of the base protocol (confidence-first order,
+  // rating cap, source stamp, audit exclusion) is unchanged for a widened
+  // item. The toggle itself defaults OFF and persists across sittings, but
+  // it licenses nothing on its own — the overlay still requires the exact
+  // per-sitting declaration, same discipline as the base protocol's own
+  // opt-in, so a stale setting flipped on weeks ago can never silently
+  // widen a sitting whose kickoff never says so.
+  'review-skill.quick-checkpoint-protocol.md': '52758c39642dd066',
   'dialogue-grammar.checkpoint-exception.md': '9c4b24e6b10a16d4',
   // 2026-08-09 pin: the mobile-walk pedagogy overlay and its own
   // dialogue-grammar companion — the second admission under the widened
@@ -1007,6 +1033,13 @@ const LOAD_BEARING: Record<string, string[]> = {
     '--source quick-mc',
     'EXCLUDED from the §3 assessor-audit stash',
     'omit `--confidence` from the rate call',
+    // The all-node-types widening's own bargain: a SECOND explicit opt-in
+    // sentence (not the setting alone), and the one carve-out that survives
+    // the widening — the recall floor. Either needle missing means the
+    // widening either fires on the setting alone (no per-sitting act) or
+    // stops protecting the recall floor, both silent doctrine erosion.
+    'ALSO explicitly states that the checkpoint-on-every-node setting is turned on',
+    'The sixth bullet does NOT waive',
   ],
   // The mobile-walk bargain, clause by clause: the per-sitting election; the
   // two beats menus may never reach; the four rules that stop an assembly

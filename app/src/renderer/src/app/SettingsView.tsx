@@ -771,6 +771,11 @@ export function SettingsView() {
     refresh()
   }
 
+  async function setCheckpointAllNodes(v: string) {
+    await window.engram.modelSetCheckpointAllNodes(v === 'on' ? 'on' : 'off')
+    refresh()
+  }
+
   async function submitCommitment() {
     if (!cueInput.trim() || !actionInput.trim()) return
     await window.engram.commit(cueInput.trim(), actionInput.trim())
@@ -941,6 +946,16 @@ export function SettingsView() {
           hint="The honest-number line on return after an absence"
           current={model.settings.decay_notice}
           onPick={(v) => setDecayNotice(v)}
+          options={[
+            { value: 'off', label: 'Off' },
+            { value: 'on', label: 'On' },
+          ]}
+        />
+        <PickerRow
+          label="Checkpoints on every node"
+          hint="Off by default. When on, an elected Checkpoint sitting may walk ANY node as a chain of picks — including threshold, lapsed, transfer-ready, and procedure nodes normally held to free recall. The recall floor still applies: two checkpoint reviews in a row still force the next one back to real production."
+          current={model.settings.checkpoint_all_nodes ?? 'off'}
+          onPick={(v) => setCheckpointAllNodes(v)}
           options={[
             { value: 'off', label: 'Off' },
             { value: 'on', label: 'On' },

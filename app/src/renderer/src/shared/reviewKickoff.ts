@@ -74,10 +74,21 @@ export interface ComposeOptions {
    * table — which measurement showed over-promises by up to 6×, so this is
    * the path that should normally be taken. */
   plannedItems?: number
+  /** The Settings-level "checkpoints on every node" toggle (off by default —
+   * see SettingsView.tsx's own row and shared/types.ts's `checkpoint_all_
+   * nodes` doc comment). Ignored unless `style === 'checkpoint'`. When true,
+   * the kickoff explicitly NAMES the override — load-bearing, not
+   * descriptive, exactly like the mobile-walk overlay's own surface
+   * declaration: the D5-pinned overlay section that waives the node-type
+   * carve-outs activates ONLY on this exact declaration, never on the
+   * setting alone reaching some other part of the app. Still says nothing
+   * about HOW the widened protocol works — that stays the skill file's
+   * business, same as the plain checkpoint branch below. */
+  allNodeTypes?: boolean
 }
 
 export function composeReviewKickoff(opts: ComposeOptions): string {
-  const { style, mins, totalDue, recallDueNodes, retest, digestLines, focusTopic } = opts
+  const { style, mins, totalDue, recallDueNodes, retest, digestLines, focusTopic, allNodeTypes } = opts
 
   if (retest) {
     return `/engram:review
@@ -88,6 +99,13 @@ It is filed open; "misconception resolve --id ${retest.id}" records a demonstrat
   }
 
   const n = opts.plannedItems ?? coveredCount(capForMins(mins), totalDue)
+
+  if (style === 'checkpoint' && allNodeTypes) {
+    const floor = recallDueNodes.length > 0 ? ` These nodes need the normal style this time: ${recallDueNodes.join(', ')}.` : ''
+    return `/engram:review quick
+
+I have about ${mins} minutes. Please work in triage order and cover what fits — roughly ${n} items. I have turned on checkpoints for every node in Settings, so please use the checkpoint style for every eligible item this sitting, including threshold, lapsed, transfer-ready, and procedure nodes.${floor}`
+  }
 
   if (style === 'checkpoint') {
     const floor = recallDueNodes.length > 0 ? ` These nodes need the normal style this time: ${recallDueNodes.join(', ')}.` : ''
