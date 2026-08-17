@@ -37,12 +37,20 @@ import {
 } from '../graph3d/layout'
 import { DEFAULT_FORCE_PARAMS, type EdgeKind, type ForceParams, type SimEdge } from '../graph3d/types'
 import { regionName, settlePlate, type PlateNode } from '../graph2d/plate'
+import { DEFAULT_GRAPH_SETTINGS, type DisplaySettings, type ForceSettings } from './settings'
 
 export interface AtlasNode {
   id: string
   x: number
   y: number
   r: number
+  /** `r` before the Display panel's node-scale multiplier is applied — the
+   * anchor `applyDisplaySettings` scales FROM, so repeated scale changes
+   * (1.5×, then back to 1×, then 2.3×) never compound or drift. Hit-testing
+   * and collision (`resolveCrowding`) read `r` itself, so a scaled node is
+   * genuinely bigger to click and to collide with — not just to look at,
+   * the way Cairn's own `nodeScale` also touches its shared layout `r`. */
+  baseR: number
   vx: number
   vy: number
   /** Non-null while dragged — pinned in place, exactly like Cairn's `fx/fy`
@@ -140,6 +148,7 @@ export function buildLayout(
         x: p.x,
         y: p.y,
         r: p.r,
+        baseR: p.r,
         vx: 0,
         vy: 0,
         fx: null,
@@ -169,6 +178,29 @@ export function buildLayout(
     .filter((r) => r.memberIds.length > 0)
 
   return { nodes, edges: atlasEdges, regions, width, height, hubNodeIds, forwardAdjacency }
+}
+
+/** Apply the Display panel's node-scale multiplier to every node's radius,
+ * in place. Called once when the panel changes it — not per tick — since
+ * `r` then simply reads back out of the layout everywhere else (painters,
+ * hit-testing, `resolveCrowding`'s clearance math) exactly like any other
+ * settled radius. */
+export function applyDisplaySettings(layout: AtlasLayout, display: DisplaySettings): void {
+  for (const n of layout.nodes) n.r = n.baseR * display.nodeScale
+}
+
+/** Build the live `ForceParams` `stepSimulation` reads from the panel's
+ * `ForceSettings`, layered over `PLATE_FORCE_PARAMS` for the fields the
+ * panel doesn't expose (`nodeSize`/`labelSize`/etc. — display-only knobs
+ * `stepSimulation` never looks at). */
+function toForceParams(forces: ForceSettings): ForceParams {
+  return {
+    ...PLATE_FORCE_PARAMS,
+    centerForce: forces.center,
+    repelForce: forces.repel,
+    linkForce: forces.link,
+    linkDistance: forces.linkDistance,
+  }
 }
 
 /** Rebuild a layout's `SimEdge[]` view — the shape `stepSimulation` and
@@ -210,35 +242,130 @@ const REST_SPEED = 0.05
  * caller controlling `alpha` (a steady low value for ambient life, a
  * reheated high one right after a drag releases or a region focus
  * changes). */
-export function tickLayout(layout: AtlasLayout, alpha: number, centerX: number, centerY: number): boolean {
-  const sim = new Map<string, SimNode3D>()
-  for (const n of layout.nodes) {
-    sim.set(n.id, { id: n.id, x: n.x, y: n.y, z: 0, vx: n.vx, vy: n.vy, fx: n.fx, fy: n.fy, r: n.r, layer: 0 })
-  }
-  stepSimulation(sim, toSimEdges(layout.edges), PLATE_FORCE_PARAMS, alpha, centerX, centerY)
-
+export function tickLayout(
+  layout: AtlasLayout,
+  alpha: number,
+  centerX: number,
+  centerY: number,
+  forces: ForceSettings = DEFAULT_GRAPH_SETTINGS.forces,
+): boolean {
   let hot = false
-  for (const n of layout.nodes) {
-    const s = sim.get(n.id)
-    if (!s) continue
-    // Speed clamp — see MAX_SPEED's doctrine comment. Direction is kept;
-    // only the magnitude is argued with, same rule camera.ts's `fling`
-    // applies to a coast release.
-    const speed = Math.hypot(s.vx, s.vy)
-    if (speed > MAX_SPEED) {
-      const scale = MAX_SPEED / speed
-      s.vx *= scale
-      s.vy *= scale
-      s.x = n.x + s.vx
-      s.y = n.y + s.vy
+  // Physics off: the plate reads exactly like the old frozen-after-settle
+  // renderer — no spring/repulsion/centering — but `resolveCrowding` still
+  // runs below so a manual drag still displaces a crowded neighbour rather
+  // than overlapping it.
+  if (forces.enabled) {
+    const sim = new Map<string, SimNode3D>()
+    for (const n of layout.nodes) {
+      sim.set(n.id, { id: n.id, x: n.x, y: n.y, z: 0, vx: n.vx, vy: n.vy, fx: n.fx, fy: n.fy, r: n.r, layer: 0 })
     }
-    n.x = s.x
-    n.y = s.y
-    n.vx = s.vx
-    n.vy = s.vy
-    if (Math.hypot(n.vx, n.vy) > REST_SPEED) hot = true
+    stepSimulation(sim, toSimEdges(layout.edges), toForceParams(forces), alpha, centerX, centerY)
+
+    for (const n of layout.nodes) {
+      const s = sim.get(n.id)
+      if (!s) continue
+      // Speed clamp — see MAX_SPEED's doctrine comment. Direction is kept;
+      // only the magnitude is argued with, same rule camera.ts's `fling`
+      // applies to a coast release.
+      const speed = Math.hypot(s.vx, s.vy)
+      if (speed > MAX_SPEED) {
+        const scale = MAX_SPEED / speed
+        s.vx *= scale
+        s.vy *= scale
+        s.x = n.x + s.vx
+        s.y = n.y + s.vy
+      }
+      n.x = s.x
+      n.y = s.y
+      n.vx = s.vx
+      n.vy = s.vy
+      if (Math.hypot(n.vx, n.vy) > REST_SPEED) hot = true
+    }
   }
+
+  resolveCrowding(layout)
   return hot
+}
+
+/** Minimum clear space between two node rims — room for rings, halos, and a
+ * label line without collisions. The SAME value (and the same "hard-
+ * separate any pair closer than r_a + r_b + clearance" rule) the old SVG
+ * renderer's `settlePlate` used for its own post-settle collision sweep —
+ * kept identical rather than re-tuned, since it's the exact spacing this
+ * app's readers are already used to. */
+const CELL_CLEARANCE = 30
+
+/** One pairwise hard-separation pass — the discipline `stepSimulation`'s
+ * spring/repulsion forces do NOT provide on their own.
+ *
+ * The old renderer settled once, ran this same kind of sweep to guarantee
+ * no overlap, and then FROZE — so the guarantee held forever by never being
+ * touched again. This engine's plate stays live (see `tickLayout`'s own
+ * doctrine comment), which means the guarantee has to be re-earned every
+ * tick: a pure force sim can drift two nodes back into a crowded overlap
+ * over time (repulsion is a smooth inverse-square falloff, not a hard
+ * floor), and across enough idle ticks it will. So this runs every call,
+ * not just after a drag — crowding is a thing that must never happen
+ * rather than a thing that gets fixed once at the start.
+ *
+ * O(n²), same as `stepSimulation`'s own repulsion term, so it costs no more
+ * than the sim it's correcting; guarded at `MAX_CROWD_NODES` so a
+ * pathologically large graph degrades by skipping the guarantee rather than
+ * stalling the frame. A node pinned by a drag (`fx`/`fy` non-null) is never
+ * moved by this pass — dragging INTO a neighbour pushes the neighbour, the
+ * same feel a real hand sweeping objects apart on a table has. */
+const MAX_CROWD_NODES = 240
+
+/** Sweeps per tick. A single pass over all pairs can leave residual overlap
+ * when three or more nodes are mutually crowded (separating A from B can
+ * push A into C) — the old one-shot settle bought its own guarantee with
+ * 24 sweeps, paid once at layout time. A live per-frame pass can't afford
+ * that every frame, but it does not need to: it gets another 4 sweeps on
+ * the very next tick too, and the next, so a few sweeps per call converges
+ * within a handful of frames rather than needing to reach zero overlap in
+ * one — imperceptible at 60fps, unlike the one-shot settle where 24 was the
+ * only chance it got. */
+const CROWD_SWEEPS = 4
+
+function resolveCrowding(layout: AtlasLayout): void {
+  const nodes = layout.nodes
+  if (nodes.length > MAX_CROWD_NODES) return
+  for (let sweep = 0; sweep < CROWD_SWEEPS; sweep++) resolveCrowdingSweep(nodes)
+}
+
+function resolveCrowdingSweep(nodes: AtlasNode[]): void {
+  for (let i = 0; i < nodes.length; i++) {
+    const a = nodes[i]
+    for (let j = i + 1; j < nodes.length; j++) {
+      const b = nodes[j]
+      const dx = b.x - a.x
+      const dy = b.y - a.y
+      let dist = Math.hypot(dx, dy)
+      const minDist = a.r + b.r + CELL_CLEARANCE
+      if (dist >= minDist) continue
+      // Coincident centres have no direction to separate along — pick a
+      // deterministic one (along +x) rather than dividing by zero.
+      const ux = dist > 0.001 ? dx / dist : 1
+      const uy = dist > 0.001 ? dy / dist : 0
+      if (dist < 0.001) dist = 0.001
+      const overlap = minDist - dist
+      const aPinned = a.fx !== null
+      const bPinned = b.fx !== null
+      if (aPinned && bPinned) continue
+      if (aPinned) {
+        b.x += ux * overlap
+        b.y += uy * overlap
+      } else if (bPinned) {
+        a.x -= ux * overlap
+        a.y -= uy * overlap
+      } else {
+        a.x -= ux * overlap * 0.5
+        a.y -= uy * overlap * 0.5
+        b.x += ux * overlap * 0.5
+        b.y += uy * overlap * 0.5
+      }
+    }
+  }
 }
 
 /** Pin a node to a world position (drag) or release it (drag end). Pinning

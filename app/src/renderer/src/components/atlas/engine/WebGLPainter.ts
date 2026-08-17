@@ -200,7 +200,7 @@ export class WebGLPainter implements PlatePainter {
       const rgb = parseColor(spec.color)
       const kind: 'requires' | 'other' = e.kind === 'requires' ? 'requires' : 'other'
       const d = stringEdgePath(e.source, e.target, a, b, kind)
-      const width = spec.width * invZoom
+      const width = spec.width * frame.linkThickness * invZoom
 
       if (spec.dash) {
         // WebGL has no native dash array — walked as discrete lit segments
@@ -275,17 +275,26 @@ export class WebGLPainter implements PlatePainter {
         continue
       }
 
+      // `nodeMarkPath` returns a path centred at the ORIGIN (see its own
+      // doctrine comment in marks.ts/plate.ts) — every push of it below
+      // MUST carry `n.x, n.y` as the batch's own dx/dy offset, or the glyph
+      // draws at world (0,0) regardless of where the node actually sits.
+      // That was missing on three of these four branches: every ring and
+      // diamond mark collapsed onto one point at the origin, which is
+      // exactly "no node icons, just lines" — the edges (computed in real
+      // absolute coordinates) still drew correctly between the nodes' true
+      // positions; nothing marked the endpoints.
       const d = nodeMarkPath(n.threshold, n.r)
       const style = fillStyleFor(n.state)
       if (style === 'filled') {
-        this.batch.push(this.cache.fill(d), rgb, opacity * 0.92)
-        this.batch.push(this.cache.stroke(d, strokeW), rgb, 0.9)
+        this.batch.push(this.cache.fill(d), rgb, opacity * 0.92, n.x, n.y)
+        this.batch.push(this.cache.stroke(d, strokeW), rgb, 0.9, n.x, n.y)
       } else if (style === 'half') {
         const half = halfDiscMarkPath(n.r)
         this.batch.push(transformTriangles(fillTriangles(half), 0, 0, 1), rgb, opacity * 0.85, n.x, n.y)
-        this.batch.push(this.cache.stroke(d, strokeW), rgb, opacity)
+        this.batch.push(this.cache.stroke(d, strokeW), rgb, opacity, n.x, n.y)
       } else {
-        this.batch.push(this.cache.stroke(d, strokeW), rgb, opacity)
+        this.batch.push(this.cache.stroke(d, strokeW), rgb, opacity, n.x, n.y)
       }
 
       if (n.lapses > 0) {
@@ -297,7 +306,7 @@ export class WebGLPainter implements PlatePainter {
 
       if (n.isFrontier) {
         const pulse = frame.reducedMotion ? 0.6 : 0.4 + 0.3 * Math.sin(frame.nowSec * 1.6)
-        this.batch.push(this.cache.stroke(nodeMarkPath(n.threshold, n.r + 3), 1.4 * invZoom), parseColor(frame.tokens.warm), pulse)
+        this.batch.push(this.cache.stroke(nodeMarkPath(n.threshold, n.r + 3), 1.4 * invZoom), parseColor(frame.tokens.warm), pulse, n.x, n.y)
       }
 
       if (trailRole === 'selected') {

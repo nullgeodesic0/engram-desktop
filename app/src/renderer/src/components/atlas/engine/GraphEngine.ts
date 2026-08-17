@@ -33,12 +33,13 @@ import {
 } from '../camera'
 import { clampToContent, revealTarget, type Viewport } from '../framing'
 import { planFlight, type Viewpoint } from '../flight'
-import { buildLayout, pinNode, tickLayout, type AtlasLayout } from '../layout'
+import { applyDisplaySettings, buildLayout, pinNode, tickLayout, type AtlasLayout } from '../layout'
 import { hitNode, hitRegion, invalidateHullCache } from './hit'
 import { placeLabels, type LabelBox } from '../labels'
 import { readPlateTokens, type PlateTokens } from './tokens'
 import type { PlatePainter, RenderFrame } from './paint'
 import { ancestorClosure, descendantPath } from '../../graph2d/plate'
+import { DEFAULT_GRAPH_SETTINGS, readGraphSettings, type AtlasGraphSettings } from '../settings'
 
 export interface EngineCallbacks {
   onSelect: (id: string) => void
@@ -101,6 +102,7 @@ export class GraphEngine {
   private flight: { plan: ReturnType<typeof planFlight>; start: number } | null = null
   private simAlpha = IDLE_ALPHA
   private simHot = false
+  private settings: AtlasGraphSettings = DEFAULT_GRAPH_SETTINGS
 
   /** Set whenever something happened that the NEXT frame must actually
    * paint for — a prop update, a hover change, a keypress. Checked
@@ -133,6 +135,23 @@ export class GraphEngine {
     this.makeFallbackPainter = makeFallbackPainter
     this.tokens = readPlateTokens(host)
     this.reducedMotion = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches
+    this.settings = readGraphSettings()
+  }
+
+  /** Pushed by the Graph Settings panel (`GraphSettings.tsx`, hosted in
+   * `AtlasCanvas.tsx`) on every slider/toggle change — not persisted here,
+   * the panel owns `saveGraphSettings`. Display changes apply to the
+   * layout immediately (a node-scale drag must resize nodes on that same
+   * frame, not wait for the next tick); force changes just take effect the
+   * next time `tickLayout` runs, in the RAF loop below. */
+  updateSettings(settings: AtlasGraphSettings): void {
+    this.settings = settings
+    if (this.layout) {
+      applyDisplaySettings(this.layout, settings.display)
+      invalidateHullCache(this.layout)
+    }
+    this.simAlpha = Math.max(this.simAlpha, IDLE_ALPHA)
+    this.dirty = true
   }
 
   mount(): void {
@@ -194,6 +213,7 @@ export class GraphEngine {
 
     if (graphChanged || regionsChanged || !this.layout) {
       this.layout = buildLayout(props.graph, Math.max(1, this.width), Math.max(1, this.height), props.regions)
+      applyDisplaySettings(this.layout, this.settings.display)
       this.simAlpha = IDLE_ALPHA
       invalidateHullCache(this.layout)
       if (graphChanged) this.fitToContent(true)
@@ -459,7 +479,7 @@ export class GraphEngine {
         this.view = clampToContent(this.view, bounds, this.viewport())
         const cx = this.width / 2
         const cy = this.height / 2
-        this.simHot = tickLayout(this.layout, this.simAlpha, cx, cy)
+        this.simHot = tickLayout(this.layout, this.simAlpha, cx, cy, this.settings.forces)
         if (this.simHot) invalidateHullCache(this.layout)
         // Idle alpha decays toward rest once a reheat (drag) has settled, so
         // the plate does not stay perpetually "warm" after the interaction
@@ -524,6 +544,7 @@ export class GraphEngine {
       nowSec: (t - this.startedAt) / 1000,
       reducedMotion: this.reducedMotion,
       labels,
+      linkThickness: this.settings.display.linkThickness,
     }
     this.painter.paint(frame)
   }

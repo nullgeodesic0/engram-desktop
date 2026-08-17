@@ -41,6 +41,8 @@ export interface RenderFrame {
    * the frontier ring's pulse. */
   nowSec: number
   reducedMotion: boolean
+  /** Display panel's edge-stroke multiplier — see `settings.ts`. */
+  linkThickness: number
 }
 
 export interface PlatePainter {

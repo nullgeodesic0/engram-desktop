@@ -1,9 +1,12 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { MapAnnotations, TopicGraph } from '../../../../shared/types'
 import { GraphEngine, type EngineCallbacks } from './engine/GraphEngine'
 import { WebGLPainter } from './engine/WebGLPainter'
 import { Canvas2DPainter } from './engine/render'
 import type { PlatePainter } from './engine/paint'
+import { GraphSettings } from './GraphSettings'
+import { readGraphSettings, saveGraphSettings, type AtlasGraphSettings } from './settings'
+import { CTRL_QUIET } from '../../shared/controlChrome'
 
 /** The Topic Map's WebGL host — replaces the retired `GraphView.tsx`'s SVG
  * root with two stacked `<canvas>` elements (drawing, and a text overlay
@@ -43,6 +46,8 @@ export function AtlasCanvas(props: AtlasCanvasProps) {
   const engineRef = useRef<GraphEngine | null>(null)
   const callbacksRef = useRef(props)
   callbacksRef.current = props
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [settings, setSettings] = useState<AtlasGraphSettings>(readGraphSettings)
 
   useEffect(() => {
     const host = hostRef.current
@@ -103,10 +108,37 @@ export function AtlasCanvas(props: AtlasCanvasProps) {
     props.focusedRegion,
   ])
 
+  // Pushed to the engine on every change, not just on open/close — a slider
+  // drag must resettle the plate live, the same immediacy Cairn's docked
+  // panel has. Persisted here too, so the panel's own Reset button (which
+  // only touches React state) and this effect are the single place settings
+  // are written to storage.
+  useEffect(() => {
+    engineRef.current?.updateSettings(settings)
+    saveGraphSettings(settings)
+  }, [settings])
+
   return (
     <div ref={hostRef} className="relative h-full w-full overflow-hidden" aria-label={`Topic map — ${props.graph.title}`}>
       <canvas ref={canvasRef} className="absolute inset-0 h-full w-full touch-none" tabIndex={0} />
       <canvas ref={textRef} className="absolute inset-0 h-full w-full pointer-events-none" aria-hidden="true" />
+
+      {/* Bottom-right — the one corner the plate's other floating chrome
+          (search top-left, territory/pressure readouts top-right, Key
+          bottom-left) leaves free. */}
+      {!settingsOpen && (
+        <button
+          type="button"
+          onClick={() => setSettingsOpen(true)}
+          aria-label="Graph settings"
+          title="Graph settings"
+          className={`${CTRL_QUIET} absolute bottom-3 right-3 z-10`}
+        >
+          Settings
+        </button>
+      )}
+
+      {settingsOpen && <GraphSettings value={settings} onChange={setSettings} onClose={() => setSettingsOpen(false)} />}
     </div>
   )
 }

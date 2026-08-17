@@ -134,7 +134,7 @@ export class Canvas2DPainter implements PlatePainter {
       const kind: 'requires' | 'other' = e.kind === 'requires' ? 'requires' : 'other'
       const d = stringEdgePath(e.source, e.target, a, b, kind)
       ctx.strokeStyle = col(spec.color)
-      ctx.lineWidth = spec.width * invZoom
+      ctx.lineWidth = spec.width * frame.linkThickness * invZoom
       ctx.globalAlpha = 0.85
       ctx.setLineDash(spec.dash ? spec.dash.map((v) => v * invZoom) : [])
       ctx.stroke(new Path2D(d))

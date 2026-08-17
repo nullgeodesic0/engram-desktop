@@ -7,6 +7,7 @@ function node(overrides: Partial<AtlasNode> & { id: string }): AtlasNode {
     x: 0,
     y: 0,
     r: 10,
+    baseR: 10,
     vx: 0,
     vy: 0,
     fx: null,
