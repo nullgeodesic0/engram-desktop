@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ACHIEVEMENTS } from '../../../shared/achievements'
 import type { UnlockedAchievement } from '../../../shared/types'
+import { TrophyIcon, LockIcon } from './ui/icons'
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -29,7 +30,9 @@ export function AchievementsPanel() {
             key={a.id}
             className={`panel px-3 py-2.5 flex items-center gap-2.5 ${hit ? '' : 'opacity-40'}`}
           >
-            <span className="text-lg">{hit ? '🏆' : '🔒'}</span>
+            <span className={hit ? 'text-[var(--color-ink-warm)]' : 'text-[var(--color-text-faint)]'}>
+              {hit ? <TrophyIcon /> : <LockIcon />}
+            </span>
             <div className="min-w-0">
               <div className={`text-sm truncate ${hit ? 'text-[var(--color-text-primary)]' : 'text-[var(--color-text-dim)]'}`}>{a.label}</div>
               <div className="text-xs text-[var(--color-text-faint)] truncate">

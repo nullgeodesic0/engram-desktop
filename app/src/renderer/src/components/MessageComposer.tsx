@@ -6,6 +6,7 @@ import { CTRL_QUIET, ctrlFilled, type EnvAccent } from '../shared/controlChrome'
 import { imagesFromPaste, imagesFromDrop, dragCarriesImage } from '../shared/incomingImages'
 import { scanLatex, describeScan } from '../shared/latexSyntax'
 import { countUnicodeMath, unicodeToLatex } from '../shared/latexEditing'
+import { PaperclipIcon, HandwritingIcon } from './ui/icons'
 
 interface MessageComposerProps {
   production: string
@@ -133,7 +134,7 @@ export function MessageComposer({
               title={path}
               className="label-data text-[10px] px-1.5 py-0.5 border border-[var(--color-edge)] bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] text-[var(--color-text-dim)] flex items-center gap-1"
             >
-              📎 {fileName(path)}
+              <PaperclipIcon /> {fileName(path)}
               <button
                 onClick={() => onRemoveAttachment(path)}
                 aria-label={`Remove attachment ${fileName(path)}`}
@@ -241,16 +242,16 @@ export function MessageComposer({
       )}
       <div className="detail-footer pt-2">
         <div className="flex items-center gap-1.5 flex-wrap">
-          <button onClick={onAttach} title="Attach files for the tutor to read for context" className={CTRL_QUIET}>
-            📎 Attach
+          <button onClick={onAttach} title="Attach files for the tutor to read for context" className={`${CTRL_QUIET} flex items-center gap-1`}>
+            <PaperclipIcon /> Attach
           </button>
           {onAttachHandwriting && (
             <button
               onClick={() => onAttachHandwriting()}
               title="Photograph your handwritten work — it comes back as LaTeX for you to check before it counts"
-              className={CTRL_QUIET}
+              className={`${CTRL_QUIET} flex items-center gap-1`}
             >
-              ✍️ Handwriting
+              <HandwritingIcon /> Handwriting
             </button>
           )}
           <button

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { AchievementDef } from '../../../shared/achievements'
+import { TrophyIcon } from './ui/icons'
 
 const VISIBLE_MS = 4000
 const FADE_MS = 300
@@ -31,7 +32,9 @@ export function AchievementToast({ achievement, onDone }: { achievement: Achieve
         transitionDuration: `${FADE_MS}ms`,
       }}
     >
-      <span className="text-xl">🏆</span>
+      <span className="text-[var(--color-ink-warm)]">
+        <TrophyIcon />
+      </span>
       <div>
         <div className="text-xs label-data uppercase tracking-wide text-[var(--color-ink-warm)]">Achievement unlocked</div>
         <div className="text-sm text-[var(--color-text-primary)] mt-0.5">{achievement.label}</div>

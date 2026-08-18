@@ -8,6 +8,7 @@ import { InkNode } from './ui/InkNode'
 import { splitAroundProbeHeader } from '../../../shared/probeHeader'
 import { ProbeCard } from './ritual/ProbeCard'
 import { CheckpointAnchor } from './CheckpointAnchor'
+import { PaperclipIcon } from './ui/icons'
 import { CanonicalPlate } from './ritual/CanonicalPlate'
 import { VerdictEyebrowRail, RatingEchoRow, ScheduleEchoRow, ConfidenceEchoRow } from './ritual/VerdictRows'
 import type { EnvAccent } from '../shared/controlChrome'
@@ -207,9 +208,9 @@ export const ChatMessageView = memo(function ChatMessageView({
                 <span
                   key={path}
                   title={path}
-                  className="label-data text-[10px] px-1.5 py-0.5 rounded bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] text-[var(--color-text-dim)]"
+                  className="label-data text-[10px] px-1.5 py-0.5 rounded bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] text-[var(--color-text-dim)] flex items-center gap-1"
                 >
-                  📎 {fileName(path)}
+                  <PaperclipIcon /> {fileName(path)}
                 </span>
               ))}
             </div>

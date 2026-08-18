@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Modal } from './ui/Modal'
 import { fileName } from './ChatMessageView'
+import { PaperclipIcon } from './ui/icons'
 
 interface NewTopicModalProps {
   onClose: () => void
@@ -198,7 +199,7 @@ export function NewTopicModal({
                       native file dialog below) is already something the
                       learner explicitly navigated to, so the shorter name
                       stays there. */}
-                  📎 {externalOrigin ? path : fileName(path)}
+                  <PaperclipIcon /> {externalOrigin ? path : fileName(path)}
                   <button
                     onClick={() => setFiles((prev) => prev.filter((p) => p !== path))}
                     aria-label={`Remove ${fileName(path)}`}
@@ -216,8 +217,8 @@ export function NewTopicModal({
               included (missing, an unsupported type, or an unsafe path).
             </div>
           )}
-          <button onClick={attach} className="focus-ring self-start text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]">
-            📎 Attach files
+          <button onClick={attach} className="focus-ring self-start text-xs text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)] inline-flex items-center gap-1">
+            <PaperclipIcon /> Attach files
           </button>
         </div>
       </div>
