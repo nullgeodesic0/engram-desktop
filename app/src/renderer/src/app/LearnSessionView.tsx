@@ -72,8 +72,8 @@ import { SessionMasthead } from '../components/SessionMasthead'
 import { SummaryOverlay, makePeek } from '../components/ritual/SummaryOverlay'
 import { parseGradeResults, type GradeResult } from '../../../shared/gradeResult'
 import { MarkView, type RitualMark } from '../components/ritual/Marks'
+import { TranscriptionCard } from '../components/ritual/TranscriptionCard'
 import { bridgeUiIntent } from '../../../shared/bridgeUiIntents'
-import { handwritingRequestMessage } from '../shared/handwritingRequest'
 import { saveDraft, loadDraft, clearDraft } from '../shared/composerDrafts'
 import { ActionChips, type SuggestedAction } from '../components/ritual/ActionChips'
 import { SessionOpenPlate, SessionCeremony } from '../components/ritual/Bookends'
@@ -466,6 +466,11 @@ export function LearnSessionView({
   const [production, setProduction] = useState('')
   const [attachedFiles, setAttachedFiles] = useState<string[]>([])
   const [markdownPreview, setMarkdownPreview] = useState(false)
+  // The pre-session transcription confirm gate — see ReviewSessionView's
+  // identical fields/doctrine comment and transcribeHandwriting.ts.
+  const [pendingTranscription, setPendingTranscription] = useState<{ latex: string; pages: string[] } | null>(null)
+  const [transcribing, setTranscribing] = useState(false)
+  const [transcribeError, setTranscribeError] = useState<string | null>(null)
   const [rateLimit, setRateLimit] = useState<{ status: string; resetsAt: number | null } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [jobs, setJobs] = useState<Job[]>([])
@@ -1671,19 +1676,24 @@ export function LearnSessionView({
   const blindSinceRequest = useRef(false)
 
   async function attachHandwriting(prePicked?: string[]) {
-    // Paths already in hand (a paste or a drop) skip the picker entirely —
-    // same flow from there on, so the attestation gate is identical however
-    // the pages arrived.
+    // Paths already in hand (a paste or a drop) skip the picker entirely.
     const picked = prePicked && prePicked.length > 0 ? prePicked : await window.engram.pickHandwriting()
-    const message = handwritingRequestMessage({ pages: picked })
-    if (!message || !sessionId) return
-    blindSinceRequest.current = false
-    setMessages((prev) => [
-      ...prev,
-      { id: crypto.randomUUID(), role: 'user', text: message, attachments: picked, timestamp: Date.now() },
-    ])
-    setBusy(true)
-    await window.engram.sendMessage(sessionId, message)
+    if (picked.length === 0) return
+    // Runs BEFORE any session turn — the tutor never sees these paths, or
+    // this attach happening, at all. See transcribeHandwriting.ts's own
+    // doctrine comment for why this replaced the old "ask the tutor to
+    // delegate" flow (kept below, unreachable via this button, only for
+    // replaying a session recorded before this fix).
+    setTranscribeError(null)
+    setTranscribing(true)
+    try {
+      const latex = await window.engram.transcribeHandwriting(picked)
+      setPendingTranscription({ latex, pages: picked })
+    } catch (err) {
+      setTranscribeError(err instanceof Error ? err.message : 'Transcription failed.')
+    } finally {
+      setTranscribing(false)
+    }
   }
 
   // ── Drafts ───────────────────────────────────────────────────────────────
@@ -2623,6 +2633,27 @@ export function LearnSessionView({
             <div className="shrink-0">
               <ActionChips actions={suggestedActions} onAct={handleSuggestedAction} />
             </div>
+          )}
+
+          {/* Pre-session transcription — see attachHandwriting's own doctrine
+              comment. Rendered here, never as a transcript bubble: no session
+              turn exists for it yet, and none does until the learner confirms
+              AND presses send. */}
+          {transcribing && <div className="shrink-0 fig-caption px-1">transcribing your handwriting…</div>}
+          {transcribeError && (
+            <div className="shrink-0 fig-caption px-1 text-[var(--color-ink-danger)]">{transcribeError}</div>
+          )}
+          {pendingTranscription && (
+            <TranscriptionCard
+              latex={pendingTranscription.latex}
+              pages={pendingTranscription.pages}
+              blind={true}
+              live={true}
+              onConfirm={(latex) => {
+                setProduction(latex)
+                setPendingTranscription(null)
+              }}
+            />
           )}
 
           {/* Chat Presence Wave D Task 10 — the generic 90s idle cue (Review's

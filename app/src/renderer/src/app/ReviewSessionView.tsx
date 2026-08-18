@@ -37,6 +37,7 @@ import { SummaryOverlay, makePeek } from '../components/ritual/SummaryOverlay'
 import { MathRenderer } from '../components/MathRenderer'
 import { SessionHistoryDrawer, exportSittingTranscript, buildHistoryTimeline, type GradeBatch } from '../components/SessionHistoryDrawer'
 import { SessionMasthead } from '../components/SessionMasthead'
+import { TranscriptionCard } from '../components/ritual/TranscriptionCard'
 import { SectionBanner } from '../components/ui/SectionBanner'
 import { StatFraction } from '../components/ui/StatFraction'
 import { ErrorPanel } from '../components/ErrorPanel'
@@ -50,7 +51,6 @@ import { recallDueNodes, quickShare, type RecallDueEntry } from '../shared/check
 import { TicketCard } from '../components/ritual/TicketCard'
 import { ActionChips, type SuggestedAction } from '../components/ritual/ActionChips'
 import { bridgeUiIntent } from '../../../shared/bridgeUiIntents'
-import { handwritingRequestMessage } from '../shared/handwritingRequest'
 import { planSitting, secondsForTopic, humanMinutes, type PaceModel } from '../../../shared/sittingPace'
 import { saveDraft, loadDraft, clearDraft } from '../shared/composerDrafts'
 import { ReadyRoomPlate } from '../components/ritual/ReadyRoomPlate'
@@ -172,6 +172,15 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
   const [sittingStartedAt, setSittingStartedAt] = useState<number | null>(null)
   const [production, setProduction] = useState('')
   const [attachedFiles, setAttachedFiles] = useState<string[]>([])
+  // The pre-session transcription confirm gate — see transcribeHandwriting.ts's
+  // doctrine comment. Populated once the isolated transcription subprocess
+  // returns, rendered ABOVE the composer (never as a transcript bubble, since
+  // no session turn exists yet for it to attach to); cleared the instant the
+  // learner confirms, at which point the text lives only in the composer
+  // (`production`) — exactly like typing it — until they press send.
+  const [pendingTranscription, setPendingTranscription] = useState<{ latex: string; pages: string[] } | null>(null)
+  const [transcribing, setTranscribing] = useState(false)
+  const [transcribeError, setTranscribeError] = useState<string | null>(null)
   const [markdownPreview, setMarkdownPreview] = useState(false)
   const [busy, setBusy] = useState(false)
   // Watchdog (Phase 3) — see LearnSessionView's twin doctrine comment.
@@ -1228,19 +1237,24 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
   const blindSinceRequest = useRef(false)
 
   async function attachHandwriting(prePicked?: string[]) {
-    // Paths already in hand (a paste or a drop) skip the picker entirely —
-    // same flow from there on, so the attestation gate is identical however
-    // the pages arrived.
+    // Paths already in hand (a paste or a drop) skip the picker entirely.
     const picked = prePicked && prePicked.length > 0 ? prePicked : await window.engram.pickHandwriting()
-    const message = handwritingRequestMessage({ pages: picked })
-    if (!message || !sessionId) return
-    blindSinceRequest.current = false
-    setMessages((prev) => [
-      ...prev,
-      { id: crypto.randomUUID(), role: 'user', text: message, attachments: picked, timestamp: Date.now() },
-    ])
-    setBusy(true)
-    await window.engram.sendMessage(sessionId, message)
+    if (picked.length === 0) return
+    // Runs BEFORE any session turn — the tutor never sees these paths, or
+    // this attach happening, at all. See transcribeHandwriting.ts's own
+    // doctrine comment for why this replaced the old "ask the tutor to
+    // delegate" flow (kept below, unreachable via this button, only for
+    // replaying a session recorded before this fix).
+    setTranscribeError(null)
+    setTranscribing(true)
+    try {
+      const latex = await window.engram.transcribeHandwriting(picked)
+      setPendingTranscription({ latex, pages: picked })
+    } catch (err) {
+      setTranscribeError(err instanceof Error ? err.message : 'Transcription failed.')
+    } finally {
+      setTranscribing(false)
+    }
   }
 
   async function submitProduction() {
@@ -2471,6 +2485,27 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
               happened and where the record lives). */}
           {tutorActivity.activity.kind === 'ended' && (
             <div className="shrink-0 fig-caption px-1">this sitting has closed · session history holds the record</div>
+          )}
+
+          {/* Pre-session transcription — see attachHandwriting's own doctrine
+              comment. Rendered here, never as a transcript bubble: no session
+              turn exists for it yet, and none does until the learner confirms
+              AND presses send. */}
+          {transcribing && <div className="shrink-0 fig-caption px-1">transcribing your handwriting…</div>}
+          {transcribeError && (
+            <div className="shrink-0 fig-caption px-1 text-[var(--color-ink-danger)]">{transcribeError}</div>
+          )}
+          {pendingTranscription && (
+            <TranscriptionCard
+              latex={pendingTranscription.latex}
+              pages={pendingTranscription.pages}
+              blind={true}
+              live={true}
+              onConfirm={(latex) => {
+                setProduction(latex)
+                setPendingTranscription(null)
+              }}
+            />
           )}
 
           {/* The tutor's suggested next steps (suggest_action) — chips, never

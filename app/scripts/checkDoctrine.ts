@@ -234,6 +234,11 @@ const PINNED_SUBPROCESS_FILES: Record<string, string> = {
   'main/session/opencodeSession.ts': 'spawns `opencode serve` — the driven session itself, OpenCode’s analog of SessionManager.ts',
   'main/session/opencodeResolver.ts': 'locates the opencode binary and the vendored opencode-engram-learning plugin path',
   'main/session/opencodeCapability.ts': 'opencode models cursor-acp (setup check) + a throwaway `opencode serve` (the user-triggered, real-money capability probe — see OpencodeProbe’s own doctrine comment for why it is never run automatically)',
+  // 2026-08-17 — the handwriting-transcription fix (see D3.handwritingPrompt
+  // below for why this door exists at all). A second, throwaway `claude -p`
+  // child, `--tools Read` only, no MCP config, no engram.py — spawned and
+  // torn down entirely before any tutor session for the attachment exists.
+  'main/session/transcribeHandwriting.ts': 'a one-off `claude -p`, Read-only, no MCP — transcribes handwriting BEFORE any tutor session sees it',
 }
 const SPAWN_CALL = /\b(execFile|execFileSync|execSync|exec|spawn|spawnSync|fork)\s*(?:Async)?\s*\(/g
 for (const f of FILES) {
@@ -804,7 +809,22 @@ for (const f of FILES) {
 // name a protocol the review skill itself defines. It says nothing about
 // how the widened protocol works, and the recall-floor sentence (`floor`)
 // is unchanged and still interpolated exactly as in the plain branch.
-const PINNED_MESSAGE_HASH = '06a657139fa0361a'
+// 2026-08-17 re-pin: attachHandwriting's OLD kickoff
+// (shared/handwritingRequest.ts, "[Attached files — my handwritten work...",
+// asking the tutor to delegate transcription to a subagent) is GONE from this
+// collected set — the file is deleted, not just unreferenced. A reader
+// reported the tutor "receiving and using" their handwriting before they
+// pressed confirm, root-caused to that delegation instruction being
+// prompt-only: the tutor session itself holds Read, so nothing in CODE
+// enforced it. The fix moves transcription entirely OUTSIDE any session (see
+// the new D3.handwritingPrompt pin below) — attachHandwriting no longer sends
+// anything into the tutor session until the learner has confirmed a
+// transcription, and what it then sends afterward is ordinary composer text
+// via the existing send path, never a message this file's collector would
+// see. The remaining two `[Attached files — read these for context: ${}]`
+// literals (LearnSessionView.tsx/ReviewSessionView.tsx) are the UNRELATED
+// generic file-attach flow (attachFiles, not attachHandwriting) — untouched.
+const PINNED_MESSAGE_HASH = '5d71ba792b280530'
 if (sha(injectedMessages.sort().join('\n')) !== PINNED_MESSAGE_HASH) {
   fail(
     'D3.kickoff',
@@ -843,6 +863,44 @@ if (deadlineNoteNormalized === null || sha(deadlineNoteNormalized) !== PINNED_DE
     `deepLink.ts's app-authored deadline sentence changed or is missing.\n      pinned: ${PINNED_DEEPLINK_DEADLINE_NOTE_HASH}\n      found:  ${deadlineNoteNormalized === null ? '(deadlineNote() not found)' : sha(deadlineNoteNormalized)}\n      current text: ${deadlineNoteNormalized ?? '(none)'}`,
     "This sentence is folded into a deep-linked topic's instructions in main/deepLink.ts before it ever reaches a session — the same authority-bearing position as a kickoff message, just delivered through a different file than permissionConfig.ts/D3.kickoff's collector, and outside both (it matches neither /engram: nor [Attached files). Pinning it here separately is what keeps a change to its wording an explicit, audited decision instead of a silent drift with no pin to update. See this check's own file-level comment for the pre-existing appendix blind spot this does NOT cover.",
   )
+}
+
+// ===========================================================================
+// SECTION 3c — the handwriting-transcription subprocess prompt
+// (transcribeHandwriting.ts): the blindest text surface in the whole app.
+//
+// This runs BEFORE any tutor session exists for the attachment at all — a
+// throwaway `claude -p` child, `--tools Read` only, no MCP bridge, no
+// engram.py, no topic/node/claim/rubric, nothing but this prompt and the
+// file paths. It replaced an older design (shared/handwritingRequest.ts,
+// now deleted) that asked the LIVE TUTOR to delegate transcription to a
+// Task subagent via a prompt instruction — which a reader could bypass
+// simply by not complying, since the tutor session is itself granted
+// `Read`. This pin exists for the same reason D3.kickoff and D4 exist:
+// the wording carries authority (over what "exactly as written" means,
+// whether commentary leaks in) even though the STRUCTURE (no session, no
+// context) is now what actually enforces blindness, not the prompt alone.
+// ===========================================================================
+
+const transcribeHandwritingTs = read('main/session/transcribeHandwriting.ts')
+const handwritingPromptMatch = transcribeHandwritingTs.match(/export function buildPrompt[\s\S]*?return `([\s\S]*?)`\n}/)
+const handwritingPromptNormalized = handwritingPromptMatch ? handwritingPromptMatch[1].replace(/\$\{[^}]*\}/g, '${}') : null
+const PINNED_HANDWRITING_PROMPT_HASH = '0b4117e2b884fae5'
+if (handwritingPromptNormalized === null || sha(handwritingPromptNormalized) !== PINNED_HANDWRITING_PROMPT_HASH) {
+  fail(
+    'D3.handwritingPrompt',
+    `transcribeHandwriting.ts's buildPrompt() changed or is missing.\n      pinned: ${PINNED_HANDWRITING_PROMPT_HASH}\n      found:  ${handwritingPromptNormalized === null ? '(buildPrompt() not found)' : sha(handwritingPromptNormalized)}\n      current text:\n${handwritingPromptNormalized ?? '(none)'}`,
+    'This prompt reaches an isolated transcription process with no other context — it IS the whole instruction, so "exactly as written, including any errors" and "no commentary on whether anything is right or wrong" are the entire safety argument for the confirmation card that follows. A rewording that softened either clause would silently degrade the transcription the learner is asked to trust before confirming it as their own production.',
+  )
+}
+for (const needle of ['exactly as written', 'including any errors', 'do not correct, complete, or improve anything', 'no commentary on whether anything is right or wrong']) {
+  if (!handwritingPromptNormalized?.includes(needle)) {
+    fail(
+      'D3.handwritingPrompt',
+      `transcribeHandwriting.ts's buildPrompt() lost a load-bearing clause: ${needle}`,
+      'Same bargain as the hash pin above, asserted clause-by-clause so a rewording that keeps the hash-relevant text length similar cannot quietly drop one of the two guarantees this prompt exists to make.',
+    )
+  }
 }
 
 // ===========================================================================

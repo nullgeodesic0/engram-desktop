@@ -28,6 +28,7 @@ import { startPackScheduler, stopPackScheduler, topUpPacksNow } from './session/
 import { packSchedulerDeps } from './link/linkService'
 import { checkForUpdate, getCachedUpdateCheck, maybeAutoCheckForUpdate } from './session/updateCheck'
 import { restoreWindowState, trackWindowState } from './windowState'
+import { transcribeHandwriting } from './session/transcribeHandwriting'
 import { installAppMenu } from './appMenu'
 import { installGlobalErrorHandlers, getCrashLog } from './session/crashLog'
 import { buildNewTopicPrefill } from './deepLink'
@@ -421,6 +422,11 @@ app.whenReady().then(() => {
     })
     return result.canceled ? [] : result.filePaths
   })
+
+  // Runs BEFORE any tutor session sees these pages at all — see
+  // transcribeHandwriting.ts's own doctrine comment for why this is a
+  // structural fix, not a stronger prompt.
+  ipcMain.handle('engram:transcribeHandwriting', (_e, pages: string[]) => transcribeHandwriting(pages))
 
   // A plain filesystem copy of the Engram plugin's own storage (topics, receipts,
   // artifacts, learner-model.json) to a folder the user picks — this is now a real

@@ -92,6 +92,7 @@ const engramApi = {
   pendingProductions: (): Promise<{ pending: number } | { error: string }> =>
     ipcRenderer.invoke('engram:pendingProductions'),
   pickHandwriting: (): Promise<string[]> => ipcRenderer.invoke('dialog:pickHandwriting'),
+  transcribeHandwriting: (pages: string[]): Promise<string> => ipcRenderer.invoke('engram:transcribeHandwriting', pages),
   saveIncomingImage: (payload: { mime: string; bytes: ArrayBuffer; name?: string }): Promise<{ path: string } | { error: string }> =>
     ipcRenderer.invoke('dialog:saveIncomingImage', payload),
   exportLearningData: (): Promise<{ canceled: boolean; path?: string }> => ipcRenderer.invoke('engram:exportData'),
