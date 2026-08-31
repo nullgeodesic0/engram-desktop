@@ -42,7 +42,7 @@
 
 import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join, win32 as winPath } from 'node:path'
+import { win32 as winPath, posix as posixPath } from 'node:path'
 import which from 'which'
 import { execCli } from '../platform'
 
@@ -93,20 +93,30 @@ export function windowsVariants(dir: string, name: string): string[] {
  * Install locations shared by every CLI we look for, rather than repeated per
  * tool: npm's global bin, winget's shim directory, bun, and the standard
  * user-local and system prefixes.
+ *
+ * `posixPath.join`, not the plain `join` used elsewhere in this file — the
+ * plain form resolves to whatever `path.join` the HOST Node process has,
+ * which is `path.win32.join` when this actually runs on Windows. That
+ * produced `C:\opt\homebrew\bin\claude` — a POSIX candidate with backslash
+ * separators — invisible in the app itself (this function is never reached
+ * on Windows, `genericWindowsCandidates` is) but exactly the bug that broke
+ * `cliResolver.test.ts` when it ran on a real Windows CI runner, where the
+ * test calls this function directly. Same class of mistake `windowsVariants`
+ * already documents in the other direction.
  */
 function genericPosixCandidates(name: string, home: string): string[] {
   const dirs = [
     '/opt/homebrew/bin', // Apple-silicon Homebrew
     '/usr/local/bin', // Intel Homebrew, and the usual `make install` prefix
-    join(home, '.local', 'bin'), // pipx, pip --user, and the XDG convention Linux leans on
-    join(home, 'bin'),
-    join(home, '.bun', 'bin'),
-    join(home, '.npm-global', 'bin'),
+    posixPath.join(home, '.local', 'bin'), // pipx, pip --user, and the XDG convention Linux leans on
+    posixPath.join(home, 'bin'),
+    posixPath.join(home, '.bun', 'bin'),
+    posixPath.join(home, '.npm-global', 'bin'),
     '/usr/bin',
     '/snap/bin', // Linux: snap-packaged tools
     '/var/lib/flatpak/exports/bin',
   ]
-  return dirs.map((dir) => join(dir, name))
+  return dirs.map((dir) => posixPath.join(dir, name))
 }
 
 /** `winPath.join` throughout, for the reason spelled out on `windowsVariants`. */

@@ -1,4 +1,4 @@
-import { join, win32 as winPath } from 'node:path'
+import { posix as posixPath, win32 as winPath } from 'node:path'
 import { resolveCliBinary, clearCliBinaryCache, windowsVariants } from './cliResolver'
 
 /**
@@ -23,7 +23,11 @@ import { resolveCliBinary, clearCliBinaryCache, windowsVariants } from './cliRes
 export async function resolveClaudeBinary(): Promise<string> {
   return resolveCliBinary({
     name: 'claude',
-    posix: (home) => [join(home, '.claude', 'local', 'claude')],
+    // posixPath.join, not join — same host-Node-decides-the-separator trap
+    // documented on cliResolver.ts's genericPosixCandidates; this candidate
+    // list is reached and asserted on directly by claudeResolver.test.ts-style
+    // callers regardless of which OS actually runs the test.
+    posix: (home) => [posixPath.join(home, '.claude', 'local', 'claude')],
     // winPath.join, not join — see the note on `windowsVariants`.
     windows: (home, env) => {
       const localAppData = env.LOCALAPPDATA ?? winPath.join(home, 'AppData', 'Local')

@@ -13,6 +13,24 @@ import type { OutboxItem } from '../../shared/linkProtocol'
  * genuinely produced disappearing between two machines.
  */
 
+/**
+ * Pulls the evidence-file path out of a kickoff message.
+ *
+ * The original regex (`/\/[^\s]+\.json/`) assumed a POSIX absolute path —
+ * true in every dev/CI environment this suite had ever run in, until the
+ * Windows CI job added by the cross-platform port actually exercised it: the
+ * real path there is `C:\Users\...\Temp\mobile-batch-<uuid>.json`, which
+ * has no leading `/` and uses backslashes, so the old pattern matched
+ * nothing and every assertion here failed on `null`. The message itself was
+ * never wrong — `composeMobileDrainKickoff` embeds whatever `evidencePath`
+ * the OS handed it, and a Windows tutor session reads a Windows path just
+ * fine. This is a test-only fix: recognise either path shape.
+ */
+function extractEvidencePath(message: string): string | null {
+  const m = message.match(/([A-Za-z]:\\[^\s]+\.json|\/[^\s]+\.json)/)
+  return m ? m[1] : null
+}
+
 let dir: string
 let outbox: OutboxStore
 let started: Array<{ message: string; kind: string; topic?: string }>
@@ -84,9 +102,9 @@ describe('drainOutbox', () => {
     await drainOutbox(deps())
 
     const message = started[0].message
-    const pathMatch = message.match(/(\/[^\s]+\.json)/)
-    expect(pathMatch).not.toBeNull()
-    const written = JSON.parse(readFileSync(pathMatch![1], 'utf-8'))
+    const evidencePath = extractEvidencePath(message)
+    expect(evidencePath).not.toBeNull()
+    const written = JSON.parse(readFileSync(evidencePath!, 'utf-8'))
     expect(written.items).toHaveLength(2)
     expect(message).toContain('/engram:learn')
     expect(message).toContain('companion app')
@@ -209,7 +227,7 @@ describe('drainOutbox', () => {
 
     await drainOutbox(deps())
 
-    const raw = readFileSync(started[0].message.match(/(\/[^\s]+\.json)/)![1], 'utf-8')
+    const raw = readFileSync(extractEvidencePath(started[0].message)!, 'utf-8')
     expect(raw).not.toContain('"rating"')
     expect(raw).not.toContain('"source"')
   })

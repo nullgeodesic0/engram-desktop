@@ -144,8 +144,8 @@ function send(res: ServerResponse, status: number, body: unknown): void {
 }
 
 /** Reads the body, refusing anything over the cap. Resolves `null` when the
- * cap is hit — the response is already sent by then and the socket destroyed,
- * so the caller must simply stop. */
+ * cap is hit — the response is already sent by then, so the caller must
+ * simply stop. */
 function readBody(req: IncomingMessage, res: ServerResponse): Promise<string | null> {
   return new Promise((resolve) => {
     const chunks: Buffer[] = []
@@ -157,7 +157,19 @@ function readBody(req: IncomingMessage, res: ServerResponse): Promise<string | n
       if (size > MAX_BODY_BYTES) {
         done = true
         send(res, 413, { error: 'body too large' })
-        req.destroy()
+        // Drain and discard whatever the client still has queued, rather than
+        // `req.destroy()`-ing the socket right after writing the response.
+        // Destroying immediately races the outbound response bytes against
+        // the RST that follows: on macOS/Linux the client's `fetch` usually
+        // still gets to read the already-buffered 413 first, but on Windows
+        // it lost that race outright — the client saw ECONNRESET instead of
+        // ever seeing the response (found running this suite on Windows CI
+        // for the first time). Removing the 'data' listener and resuming the
+        // stream lets Node discard the rest of the body without buffering it
+        // or holding the connection half-open, and the socket then closes
+        // normally once the client finishes writing.
+        req.removeAllListeners('data')
+        req.resume()
         resolve(null)
         return
       }

@@ -35,7 +35,7 @@
 
 import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { posix as posixPath, win32 as winPath } from 'node:path'
 import which from 'which'
 import { execCli, isWindows } from '../platform'
 
@@ -56,8 +56,20 @@ interface Candidate extends PythonCommand {
 const PROBE_ARGS = ['-c', 'import sys; sys.stdout.write(str(sys.version_info[0]))']
 const PROBE_TIMEOUT_MS = 8_000
 
+// Both candidate builders below use the EXPLICIT `posixPath`/`winPath` join,
+// not the plain `path.join` this file used to call — plain `join` resolves
+// to whichever flavour the HOST Node process has, which silently swaps to
+// backslashes for a POSIX list (or forward slashes for a Windows list) the
+// moment this code runs on the "wrong" OS for the list being built. Each
+// function only ever runs on its own platform at real runtime (gated by
+// `isWindows` in resolvePython below), so the bug is invisible there — it
+// only bites a test that calls either builder directly on a CI runner whose
+// host OS doesn't match the list under test, which is exactly the mismatch
+// that broke this file's sibling resolvers' own tests. See cliResolver.ts's
+// `genericPosixCandidates` for the fuller version of this story.
+
 function windowsCandidates(home: string, env: NodeJS.ProcessEnv): Candidate[] {
-  const localAppData = env.LOCALAPPDATA ?? join(home, 'AppData', 'Local')
+  const localAppData = env.LOCALAPPDATA ?? winPath.join(home, 'AppData', 'Local')
   const out: Candidate[] = [
     // The launcher first: it is the one entry point that is explicit about
     // which major version it is handing back.
@@ -70,20 +82,20 @@ function windowsCandidates(home: string, env: NodeJS.ProcessEnv): Candidate[] {
   // missing directory throws, and the list is short and stable enough to
   // spell out.
   const pythonRoots = [
-    join(localAppData, 'Programs', 'Python'),
+    winPath.join(localAppData, 'Programs', 'Python'),
     'C:\\',
-    join(env.ProgramFiles ?? 'C:\\Program Files'),
+    winPath.join(env.ProgramFiles ?? 'C:\\Program Files'),
   ]
   for (const minor of [14, 13, 12, 11, 10, 9, 8]) {
     for (const root of pythonRoots) {
-      const exe = join(root, `Python3${minor}`, 'python.exe')
+      const exe = winPath.join(root, `Python3${minor}`, 'python.exe')
       out.push({ command: exe, prefixArgs: [], requirePath: exe })
     }
   }
   // Conda/miniconda, which put a genuine python.exe somewhere PATH may not
   // reach when the user has never run `conda init`.
-  for (const dir of [join(home, 'anaconda3'), join(home, 'miniconda3'), join(localAppData, 'Continuum', 'anaconda3')]) {
-    const exe = join(dir, 'python.exe')
+  for (const dir of [winPath.join(home, 'anaconda3'), winPath.join(home, 'miniconda3'), winPath.join(localAppData, 'Continuum', 'anaconda3')]) {
+    const exe = winPath.join(dir, 'python.exe')
     out.push({ command: exe, prefixArgs: [], requirePath: exe })
   }
   return out
@@ -95,10 +107,10 @@ function posixCandidates(home: string): Candidate[] {
     '/opt/homebrew/bin',
     '/usr/local/bin',
     '/usr/bin',
-    join(home, '.pyenv', 'shims'),
-    join(home, '.local', 'bin'),
+    posixPath.join(home, '.pyenv', 'shims'),
+    posixPath.join(home, '.local', 'bin'),
   ]) {
-    const exe = join(dir, 'python3')
+    const exe = posixPath.join(dir, 'python3')
     out.push({ command: exe, prefixArgs: [], requirePath: exe })
   }
   // Last: a bare `python` that turns out to be a 3.x, which is the norm inside

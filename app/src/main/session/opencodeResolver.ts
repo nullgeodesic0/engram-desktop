@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs'
-import { join, win32 as winPath } from 'node:path'
+import { join, posix as posixPath, win32 as winPath } from 'node:path'
 import { app } from 'electron'
 import { resolveCliBinary, clearCliBinaryCache, windowsVariants } from './cliResolver'
 
@@ -14,7 +14,8 @@ import { resolveCliBinary, clearCliBinaryCache, windowsVariants } from './cliRes
 export async function resolveOpencodeBinary(): Promise<string> {
   return resolveCliBinary({
     name: 'opencode',
-    posix: (home) => [join(home, '.opencode', 'bin', 'opencode')],
+    // posixPath.join, not join — see the note in claudeResolver.ts.
+    posix: (home) => [posixPath.join(home, '.opencode', 'bin', 'opencode')],
     windows: (home) => windowsVariants(winPath.join(home, '.opencode', 'bin'), 'opencode'),
   })
 }
