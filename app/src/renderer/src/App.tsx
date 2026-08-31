@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, Suspense, lazy, type ReactElement } from 'react'
+import { useEffect, useCallback, useRef, useState, Suspense, lazy, type ReactElement } from 'react'
 import { HomeView } from './app/HomeView'
 import { DashboardView } from './app/DashboardView'
 import { ReviewSessionView } from './app/ReviewSessionView'
@@ -8,6 +8,7 @@ import { GradesView } from './app/GradesView'
 import { CommandPalette } from './components/CommandPalette'
 import { SessionHistoryDrawer, ALL_HISTORY_KEY } from './components/SessionHistoryDrawer'
 import { TitleBar } from './components/TitleBar'
+import { isMacUI, shortcutLabel } from './shared/platform'
 import { CommandStrip } from './components/CommandStrip'
 import { SkeletonBar, SkeletonGrid } from './components/Skeleton'
 import { HelpSheet } from './components/HelpSheet'
@@ -210,35 +211,43 @@ export default function App() {
 
   // Deep-link target from a tray click or a background review-due notification —
   // fires even if this window was just recreated (see main/index.ts's focusOrCreateWindow).
-  useEffect(() => {
-    return window.engram.onNavigate((v) => {
-      if (v === 'learn:new-topic') {
-        setView('learn')
-        setNewTopicRequest((n) => n + 1)
-        return
-      }
-      if (v === 'history:all') {
-        setAllHistoryOpen(true)
-        return
-      }
-      if (v === 'help') {
-        setHelpOpen(true)
-        return
-      }
-      if (
-        v === 'home' ||
-        v === 'topics' ||
-        v === 'dashboard' ||
-        v === 'artifacts' ||
-        v === 'review' ||
-        v === 'learn' ||
-        v === 'settings' ||
-        v === 'grades'
-      ) {
-        goToView(v)
-      }
-    })
+  // Extracted from the onNavigate subscription below because the keyboard
+  // handler needs the same routing: on Windows and Linux this frameless
+  // window has no native menu bar, so the accelerators the macOS menu owns
+  // (⌘N, ⌘L, ⇧⌘R, ⇧⌘H, ⌘,) have to be handled here instead — and they must
+  // land in exactly the same place a tray click or a deep link does, not in
+  // a parallel near-copy of it. See main/appMenu.ts.
+  const handleNavigate = useCallback((v: string) => {
+    if (v === 'learn:new-topic') {
+      setView('learn')
+      setNewTopicRequest((n) => n + 1)
+      return
+    }
+    if (v === 'history:all') {
+      setAllHistoryOpen(true)
+      return
+    }
+    if (v === 'help') {
+      setHelpOpen(true)
+      return
+    }
+    if (
+      v === 'home' ||
+      v === 'topics' ||
+      v === 'dashboard' ||
+      v === 'artifacts' ||
+      v === 'review' ||
+      v === 'learn' ||
+      v === 'settings' ||
+      v === 'grades'
+    ) {
+      goToView(v)
+    }
   }, [])
+
+  useEffect(() => {
+    return window.engram.onNavigate(handleNavigate)
+  }, [handleNavigate])
 
   // engram:// deep link with a prefill payload — main sends this alongside
   // (not instead of) its own onNavigate('learn'); this is what actually pops
@@ -333,6 +342,39 @@ export default function App() {
         setPaletteOpen((v) => !v)
         return
       }
+      // The menu-bar accelerators, re-homed. On macOS the native menu owns
+      // these and handling them here too would fire each action twice; on
+      // Windows and Linux the window is frameless, there is no menu bar to
+      // own them, and without this block they simply do not exist. `e.key`
+      // arrives uppercased when Shift is held, hence the paired comparisons.
+      if (!isMacUI()) {
+        const shifted = e.shiftKey
+        if (!shifted && e.key === ',') {
+          e.preventDefault()
+          handleNavigate('settings')
+          return
+        }
+        if (!shifted && (e.key === 'n' || e.key === 'N')) {
+          e.preventDefault()
+          handleNavigate('learn:new-topic')
+          return
+        }
+        if (!shifted && (e.key === 'l' || e.key === 'L')) {
+          e.preventDefault()
+          handleNavigate('learn')
+          return
+        }
+        if (shifted && (e.key === 'r' || e.key === 'R')) {
+          e.preventDefault()
+          handleNavigate('review')
+          return
+        }
+        if (shifted && (e.key === 'h' || e.key === 'H')) {
+          e.preventDefault()
+          handleNavigate('history:all')
+          return
+        }
+      }
       const n = NAV.find((item) => item.hint === e.key)
       if (n) {
         e.preventDefault()
@@ -341,7 +383,7 @@ export default function App() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  }, [handleNavigate])
 
   // Every external trigger that can land on a nav tab goes through here —
   // never a bare `setView` — so "go to Coach" always bumps coachHomeSignal
@@ -505,8 +547,13 @@ export default function App() {
         onGoNode={goToNode}
         onGoSitting={goToSitting}
         navCommands={[
-          ...NAV.map((n) => ({ id: `nav:${n.id}`, label: n.label, hint: `⌘${n.hint}`, action: () => goToView(n.id) })),
-          { id: 'nav:history', label: 'Session History', hint: '⇧⌘H', action: () => setAllHistoryOpen(true) },
+          ...NAV.map((n) => ({
+            id: `nav:${n.id}`,
+            label: n.label,
+            hint: shortcutLabel(`⌘${n.hint}`),
+            action: () => goToView(n.id),
+          })),
+          { id: 'nav:history', label: 'Session History', hint: shortcutLabel('⇧⌘H'), action: () => setAllHistoryOpen(true) },
           // Static command, not a searchIndex entry — the index's kinds are
           // topic/node/receipt/artifact data; app surfaces live here.
           { id: 'nav:misconceptions', label: 'Misconception Ledger', action: () => setLedgerOpen(true) },

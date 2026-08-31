@@ -1,11 +1,8 @@
-import { execFile } from 'node:child_process'
-import { promisify } from 'node:util'
 import { app } from 'electron'
+import { execCli } from '../platform'
 import { join } from 'node:path'
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import type { UpdateCheckResult } from '../../shared/types'
-
-const execFileAsync = promisify(execFile)
 
 const REPO = 'nullgeodesic0/engram-desktop'
 const GH_TIMEOUT_MS = 10_000
@@ -109,7 +106,10 @@ export async function checkForUpdate(): Promise<UpdateCheckResult> {
   }
 
   try {
-    const { stdout } = await execFileAsync(
+    // `gh` ships as a real executable on every platform (its installers never
+    // use a batch shim), so execCli here buys only the uniform error shape,
+    // not a fix for anything broken — same reasoning as backup.ts's tar calls.
+    const { stdout } = await execCli(
       'gh',
       ['api', `repos/${REPO}/commits/main`, '--jq', '{sha:.sha,date:.commit.committer.date}'],
       { timeout: GH_TIMEOUT_MS },

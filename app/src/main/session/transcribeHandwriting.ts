@@ -23,16 +23,14 @@
  * for REPLAY of sessions recorded before this fix; this is the only path a
  * fresh attachment takes now. */
 
-import { execFile } from 'node:child_process'
-import { promisify } from 'node:util'
 import { homedir } from 'node:os'
 import { resolveEngramPlugin } from './pluginResolver'
 import { resolveClaudeBinary } from './claudeResolver'
 import { buildSessionEnv } from './sessionEnv'
+import { ensurePython3Shim } from '../engramCli/pythonShim'
 import { getAuthSettings } from './authSettings'
 import { apiKeyStore } from './auth'
-
-const execFileAsync = promisify(execFile)
+import { execCli } from '../platform'
 
 /** Ten minutes — generous for a handful of photographed pages, short enough
  * that a genuinely wedged child (bad auth, a hung endpoint) fails loudly
@@ -75,9 +73,19 @@ export async function transcribeHandwriting(pages: readonly string[]): Promise<s
     args.push('--model', localModel.trim())
   }
 
-  const env = buildSessionEnv(process.env, engramRoot, authMode, authMode === 'apiKey' ? apiKeyStore().get() : null, authMode === 'local' ? localBaseUrl : null)
+  const env = buildSessionEnv(
+    process.env,
+    engramRoot,
+    authMode,
+    authMode === 'apiKey' ? apiKeyStore().get() : null,
+    authMode === 'local' ? localBaseUrl : null,
+    await ensurePython3Shim(),
+  )
 
-  const { stdout } = await execFileAsync(claudeBin, args, {
+  // `execCli`, not `execFile` — `claudeBin` may be a Windows `.cmd` shim, and
+  // the prompt argument here is a paragraph of prose with spaces in it. See
+  // platform.ts.
+  const { stdout } = await execCli(claudeBin, args, {
     cwd: homedir(),
     env,
     timeout: TIMEOUT_MS,

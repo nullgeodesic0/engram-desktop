@@ -1,5 +1,6 @@
 import { app, Menu } from 'electron'
 import { showPairingCode } from './link/linkService'
+import { isMac } from './platform'
 
 /** The native menu bar — the single loudest "this is a real app" signal on
  * macOS. Actions route through `focusOrCreateWindow`, the same deep-link
@@ -18,6 +19,27 @@ import { showPairingCode } from './link/linkService'
  * firing. An Electron-level accelerator can't do that — it would fire while
  * the learner is mid-sentence in the composer, "?" and all. */
 export function installAppMenu(focusOrCreateWindow: (navigateTo?: string) => void): void {
+  // Windows and Linux get NO application menu, deliberately.
+  //
+  // The window is `frame: false` on every platform (TitleBar.tsx draws its own
+  // chrome), and a frameless window on Windows/Linux has nowhere to render a
+  // menu bar — Electron neither draws one nor fires its accelerators. Leaving
+  // the macOS template installed there would therefore ship a menu that is
+  // invisible AND inert: every item below would silently do nothing, and the
+  // half of the template that is macOS-only (`about`, `hide`, `hideOthers`,
+  // `unhide`, and every `Cmd+…` accelerator, which Electron does not map to
+  // Ctrl off macOS) would be dead weight on top of that.
+  //
+  // So those platforms clear the menu outright — which also removes the
+  // default Electron menu, whose stray items (a devtools toggle in a shipped
+  // build) have no business in this app — and the accelerators the menu owns
+  // on macOS are re-homed to the renderer's own keydown handler instead. See
+  // the `isMacUI()` block in App.tsx; the two lists must stay in step.
+  if (!isMac) {
+    Menu.setApplicationMenu(null)
+    return
+  }
+
   const isDev = !app.isPackaged
   const template: Electron.MenuItemConstructorOptions[] = [
     {

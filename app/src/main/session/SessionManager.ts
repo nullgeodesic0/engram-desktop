@@ -1,9 +1,10 @@
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
+import { type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { EventEmitter } from 'node:events'
 import { resolveEngramPlugin } from './pluginResolver'
 import { resolveClaudeBinary } from './claudeResolver'
 import { buildSessionEnv } from './sessionEnv'
+import { ensurePython3Shim } from '../engramCli/pythonShim'
 import { getAuthSettings } from './authSettings'
 import { apiKeyStore } from './auth'
 import { prepareSessionPermissions, type SessionPermissionSetup } from './permissionConfig'
@@ -12,6 +13,7 @@ import { bridgeServer } from '../bridge/bridgeServer'
 import type { SessionEvent } from '../../shared/sessionEvents'
 import { isTaskNotificationContent } from '../../shared/taskNotification'
 import { homedir } from 'node:os'
+import { spawnCli } from '../platform'
 
 interface RawToolUseBlock {
   type: 'tool_use'
@@ -120,14 +122,25 @@ export class SessionManager extends EventEmitter {
       }
       args.push('--model', localModel.trim())
     }
+    // Windows only (null everywhere else): a directory holding a `python3`
+    // that forwards to the real interpreter, prepended to the child's PATH.
+    // The plugin's skills shell out to `python3` by that exact name and
+    // Windows has no such command — see engramCli/pythonShim.ts.
+    const shimDir = await ensurePython3Shim()
     const sessionEnv = buildSessionEnv(
       process.env,
       engramRoot,
       authMode,
       authMode === 'apiKey' ? apiKeyStore().get() : null,
       authMode === 'local' ? localBaseUrl : null,
+      shimDir,
     )
-    this.child = spawn(claudeBin, args, {
+    // `spawnCli`, not `spawn`: on Windows `claudeBin` is usually the
+    // `claude.cmd` batch shim npm writes, which Node refuses to execute
+    // directly and which `shell: true` would mangle — `--append-system-prompt`
+    // alone is kilobytes of prose with spaces and quotes in it. See
+    // platform.ts for the full reasoning.
+    this.child = spawnCli(claudeBin, args, {
       cwd: homedir(),
       stdio: ['pipe', 'pipe', 'pipe'],
       // ENGRAM_ROOT: the skills' own engine-locator bootstrap probes

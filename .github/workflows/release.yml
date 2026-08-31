@@ -1,11 +1,13 @@
 # Cut a release by pushing a version tag:
 #   1. bump "version" in app/package.json (and commit)
 #   2. git tag v<that version> && git push origin v<that version>
-# The build runs on a clean CI runner, so it is fontless by construction —
-# the licensed typefaces never exist there and the app bundles only its
-# open fallbacks (see app/src/renderer/src/assets/fonts/README.md).
-# electron-builder uploads the DMG/zip to a DRAFT release; review it on
-# GitHub and press Publish.
+# Each platform builds on its own clean CI runner, so every artifact is
+# fontless by construction — the licensed typefaces never exist there and the
+# app bundles only its open fallbacks (see
+# app/src/renderer/src/assets/fonts/README.md).
+# electron-builder uploads each platform's installers to the SAME draft
+# release (matched by tag); review the full set on GitHub and press Publish
+# once all three jobs have landed their artifacts.
 name: Release
 
 on:
@@ -45,3 +47,56 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npm run dist:mac -- --publish always
+
+  build-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      - run: npm test
+
+      - name: Build and upload draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # electron-builder is also unsigned here (no code-signing cert is
+        # configured) — Windows SmartScreen will warn on first run, same
+        # unsigned-build tradeoff the mac job already makes for Gatekeeper.
+        run: npm run dist:win -- --publish always
+
+  build-linux:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      - run: npm test
+
+      - name: Build and upload draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run dist:linux -- --publish always

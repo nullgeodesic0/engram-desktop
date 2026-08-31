@@ -1,8 +1,14 @@
 import { protocol, net } from 'electron'
 import { isAbsolute, join, resolve, dirname } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { explorableUrlToPath } from './explorablePaths'
 import { stat, realpath } from 'node:fs/promises'
 import { engramLearningHome } from './engramCli/readOnly'
+
+// Re-exported so callers keep one import site for the whole explorable
+// surface; the implementation lives in a plain, electron-free module so it
+// can be tested. See explorablePaths.ts.
+export { explorablePathToUrl, explorableUrlToPath } from './explorablePaths'
 
 /**
  * Serves explorable-artifact HTML (and its same-directory assets — css/js/img
@@ -129,7 +135,7 @@ export function installExplorableProtocolHandler(): void {
 
     let requestedPath: string
     try {
-      requestedPath = decodeURIComponent(new URL(request.url).pathname)
+      requestedPath = explorableUrlToPath(request.url)
     } catch {
       return new Response('Bad request', { status: 400 })
     }

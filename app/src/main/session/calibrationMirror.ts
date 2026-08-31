@@ -39,6 +39,18 @@ import type { ConfidencePick } from '../../shared/confidence'
  * topicSettings, on the app's side of the line.
  */
 
+/** Electron's `app.getPath('userData')` parent, computed without Electron —
+ * see the fallback in `mirrorPath` for why that is needed at all. */
+function userDataRoot(): string {
+  if (process.platform === 'win32') {
+    return process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming')
+  }
+  if (process.platform === 'darwin') {
+    return join(homedir(), 'Library', 'Application Support')
+  }
+  return process.env.XDG_CONFIG_HOME ?? join(homedir(), '.config')
+}
+
 /**
  * Resolved lazily, and without a top-level `electron` import.
  *
@@ -55,8 +67,13 @@ async function mirrorPath(): Promise<string> {
     dir = app.getPath('userData')
   } catch {
     // Not inside Electron: the dev fixture, which points at the same store the
-    // app uses so both see one set of picks.
-    dir = join(homedir(), 'Library', 'Application Support', 'Engram Desktop')
+    // app uses so both see one set of picks. That means reproducing what
+    // Electron's own `app.getPath('userData')` would have answered, which is a
+    // different directory on each platform — `%APPDATA%` on Windows,
+    // `$XDG_CONFIG_HOME` (defaulting to `~/.config`) on Linux, `~/Library/
+    // Application Support` on macOS. Hardcoding the macOS one made the fixture
+    // silently read an empty mirror everywhere else.
+    dir = join(userDataRoot(), 'Engram Desktop')
   }
   return join(dir, 'calibration-mirror.json')
 }

@@ -230,6 +230,17 @@ const engramApi = {
   },
   refreshDueCount: (): Promise<{ dueCount: number }> => ipcRenderer.invoke('engram:refresh-due-count'),
 
+  /**
+   * Which OS this is, for the handful of renderer decisions that genuinely
+   * differ — where the window controls sit, whether a shortcut is written
+   * ⌘ or Ctrl, and which accelerators the renderer has to own because the
+   * native menu bar isn't there to own them (see appMenu.ts).
+   *
+   * A plain value rather than an invoke: it can never change while the app
+   * runs, and every consumer wants it during the first render.
+   */
+  platform: process.platform as NodeJS.Platform,
+
   windowClose: (): Promise<void> => ipcRenderer.invoke('window:close'),
   windowMinimize: (): Promise<void> => ipcRenderer.invoke('window:minimize'),
   windowZoom: (): Promise<void> => ipcRenderer.invoke('window:zoom'),

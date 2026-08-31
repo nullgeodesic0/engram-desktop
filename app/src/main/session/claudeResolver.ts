@@ -1,63 +1,42 @@
-import { existsSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { join } from 'node:path'
-import { exec } from 'node:child_process'
-import { promisify } from 'node:util'
-
-const execAsync = promisify(exec)
-
-const COMMON_LOCATIONS = [
-  join(homedir(), '.claude', 'local', 'claude'),
-  '/opt/homebrew/bin/claude',
-  '/usr/local/bin/claude',
-]
-
-let cached: string | null = null
+import { join, win32 as winPath } from 'node:path'
+import { resolveCliBinary, clearCliBinaryCache, windowsVariants } from './cliResolver'
 
 /**
- * Resolve an absolute path to the `claude` CLI binary. `spawn('claude', ...)`
- * relies on inherited PATH, which is fine when the app runs via `npm run dev`
- * from a terminal but silently fails for a packaged app launched from
- * Finder/Dock/Spotlight — those don't inherit a login shell's PATH, so
- * wherever `claude` actually lives (nvm, Homebrew, the Claude Code local
- * installer under ~/.claude/local) often isn't visible.
+ * Resolve an absolute path to the `claude` CLI binary.
  *
- * Checks common install locations first (cheap, no subprocess), then falls
- * back to asking the user's actual login shell for its real PATH once
- * (`$SHELL -lic 'command -v claude'`) — this correctly picks up whatever the
- * user's own shell rc files configure, which is the only fully general
- * answer short of requiring a specific install location.
+ * The general problem — a packaged app's PATH is not a terminal's PATH — and
+ * the four-tier search that answers it both live in `cliResolver.ts`. This
+ * file is only the Claude-specific part: where Claude Code's own installers
+ * put things.
+ *
+ * `~/.claude/local/claude` is the Claude Code local installer's own target on
+ * every platform and so goes first; on Windows the same directory holds a
+ * `.cmd`/`.exe` instead of an extensionless shell script, and `existsSync`
+ * does not apply PATHEXT, so each extension has to be spelled out. The
+ * npm-global case (`%APPDATA%\npm\claude.cmd`) is covered by the generic
+ * candidate list in `cliResolver.ts` — it is not Claude-specific.
+ *
+ * NOTE for callers: the returned path may be a Windows `.cmd` batch shim,
+ * which `child_process.spawn` refuses to execute. Launch it through
+ * `spawnCli`/`execCli` from `platform.ts`, never `spawn`/`execFile` directly.
  */
 export async function resolveClaudeBinary(): Promise<string> {
-  if (cached) return cached
-
-  for (const loc of COMMON_LOCATIONS) {
-    if (existsSync(loc)) {
-      cached = loc
-      return cached
-    }
-  }
-
-  const shell = process.env.SHELL || '/bin/zsh'
-  try {
-    const { stdout } = await execAsync(`${shell} -lic 'command -v claude'`, { timeout: 10_000 })
-    const resolved = stdout.trim().split('\n').pop()?.trim()
-    if (resolved && existsSync(resolved)) {
-      cached = resolved
-      return cached
-    }
-  } catch {
-    // Login-shell probe failed (no such binary, shell not found, etc.) — fall through
-    // to the bare-name fallback below rather than throwing here; the actual spawn
-    // failure (if any) surfaces as a real session error the environment-check screen
-    // and RateLimitBanner-adjacent error UI already know how to show.
-  }
-
-  cached = 'claude' // last resort: trust inherited PATH, correct in a terminal-launched dev run
-  return cached
+  return resolveCliBinary({
+    name: 'claude',
+    posix: (home) => [join(home, '.claude', 'local', 'claude')],
+    // winPath.join, not join — see the note on `windowsVariants`.
+    windows: (home, env) => {
+      const localAppData = env.LOCALAPPDATA ?? winPath.join(home, 'AppData', 'Local')
+      return [
+        ...windowsVariants(winPath.join(home, '.claude', 'local'), 'claude'),
+        ...windowsVariants(winPath.join(localAppData, 'Programs', 'claude-code'), 'claude'),
+        ...windowsVariants(winPath.join(localAppData, 'claude-code', 'bin'), 'claude'),
+      ]
+    },
+  })
 }
 
 /** Test-only: clears the module-level cache so a resolution can be re-run. */
 export function clearClaudeBinaryCache(): void {
-  cached = null
+  clearCliBinaryCache('claude')
 }

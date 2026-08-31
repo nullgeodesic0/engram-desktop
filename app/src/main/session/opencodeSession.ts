@@ -1,4 +1,5 @@
-import { spawn, type ChildProcessByStdio } from 'node:child_process'
+import { type ChildProcessByStdio } from 'node:child_process'
+import { spawnCliReadOnly } from '../platform'
 import type { Readable } from 'node:stream'
 import { randomUUID } from 'node:crypto'
 import { EventEmitter } from 'node:events'
@@ -124,9 +125,9 @@ export class OpencodeSessionManager extends EventEmitter {
     this.setup = await prepareOpencodeSession(port, this.sessionId, opencodeModel, extraInstructions)
 
     const bin = await resolveOpencodeBinary()
-    this.child = spawn(bin, ['serve', '--port', '0'], {
+    // spawnCliReadOnly, not spawn: on Windows `opencode` is a `.cmd` shim.
+    this.child = spawnCliReadOnly(bin, ['serve', '--port', '0'], {
       cwd: this.setup.workspaceDir,
-      stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env, OPENCODE_CONFIG: this.setup.opencodeConfigPath },
     })
     this.child.on('close', (code) => this.handleClose(code))

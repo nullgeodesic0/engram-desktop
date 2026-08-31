@@ -15,6 +15,7 @@
  * `ENGRAM_ROOT` is the skills' engine-locator bootstrap — see the spawn
  * site's comment in `SessionManager.ts`. */
 
+import { delimiter } from 'node:path'
 import type { AuthMode } from '../../shared/types'
 
 const AUTH_VARS = ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN'] as const
@@ -25,6 +26,11 @@ export function buildSessionEnv(
   mode: AuthMode = 'subscription',
   apiKey: string | null = null,
   localBaseUrl: string | null = null,
+  /** Prepended to PATH. Windows only in practice: the directory holding the
+   * `python3` shim, without which every `python3 "$ENGRAM" …` line in the
+   * plugin's own skills fails on that platform. See engramCli/pythonShim.ts
+   * for why the fix lives in the environment rather than in the plugin. */
+  pathPrefixDir: string | null = null,
 ): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...base, ENGRAM_ROOT: engramRoot }
   for (const v of AUTH_VARS) delete env[v]
@@ -51,6 +57,14 @@ export function buildSessionEnv(
     // impression that something here is authenticated — it is not, and the
     // endpoint is on loopback.
     env.ANTHROPIC_AUTH_TOKEN = 'local-no-auth'
+  }
+  if (pathPrefixDir) {
+    // Windows environment-variable names are case-insensitive but the object
+    // Node hands back is not always normalised, so find whichever spelling
+    // this process actually has rather than blindly writing `PATH` and
+    // leaving an existing `Path` to win.
+    const key = Object.keys(env).find((k) => k.toUpperCase() === 'PATH') ?? 'PATH'
+    env[key] = env[key] ? `${pathPrefixDir}${delimiter}${env[key]}` : pathPrefixDir
   }
   return env
 }

@@ -7,8 +7,11 @@ How to build, run, and package Engram Desktop, plus a map of the codebase and wh
 - Node.js 22 or later (developed on 26)
 - The `claude` CLI installed and authenticated
 - The engram learning plugin installed in Claude Code
+- Python 3 — as `python3` on macOS/Linux, or anything the standard installer/launcher produces on Windows (`py`, `python`, or a versioned `C:\...\PythonXY\python.exe`; see `src/main/engramCli/pythonResolver.ts`)
 
 The app never calls a model API directly — it spawns `claude -p` as a child process, so a working, authenticated `claude` CLI with the engram plugin installed is required for any session to run, not just for packaging.
+
+The app resolves `claude`, `opencode`, and Python itself rather than trusting inherited PATH — a packaged app launched from Finder/Start Menu/a `.desktop` file does not inherit a terminal's PATH, and on Windows `python3` specifically is not a name any standard installer creates (see `src/main/engramCli/pythonShim.ts` for how a spawned session's PATH is patched so the plugin's own `python3 "$ENGRAM" …` skill lines still work there).
 
 ## Commands
 
@@ -19,32 +22,64 @@ All commands run from `app/`.
 | `npm run dev` | Starts electron-vite in dev mode — hot-reloading renderer, live-reloading main/preload — and launches the app. |
 | `npm run typecheck` | Runs `tsc --noEmit` twice, once against the main/preload project and once against the renderer/web project. |
 | `npm run build` | Runs electron-vite's production build (main, preload, renderer) into `out/`, without packaging an app bundle. |
-| `npm run dist:mac` | Bundles the MCP bridge worker with esbuild, runs `build`, then runs electron-builder for macOS — produces a signed-or-not `.app` (plus `.dmg`/`.zip`) in `dist/`. |
-| `npm run dist` | Same as `dist:mac` but lets electron-builder target whatever platform it's invoked on. |
+| `npm run dist:mac` | Runs `dist:prepare` (below), then electron-builder for macOS — produces a signed-or-not `.app` (plus `.dmg`/`.zip`) in `dist/`. |
+| `npm run dist:win` | Same, targeting Windows — produces an NSIS installer (`.exe`) and a `.zip`, x64 and arm64. |
+| `npm run dist:linux` | Same, targeting Linux — produces an AppImage and a `.deb`, x64 and arm64. |
+| `npm run dist` | Runs `dist:prepare`, then lets electron-builder target whatever platform it's invoked on. |
+| `npm run dist:prepare` | Bundles the MCP bridge worker with esbuild, installs the vendored OpenCode plugin, and runs `build` — the shared prep step every `dist:*` target needs before electron-builder runs. |
 | `npm run start` | Previews the last `build` output via electron-vite's preview mode, without a dev server. |
-| `npm run icons` | Regenerates app icons from source art via `scripts/build-icons.sh`. |
+| `npm run icons` | Regenerates the macOS icon set (`.icns`) and the macOS tray template from source art via `scripts/build-icons.sh`. macOS-only — it shells out to `qlmanage`/`sips`/`iconutil`. |
+| `npm run icons:platform` | Regenerates the Windows `.ico` and the Windows/Linux tray + taskbar-badge PNGs via `scripts/build-platform-icons.py`. Runs anywhere Pillow does, reading the master PNG `npm run icons` already produced — run `icons` first on a fresh icon change. |
 
-`dist:mac` explicitly runs `bundle:bridge-worker` first: the MCP bridge worker (`src/main/bridge/mcpBridgeWorker.mjs`) is a separate stdio process spawned at runtime, so it has to be esbuild-bundled into `resources/` before electron-builder copies `resources/` into the packaged app as an extra resource. Skipping that step produces a package whose bridge worker is missing or stale.
+Every `dist:*` target runs `bundle:bridge-worker` first (via `dist:prepare`): the MCP bridge worker (`src/main/bridge/mcpBridgeWorker.mjs`) is a separate stdio process spawned at runtime, so it has to be esbuild-bundled into `resources/` before electron-builder copies `resources/` into the packaged app as an extra resource. Skipping that step produces a package whose bridge worker is missing or stale.
+
+Cross-building: electron-builder can produce a Windows or Linux artifact from macOS (verified — `dist:win` and `dist:linux` both complete on a clean macOS checkout with no `wine` installed), but the released binaries come from each platform's own CI runner (see `.github/workflows/release.yml`), which is also the only way to get a real code-signed Windows build if that's ever added later.
 
 ## Packaged install flow
 
-To pick up a newer build (the in-app update check under Settings surfaces exactly these three commands):
+To pick up a newer build (the in-app update check under Settings surfaces exactly this platform's own three commands — see `app/src/renderer/src/shared/platform.ts`'s `updateCommands()`):
 
 ```bash
 git pull
 ```
 
+Quit any running copy of Engram Desktop first — **quitting mid-session kills the live `claude -p` child process**, but nothing is lost: sessions are driven by the engram plugin's own append-only transcript and receipt files on disk, so a killed session simply resumes from the last completed beat the next time you open that topic.
+
+**macOS**
+
 ```bash
 npm run dist:mac
 ```
 
-produces the `.app` under `app/dist/mac*/`. Quit any running copy of Engram Desktop first — **quitting mid-session kills the live `claude -p` child process**, but nothing is lost: sessions are driven by the engram plugin's own append-only transcript and receipt files on disk, so a killed session simply resumes from the last completed beat the next time you open that topic. Then:
+produces the `.app` under `app/dist/mac*/`. Then:
 
 ```bash
 cp -R "app/dist/mac-arm64/Engram Desktop.app" /Applications/
 ```
 
 replacing the old one, and relaunch.
+
+**Windows**
+
+```bash
+npm run dist:win
+```
+
+produces `app/dist/Engram Desktop-<version>-win-setup.exe` (an NSIS installer covering both x64 and arm64). Run it — it upgrades an existing install in place.
+
+**Linux**
+
+```bash
+npm run dist:linux
+```
+
+produces an AppImage and a `.deb` under `app/dist/`. For the AppImage:
+
+```bash
+chmod +x "app/dist/Engram Desktop-<version>-linux-x86_64.AppImage"
+```
+
+then run it directly (no install step). For the `.deb`, `sudo apt install ./app/dist/Engram\ Desktop-<version>-linux-amd64.deb` (or your distro's equivalent) over the old package.
 
 ## Repo layout
 
@@ -55,7 +90,7 @@ engram-desktop/
 │   └── src/
 │       ├── main/                Electron main process (Node context)
 │       │   ├── index.ts           app bootstrap, window creation, lifecycle
-│       │   ├── appMenu.ts         native macOS application menu
+│       │   ├── appMenu.ts         native application menu (macOS only — Windows/Linux get no menu bar; see platform.ts)
 │       │   ├── windowState.ts     persists/restores window position & size
 │       │   ├── bridge/            the MCP bridge worker and its HTTP server
 │       │   ├── engramCli/         read-only helpers that shell out to engram.py

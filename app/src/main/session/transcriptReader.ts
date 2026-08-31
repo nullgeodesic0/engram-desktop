@@ -20,9 +20,27 @@ export function projectsRoot(): string {
   return join(homedir(), '.claude', 'projects')
 }
 
+/**
+ * Claude Code's own name for a project directory: the cwd with every path
+ * separator replaced by `-`. On POSIX that is just `/` -> `-`, so `/Users/x`
+ * becomes `-Users-x` (verified byte-for-byte against a real recorded
+ * session). Windows additionally has backslash separators and a drive-letter
+ * colon, neither of which is legal in a directory name, so both are flattened
+ * the same way: `C:\Users\x` -> `C--Users-x`.
+ *
+ * Treat this as a fast path, not a contract. The convention belongs to Claude
+ * Code, not to this app, and nothing here would notice if it changed. That is
+ * exactly why `findTranscriptPath` below falls back to sweeping every sibling
+ * project directory for the session id — a globally unique id makes that
+ * sweep correct regardless of how the directory got its name, so a wrong
+ * guess here costs one `stat`, never a lost transcript.
+ */
+export function flattenCwd(cwd: string): string {
+  return cwd.replace(/[/\\:]/g, '-')
+}
+
 export function transcriptsDir(): string {
-  const flattenedCwd = homedir().replace(/\//g, '-')
-  return join(projectsRoot(), flattenedCwd)
+  return join(projectsRoot(), flattenCwd(homedir()))
 }
 
 export function transcriptPath(sessionId: string): string {

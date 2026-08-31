@@ -25,14 +25,12 @@ import { SectionBanner } from '../components/ui/SectionBanner'
 import { soundOn, setSoundOn } from '../shared/soundscape'
 import { friendlyErrorText } from '../shared/friendlyError'
 import { getStoredThemeChoice, setThemeChoice, type ThemeChoice } from '../shared/theme'
+import { deviceNoun, updateCommands } from '../shared/platform'
 
-// Mirrors docs/development.md's "Packaged install flow" exactly — keep the two
-// in sync if the packaging steps ever change.
-const UPDATE_COMMANDS = [
-  'git pull',
-  'npm run dist:mac',
-  'cp -R "app/dist/mac-arm64/Engram Desktop.app" /Applications/',
-]
+// The install flow differs per platform (a .app copied into /Applications, an
+// NSIS installer, an AppImage), so the list is resolved at render time rather
+// than being a module constant that could only ever be right on one of them —
+// see shared/platform.ts, and docs/development.md's "Packaged install flow".
 
 function formatBuildDate(iso: string): string {
   if (!iso || iso === 'unknown') return 'unknown'
@@ -62,7 +60,7 @@ function UpdateStatusLine({ update }: { update: UpdateCheckResult }) {
         <details className="fig-caption">
           <summary className="cursor-pointer">how to update</summary>
           <div className="mt-2 flex flex-col gap-1.5 not-italic">
-            {UPDATE_COMMANDS.map((cmd) => (
+            {updateCommands().map((cmd) => (
               <div key={cmd} className="group flex items-center gap-2 label-data text-[10px]">
                 <code className="flex-1 truncate">{cmd}</code>
                 <CopyButton text={cmd} alwaysVisible />
@@ -393,7 +391,7 @@ function ThemePickerRow() {
   return (
     <PickerRow
       label="Theme"
-      hint="System follows your Mac's appearance setting"
+      hint={`System follows your ${deviceNoun()}'s appearance setting`}
       current={choice}
       onPick={(v) => {
         setThemeChoice(v)
@@ -459,7 +457,7 @@ function CompanionSection() {
             {status.running ? 'Listening for your phone' : 'Not running'}
           </div>
           <div className="label-data text-xs text-[var(--color-text-dim)] mt-1">
-            {status.running ? (status.lanUrl ?? `http://127.0.0.1:${status.port} · this Mac only`) : (status.error ?? '—')}
+            {status.running ? (status.lanUrl ?? `http://127.0.0.1:${status.port} · this ${deviceNoun()} only`) : (status.error ?? '—')}
           </div>
           {!status.running && status.error?.includes('EADDRINUSE') && (
             <div className="text-xs text-[var(--color-text-dim)] mt-1">
@@ -483,7 +481,7 @@ function CompanionSection() {
           </div>
           {offer.loopbackOnly && (
             <div className="text-xs text-[var(--color-text-dim)] mt-1">
-              Reachable from this Mac only, so a simulator will connect and a real phone will not.
+              Reachable from this {deviceNoun()} only, so a simulator will connect and a real phone will not.
             </div>
           )}
         </div>
@@ -498,7 +496,7 @@ function CompanionSection() {
           setOffer(null)
         }}
         options={[
-          { value: 'loopback', label: 'This Mac only' },
+          { value: 'loopback', label: `This ${deviceNoun()} only` },
           { value: 'lan', label: 'This network' },
         ]}
       />

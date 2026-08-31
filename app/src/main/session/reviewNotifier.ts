@@ -16,11 +16,25 @@ async function currentDue(): Promise<DueItemLite[]> {
   return engramRead<DueItemLite[]>('due', ['--limit', '50'])
 }
 
-/** Mirrors the due count onto the dock icon (macOS/Linux; a no-op elsewhere via
- * Electron's own cross-platform guard) — 0 clears it, both when the setting is
- * off and when nothing is due. */
+/** How the due count reaches the app icon. Injected because the answer is
+ * platform-specific and one of the two forms needs a BrowserWindow this module
+ * has no business holding: macOS and Linux take a number
+ * (`app.setBadgeCount`), Windows needs a picture drawn onto the taskbar
+ * button (`win.setOverlayIcon`). See session/taskbarBadge.ts.
+ *
+ * The default keeps this module runnable on its own — the pre-Windows
+ * behaviour exactly — so a caller that never installs one is not broken, just
+ * limited to the platforms where a count is enough. */
+let badgeSetter: (count: number) => void = (count) => app.setBadgeCount(count)
+
+export function installBadgeSetter(fn: (count: number) => void): void {
+  badgeSetter = fn
+}
+
+/** Mirrors the due count onto the app icon — 0 clears it, both when the
+ * setting is off and when nothing is due. */
 function updateBadge(settings: NotifierSettings, dueCount: number): void {
-  app.setBadgeCount(settings.dockBadgeEnabled ? dueCount : 0)
+  badgeSetter(settings.dockBadgeEnabled ? dueCount : 0)
 }
 
 /**

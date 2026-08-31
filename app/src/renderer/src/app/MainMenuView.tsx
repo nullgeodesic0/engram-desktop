@@ -1,4 +1,5 @@
 import type { ReactElement, ReactNode } from 'react'
+import { shortcutLabel } from '../shared/platform'
 
 export interface MainMenuNavItem {
   id: string
@@ -206,7 +207,7 @@ export function MainMenuView({
                           a menu that can be driven from the keyboard should
                           look like one. Existing chip recipe, no new primitive. */}
                       <span className="label-data text-[10px] px-1.5 py-0.5 border border-[var(--color-edge)] text-[var(--color-text-faint)]">
-                        ⌘{n.hint}
+                        {shortcutLabel(`⌘${n.hint}`)}
                       </span>
                     </div>
                   </div>
@@ -252,7 +253,7 @@ export function MainMenuView({
                     </span>
                     {pulsing && <ActivityDot busy={activity[n.id as 'learn' | 'review'].busy} />}
                   </div>
-                  <span className="label-data text-[10px] text-[var(--color-text-faint)] shrink-0">⌘{n.hint}</span>
+                  <span className="label-data text-[10px] text-[var(--color-text-faint)] shrink-0">{shortcutLabel(`⌘${n.hint}`)}</span>
                 </div>
                 {/* The review plate's own second-line register — faint mono,
                     indented past the icon, truncating — the same treatment

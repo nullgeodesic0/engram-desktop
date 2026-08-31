@@ -11,6 +11,7 @@ app/build/*
 !app/build/icon.svg
 !app/build/icon.png
 !app/build/icon.icns
+!app/build/icon.ico
 !app/build/dmg-background.png
 !app/build/entitlements.mac.plist
 *.log

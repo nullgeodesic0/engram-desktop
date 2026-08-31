@@ -1,9 +1,19 @@
-import { execFile } from 'node:child_process'
-import { promisify } from 'node:util'
 import { isAbsolute, join } from 'node:path'
 import { resolveEngramPlugin } from '../session/pluginResolver'
+import { resolvePython } from './pythonResolver'
+import { execCli } from '../platform'
 
-const execFileAsync = promisify(execFile)
+/**
+ * One `engram.py <args>` invocation, with the interpreter resolved rather
+ * than assumed. `python3` is not a name that exists on Windows (see
+ * pythonResolver.ts for the Microsoft-Store-alias trap that makes assuming it
+ * fail confusingly rather than cleanly), and `execCli` rather than
+ * `execFile` because the resolved interpreter may be a launcher shim.
+ */
+async function runEngram(args: string[], options: { maxBuffer?: number } = {}) {
+  const { command, prefixArgs } = await resolvePython()
+  return execCli(command, [...prefixArgs, ...args], options)
+}
 
 // Exact allowlist of engram.py subcommands this module will ever invoke.
 //
@@ -87,7 +97,7 @@ export async function engramRead<T = unknown>(command: string, args: string[] = 
   }
   const { scriptPath } = resolveEngramPlugin()
   try {
-    const { stdout } = await execFileAsync('python3', [scriptPath, command, ...args], {
+    const { stdout } = await runEngram([scriptPath, command, ...args], {
       maxBuffer: 32 * 1024 * 1024,
     })
     return JSON.parse(stdout) as T
@@ -105,7 +115,7 @@ export async function engramRead<T = unknown>(command: string, args: string[] = 
 export async function engramTopicStatusText(topic: string): Promise<string> {
   const { scriptPath } = resolveEngramPlugin()
   try {
-    const { stdout } = await execFileAsync('python3', [scriptPath, 'topic-status', '--topic', topic])
+    const { stdout } = await runEngram([scriptPath, 'topic-status', '--topic', topic])
     return stdout
   } catch (err: unknown) {
     const e = err as { stderr?: string; code?: number; message: string }
@@ -117,7 +127,7 @@ export async function engramTopicStatusText(topic: string): Promise<string> {
 // (which JSON.parses stdout), same reasoning as engramTopicStatusText above.
 export async function engramLearningHome(): Promise<string> {
   const { scriptPath } = resolveEngramPlugin()
-  const { stdout } = await execFileAsync('python3', [scriptPath, 'path'])
+  const { stdout } = await runEngram([scriptPath, 'path'])
   return stdout.trim()
 }
 
@@ -131,7 +141,7 @@ export async function engramLearningHome(): Promise<string> {
  */
 export async function engramArtifactList(): Promise<unknown[]> {
   const { scriptPath } = resolveEngramPlugin()
-  const { stdout } = await execFileAsync('python3', [scriptPath, 'artifact', 'list'])
+  const { stdout } = await runEngram([scriptPath, 'artifact', 'list'])
   const entries = JSON.parse(stdout) as { artifact: string; [k: string]: unknown }[]
   if (entries.length === 0) return entries
   const home = await engramLearningHome()
@@ -183,7 +193,7 @@ export async function engramDirectMutate(command: string, args: string[]): Promi
     }
   }
   const { scriptPath } = resolveEngramPlugin()
-  const { stdout } = await execFileAsync('python3', [scriptPath, command, ...args])
+  const { stdout } = await runEngram([scriptPath, command, ...args])
   try {
     return JSON.parse(stdout)
   } catch {

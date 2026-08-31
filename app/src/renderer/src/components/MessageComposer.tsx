@@ -7,6 +7,7 @@ import { imagesFromPaste, imagesFromDrop, dragCarriesImage } from '../shared/inc
 import { scanLatex, describeScan } from '../shared/latexSyntax'
 import { countUnicodeMath, unicodeToLatex } from '../shared/latexEditing'
 import { PaperclipIcon, HandwritingIcon } from './ui/icons'
+import { shortcutLabel } from '../shared/platform'
 
 interface MessageComposerProps {
   production: string
@@ -227,7 +228,9 @@ export function MessageComposer({
             <span />
           )}
           {mathMode && scan.problems.length === 0 && (
-            <span className="fig-caption hidden sm:inline">⇥ out of group · ⌘\\ match · ⌥↑ expand</span>
+            <span className="fig-caption hidden sm:inline">
+              ⇥ out of group · {shortcutLabel('⌘\\')} match · {shortcutLabel('⌥↑')} expand
+            </span>
           )}
           {unicodeCount > 0 && (
             <button
@@ -283,7 +286,7 @@ export function MessageComposer({
           )}
         </div>
         <div className="flex items-center gap-2">
-          <span className="kbd-hint">⌘⏎</span>
+          <span className="kbd-hint">{shortcutLabel('⌘⏎')}</span>
           <button
             onClick={submit}
             disabled={!production.trim() || !!disabledReason}

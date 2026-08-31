@@ -1,9 +1,7 @@
 import { app, shell, BrowserWindow, ipcMain, dialog, Tray, Menu, nativeImage } from 'electron'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { cp, mkdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { execFile } from 'node:child_process'
-import { promisify } from 'node:util'
 import { registerLinkHandlers, startLinkServer, stopLinkServer, autoSettle } from './link/linkService'
 import { registerReadHandlers } from './ipc/readHandlers'
 import { registerSessionHandlers, rebindWindow, abortAllSessions, onIdle } from './ipc/sessionHandlers'
@@ -15,6 +13,7 @@ import {
   installExplorableProtocolHandler,
   registerExplorableRoot,
   resolveExplorablePath,
+  explorablePathToUrl,
 } from './explorableProtocol'
 import { bridgeServer } from './bridge/bridgeServer'
 import { getNotifierSettings, setNotifierSettings } from './session/notifierState'
@@ -23,7 +22,8 @@ import { isLoopbackUrl, listLocalModels, probeLocalModel } from './session/local
 import { checkOpencodeSetup, probeOpencodeModel } from './session/opencodeCapability'
 import { apiKeyStore, isPlausibleApiKey } from './session/auth'
 import { getUnlockedAchievements, recordUnlocked } from './session/achievementsStore'
-import { startReviewNotifier, stopReviewNotifier, checkReviewsNow, refreshDueCount } from './session/reviewNotifier'
+import { startReviewNotifier, stopReviewNotifier, checkReviewsNow, refreshDueCount, installBadgeSetter } from './session/reviewNotifier'
+import { setTaskbarBadge } from './session/taskbarBadge'
 import { startPackScheduler, stopPackScheduler, topUpPacksNow } from './session/packScheduler'
 import { packSchedulerDeps } from './link/linkService'
 import { checkForUpdate, getCachedUpdateCheck, maybeAutoCheckForUpdate } from './session/updateCheck'
@@ -33,9 +33,9 @@ import { installAppMenu } from './appMenu'
 import { installGlobalErrorHandlers, getCrashLog } from './session/crashLog'
 import { buildNewTopicPrefill } from './deepLink'
 import { createDeepLinkQueue } from './deepLinkQueue'
+import { execCli, isMac, isWindows } from './platform'
+import { sweepOrphanTutors } from './session/orphanSweep'
 import type { EnvironmentCheckResult } from '../shared/types'
-
-const execFileAsync = promisify(execFile)
 
 // Installed before anything else can throw — see crashLog.ts's own doctrine
 // comment for why this exists (previously: zero handler at all, so a main-
@@ -46,6 +46,14 @@ installGlobalErrorHandlers()
 // it — the About panel, the menu bar's first item, dev-mode window chrome —
 // not just once whenReady's menu installation runs.
 app.setName('Engram Desktop')
+
+// Windows routes every toast through an Application User Model ID, and a
+// process that never declares one gets its notifications silently dropped —
+// the review reminders would simply never appear, with no error anywhere.
+// electron-builder writes this same id into the Start Menu shortcut NSIS
+// creates, so declaring it here makes the running process match the shortcut
+// and the toast is attributed to the app rather than to "Electron".
+if (isWindows) app.setAppUserModelId('com.nullgeodesic0.engram-desktop')
 
 // Must run before app is ready (Electron enforces this) — see explorableProtocol.ts
 // for why explorables get a dedicated scheme instead of file://.
@@ -61,7 +69,16 @@ registerExplorableSchemePrivileges()
 // the app is actually ready (see its own comment) since creating a
 // BrowserWindow that early throws. Windows/Linux instead relaunch the
 // process with the URL on argv, handled by the second-instance branch below.
-app.setAsDefaultProtocolClient('engram')
+// On Windows and Linux the registration records a command line, not just a
+// bundle id, so a dev run (where the executable is Electron itself and the
+// app is an argument to it) has to say so explicitly or the OS registers
+// "launch bare Electron" and every engram:// click opens an empty window.
+// Packaged builds take the plain form on all three platforms.
+if (app.isPackaged || isMac) {
+  app.setAsDefaultProtocolClient('engram')
+} else {
+  app.setAsDefaultProtocolClient('engram', process.execPath, [resolve(process.argv[1] ?? '.')])
+}
 app.on('open-url', (event, url) => {
   event.preventDefault()
   handleDeepLink(url)
@@ -117,7 +134,9 @@ async function checkEnvironment(): Promise<EnvironmentCheckResult> {
   }
   try {
     const claudeBin = await resolveClaudeBinary()
-    await execFileAsync(claudeBin, ['--version'], { timeout: 8000 })
+    // execCli, not execFile: on Windows the resolved binary is usually a
+    // `claude.cmd` batch shim, which Node refuses to execute directly.
+    await execCli(claudeBin, ['--version'], { timeout: 8000 })
     result.claudeOk = true
     result.claudePath = claudeBin
   } catch (err) {
@@ -220,8 +239,15 @@ function handleDeepLink(url: string): void {
 }
 
 function createTray(): void {
-  const icon = nativeImage.createFromPath(resourcePath('trayTemplate.png'))
-  icon.setTemplateImage(true)
+  // macOS gets a "template image" — pure black plus alpha, which the OS
+  // recolours to match the menu bar (light, dark, and the inverted state
+  // while the menu is open) on its own. Neither Windows nor Linux has that
+  // concept: shipped there, the same file is a black glyph on a black
+  // taskbar. Those platforms get the amber ink version instead, which reads
+  // against a dark taskbar and a light one alike. See
+  // scripts/build-platform-icons.py.
+  const icon = nativeImage.createFromPath(resourcePath(isMac ? 'trayTemplate.png' : 'tray.png'))
+  if (isMac) icon.setTemplateImage(true)
   tray = new Tray(icon)
   tray.setToolTip('Engram Desktop')
   tray.setContextMenu(
@@ -233,6 +259,11 @@ function createTray(): void {
     ]),
   )
   tray.on('click', () => focusOrCreateWindow())
+  // Windows fires 'double-click' for the gesture users reach for first there,
+  // and (unlike macOS) does not treat a right-click as implicitly opening the
+  // context menu on every shell — bind both rather than assume.
+  tray.on('double-click', () => focusOrCreateWindow())
+  if (isWindows) tray.on('right-click', () => tray?.popUpContextMenu())
 }
 
 function createWindow(): BrowserWindow {
@@ -252,6 +283,25 @@ function createWindow(): BrowserWindow {
   })
   mainWindow = win
   trackWindowState(win)
+
+  // The View menu carries reload and devtools in dev — but only on macOS,
+  // since Windows and Linux have no menu bar on a frameless window (see
+  // appMenu.ts). Without this, a dev run on those platforms has no way into
+  // devtools at all.
+  if (!app.isPackaged && !isMac) {
+    win.webContents.on('before-input-event', (event, input) => {
+      if (input.type !== 'keyDown') return
+      const devtools = input.key === 'F12' || (input.control && input.shift && input.key.toLowerCase() === 'i')
+      const reload = input.control && !input.shift && input.key.toLowerCase() === 'r'
+      if (devtools) {
+        win.webContents.toggleDevTools()
+        event.preventDefault()
+      } else if (reload) {
+        win.webContents.reload()
+        event.preventDefault()
+      }
+    })
+  }
 
   win.once('ready-to-show', () => win.show())
   win.on('closed', () => {
@@ -349,7 +399,9 @@ app.whenReady().then(() => {
       const resolved = await resolveExplorablePath(rawPath)
       if (!resolved) return { error: `Explorable file not found: ${rawPath}` }
       registerExplorableRoot(resolved)
-      return { url: `explorable://local${resolved}`, absolutePath: resolved }
+      // Built by explorablePathToUrl rather than string concatenation — a
+      // Windows path is not a valid URL path (see explorableProtocol.ts).
+      return { url: explorablePathToUrl(resolved), absolutePath: resolved }
     },
   )
 
@@ -513,7 +565,7 @@ app.whenReady().then(() => {
       const next = await setNotifierSettings(patch)
       // Clear right away rather than waiting for the next poll — a toggle the
       // user just flipped off should stop lying to them immediately.
-      if (!next.dockBadgeEnabled) app.setBadgeCount(0)
+      if (!next.dockBadgeEnabled) setTaskbarBadge(mainWindow, 0, resourcePath)
       return next
     },
   )
@@ -559,6 +611,10 @@ app.whenReady().then(() => {
 
   registerSessionHandlers(createWindow())
   createTray()
+  // Reads the CURRENT mainWindow on every call rather than capturing one: the
+  // Windows overlay lives on a taskbar button that disappears with the window
+  // and comes back when the tray recreates it.
+  installBadgeSetter((count) => setTaskbarBadge(mainWindow, count, resourcePath))
   startReviewNotifier(() => focusOrCreateWindow('review'), sendDueCount)
   // Keeps the phone stocked without anyone remembering to — and now, without
   // making anyone wait: the poll below is a safety net, but the real trigger
@@ -617,31 +673,6 @@ app.on('before-quit', () => {
   void stopLinkServer()
 })
 
-/** Launch-time orphan sweep — the belt-and-suspenders half of
- * `abortAllSessions` above. `before-quit` never runs on a crash, a
- * force-kill, or an installer's pkill, and a surviving tutor child keeps
- * writing its session transcript and blocks that session's `--resume`
- * (observed live, 2026-08-03). Our children are unambiguously identifiable:
- * their argv carries the app's own per-instance MCP config path
- * (`engram-desktop-mcp-<random>/mcp-config.json`, see permissionConfig.ts)
- * — nothing else on the machine launches claude with that marker. At launch
- * this process owns zero children, so every match is an orphan. SIGTERM,
- * not SIGKILL: the CLI flushes its transcript on TERM. Best-effort — a
- * failed sweep must never block startup. */
-function sweepOrphanTutors(): void {
-  execFile('ps', ['ax', '-o', 'pid=,command='], (err, stdout) => {
-    if (err) return
-    for (const line of stdout.split('\n')) {
-      if (!line.includes('engram-desktop-mcp-')) continue
-      const pid = Number(line.trim().split(/\s+/, 1)[0])
-      if (Number.isFinite(pid) && pid > 1 && pid !== process.pid) {
-        try {
-          process.kill(pid, 'SIGTERM')
-        } catch {
-          // already gone, or not ours to signal — either way, done
-        }
-      }
-    }
-  })
-}
+// Launch-time orphan sweep — see session/orphanSweep.ts for why it exists
+// and why the process enumeration has to differ per platform.
 sweepOrphanTutors()

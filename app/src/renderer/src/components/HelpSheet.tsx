@@ -1,5 +1,6 @@
 import { Modal } from './ui/Modal'
 import { SHORTCUT_GROUPS, GLOSSARY } from '../shared/helpContent'
+import { shortcutLabel } from '../shared/platform'
 
 /** The app's one help surface — a keyboard reference and a glossary, reachable
  * from the app menu and from `?` (App.tsx's global listener, which is careful
@@ -47,7 +48,7 @@ export function HelpSheet({ open, onClose }: { open: boolean; onClose: () => voi
                           <span key={ki} className="flex items-center gap-1.5">
                             {ki > 0 && <span className="text-[var(--color-text-faint)]">or</span>}
                             <kbd className="label-data px-1.5 py-0.5 rounded border border-[var(--color-hairline)] bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] text-[var(--color-text-primary)] text-xs">
-                              {k}
+                              {shortcutLabel(k)}
                             </kbd>
                           </span>
                         ))}

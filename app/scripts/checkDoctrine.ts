@@ -203,7 +203,13 @@ if (!readOnlyTs.includes("args[2] === '--restore'")) {
 }
 
 // The bespoke helpers must still only ever invoke read-only subcommands.
-const bespoke = [...readOnlyTs.matchAll(/execFileAsync\('python3',\s*\[scriptPath,\s*([^\]]*)\]/g)]
+// `runEngram([scriptPath, …])` since 2026-08-30: the literal `python3` moved
+// out of every call site when the interpreter became something resolved
+// rather than assumed (Windows has no command by that name — see
+// engramCli/pythonResolver.ts). The subcommands are what this pin is about,
+// and they are still spelled out at each call site, so the pin survives the
+// indirection; only the shape it matches changed.
+const bespoke = [...readOnlyTs.matchAll(/runEngram\(\[scriptPath,\s*([^\]]*)\]/g)]
   .flatMap((m) => literalsIn(m[1]))
   .filter((s) => !s.startsWith('--'))
 if (!eq(bespoke, PINNED_BESPOKE_READ_HELPERS)) {
@@ -239,17 +245,42 @@ const PINNED_SUBPROCESS_FILES: Record<string, string> = {
   // child, `--tools Read` only, no MCP config, no engram.py — spawned and
   // torn down entirely before any tutor session for the attachment exists.
   'main/session/transcribeHandwriting.ts': 'a one-off `claude -p`, Read-only, no MCP — transcribes handwriting BEFORE any tutor session sees it',
+  // 2026-08-30 — the Windows/Linux port. Four doors, none of which is a new
+  // route to the engine: the first is the launch primitive every other door
+  // now goes through, and the other three exist because "where is this CLI,
+  // and is it real" stopped having an answer that could be assumed.
+  'main/platform.ts':
+    'THE launch primitive — cross-spawn plus a promisified exec, so a Windows `.cmd` shim can be executed at all and its arguments survive cmd.exe. Runs nothing of its own; every command it launches is chosen by one of the doors below',
+  'main/session/cliResolver.ts':
+    'locates a CLI — a PATHEXT-aware PATH lookup, and on POSIX one `$SHELL -lic \'command -v <name>\'` probe. Never engram.py',
+  'main/engramCli/pythonResolver.ts':
+    'runs candidate interpreters with `-c "import sys; …"` to find one that really is Python 3 — a version probe, never engram.py. See its own docstring for why existence is not enough on Windows',
+  'main/session/orphanSweep.ts':
+    '`ps ax` (POSIX) / a PowerShell CIM query (Windows) to find tutor children orphaned by a crash, then SIGTERM / taskkill. Reads process tables; invokes nothing',
 }
-const SPAWN_CALL = /\b(execFile|execFileSync|execSync|exec|spawn|spawnSync|fork)\s*(?:Async)?\s*\(/g
+const SPAWN_CALL =
+  /\b(execFile|execFileSync|execSync|exec|spawn|spawnSync|fork|execCli|spawnCli|spawnCliReadOnly|runEngram)\s*(?:Async)?\s*\(/g
+
+/** Does this file launch a child process?
+ *
+ * Importing `node:child_process` used to be the whole test, and as of the
+ * 2026-08-30 Windows port it is no longer sufficient: launches now go through
+ * `platform.ts`'s `spawnCli`/`execCli`, which exist because Node refuses to
+ * execute the `.cmd` shims Windows installs CLIs as. A file can therefore
+ * spawn a process while importing nothing from `node:child_process` at all —
+ * which would have made this gate silently stop counting doors, exactly the
+ * failure mode the gate exists to prevent. Both spellings count. */
+function runsSubprocess(t: string): boolean {
+  return /from 'node:child_process'/.test(t) || /\b(execCli|spawnCli|spawnCliReadOnly)\b/.test(t)
+}
+
 for (const f of FILES) {
   const t = TEXT.get(f)!
-  // Strip the `spawn(` helper name sessionHandlers.ts defines for itself —
-  // a local function, not node:child_process.
-  const importsChildProcess = /from 'node:child_process'/.test(t)
+  const importsChildProcess = runsSubprocess(t)
   if (importsChildProcess && !(f in PINNED_SUBPROCESS_FILES)) {
     fail(
       'D1.subprocess',
-      `${f} imports node:child_process and is not a pinned subprocess caller.`,
+      `${f} launches child processes (node:child_process, or platform.ts's spawnCli/execCli) and is not a pinned subprocess caller.`,
       'The app reaches the outside world through a very small number of doors. A new one is how an engram.py call gets made without passing readOnly.ts’s allowlist — which is the only thing that makes “the app never writes engram state” mechanically true rather than merely intended.',
     )
   }
@@ -293,6 +324,15 @@ const PINNED_WRITERS: Record<string, string> = {
   'main/session/sessionIndex.ts': 'app userData',
   'main/session/updateCheck.ts': 'app userData — update-check cache',
   'main/session/permissionConfig.ts': 'os tmpdir — per-session MCP config',
+  // 2026-08-30 — Windows only, and nowhere near the learning home. Two tiny
+  // forwarding scripts named `python3`, written into app userData and put on
+  // the spawned session's PATH, because the plugin's OWN skill files shell
+  // out to `python3 "$ENGRAM" …` by that exact name and Windows has no such
+  // command. Fixing that in the environment rather than by forking hundreds
+  // of prose lines in the plugin is what keeps the vendored-plugin doctrine
+  // intact — see the module's own docstring for the full argument.
+  'main/engramCli/pythonShim.ts':
+    'app userData — bin/python3 and bin/python3.cmd, forwarding shims that give the plugin’s own skill lines an interpreter to find on Windows',
   // 2026-08-14 — OpenCode provider, opencodePermissions.ts's exact sibling of
   // permissionConfig.ts above: same os tmpdir per-session config file, same
   // reused mcpBridgeWorker.mjs, same never-touches-the-learning-home shape.

@@ -1,53 +1,26 @@
 import { existsSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { join } from 'node:path'
-import { exec } from 'node:child_process'
-import { promisify } from 'node:util'
+import { join, win32 as winPath } from 'node:path'
 import { app } from 'electron'
-
-const execAsync = promisify(exec)
-
-const COMMON_LOCATIONS = [
-  join(homedir(), '.opencode', 'bin', 'opencode'),
-  '/opt/homebrew/bin/opencode',
-  '/usr/local/bin/opencode',
-]
-
-let cached: string | null = null
+import { resolveCliBinary, clearCliBinaryCache, windowsVariants } from './cliResolver'
 
 /**
- * Resolve an absolute path to the `opencode` CLI. Same Finder/Dock PATH
- * problem as `claudeResolver.ts` — packaged launches don't inherit a login
- * shell's PATH, so we check common installs then ask the login shell once.
+ * Resolve an absolute path to the `opencode` CLI — same packaged-app PATH
+ * problem as `claudeResolver.ts`, same four-tier search in `cliResolver.ts`.
+ * The only OpenCode-specific location is its own installer's `~/.opencode/bin`.
+ *
+ * NOTE for callers: on Windows this may be a `.cmd` shim — launch it through
+ * `spawnCli`/`execCli` from `platform.ts`.
  */
 export async function resolveOpencodeBinary(): Promise<string> {
-  if (cached) return cached
-
-  for (const loc of COMMON_LOCATIONS) {
-    if (existsSync(loc)) {
-      cached = loc
-      return cached
-    }
-  }
-
-  const shell = process.env.SHELL || '/bin/zsh'
-  try {
-    const { stdout } = await execAsync(`${shell} -lic 'command -v opencode'`, { timeout: 10_000 })
-    const resolved = stdout.trim().split('\n').pop()?.trim()
-    if (resolved && existsSync(resolved)) {
-      cached = resolved
-      return cached
-    }
-  } catch {
-    // Fall through to bare-name fallback.
-  }
-
-  cached = 'opencode'
-  return cached
+  return resolveCliBinary({
+    name: 'opencode',
+    posix: (home) => [join(home, '.opencode', 'bin', 'opencode')],
+    windows: (home) => windowsVariants(winPath.join(home, '.opencode', 'bin'), 'opencode'),
+  })
 }
 
 export function clearOpencodeBinaryCache(): void {
-  cached = null
+  clearCliBinaryCache('opencode')
 }
 
 /**

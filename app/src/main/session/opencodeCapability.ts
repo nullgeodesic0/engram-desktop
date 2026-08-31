@@ -9,18 +9,14 @@
  * never run automatically, and the real cost is surfaced rather than hidden.
  */
 
-import { exec } from 'node:child_process'
-import { promisify } from 'node:util'
 import * as http from 'node:http'
 import { resolveOpencodeBinary } from './opencodeResolver'
 import { prepareOpencodeSession } from './opencodePermissions'
 import { bridgeServer } from '../bridge/bridgeServer'
-import { spawn } from 'node:child_process'
+import { execCli, spawnCliReadOnly } from '../platform'
 import type { OpencodeSetupStatus, OpencodeProbe } from '../../shared/types'
 
 export { describeOpencodeProbe } from '../../shared/opencodeVerdict'
-
-const execAsync = promisify(exec)
 
 /** No live server, no cost — just "is this usable at all". Shells out to the
  * CLI's own `models` listing rather than standing up an `opencode serve`
@@ -31,7 +27,10 @@ export async function checkOpencodeSetup(): Promise<OpencodeSetupStatus> {
     return { binaryFound: false, binaryPath: null, models: [], error: 'opencode CLI not found.' }
   }
   try {
-    const { stdout } = await execAsync(`${JSON.stringify(binaryPath)} models cursor-acp`, { timeout: 15_000 })
+    // Argument vector, not a shell string: `binaryPath` can be a Windows
+    // `.cmd` shim and can sit under a path with spaces in it. execCli quotes
+    // correctly for cmd.exe on Windows and skips the shell entirely elsewhere.
+    const { stdout } = await execCli(binaryPath, ['models', 'cursor-acp'], { timeout: 15_000 })
     const models = stdout
       .split('\n')
       .map((l) => l.trim())
@@ -86,16 +85,15 @@ export async function probeOpencodeModel(_model: string, _timeoutMs = 60_000): P
 export async function probeOpencodeModelWhenBridgeWorks(model: string, timeoutMs = 60_000): Promise<OpencodeProbe> {
   if (model.trim() === '') return { ok: false, toolUse: false, costUsd: null, error: 'No model selected.' }
 
-  let child: ReturnType<typeof spawn> | null = null
+  let child: ReturnType<typeof spawnCliReadOnly> | null = null
   let cleanup: (() => Promise<void>) | null = null
   try {
     const port = await bridgeServer.start()
     const setup = await prepareOpencodeSession(port, `probe-${Date.now()}`, model)
     cleanup = setup.cleanup
     const bin = await resolveOpencodeBinary()
-    child = spawn(bin, ['serve', '--port', '0'], {
+    child = spawnCliReadOnly(bin, ['serve', '--port', '0'], {
       cwd: setup.workspaceDir,
-      stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env, OPENCODE_CONFIG: setup.opencodeConfigPath },
     })
 

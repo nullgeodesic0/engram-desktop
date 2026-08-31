@@ -1,5 +1,3 @@
-import { execFile } from 'node:child_process'
-import { promisify } from 'node:util'
 import { existsSync } from 'node:fs'
 import { mkdir, rm, rename, cp, copyFile, mkdtemp, stat, readFile, writeFile } from 'node:fs/promises'
 import { join, dirname, basename, relative, isAbsolute, resolve } from 'node:path'
@@ -7,6 +5,7 @@ import { tmpdir, homedir } from 'node:os'
 import { randomBytes } from 'node:crypto'
 import { app, dialog } from 'electron'
 import { engramLearningHome } from '../engramCli/readOnly'
+import { execCli } from '../platform'
 import type {
   BackupInfo,
   BackupNowResult,
@@ -14,8 +13,6 @@ import type {
   RestoreArchiveResult,
   SafetySnapshotResult,
 } from '../../shared/types'
-
-const execFileAsync = promisify(execFile)
 
 /** The five userData JSON files this app owns (see topicSettings.ts,
  * sessionIndex.ts, mapAnnotations.ts, achievementsStore.ts, notifierState.ts)
@@ -111,7 +108,11 @@ export async function createBackupArchive(opts: {
 
   await mkdir(destDir, { recursive: true })
   const destPath = join(destDir, opts.fileName ?? `engram-backup-${localStamp(now)}.tar.gz`)
-  await execFileAsync('tar', ['-czf', destPath, ...args])
+  // `tar` is a real executable on all three platforms (bsdtar.exe has shipped
+  // in System32 since Windows 10 1803), so this needs no CLI resolution the
+  // way `claude`/`opencode`/`python3` do — execCli is used only for the
+  // uniform error shape, not to get around a batch-shim problem.
+  await execCli('tar', ['-czf', destPath, ...args])
   const { size } = await stat(destPath)
   return { path: destPath, bytes: size }
 }
@@ -181,7 +182,7 @@ export async function createSafetySnapshotArchive(opts: {
  * (summary counts) and restoreArchiveInto (pre-extraction validation) so
  * there's exactly one place that knows how to list an archive. */
 async function listArchiveEntries(archivePath: string): Promise<string[]> {
-  const { stdout } = await execFileAsync('tar', ['-tzf', archivePath], { maxBuffer: 32 * 1024 * 1024 })
+  const { stdout } = await execCli('tar', ['-tzf', archivePath], { maxBuffer: 32 * 1024 * 1024 })
   return stdout.split('\n').filter(Boolean)
 }
 
@@ -286,7 +287,7 @@ export async function restoreArchiveInto(opts: {
   let renamedAside = false
 
   try {
-    await execFileAsync('tar', ['-xzf', archivePath, '-C', tmpStagingDir])
+    await execCli('tar', ['-xzf', archivePath, '-C', tmpStagingDir])
 
     const stagedLearning = join(tmpStagingDir, '.claude', 'learning')
     if (!existsSync(stagedLearning)) {

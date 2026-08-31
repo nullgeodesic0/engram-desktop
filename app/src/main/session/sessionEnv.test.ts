@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { delimiter } from 'node:path'
 import { buildSessionEnv } from './sessionEnv'
 
 describe('buildSessionEnv', () => {
@@ -64,5 +65,30 @@ describe('local-model mode', () => {
     expect(buildSessionEnv(stray, '/root', 'subscription').ANTHROPIC_BASE_URL).toBeUndefined()
     expect(buildSessionEnv(stray, '/root', 'apiKey', 'sk-real').ANTHROPIC_BASE_URL).toBeUndefined()
     expect(stray.ANTHROPIC_BASE_URL).toBe('http://somewhere-else:9999') // caller's env untouched
+  })
+})
+
+describe('buildSessionEnv PATH prefix (the Windows python3 shim)', () => {
+  it('prepends the shim directory so it wins over anything already on PATH', () => {
+    const env = buildSessionEnv({ PATH: '/usr/bin:/bin' }, '/root', 'subscription', null, null, '/shim/bin')
+    expect(env.PATH).toBe(`/shim/bin${delimiter}/usr/bin:/bin`)
+  })
+
+  it('is a no-op when no shim directory is given — the macOS and Linux case', () => {
+    expect(buildSessionEnv({ PATH: '/usr/bin' }, '/root').PATH).toBe('/usr/bin')
+    expect(buildSessionEnv({ PATH: '/usr/bin' }, '/root', 'subscription', null, null, null).PATH).toBe('/usr/bin')
+  })
+
+  it('sets PATH when the inherited environment has none at all', () => {
+    expect(buildSessionEnv({}, '/root', 'subscription', null, null, '/shim/bin').PATH).toBe('/shim/bin')
+  })
+
+  it('extends the existing spelling of the variable rather than adding a rival one', () => {
+    // Windows environment names are case-insensitive, and the object Node
+    // hands back is not always normalised — writing `PATH` beside an existing
+    // `Path` would leave the child resolving against the untouched one.
+    const env = buildSessionEnv({ Path: 'C:\\Windows' }, '/root', 'subscription', null, null, 'C:\\shim')
+    expect(env.Path).toBe(`C:\\shim${delimiter}C:\\Windows`)
+    expect(env.PATH).toBeUndefined()
   })
 })

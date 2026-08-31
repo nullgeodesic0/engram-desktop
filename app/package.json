@@ -1,8 +1,11 @@
 {
   "name": "engram-desktop",
   "version": "0.1.3",
-  "description": "A custom desktop app for the Engram Claude Code learning plugin — scripts the claude CLI directly, no API billing.",
-  "author": "Tyler Hadsell",
+  "description": "A custom desktop app for the Engram Claude Code learning plugin \u2014 scripts the claude CLI directly, no API billing.",
+  "author": {
+    "name": "Tyler Hadsell",
+    "email": "52475218+nullgeodesic0@users.noreply.github.com"
+  },
   "license": "MIT",
   "private": true,
   "type": "module",
@@ -21,10 +24,14 @@
     "check:plugin-overlay": "tsx scripts/applyPluginOverlays.ts --check",
     "apply:plugin-overlay": "tsx scripts/applyPluginOverlays.ts",
     "icons": "./scripts/build-icons.sh",
+    "icons:platform": "python3 scripts/build-platform-icons.py",
     "bundle:bridge-worker": "esbuild src/main/bridge/mcpBridgeWorker.mjs --bundle --platform=node --format=esm --outfile=resources/mcpBridgeWorker.mjs",
     "bundle:opencode-plugin": "cd vendor/opencode-plugin && npm install --omit=dev",
-    "dist": "npm run bundle:bridge-worker && npm run bundle:opencode-plugin && npm run build && electron-builder",
-    "dist:mac": "npm run bundle:bridge-worker && npm run bundle:opencode-plugin && npm run build && electron-builder --mac"
+    "dist:prepare": "npm run bundle:bridge-worker && npm run bundle:opencode-plugin && npm run build",
+    "dist": "npm run dist:prepare && electron-builder",
+    "dist:mac": "npm run dist:prepare && electron-builder --mac",
+    "dist:win": "npm run dist:prepare && electron-builder --win",
+    "dist:linux": "npm run dist:prepare && electron-builder --linux"
   },
   "dependencies": {
     "@fontsource/fraunces": "^5.3.0",
@@ -32,19 +39,23 @@
     "@fontsource/space-grotesk": "^5.3.0",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "@types/three": "^0.185.1",
+    "cross-spawn": "^7.0.6",
     "katex": "^0.18.0",
     "marked": "^18.0.6",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "three": "^0.185.1",
+    "which": "^5.0.0",
     "zod": "^3.24.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.0",
+    "@types/cross-spawn": "^6.0.6",
     "@types/katex": "^0.16.8",
     "@types/node": "^22.10.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
+    "@types/which": "^3.0.4",
     "@vitejs/plugin-react": "^4.3.4",
     "electron": "^36.2.1",
     "electron-builder": "^26.15.3",
@@ -92,14 +103,6 @@
       "target": [
         "dmg",
         "zip"
-      ],
-      "protocols": [
-        {
-          "name": "Engram Deep Link",
-          "schemes": [
-            "engram"
-          ]
-        }
       ]
     },
     "dmg": {
@@ -122,6 +125,72 @@
           "path": "/Applications"
         }
       ]
+    },
+    "protocols": [
+      {
+        "name": "Engram Deep Link",
+        "schemes": [
+          "engram"
+        ]
+      }
+    ],
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Engram Desktop",
+      "artifactName": "${productName}-${version}-win-${arch}-setup.${ext}"
+    },
+    "linux": {
+      "icon": "build/icon.png",
+      "category": "Education",
+      "desktop": {
+        "entry": {
+          "MimeType": "x-scheme-handler/engram;",
+          "Keywords": "learning;study;spaced-repetition;engram;",
+          "StartupWMClass": "Engram Desktop"
+        }
+      },
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "synopsis": "First-principles learning, verified by free recall.",
+      "syncDesktopName": true
     }
   },
   "allowScripts": {
@@ -130,5 +199,7 @@
     "esbuild@0.25.12": true,
     "fsevents@2.3.3": true,
     "electron-winstaller@5.4.0": true
-  }
+  },
+  "homepage": "https://github.com/nullgeodesic0/engram-desktop",
+  "desktopName": "engram-desktop.desktop"
 }
