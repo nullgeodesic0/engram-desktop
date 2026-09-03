@@ -19,7 +19,35 @@ permissions:
   contents: write
 
 jobs:
+  # A dedicated first job that does nothing but guarantee the draft release
+  # exists before any platform build starts. Without this, three
+  # electron-builder processes on three different runners each do their own
+  # "does a release for this tag exist? if not, create one" check against
+  # the GitHub API at nearly the same instant — and when none of them yet
+  # see each other's not-yet-visible release (this raced in practice: v0.1.5's
+  # first attempt split into two separate draft releases, mac+windows landing
+  # in one and linux in the other), each one creates its own, and the
+  # published set is whichever one happens to be listed first — silently
+  # missing two-thirds of the artifacts. Creating it here first, and having
+  # every build job `needs` this one, makes that race impossible: by the time
+  # any `--publish always` runs, the release is already there to find, and
+  # three parallel uploads to an EXISTING release are exactly what this setup
+  # already relies on working (and does — this is not the part that raced).
+  create-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure a draft release exists for this tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "${{ github.ref_name }}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "Release ${{ github.ref_name }} already exists — nothing to do."
+          else
+            gh release create "${{ github.ref_name }}" --repo "${{ github.repository }}" --draft --title "${{ github.ref_name }}" --notes ""
+          fi
+
   build-mac:
+    needs: create-release
     runs-on: macos-14 # Apple silicon — the app targets arm64
     defaults:
       run:
@@ -49,6 +77,7 @@ jobs:
         run: npm run dist:mac -- --publish always
 
   build-windows:
+    needs: create-release
     runs-on: windows-latest
     defaults:
       run:
@@ -77,6 +106,7 @@ jobs:
         run: npm run dist:win -- --publish always
 
   build-linux:
+    needs: create-release
     runs-on: ubuntu-latest
     defaults:
       run:
