@@ -26,6 +26,7 @@ import { soundOn, setSoundOn } from '../shared/soundscape'
 import { friendlyErrorText } from '../shared/friendlyError'
 import { getStoredThemeChoice, setThemeChoice, type ThemeChoice } from '../shared/theme'
 import { deviceNoun, updateCommands } from '../shared/platform'
+import { SUBSCRIPTION_MODEL_OPTIONS } from '../../../shared/subscriptionModels'
 
 // The install flow differs per platform (a .app copied into /Applications, an
 // NSIS installer, an AppImage), so the list is resolved at render time rather
@@ -681,6 +682,10 @@ export function SettingsView() {
     setAuth(await window.engram.setOpencodeModel(model))
   }
 
+  async function pickSubscriptionModel(model: string) {
+    setAuth(await window.engram.setSubscriptionModel(model))
+  }
+
   async function runOpencodeProbe() {
     if (!auth) return
     setOpencodeProbing(true)
@@ -1221,6 +1226,18 @@ export function SettingsView() {
             // is otherwise intact; this is only the picker entry point.
           ]}
         />
+        {(auth?.authMode ?? 'subscription') === 'subscription' && (
+          <PickerRow
+            label="Model"
+            hint={
+              SUBSCRIPTION_MODEL_OPTIONS.find((o) => o.value === (auth?.subscriptionModel ?? ''))?.description ??
+              'Whatever the CLI itself defaults to — currently Opus.'
+            }
+            current={auth?.subscriptionModel ?? ''}
+            onPick={pickSubscriptionModel}
+            options={SUBSCRIPTION_MODEL_OPTIONS}
+          />
+        )}
         {(auth?.authMode ?? 'subscription') === 'apiKey' && (
           <div className="flex flex-col gap-2">
             {keyStatus?.present ? (

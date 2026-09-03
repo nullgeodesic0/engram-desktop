@@ -15,6 +15,7 @@ const DEFAULTS: AuthSettings = {
   localBaseUrl: DEFAULT_LOCAL_BASE_URL,
   localModel: '',
   opencodeModel: DEFAULT_OPENCODE_MODEL,
+  subscriptionModel: '',
 }
 
 const MODES: AuthMode[] = ['subscription', 'apiKey', 'local', 'opencodeCursor']
@@ -37,6 +38,11 @@ export async function getAuthSettings(): Promise<AuthSettings> {
         typeof parsed.opencodeModel === 'string' && parsed.opencodeModel.trim() !== ''
           ? parsed.opencodeModel.trim()
           : DEFAULTS.opencodeModel,
+      // Unlike opencodeModel, an EMPTY string is a real, meaningful choice
+      // here ("Claude Code default" — see subscriptionModels.ts), not a
+      // missing value to fall back from. Only a non-string in the file
+      // (corruption, a hand-edit) falls back to the default.
+      subscriptionModel: typeof parsed.subscriptionModel === 'string' ? parsed.subscriptionModel.trim() : DEFAULTS.subscriptionModel,
     }
   } catch {
     return { ...DEFAULTS }
@@ -71,4 +77,12 @@ export async function setOpencodeModelSettings(model: string): Promise<AuthSetti
     ...current,
     opencodeModel: trimmed === '' ? DEFAULT_OPENCODE_MODEL : trimmed,
   })
+}
+
+/** `model` empty means "back to the Claude Code default" — unlike
+ * `setOpencodeModelSettings`, that is NOT the same as "unset," so an empty
+ * string here is stored as-is rather than swapped for a named default. */
+export async function setSubscriptionModelSettings(model: string): Promise<AuthSettings> {
+  const current = await getAuthSettings()
+  return persist({ ...current, subscriptionModel: model.trim() })
 }

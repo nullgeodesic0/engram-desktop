@@ -55,7 +55,7 @@ export async function transcribeHandwriting(pages: readonly string[]): Promise<s
   if (pages.length === 0) return ''
   const { root: engramRoot } = resolveEngramPlugin()
   const claudeBin = await resolveClaudeBinary()
-  const { authMode, localBaseUrl, localModel } = await getAuthSettings()
+  const { authMode, localBaseUrl, localModel, subscriptionModel } = await getAuthSettings()
 
   const args = [
     '-p', buildPrompt(pages),
@@ -66,11 +66,17 @@ export async function transcribeHandwriting(pages: readonly string[]): Promise<s
     // Stop hook from settings.local.json.
     '--setting-sources', 'user,project',
   ]
+  // Same gating as SessionManager's own spawn — see its comment for why
+  // subscription mode is optional here and local mode is not. A photographed
+  // page runs through this exact same path once per attachment, so the
+  // learner's model pick applies here too rather than only to live sittings.
   if (authMode === 'local') {
     if (localModel.trim() === '') {
       throw new Error('Local-model mode is selected but no model is chosen — pick one in Settings → Authentication, or switch back to subscription mode.')
     }
     args.push('--model', localModel.trim())
+  } else if (authMode === 'subscription' && subscriptionModel.trim() !== '') {
+    args.push('--model', subscriptionModel.trim())
   }
 
   const env = buildSessionEnv(

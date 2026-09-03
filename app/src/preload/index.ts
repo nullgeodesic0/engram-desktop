@@ -108,6 +108,7 @@ const engramApi = {
     ipcRenderer.invoke('auth:probeLocalModel', baseUrl, model),
   opencodeSetup: (): Promise<OpencodeSetupStatus> => ipcRenderer.invoke('auth:opencodeSetup'),
   setOpencodeModel: (model: string): Promise<AuthSettings> => ipcRenderer.invoke('auth:setOpencodeModel', model),
+  setSubscriptionModel: (model: string): Promise<AuthSettings> => ipcRenderer.invoke('auth:setSubscriptionModel', model),
   probeOpencodeModel: (model: string): Promise<OpencodeProbe> => ipcRenderer.invoke('auth:probeOpencodeModel', model),
   authKeyStatus: (): Promise<ApiKeyStatus> => ipcRenderer.invoke('auth:keyStatus'),
   authSetApiKey: (key: string): Promise<ApiKeyStatus> => ipcRenderer.invoke('auth:setApiKey', key),

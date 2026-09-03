@@ -112,15 +112,27 @@ export class SessionManager extends EventEmitter {
     // an actionable error when apiKey mode has no stored key, or local mode
     // has no server — the session fails to start rather than running on
     // ambient billing or against an endpoint nobody chose.
-    const { authMode, localBaseUrl, localModel } = await getAuthSettings()
-    // `--model` ONLY in local mode. In subscription/apiKey mode the CLI's
-    // own default is the right answer and pinning a name here would silently
-    // outlive whatever model the user actually selected in Claude Code.
+    const { authMode, localBaseUrl, localModel, subscriptionModel } = await getAuthSettings()
+    // `--model` in local mode is mandatory (there is no runtime default to
+    // fall back to). In subscription mode it is OPTIONAL: an empty
+    // `subscriptionModel` means "trust the CLI's own default," preserved as
+    // the out-of-the-box behavior so upgrading never silently changes which
+    // model a sitting runs on. A learner who picks one explicitly (Settings
+    // → Authentication) gets it pinned here instead — the actual point of
+    // that setting: the CLI's own default is currently Opus, which a
+    // multi-turn tutoring sitting burns through a small plan's usage
+    // allotment on far faster than Sonnet or Haiku do for the same session
+    // length (see shared/subscriptionModels.ts). apiKey mode never sets this
+    // — the CLI's default is the right answer there too, and a stray
+    // subscriptionModel pick made while in a different mode must not leak
+    // into per-token billing behavior it was never chosen for.
     if (authMode === 'local') {
       if (localModel.trim() === '') {
         throw new Error('Local-model mode is selected but no model is chosen — pick one in Settings → Authentication, or switch back to subscription mode.')
       }
       args.push('--model', localModel.trim())
+    } else if (authMode === 'subscription' && subscriptionModel.trim() !== '') {
+      args.push('--model', subscriptionModel.trim())
     }
     // Windows only (null everywhere else): a directory holding a `python3`
     // that forwards to the real interpreter, prepended to the child's PATH.

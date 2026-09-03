@@ -336,6 +336,12 @@ export interface AuthSettings {
   /** Cursor ACP model id without the `cursor-acp/` prefix (e.g. `auto`).
    * Passed to OpenCode as `-m cursor-acp/<id>`. */
   opencodeModel: string
+  /** Model tag passed to `claude --model` in SUBSCRIPTION mode only — see
+   * shared/subscriptionModels.ts. Empty means "omit the flag, trust the
+   * CLI's own default," which is what every existing install already does;
+   * this field defaults to empty so upgrading never silently changes which
+   * model a sitting runs on. */
+  subscriptionModel: string
 }
 
 /** What a local model can actually be trusted to drive.

@@ -17,7 +17,7 @@ import {
 } from './explorableProtocol'
 import { bridgeServer } from './bridge/bridgeServer'
 import { getNotifierSettings, setNotifierSettings } from './session/notifierState'
-import { getAuthSettings, setAuthMode, setLocalModelSettings, setOpencodeModelSettings } from './session/authSettings'
+import { getAuthSettings, setAuthMode, setLocalModelSettings, setOpencodeModelSettings, setSubscriptionModelSettings } from './session/authSettings'
 import { isLoopbackUrl, listLocalModels, probeLocalModel } from './session/localModel'
 import { checkOpencodeSetup, probeOpencodeModel } from './session/opencodeCapability'
 import { apiKeyStore, isPlausibleApiKey } from './session/auth'
@@ -284,24 +284,39 @@ function createWindow(): BrowserWindow {
   mainWindow = win
   trackWindowState(win)
 
-  // The View menu carries reload and devtools in dev — but only on macOS,
-  // since Windows and Linux have no menu bar on a frameless window (see
-  // appMenu.ts). Without this, a dev run on those platforms has no way into
-  // devtools at all.
-  if (!app.isPackaged && !isMac) {
-    win.webContents.on('before-input-event', (event, input) => {
-      if (input.type !== 'keyDown') return
-      const devtools = input.key === 'F12' || (input.control && input.shift && input.key.toLowerCase() === 'i')
-      const reload = input.control && !input.shift && input.key.toLowerCase() === 'r'
-      if (devtools) {
-        win.webContents.toggleDevTools()
-        event.preventDefault()
-      } else if (reload) {
-        win.webContents.reload()
-        event.preventDefault()
-      }
-    })
-  }
+  // DevTools toggle — F12, or Ctrl+Shift+I (Cmd+Option+I on macOS) — on
+  // EVERY build, packaged included, on every platform. This is deliberate,
+  // not a dev-only convenience left over from testing:
+  //
+  //  - The macOS menu's own devtools item only exists when `!app.isPackaged`
+  //    (see appMenu.ts), so before this a packaged install had NO route to
+  //    devtools on any platform at all.
+  //  - Windows and Linux have no menu bar on this frameless window in the
+  //    first place (again, appMenu.ts), packaged or not.
+  //  - The one thing standing between "the interface hit an unexpected
+  //    error" and a learner being able to tell anyone what actually broke is
+  //    the devtools console — the ErrorBoundary shows the message inline,
+  //    but not every crash reaches a message a person can read at a glance,
+  //    and there is no other way to see a stack trace, a failed IPC call, or
+  //    the network tab in a build nobody attached a debugger to.
+  //
+  // Reload (Ctrl+R / Cmd+R, non-macOS only — macOS keeps the packaged-app
+  // convention of no reload shortcut, matching every other menu-bar app)
+  // just re-navigates the currently loaded URL, packaged or dev, which is
+  // exactly what the ErrorBoundary's own "Reload" button already does.
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown') return
+    const devtoolsCombo = isMac ? input.meta && input.alt && input.key.toLowerCase() === 'i' : input.control && input.shift && input.key.toLowerCase() === 'i'
+    const devtools = input.key === 'F12' || devtoolsCombo
+    const reload = !isMac && input.control && !input.shift && input.key.toLowerCase() === 'r'
+    if (devtools) {
+      win.webContents.toggleDevTools()
+      event.preventDefault()
+    } else if (reload) {
+      win.webContents.reload()
+      event.preventDefault()
+    }
+  })
 
   win.once('ready-to-show', () => win.show())
   win.on('closed', () => {
@@ -545,6 +560,13 @@ app.whenReady().then(() => {
   ipcMain.handle('auth:probeOpencodeModel', (_e, model: unknown) => {
     if (typeof model !== 'string') throw new Error('auth:probeOpencodeModel: model must be a string')
     return probeOpencodeModel(model)
+  })
+  // Empty string is a real, meaningful choice here ("Claude Code default" —
+  // see shared/subscriptionModels.ts), not an omission to guard against like
+  // the other model setters above — so no non-empty check.
+  ipcMain.handle('auth:setSubscriptionModel', (_e, model: unknown) => {
+    if (typeof model !== 'string') throw new Error('auth:setSubscriptionModel: model must be a string')
+    return setSubscriptionModelSettings(model)
   })
   ipcMain.handle('auth:keyStatus', () => apiKeyStore().status())
   ipcMain.handle('auth:setApiKey', (_e, key: unknown) => {
