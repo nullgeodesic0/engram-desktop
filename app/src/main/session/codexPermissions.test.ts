@@ -19,6 +19,9 @@ describe('buildCodexThreadSetup', () => {
         command: '/app/Engram Desktop',
         args: ['/app/mcpBridgeWorker.mjs'],
         required: true,
+        // Engram's private loopback bridge must run without a second Codex
+        // approval prompt; ask_user_question is itself the app's modal.
+        default_tools_approval_mode: 'approve',
         env: {
           ENGRAM_BRIDGE_PORT: '4312',
           ENGRAM_BRIDGE_SESSION_ID: 'desktop-session',

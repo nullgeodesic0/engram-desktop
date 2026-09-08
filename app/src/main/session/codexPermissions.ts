@@ -55,7 +55,12 @@ export function buildCodexThreadSetup(options: CodexThreadSetupOptions): {
           enabled: true,
           required: true,
           enabled_tools: [...BRIDGE_TOOL_NAMES],
-          default_tools_approval_mode: 'auto',
+          // `auto` treats these custom local tools as approval-requiring.
+          // With a headless `never` thread policy Codex rejects them before
+          // the bridge can render anything, then falls back to plain prose.
+          // This approval applies only to this exact, app-owned MCP server;
+          // shell and every unrelated tool keep the thread's `never` policy.
+          default_tools_approval_mode: 'approve',
           tool_timeout_sec: 600,
         },
       },
