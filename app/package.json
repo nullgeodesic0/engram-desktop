@@ -91,6 +91,10 @@
       {
         "from": "vendor/opencode-plugin/node_modules",
         "to": "opencode-plugin"
+      },
+      {
+        "from": "../vendor/engram",
+        "to": "engram-plugin"
       }
     ],
     "mac": {

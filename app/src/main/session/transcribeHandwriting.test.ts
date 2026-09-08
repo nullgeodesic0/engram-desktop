@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { buildPrompt } from './transcribeHandwriting'
+import {
+  assertCodexImageModel,
+  buildCodexTranscriptionInput,
+  buildPrompt,
+  codexTranscriptionTurnError,
+} from './transcribeHandwriting'
 
 describe('transcribeHandwriting buildPrompt', () => {
   it('lists the files in order', () => {
@@ -28,5 +33,33 @@ describe('transcribeHandwriting buildPrompt', () => {
     for (const forbidden of ['rubric', 'claim', 'grade', 'correct answer', 'node', 'topic']) {
       expect(p, forbidden).not.toContain(forbidden)
     }
+  })
+})
+
+describe('Codex handwriting input', () => {
+  it('passes pages as isolated local-image items in reading order', () => {
+    expect(buildCodexTranscriptionInput(['/a/p1.jpg', '/a/p2.jpg'])).toEqual([
+      { type: 'text', text: expect.stringContaining('exactly as written'), text_elements: [] },
+      { type: 'localImage', path: '/a/p1.jpg' },
+      { type: 'localImage', path: '/a/p2.jpg' },
+    ])
+  })
+
+  it('rejects a selected text-only model before starting a paid turn', () => {
+    expect(() => assertCodexImageModel([
+      { value: '', label: 'Codex default', description: 'Default', inputModalities: ['text', 'image'] },
+      { value: 'gpt-text', label: 'GPT Text', description: 'Text only', inputModalities: ['text'] },
+    ], 'gpt-text')).toThrow('does not accept images')
+  })
+
+  it('accepts the image-capable server default', () => {
+    expect(() => assertCodexImageModel([
+      { value: '', label: 'Codex default', description: 'Default', inputModalities: ['text', 'image'] },
+    ], '')).not.toThrow()
+  })
+
+  it('treats interrupted turns as transcription failures', () => {
+    expect(codexTranscriptionTurnError({ status: 'interrupted' })?.message).toContain('interrupted')
+    expect(codexTranscriptionTurnError({ status: 'completed' })).toBeNull()
   })
 })

@@ -14,6 +14,7 @@ import type { SessionEvent } from '../../shared/sessionEvents'
 import { isTaskNotificationContent } from '../../shared/taskNotification'
 import { homedir } from 'node:os'
 import { spawnCli } from '../platform'
+import type { SessionProvider } from '../../shared/types'
 
 interface RawToolUseBlock {
   type: 'tool_use'
@@ -37,6 +38,9 @@ const STALL_THRESHOLD_MS = 90_000
 
 export class SessionManager extends EventEmitter {
   readonly sessionId: string
+  readonly provider: SessionProvider = 'claude'
+  readonly providerSessionId: string
+  model = 'Claude default'
   private readonly isResume: boolean
   private child: ChildProcessWithoutNullStreams | null = null
   private splitter = new NdjsonLineSplitter()
@@ -59,6 +63,7 @@ export class SessionManager extends EventEmitter {
   constructor(resumeSessionId?: string) {
     super()
     this.sessionId = resumeSessionId ?? randomUUID()
+    this.providerSessionId = this.sessionId
     this.isResume = Boolean(resumeSessionId)
     this.ready = new Promise((resolve) => {
       this.readyResolve = resolve
@@ -131,8 +136,12 @@ export class SessionManager extends EventEmitter {
         throw new Error('Local-model mode is selected but no model is chosen — pick one in Settings → Authentication, or switch back to subscription mode.')
       }
       args.push('--model', localModel.trim())
+      this.model = localModel.trim()
     } else if (authMode === 'subscription' && subscriptionModel.trim() !== '') {
       args.push('--model', subscriptionModel.trim())
+      this.model = subscriptionModel.trim()
+    } else {
+      this.model = 'Claude default'
     }
     // Windows only (null everywhere else): a directory holding a `python3`
     // that forwards to the real interpreter, prepended to the child's PATH.

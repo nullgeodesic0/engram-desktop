@@ -1,17 +1,18 @@
 import { ipcMain, type BrowserWindow } from 'electron'
 import { SessionManager } from '../session/SessionManager'
 import { OpencodeSessionManager } from '../session/opencodeSession'
+import { CodexSessionManager } from '../session/CodexSessionManager'
 import { getAuthSettings } from '../session/authSettings'
 import { bridgeServer } from '../bridge/bridgeServer'
 import type { BridgeAskResponse } from '../../shared/bridgeProtocol'
 import type { SessionEvent } from '../../shared/sessionEvents'
-import { recordSession, lastSessionFor, sessionHistoryFor } from '../session/sessionIndex'
+import { recordSession, lastSessionEntryFor, lastSessionFor, sessionHistoryFor } from '../session/sessionIndex'
 import { getTopicSettings, setTopicSettings, type TopicSettings } from '../session/topicSettings'
 import { readTranscript } from '../session/transcriptReader'
 import { exportSitting } from '../session/exportSitting'
 import { exportMap } from '../session/exportMap'
 import { backupNow, describeArchive, restoreFromArchive, pickBackupArchivePath, getBackupInfo } from '../session/backup'
-import type { ExportSittingRequest, ExportSittingResult, ExportMapRequest } from '../../shared/types'
+import type { ExportSittingRequest, ExportSittingResult, ExportMapRequest, SessionIndexEntry, SessionProvider } from '../../shared/types'
 
 type SessionKind = 'learn' | 'review' | 'coach'
 
@@ -23,10 +24,14 @@ type SessionKind = 'learn' | 'review' | 'coach'
  * the renderer, mark derivation, replay) only ever needs this much. */
 interface DrivenSession {
   readonly sessionId: string
+  readonly provider: SessionProvider
+  readonly providerSessionId: string
+  readonly model: string
   start(initialMessage: string, extraInstructions?: string): Promise<void>
   sendUserMessage(text: string): void
   sendUserMessageWhenReady(text: string): Promise<void>
   abort(): void
+  shutdown?: () => Promise<void>
   on(event: 'event', listener: (event: SessionEvent) => void): unknown
 }
 
@@ -103,9 +108,14 @@ async function buildExtraInstructions(topicId: string): Promise<string | undefin
  * with this process (observed live, 2026-08-03: an orphan kept a sitting's
  * transcript growing for minutes after the app was gone, and the learner's
  * resume met a session still "in use"). */
-export function abortAllSessions(): void {
-  for (const manager of sessions.values()) manager.abort()
+export async function abortAllSessions(): Promise<void> {
+  const closing = [...sessions.values()].map((manager) => {
+    if (manager.shutdown) return manager.shutdown()
+    manager.abort()
+    return Promise.resolve()
+  })
   sessions.clear()
+  await Promise.all(closing)
 }
 
 export function hasLiveSessions(): boolean {
@@ -119,7 +129,7 @@ export function hasLiveSessions(): boolean {
 export async function startSession(
   initialMessage: string,
   kind: SessionKind,
-  resumeSessionId?: string,
+  resumeSession?: string | SessionIndexEntry,
   topicId?: string,
   // A background kickoff (pack top-up, the phone's ASK button, the mobile
   // drain) sends one message and expects the sitting to finish the whole
@@ -141,8 +151,15 @@ export async function startSession(
   // registry, event forwarding, resume bookkeeping) branches on which one
   // this is.
   const { authMode } = await getAuthSettings()
-  const manager: DrivenSession =
-    authMode === 'opencodeCursor' ? new OpencodeSessionManager(resumeSessionId) : new SessionManager(resumeSessionId)
+  const provider: SessionProvider = authMode === 'codexSubscription' ? 'codex' : authMode === 'opencodeCursor' ? 'opencode' : 'claude'
+  const resumeEntry = typeof resumeSession === 'string'
+    ? { sessionId: resumeSession, providerSessionId: resumeSession, provider, model: `${provider} default`, key: topicId ?? kind, startedAt: '' } satisfies SessionIndexEntry
+    : resumeSession
+  const manager: DrivenSession = provider === 'codex'
+    ? new CodexSessionManager(kind, resumeEntry)
+    : provider === 'opencode'
+      ? new OpencodeSessionManager(resumeEntry?.sessionId)
+      : new SessionManager(resumeEntry?.providerSessionId)
   sessions.set(manager.sessionId, manager)
   manager.on('event', (event: SessionEvent) => {
     activeWindow?.webContents.send('session:event', { sessionId: manager.sessionId, event })
@@ -157,11 +174,25 @@ export async function startSession(
   // doesn't accept a new one, so a topic's extra instructions (and its initial-context
   // files) only apply on a fresh start; a resumed session already read them once.
   const extraInstructions =
-    !resumeSessionId && topicId ? await buildExtraInstructions(topicId) : undefined
-  await manager.start(initialMessage, extraInstructions)
+    !resumeEntry && topicId ? await buildExtraInstructions(topicId) : undefined
+  try {
+    await manager.start(initialMessage, extraInstructions)
+  } catch (error) {
+    // A resolver/auth/config failure can happen before a child exists and
+    // therefore before any `closed` event has a chance to clean the registry.
+    // Never leave that failed start occupying the global session slot.
+    sessions.delete(manager.sessionId)
+    manager.abort()
+    notifyIfIdle()
+    throw error
+  }
   // A specific topic gets its own remembered session, distinct from other topics'
   // (see sessionIndex.ts) — 'review'/'coach' aren't topic-scoped, so `kind` is the key.
-  await recordSession(topicId ?? kind, manager.sessionId)
+  await recordSession(topicId ?? kind, manager.sessionId, {
+    provider: manager.provider,
+    providerSessionId: manager.providerSessionId,
+    model: manager.model,
+  })
   return { sessionId: manager.sessionId }
 }
 
@@ -175,11 +206,17 @@ export function registerSessionHandlers(win: BrowserWindow): void {
   // "Continue if there's a previous session for this key, otherwise start fresh" — one
   // call, no separate resume-vs-start branching needed at the call site.
   ipcMain.handle('session:resume', async (_e, initialMessage: string, kind: SessionKind, topicId?: string) => {
-    const previous = await lastSessionFor(topicId ?? kind)
+    const { authMode } = await getAuthSettings()
+    const provider: SessionProvider = authMode === 'codexSubscription' ? 'codex' : authMode === 'opencodeCursor' ? 'opencode' : 'claude'
+    const previous = await lastSessionEntryFor(topicId ?? kind, provider)
     return startSession(initialMessage, kind, previous ?? undefined, topicId)
   })
 
-  ipcMain.handle('session:lastFor', (_e, kind: SessionKind, topicId?: string) => lastSessionFor(topicId ?? kind))
+  ipcMain.handle('session:lastFor', async (_e, kind: SessionKind, topicId?: string) => {
+    const { authMode } = await getAuthSettings()
+    const provider: SessionProvider = authMode === 'codexSubscription' ? 'codex' : authMode === 'opencodeCursor' ? 'opencode' : 'claude'
+    return lastSessionFor(topicId ?? kind, provider)
+  })
   ipcMain.handle('session:historyFor', (_e, kind: SessionKind, topicId?: string) => sessionHistoryFor(topicId ?? kind))
 
   // History replay on resume — reads Claude Code's own on-disk transcript for a

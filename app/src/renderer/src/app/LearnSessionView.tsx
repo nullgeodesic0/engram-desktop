@@ -10,6 +10,7 @@ import type {
   EnvironmentCheckResult,
   NewTopicPrefill,
 } from '../../../shared/types'
+import { environmentIsReady } from '../../../shared/environmentStatus'
 import { RateLimitBanner } from '../components/RateLimitBanner'
 import { isBlockingRateLimitStatus } from '../../../shared/rateLimit'
 import { ChatMessageView } from '../components/ChatMessageView'
@@ -1121,7 +1122,9 @@ export function LearnSessionView({
           // follows a mark-boundary tool call (typically `render_beat`
           // posting the probe itself) instead of starting a new bubble.
           if (last && last.role === 'assistant' && (!breakBubble || bareProbeHeaderExceptionApplies(last.text, boundaryRun))) {
-            const text = mergeAssistantText(last.text, breakBubble, event.text)
+            const text = event.append && !breakBubble
+              ? last.text + event.text
+              : mergeAssistantText(last.text, breakBubble, event.text)
             // Best-effort fallback only: the bolded-label convention rarely
             // appears in real prose, so a null here means "no signal", not
             // "no beat" — never let it wipe what the reliable render_beat
@@ -2329,7 +2332,7 @@ export function LearnSessionView({
         const active = sortTopics(allTopics.filter((t) => topicBucket(t) === 'active'), topicSort)
         const consolidated = sortTopics(allTopics.filter((t) => topicBucket(t) === 'consolidated'), topicSort)
         const notStarted = sortTopics(allTopics.filter((t) => topicBucket(t) === 'notStarted'), topicSort)
-        const envBroken = envCheck !== null && !(envCheck.claudeOk && envCheck.pluginOk)
+        const envBroken = envCheck !== null && !environmentIsReady(envCheck)
         return (
           <div className="flex-1 min-h-0 overflow-y-auto">
             <div className="page-measure flex flex-col gap-3">
@@ -2340,8 +2343,8 @@ export function LearnSessionView({
               </>
             )}
             {/* Same envCheck gate as HomeView's empty state — topics() routinely
-                resolves before environmentCheck() (up to ~10s spawning `claude
-                --version`), so the guided-vs-plain decision waits on it too. */}
+                resolves before environmentCheck() finishes checking the selected
+                provider CLI, so the guided-vs-plain decision waits on it too. */}
             {topics !== null && topics.length === 0 && envCheck === null && <TopicListSkeleton />}
             {topics !== null && topics.length === 0 && envBroken && envCheck && (
               <div className="flex flex-col items-start gap-3 py-10 w-full max-w-lg">
@@ -2350,8 +2353,8 @@ export function LearnSessionView({
                   Two things first.
                 </div>
                 <p className="text-sm text-[var(--color-text-dim)] max-w-md">
-                  Engram Desktop scripts the Claude Code CLI directly — both of these need to be in place before a
-                  topic can start.
+                  Engram Desktop drives the provider selected in Settings — that CLI and the Engram learning engine
+                  need to be available before a topic can start.
                 </p>
                 <div className="w-full">
                   <EnvironmentSteps result={envCheck} />

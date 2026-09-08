@@ -1,12 +1,8 @@
 import { app } from 'electron'
 import { join } from 'node:path'
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
-
-export interface SessionIndexEntry {
-  sessionId: string
-  key: string
-  startedAt: string
-}
+import type { SessionIndexEntry, SessionProvider } from '../../shared/types'
+export type { SessionIndexEntry } from '../../shared/types'
 
 /**
  * Remembers `{key -> session_id[]}` across app restarts — an append-only history,
@@ -24,20 +20,55 @@ function indexPath(): string {
   return join(app.getPath('userData'), 'session-index.json')
 }
 
-async function readIndex(): Promise<Record<string, SessionIndexEntry[]>> {
+export type SessionIndex = Record<string, SessionIndexEntry[]>
+
+function defaultModel(provider: SessionProvider): string {
+  return provider === 'codex' ? 'Codex default' : provider === 'opencode' ? 'OpenCode default' : 'Claude default'
+}
+
+/** Converts both the original single-row shape and the pre-provider array
+ * shape into provider-safe entries. Malformed rows never become resumable. */
+export function normalizeSessionIndex(raw: unknown): SessionIndex {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
+  const index = raw as Record<string, unknown>
+  const migrated: SessionIndex = {}
+  for (const [key, value] of Object.entries(index)) {
+    const rows = Array.isArray(value) ? value : [value]
+    migrated[key] = rows.flatMap((candidate): SessionIndexEntry[] => {
+      if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return []
+      const row = candidate as Record<string, unknown>
+      if (typeof row.sessionId !== 'string' || typeof row.key !== 'string' || typeof row.startedAt !== 'string') return []
+      const provider: SessionProvider =
+        row.provider === 'codex' || row.provider === 'opencode' || row.provider === 'claude' ? row.provider : 'claude'
+      return [{
+        sessionId: row.sessionId,
+        providerSessionId: typeof row.providerSessionId === 'string' ? row.providerSessionId : row.sessionId,
+        provider,
+        model: typeof row.model === 'string' && row.model.trim() ? row.model : defaultModel(provider),
+        key: row.key,
+        startedAt: row.startedAt,
+      }]
+    })
+  }
+  return migrated
+}
+
+export function findLastSessionEntry(index: SessionIndex, key: string, provider?: SessionProvider): SessionIndexEntry | null {
+  const list = index[key] ?? []
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    if (!provider || list[i].provider === provider) return list[i]
+  }
+  return null
+}
+
+async function readIndex(): Promise<SessionIndex> {
   let raw: unknown
   try {
     raw = JSON.parse(await readFile(indexPath(), 'utf-8'))
   } catch {
     return {}
   }
-  // One-time migration from the original single-entry-per-key shape.
-  const index = raw as Record<string, SessionIndexEntry[] | SessionIndexEntry>
-  const migrated: Record<string, SessionIndexEntry[]> = {}
-  for (const [key, value] of Object.entries(index)) {
-    migrated[key] = Array.isArray(value) ? value : [value]
-  }
-  return migrated
+  return normalizeSessionIndex(raw)
 }
 
 async function writeIndex(index: Record<string, SessionIndexEntry[]>): Promise<void> {
@@ -45,18 +76,33 @@ async function writeIndex(index: Record<string, SessionIndexEntry[]>): Promise<v
   await writeFile(indexPath(), JSON.stringify(index, null, 2), 'utf-8')
 }
 
-export async function recordSession(key: string, sessionId: string): Promise<void> {
+export async function recordSession(
+  key: string,
+  sessionId: string,
+  metadata: { provider?: SessionProvider; providerSessionId?: string; model?: string } = {},
+): Promise<void> {
   const index = await readIndex()
   const list = index[key] ?? []
-  list.push({ sessionId, key, startedAt: new Date().toISOString() })
+  const provider = metadata.provider ?? 'claude'
+  list.push({
+    sessionId,
+    providerSessionId: metadata.providerSessionId ?? sessionId,
+    provider,
+    model: metadata.model?.trim() || defaultModel(provider),
+    key,
+    startedAt: new Date().toISOString(),
+  })
   index[key] = list
   await writeIndex(index)
 }
 
-export async function lastSessionFor(key: string): Promise<string | null> {
+export async function lastSessionEntryFor(key: string, provider?: SessionProvider): Promise<SessionIndexEntry | null> {
   const index = await readIndex()
-  const list = index[key] ?? []
-  return list.length > 0 ? list[list.length - 1].sessionId : null
+  return findLastSessionEntry(index, key, provider)
+}
+
+export async function lastSessionFor(key: string, provider?: SessionProvider): Promise<string | null> {
+  return (await lastSessionEntryFor(key, provider))?.sessionId ?? null
 }
 
 /** Newest first — the full history for a key, for a session-history browser. */

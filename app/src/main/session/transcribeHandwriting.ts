@@ -31,6 +31,11 @@ import { ensurePython3Shim } from '../engramCli/pythonShim'
 import { getAuthSettings } from './authSettings'
 import { apiKeyStore } from './auth'
 import { execCli } from '../platform'
+import { resolveCodexBinary } from './codexResolver'
+import { assertCodexSubscriptionAccount, launchCodexAppServer, type CodexAccountResponse, type CodexWireMessage } from './codexAppServerClient'
+import { buildCodexSessionEnv } from './codexEnv'
+import { listCodexModels } from './codexModels'
+import type { CodexModelOption } from '../../shared/types'
 
 /** Ten minutes — generous for a handful of photographed pages, short enough
  * that a genuinely wedged child (bad auth, a hung endpoint) fails loudly
@@ -48,14 +53,128 @@ Files:
 ${list}`
 }
 
+export function buildCodexTranscriptionInput(pages: readonly string[]): Array<Record<string, unknown>> {
+  return [
+    { type: 'text', text: buildPrompt(pages), text_elements: [] },
+    ...pages.map((path) => ({ type: 'localImage', path })),
+  ]
+}
+
+export function assertCodexImageModel(models: readonly CodexModelOption[], selectedModel: string): void {
+  const option = models.find((candidate) => candidate.value === selectedModel)
+  if (!option) throw new Error('The selected Codex model is no longer available. Choose another model in Settings.')
+  if (option.inputModalities.length > 0 && !option.inputModalities.includes('image')) {
+    throw new Error(`${option.label} does not accept images. Choose an image-capable Codex model in Settings before transcribing handwriting.`)
+  }
+}
+
+export function codexTranscriptionTurnError(turn: Record<string, unknown>): Error | null {
+  if (turn.status === 'completed') return null
+  const detail = turn.error && typeof turn.error === 'object' ? turn.error as Record<string, unknown> : {}
+  const message = typeof detail.message === 'string'
+    ? detail.message
+    : `Codex handwriting transcription ${typeof turn.status === 'string' ? turn.status : 'did not complete'}`
+  return new Error(message)
+}
+
+async function transcribeWithCodex(pages: readonly string[], engramRoot: string, model: string): Promise<string> {
+  const binary = await resolveCodexBinary()
+  const client = launchCodexAppServer(binary, {
+    cwd: homedir(),
+    env: buildCodexSessionEnv(process.env, engramRoot, await ensurePython3Shim()),
+  })
+  try {
+    await client.initialize()
+    assertCodexSubscriptionAccount(
+      await client.request<CodexAccountResponse>('account/read', { refreshToken: false }),
+    )
+    const thread = await client.request<{ thread: { id: string } }>('thread/start', {
+      ...(model ? { model } : {}),
+      modelProvider: 'openai',
+      cwd: homedir(),
+      approvalPolicy: 'never',
+      sandbox: 'read-only',
+      ephemeral: true,
+      config: {
+        forced_login_method: 'chatgpt',
+        model_provider: 'openai',
+        hide_agent_reasoning: true,
+      },
+      serviceName: 'engram_desktop_handwriting',
+      developerInstructions: 'Transcribe only. Do not infer, grade, teach, correct, or use any context outside the attached pages.',
+    })
+
+    let output = ''
+    let expectedTurnId = ''
+    let detachCompletionListeners = () => {}
+    const completed = new Promise<void>((resolve, reject) => {
+      const cleanup = () => {
+        client.off('notification', onNotification)
+        client.off('closed', onClosed)
+      }
+      const onNotification = (message: CodexWireMessage) => {
+        const params = message.params && typeof message.params === 'object' ? message.params as Record<string, unknown> : {}
+        if (params.threadId !== thread.thread.id) return
+        if (message.method === 'item/agentMessage/delta' && typeof params.delta === 'string') output += params.delta
+        if (message.method !== 'turn/completed') return
+        const turn = params.turn && typeof params.turn === 'object' ? params.turn as Record<string, unknown> : {}
+        if (expectedTurnId && turn.id !== expectedTurnId) return
+        cleanup()
+        const error = codexTranscriptionTurnError(turn)
+        if (error) reject(error)
+        else resolve()
+      }
+      const onClosed = (details: { code?: number | null; error?: Error }) => {
+        cleanup()
+        reject(details.error ?? new Error(`Codex app-server exited before handwriting transcription completed (code ${details.code ?? 'unknown'})`))
+      }
+      detachCompletionListeners = cleanup
+      client.on('notification', onNotification)
+      client.on('closed', onClosed)
+    })
+    // The listener is installed before turn/start so a very fast completion
+    // cannot be missed. Mark it handled in case turn/start itself rejects.
+    void completed.catch(() => {})
+    const started = await client.request<{ turn: { id: string } }>('turn/start', {
+      threadId: thread.thread.id,
+      input: buildCodexTranscriptionInput(pages),
+      sandboxPolicy: { type: 'readOnly', networkAccess: false },
+      ...(model ? { model } : {}),
+    })
+    expectedTurnId = started.turn.id
+    let timeout: ReturnType<typeof setTimeout> | undefined
+    try {
+      await Promise.race([
+        completed,
+        new Promise<never>((_, reject) => {
+          timeout = setTimeout(() => reject(new Error('Codex handwriting transcription timed out')), TIMEOUT_MS)
+        }),
+      ])
+    } finally {
+      if (timeout) clearTimeout(timeout)
+      detachCompletionListeners()
+    }
+    return output.trim()
+  } finally {
+    client.close()
+  }
+}
+
 /** Transcribes the given image paths and returns plain LaTeX text — never
  * touches any live tutoring session, never sees a node/claim/rubric, and is
  * given no instruction other than "transcribe exactly what is there." */
 export async function transcribeHandwriting(pages: readonly string[]): Promise<string> {
   if (pages.length === 0) return ''
   const { root: engramRoot } = resolveEngramPlugin()
+  const { authMode, localBaseUrl, localModel, subscriptionModel, codexModel } = await getAuthSettings()
+
+  if (authMode === 'codexSubscription') {
+    const selectedModel = codexModel.trim()
+    assertCodexImageModel(await listCodexModels(), selectedModel)
+    return transcribeWithCodex(pages, engramRoot, selectedModel)
+  }
+
   const claudeBin = await resolveClaudeBinary()
-  const { authMode, localBaseUrl, localModel, subscriptionModel } = await getAuthSettings()
 
   const args = [
     '-p', buildPrompt(pages),

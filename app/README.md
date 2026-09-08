@@ -1,6 +1,6 @@
 # Engram Desktop
 
-A custom desktop app for the [Engram](https://github.com) Claude Code learning plugin. Scripts the `claude` CLI directly — every session rides your existing Claude subscription, never a billed API key.
+A custom desktop app for the Engram learning loop. Sessions can use an existing Claude Code or OpenAI Codex/ChatGPT subscription; switching providers preserves the same local learning data, UI bridge, and history.
 
 ## Development
 
@@ -32,7 +32,7 @@ xattr -cr "/Applications/Engram Desktop.app"
 
 ## Requirements
 
-- The [Engram plugin](https://github.com) installed under `~/.claude/plugins/cache/engram`.
-- The `claude` CLI installed and logged in (`claude.ai/code`).
+- Claude Code or OpenAI Codex installed and signed in to the subscription selected in Settings.
+- The Engram engine, bundled in packaged builds and also discovered from Claude/Codex plugin caches.
 
-The app checks both on launch and shows a setup screen with specifics if either is missing — see `src/main/session/claudeResolver.ts` for how it locates `claude` even when launched outside a terminal (Finder/Dock/Spotlight don't inherit a login shell's `PATH`, which is where `claude` is usually actually installed).
+The app checks the selected provider on launch and shows provider-specific setup instructions when needed. Codex subscription mode accepts only a ChatGPT login and strips ambient API credentials.

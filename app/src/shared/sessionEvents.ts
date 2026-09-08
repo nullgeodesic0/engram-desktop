@@ -4,6 +4,11 @@
 export interface SessionTextEvent {
   type: 'text'
   text: string
+  /** Codex streams sub-token deltas. `append` means concatenate byte-for-byte
+   * with the current assistant block; absent/false means a new content block
+   * and retains the existing paragraph-boundary behavior. */
+  append?: boolean
+  itemId?: string
 }
 
 export interface SessionToolUseEvent {

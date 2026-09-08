@@ -10,6 +10,7 @@ import type {
   NotifierSettings,
   UpdateCheckResult,
   CrashLogEntry,
+  CodexModelOption,
 } from '../../../shared/types'
 import { AchievementsPanel } from '../components/AchievementsPanel'
 import { SegmentedControl } from '../components/ui/SegmentedControl'
@@ -623,12 +624,32 @@ export function SettingsView() {
   const [opencodeSetup, setOpencodeSetup] = useState<OpencodeSetupStatus | null>(null)
   const [opencodeProbe, setOpencodeProbe] = useState<OpencodeProbe | null>(null)
   const [opencodeProbing, setOpencodeProbing] = useState(false)
+  const [codexModels, setCodexModels] = useState<CodexModelOption[]>([
+    { value: '', label: 'Codex default', description: 'Whatever Codex currently recommends for this subscription.', inputModalities: [] },
+  ])
+  const [codexModelsLoading, setCodexModelsLoading] = useState(false)
+  const [codexModelsError, setCodexModelsError] = useState<string | null>(null)
+
+  async function loadCodexModels() {
+    setCodexModelsLoading(true)
+    setCodexModelsError(null)
+    try {
+      setCodexModels(await window.engram.listCodexModels())
+    } catch (err) {
+      setCodexModelsError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setCodexModelsLoading(false)
+    }
+  }
 
   function refresh() {
     window.engram.model().then(setModel)
     window.engram.anySessionActive().then(setSessionActive)
     window.engram.getNotifierSettings().then(setNotifier)
-    window.engram.getAuthSettings().then(setAuth)
+    window.engram.getAuthSettings().then((next) => {
+      setAuth(next)
+      if (next.authMode === 'codexSubscription') void loadCodexModels()
+    })
     window.engram.authKeyStatus().then(setKeyStatus)
     window.engram.getLoginItemSettings().then((s) => setLaunchAtLoginState(s.openAtLogin))
     window.engram.getBackupInfo().then(setBackupInfo)
@@ -640,7 +661,7 @@ export function SettingsView() {
   useEffect(refresh, [])
 
   async function pickAuthMode(v: string) {
-    const mode = v === 'apiKey' ? 'apiKey' : v === 'local' ? 'local' : v === 'opencodeCursor' ? 'opencodeCursor' : 'subscription'
+    const mode = v === 'apiKey' ? 'apiKey' : v === 'local' ? 'local' : v === 'opencodeCursor' ? 'opencodeCursor' : v === 'codexSubscription' ? 'codexSubscription' : 'subscription'
     const next = await window.engram.setAuthMode(mode)
     setAuth(next)
     // A mode switch invalidates any previous verdict — it was about a
@@ -649,6 +670,7 @@ export function SettingsView() {
     setOpencodeProbe(null)
     if (mode === 'local') setLocalModels(await window.engram.listLocalModels(next.localBaseUrl))
     if (mode === 'opencodeCursor') setOpencodeSetup(await window.engram.opencodeSetup())
+    if (mode === 'codexSubscription') await loadCodexModels()
   }
 
   async function pickLocalModel(model: string) {
@@ -684,6 +706,10 @@ export function SettingsView() {
 
   async function pickSubscriptionModel(model: string) {
     setAuth(await window.engram.setSubscriptionModel(model))
+  }
+
+  async function pickCodexModel(model: string) {
+    setAuth(await window.engram.setCodexModel(model))
   }
 
   async function runOpencodeProbe() {
@@ -1205,18 +1231,21 @@ export function SettingsView() {
         <SectionBanner label="Authentication" className="border-t-0" />
         <DendriteDivider />
         <ToggleRow
-          label="Claude auth"
+          label="Session provider"
           hint={
             (auth?.authMode ?? 'subscription') === 'apiKey'
               ? 'Sessions run with your Anthropic API key under the Commercial Terms, pay per token. The key is encrypted with the system keychain, stored outside any settings file, and never leaves this machine.'
               : (auth?.authMode ?? 'subscription') === 'local'
                 ? 'Sessions run against a model on this machine — nothing billed, nothing sent anywhere. Ollama 0.32+ serves the Anthropic API directly, so no proxy is involved. Check the model before you rely on it: a tutor drives the sitting with tool calls, and a model that cannot make them will appear to work while recording nothing.'
-                : 'Engram drives the Claude Code binary you already installed and pay for. The CLI authenticates from its own login; a stray ANTHROPIC_API_KEY in your shell is ignored so it can never flip sessions onto per-token billing.'
+                : (auth?.authMode ?? 'subscription') === 'codexSubscription'
+                  ? 'Engram drives the Codex CLI through your ChatGPT subscription. API-key logins are refused in this mode, so it cannot silently switch to per-token API billing.'
+                  : 'Engram drives the Claude Code binary you already installed and pay for. The CLI authenticates from its own login; a stray ANTHROPIC_API_KEY in your shell is ignored so it can never flip sessions onto per-token billing.'
           }
           current={auth?.authMode ?? 'subscription'}
           onPick={pickAuthMode}
           options={[
             { value: 'subscription', label: 'Claude Code subscription' },
+            { value: 'codexSubscription', label: 'OpenAI Codex subscription' },
             { value: 'apiKey', label: 'API key' },
             { value: 'local', label: 'Local model' },
             // 'OpenCode + Cursor' TEMPORARILY REMOVED (2026-08-14) — confirmed
@@ -1237,6 +1266,26 @@ export function SettingsView() {
             onPick={pickSubscriptionModel}
             options={SUBSCRIPTION_MODEL_OPTIONS}
           />
+        )}
+        {auth?.authMode === 'codexSubscription' && (
+          <div className="flex flex-col gap-2">
+            <PickerRow
+              label="Model"
+              hint={
+                codexModels.find((o) => o.value === auth.codexModel)?.description ??
+                'The selected model is not in the current Codex catalog.'
+              }
+              current={auth.codexModel}
+              onPick={pickCodexModel}
+              options={codexModels}
+            />
+            <div className="flex items-center gap-3">
+              <Button variant="ghost" onClick={loadCodexModels} disabled={codexModelsLoading}>
+                {codexModelsLoading ? 'Reading Codex models…' : 'Refresh Codex models'}
+              </Button>
+              {codexModelsError && <span className="text-xs text-[var(--color-ink-danger)]">{codexModelsError}</span>}
+            </div>
+          </div>
         )}
         {(auth?.authMode ?? 'subscription') === 'apiKey' && (
           <div className="flex flex-col gap-2">

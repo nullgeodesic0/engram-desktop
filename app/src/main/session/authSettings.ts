@@ -16,9 +16,10 @@ const DEFAULTS: AuthSettings = {
   localModel: '',
   opencodeModel: DEFAULT_OPENCODE_MODEL,
   subscriptionModel: '',
+  codexModel: '',
 }
 
-const MODES: AuthMode[] = ['subscription', 'apiKey', 'local', 'opencodeCursor']
+const MODES: AuthMode[] = ['subscription', 'codexSubscription', 'apiKey', 'local', 'opencodeCursor']
 
 function statePath(): string {
   return join(app.getPath('userData'), 'auth-settings.json')
@@ -26,8 +27,17 @@ function statePath(): string {
 
 export async function getAuthSettings(): Promise<AuthSettings> {
   try {
-    const parsed = JSON.parse(await readFile(statePath(), 'utf-8')) as Partial<AuthSettings>
-    return {
+    return normalizeAuthSettings(JSON.parse(await readFile(statePath(), 'utf-8')))
+  } catch {
+    return { ...DEFAULTS }
+  }
+}
+
+/** Pure normalization shared with tests and disk reads. Existing settings
+ * files predate Codex, so absent fields migrate without a write. */
+export function normalizeAuthSettings(raw: unknown): AuthSettings {
+  const parsed = (raw && typeof raw === 'object' ? raw : {}) as Partial<Record<keyof AuthSettings, unknown>>
+  return {
       // An unknown mode from a hand-edited or future-version file falls back
       // to subscription rather than throwing: the safe mode is the one that
       // bills the way the user already expects.
@@ -43,9 +53,7 @@ export async function getAuthSettings(): Promise<AuthSettings> {
       // missing value to fall back from. Only a non-string in the file
       // (corruption, a hand-edit) falls back to the default.
       subscriptionModel: typeof parsed.subscriptionModel === 'string' ? parsed.subscriptionModel.trim() : DEFAULTS.subscriptionModel,
-    }
-  } catch {
-    return { ...DEFAULTS }
+      codexModel: typeof parsed.codexModel === 'string' ? parsed.codexModel.trim() : DEFAULTS.codexModel,
   }
 }
 
@@ -85,4 +93,10 @@ export async function setOpencodeModelSettings(model: string): Promise<AuthSetti
 export async function setSubscriptionModelSettings(model: string): Promise<AuthSettings> {
   const current = await getAuthSettings()
   return persist({ ...current, subscriptionModel: model.trim() })
+}
+
+/** Empty means “follow Codex's live catalog default.” */
+export async function setCodexModelSettings(model: string): Promise<AuthSettings> {
+  const current = await getAuthSettings()
+  return persist({ ...current, codexModel: model.trim() })
 }

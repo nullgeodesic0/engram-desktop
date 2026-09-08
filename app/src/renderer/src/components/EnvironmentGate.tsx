@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import type { EnvironmentCheckResult } from '../../../shared/types'
 import { EnvironmentSteps } from './EnvironmentSteps'
+import { environmentIsReady } from '../../../shared/environmentStatus'
 
 /** Blocks the app behind a real diagnostic screen if either dependency this whole
  * app is built on isn't resolvable — the Engram plugin, or the `claude` CLI itself
@@ -24,7 +25,7 @@ export function EnvironmentGate({ children }: { children: ReactNode }) {
     )
   }
 
-  const ok = result.pluginOk && result.claudeOk
+  const ok = environmentIsReady(result)
   if (ok || dismissed) return <>{children}</>
 
   return (
@@ -33,8 +34,8 @@ export function EnvironmentGate({ children }: { children: ReactNode }) {
         <div>
           <h1 className="font-(family-name:--font-display) text-xl text-[var(--color-text-primary)]">Setup needed</h1>
           <p className="text-sm text-[var(--color-text-dim)] mt-1">
-            Engram Desktop scripts the Claude Code CLI directly — it needs both of these in place before a
-            learning session can run.
+            Engram Desktop drives your selected subscription through its local CLI. The selected provider and
+            Engram learning engine must be available before a session can run.
           </p>
         </div>
 

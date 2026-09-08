@@ -1,5 +1,6 @@
 import type { ReactElement, ReactNode } from 'react'
 import { shortcutLabel } from '../shared/platform'
+import { ProviderModelBadge } from '../components/ProviderModelBadge'
 
 export interface MainMenuNavItem {
   id: string
@@ -127,6 +128,7 @@ export function MainMenuView({
   teasers,
   activity,
   visited,
+  conversationRuntime,
   onGoView,
 }: {
   nav: MainMenuNavItem[]
@@ -136,6 +138,8 @@ export function MainMenuView({
   teasers?: Partial<Record<string, ReactNode>>
   activity: Record<'learn' | 'review', { active: boolean; busy: boolean }>
   visited: Record<'learn' | 'review' | 'dashboard', boolean>
+  /** Current provider/model for the three entries that open conversations. */
+  conversationRuntime?: { provider: string; model: string }
   onGoView: (id: string) => void
 }) {
   // `home` is excluded outright — this plate IS the Home screen, and a
@@ -191,7 +195,7 @@ export function MainMenuView({
                   // warm-dim border shift at --dur-base, rail-tier tilt. Only
                   // the scale changes, so the two registers still read as one
                   // menu rather than two components.
-                  className={`group focus-ring tilt-card-rail relative text-left flex flex-col gap-2.5 px-5 py-4 border border-[var(--color-edge)] hover:border-[var(--color-ink-warm-dim)] hover:bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] transition-colors duration-[var(--dur-base)] ${
+                  className={`group focus-ring tilt-card-rail relative text-left flex flex-col gap-2.5 px-5 pt-4 pb-9 border border-[var(--color-edge)] hover:border-[var(--color-ink-warm-dim)] hover:bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] transition-colors duration-[var(--dur-base)] ${
                     inProgress ? 'dogear' : ''
                   }`}
                 >
@@ -221,6 +225,13 @@ export function MainMenuView({
                       <div className="label-data text-xs text-[var(--color-text-dim)] truncate">{teasers[n.id]}</div>
                     )}
                   </div>
+                  {conversationRuntime && (
+                    <ProviderModelBadge
+                      provider={conversationRuntime.provider}
+                      model={conversationRuntime.model}
+                      className="pointer-events-none absolute bottom-2 right-2 max-w-[calc(100%-1rem)]"
+                    />
+                  )}
                 </button>
               )
             }
@@ -242,6 +253,8 @@ export function MainMenuView({
                 // replaced that sidebar, so they take the tier that was
                 // written for them.
                 className={`group focus-ring tilt-card-rail relative text-left flex flex-col gap-0.5 px-3 border border-[var(--color-edge)] hover:border-[var(--color-ink-warm-dim)] hover:bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] py-2 transition-colors duration-[var(--dur-base)] ${
+                  n.id === 'dashboard' && conversationRuntime ? 'pb-7 ' : ''
+                }${
                   inProgress ? 'dogear' : ''
                 }`}
               >
@@ -262,6 +275,13 @@ export function MainMenuView({
                   <div className="label-data text-[10px] text-[var(--color-text-dim)] truncate pl-[23px]">
                     {teasers[n.id]}
                   </div>
+                )}
+                {n.id === 'dashboard' && conversationRuntime && (
+                  <ProviderModelBadge
+                    provider={conversationRuntime.provider}
+                    model={conversationRuntime.model}
+                    className="pointer-events-none absolute bottom-1.5 right-2 max-w-[calc(100%-1rem)]"
+                  />
                 )}
               </button>
             )

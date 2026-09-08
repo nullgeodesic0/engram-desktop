@@ -28,6 +28,7 @@ import { jumpToCheckpoint } from '../shared/jumpToCheckpoint'
 import { GradeResultCard } from './GradeResultCard'
 import { MarkView, NodeCrossingDivider } from './ritual/Marks'
 import { CheckpointAnchor } from './CheckpointAnchor'
+import { ProviderModelBadge } from './ProviderModelBadge'
 
 interface TranscriptLine {
   type?: string
@@ -427,7 +428,17 @@ async function resolveLinkedSitting(
   for (const line of lines) {
     if (typeof line?.timestamp !== 'string') continue
     if (Number.isNaN(new Date(line.timestamp).getTime())) continue
-    return { entry: { sessionId, key: historyKey, startedAt: line.timestamp }, unrecorded: true }
+    return {
+      entry: {
+        sessionId,
+        providerSessionId: sessionId,
+        provider: 'claude',
+        model: 'Legacy default',
+        key: historyKey,
+        startedAt: line.timestamp,
+      },
+      unrecorded: true,
+    }
   }
   return null
 }
@@ -923,6 +934,7 @@ export function SessionHistoryDrawer({
               >
                 <span className="text-sm text-[var(--color-text-primary)] truncate max-w-full">Linked sitting</span>
                 <span className="text-xs text-[var(--color-text-faint)] label-data">{formatWhen(linkedSitting.entry.startedAt)}</span>
+                <ProviderModelBadge provider={linkedSitting.entry.provider === 'codex' ? 'Codex' : linkedSitting.entry.provider === 'opencode' ? 'OpenCode' : 'Claude'} model={linkedSitting.entry.model} />
               </button>
             </div>
           )}
@@ -941,6 +953,7 @@ export function SessionHistoryDrawer({
                 {historyKey === ALL_HISTORY_KEY ? historyRowTag(entry) : i === 0 ? 'Most recent' : `${i + 1} sessions ago`}
               </span>
               <span className="text-xs text-[var(--color-text-faint)] label-data">{formatWhen(entry.startedAt)}</span>
+              <ProviderModelBadge provider={entry.provider === 'codex' ? 'Codex' : entry.provider === 'opencode' ? 'OpenCode' : 'Claude'} model={entry.model} />
             </button>
           ))}
         </div>

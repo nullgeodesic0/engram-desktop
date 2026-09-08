@@ -8,9 +8,9 @@
 ![Electron](https://img.shields.io/badge/Electron-36-a78bda?style=flat-square&labelColor=14151c)
 ![License](https://img.shields.io/badge/state-100%25%20local-e6dfd0?style=flat-square&labelColor=14151c)
 
-**A native macOS home for the [engram](https://github.com/nagisanzenin/engram) learning loop — the tutor that makes you do the thinking, in an app built for the sitting.**
+**A native desktop home for the [engram](https://github.com/nagisanzenin/engram) learning loop — the tutor that makes you do the thinking, in an app built for the sitting.**
 
-Engram Desktop drives the engram learning plugin's spaced-repetition loop by scripting the Claude Code CLI headlessly. Every teaching turn, blind grade, and schedule update comes from a `claude -p` child process running the installed `/engram:learn`, `/engram:review`, and `/engram:coach` skills — the app never calls a model API directly, and all learning state stays in engram's own local files. What the app adds is the environment: a transcript that understands the dialogue's structure, a living map of what you know, and a shell that treats a study session as something worth sitting down for.
+Engram Desktop drives the engram learning plugin's spaced-repetition loop through either Claude Code or OpenAI Codex, using the subscription login already stored by the selected CLI. Every teaching turn, blind grade, and schedule update still comes from the installed Engram skills; switching providers changes neither the learning data nor the loop. The app never calls a model API directly, and all learning state stays in engram's own local files.
 
 ![Topic atlas](docs/media/topic-atlas.png)
 
@@ -24,7 +24,7 @@ This app is what the loop looks like when it isn't happening in a terminal:
 |---|---|
 | A native shell around the engram plugin's three commands | A fork of engram — the plugin and its state files are untouched |
 | A structured reading of the tutoring dialogue (beats, receipts, tickets) | A different pedagogy — the dialogue grammar is the plugin's own |
-| A scriptable host for the `claude` CLI, one child process per session | An API client — no Anthropic API key, no direct model calls |
+| A scriptable host for Claude Code or Codex, selected in Settings | An API client — subscription mode rejects API-key billing |
 | 100% local — state in `~/.claude/learning/`, UI state in Electron's app data | A sync service, tracker, or anything with a server |
 
 ## Screenshots
@@ -100,8 +100,8 @@ The full story — session lifecycle, the eight bridge tools, transcript hydrati
 
 1. **macOS on Apple silicon.** The packaged build targets `arm64`; Intel Macs can run from source but are untested.
 2. **Node.js 22 or later** (the app is developed on Node 26). Check with `node --version`.
-3. **The Claude Code CLI, installed and authenticated.** The app spawns `claude` from your `PATH`; if `claude --version` works in your terminal and you've logged in once, you're set. A Claude subscription or API billing on the CLI is what powers sessions — the app adds no key of its own.
-4. **The engram plugin, installed in Claude Code:**
+3. **Claude Code or OpenAI Codex, installed and authenticated.** Select the matching subscription under Settings → Session provider. Codex mode requires a ChatGPT login and refuses API-key authentication.
+4. **The Engram learning engine.** It is bundled with the desktop package; provider-specific plugin installs are also discovered automatically. To install it in Claude Code manually:
 
    ```bash
    claude plugin marketplace add nagisanzenin/engram
@@ -153,7 +153,7 @@ The build is unsigned — on first launch, right-click the app → Open, or clea
 
 - **Learning state** (topics, nodes, receipts, FSRS schedules): `~/.claude/learning/`, owned entirely by the engram plugin. Portable — it works in terminal Claude Code and this app interchangeably.
 - **App conveniences** (per-topic prompt additions and context files, session history index, window position): `~/Library/Application Support/Engram Desktop/`, plain JSON. Deleting it loses no learning data.
-- Nothing leaves your machine except the `claude` CLI's own traffic to Anthropic.
+- Nothing leaves your machine except the selected provider CLI's own model traffic.
 
 ## Tech stack
 

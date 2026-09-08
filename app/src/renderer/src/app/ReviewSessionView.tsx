@@ -690,7 +690,10 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
           // follows a mark-boundary tool call (typically `render_beat`
           // posting the probe itself) instead of starting a new bubble.
           if (last && last.role === 'assistant' && (!breakBubble || bareProbeHeaderExceptionApplies(last.text, boundaryRun))) {
-            return [...prev.slice(0, -1), { ...last, text: mergeAssistantText(last.text, breakBubble, event.text) }]
+            const text = event.append && !breakBubble
+              ? last.text + event.text
+              : mergeAssistantText(last.text, breakBubble, event.text)
+            return [...prev.slice(0, -1), { ...last, text }]
           }
           // `Date.now()` at append time — SessionEvent carries no timestamp
           // of its own; see ChatMessage's own doctrine comment.

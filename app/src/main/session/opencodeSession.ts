@@ -10,6 +10,7 @@ import { getAuthSettings } from './authSettings'
 import { bridgeServer } from '../bridge/bridgeServer'
 import { OpencodeEventMapper, parseOpencodeSseChunk } from './opencodeEvents'
 import type { SessionEvent } from '../../shared/sessionEvents'
+import type { SessionProvider } from '../../shared/types'
 
 // Same watchdog threshold and rationale as SessionManager.ts (Claude) — a
 // real turn can legitimately go quiet for a while (a slow tool call, heavy
@@ -59,6 +60,9 @@ const SERVE_BOOT_TIMEOUT_MS = 30_000
  */
 export class OpencodeSessionManager extends EventEmitter {
   readonly sessionId: string
+  readonly provider: SessionProvider = 'opencode'
+  providerSessionId: string
+  model = 'OpenCode default'
   private readonly isResume: boolean
   private child: ChildProcessByStdio<null, Readable, Readable> | null = null
   private baseUrl: string | null = null
@@ -76,6 +80,7 @@ export class OpencodeSessionManager extends EventEmitter {
   constructor(resumeSessionId?: string) {
     super()
     this.sessionId = resumeSessionId ?? randomUUID()
+    this.providerSessionId = this.sessionId
     this.isResume = Boolean(resumeSessionId)
     this.ready = new Promise((resolve) => {
       this.readyResolve = resolve
@@ -117,6 +122,7 @@ export class OpencodeSessionManager extends EventEmitter {
   async startWhenBridgeWorks(initialMessage: string, extraInstructions?: string): Promise<void> {
     const port = await bridgeServer.start()
     const { opencodeModel } = await getAuthSettings()
+    this.model = opencodeModel.trim() || 'OpenCode default'
     if (opencodeModel.trim() === '') {
       throw new Error(
         'OpenCode + Cursor mode is selected but no model is chosen — pick one in Settings → Authentication, or switch back to subscription mode.',
@@ -152,6 +158,7 @@ export class OpencodeSessionManager extends EventEmitter {
     const title = this.isResume ? 'Engram sitting (resumed — no prior context)' : 'Engram sitting'
     const created = await this.httpJson<{ id: string }>('POST', '/session', { title })
     this.opencodeSessionID = created.id
+    this.providerSessionId = created.id
     this.readyResolve()
 
     this.subscribeToEvents()

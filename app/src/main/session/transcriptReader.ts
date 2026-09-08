@@ -1,6 +1,8 @@
 import { readFile, readdir, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { app } from 'electron'
+import { CodexTranscriptStore } from './codexTranscript'
 
 /**
  * Claude Code persists every session's full transcript as NDJSON under
@@ -102,6 +104,16 @@ export async function readTranscriptFile(path: string): Promise<unknown[]> {
 }
 
 export async function readTranscript(sessionId: string): Promise<unknown[]> {
+  // Codex histories are normalized when events arrive, because the rest of
+  // Engram's replay stack deliberately has one transcript contract. Check
+  // that app-owned path first; Claude's native project transcript remains the
+  // fallback for every legacy and Claude sitting.
+  try {
+    const codex = await new CodexTranscriptStore(join(app.getPath('userData'), 'codex-transcripts'), sessionId).read()
+    if (codex.length > 0) return codex
+  } catch {
+    // A non-Codex/legacy id may not match the app-owned filename contract.
+  }
   const path = await findTranscriptPath(sessionId)
   if (!path) return [] // no transcript yet (brand new session id) — nothing to replay
   return readTranscriptFile(path)

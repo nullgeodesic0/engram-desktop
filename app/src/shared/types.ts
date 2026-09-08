@@ -324,7 +324,7 @@ export interface NotifierSettings {
  * and the `opencode-engram-learning` plugin, so the tutor runs on Cursor's
  * models while the same bridge drives cards/asks. Billed against the user's
  * own Cursor plan; see `OpencodeProbe` below. */
-export type AuthMode = 'subscription' | 'apiKey' | 'local' | 'opencodeCursor'
+export type AuthMode = 'subscription' | 'codexSubscription' | 'apiKey' | 'local' | 'opencodeCursor'
 
 export interface AuthSettings {
   authMode: AuthMode
@@ -342,6 +342,18 @@ export interface AuthSettings {
    * this field defaults to empty so upgrading never silently changes which
    * model a sitting runs on. */
   subscriptionModel: string
+  /** Model passed to Codex app-server in Codex subscription mode. Empty
+   * means use the model marked as default by Codex's live model catalog. */
+  codexModel: string
+}
+
+export interface CodexModelOption {
+  value: string
+  label: string
+  description: string
+  /** App-server-declared input types. Used to prevent sending handwriting
+   * to a text-only model and spending a turn that cannot succeed. */
+  inputModalities: string[]
 }
 
 /** What a local model can actually be trusted to drive.
@@ -397,12 +409,18 @@ export interface ApiKeyStatus {
 }
 
 export interface EnvironmentCheckResult {
+  /** Snapshot used to decide which CLI is actually required. Older cached
+   * results omit it and retain the legacy Claude requirement. */
+  authMode?: AuthMode
   pluginOk: boolean
   pluginVersion?: string
   pluginError?: string
   claudeOk: boolean
   claudePath?: string
   claudeError?: string
+  codexOk?: boolean
+  codexPath?: string
+  codexError?: string
 }
 
 /** engram.py's own health check (`doctor`) — state-dir writability, the
@@ -609,8 +627,17 @@ export interface CrashLogEntry {
   stack?: string
 }
 
+export type SessionProvider = 'claude' | 'codex' | 'opencode'
+
 export interface SessionIndexEntry {
   sessionId: string
+  /** Native conversation identifier for the provider. Claude legacy rows use
+   * the same value as `sessionId`; Codex rows carry the app-server thread id. */
+  providerSessionId: string
+  provider: SessionProvider
+  /** Display label captured when the sitting starts, so history remains
+   * truthful after Settings changes. */
+  model: string
   key: string
   startedAt: string
 }

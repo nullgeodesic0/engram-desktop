@@ -225,6 +225,11 @@ if (!eq(bespoke, PINNED_BESPOKE_READ_HELPERS)) {
 const PINNED_SUBPROCESS_FILES: Record<string, string> = {
   'main/engramCli/readOnly.ts': 'THE door to the engine: python3 engram.py, allowlisted',
   'main/session/SessionManager.ts': 'spawns the `claude` CLI — the driven session itself',
+  // 2026-09-07 — OpenAI Codex subscription provider. This file owns the
+  // line-framed app-server process only; it never invokes engram.py. The
+  // session driver routes every state mutation through the same installed
+  // skill and engine used by Claude, while account/read rejects API-key auth.
+  'main/session/codexAppServerClient.ts': 'spawns `codex app-server` — the transport for Codex-driven sessions and isolated handwriting transcription; never engram.py',
   'main/session/claudeResolver.ts': 'locates the claude binary',
   'main/session/backup.ts': 'tar, for backup archives',
   'main/session/updateCheck.ts': 'gh api, for the update banner',
@@ -322,6 +327,12 @@ const PINNED_WRITERS: Record<string, string> = {
   'main/session/sessionScan.ts': 'app userData — transcript scan cache',
   'main/session/achievementsStore.ts': 'app userData',
   'main/session/sessionIndex.ts': 'app userData',
+  // 2026-09-07 — normalized Codex transcript rows. The runtime constructor
+  // receives app.getPath('userData')/codex-transcripts from
+  // CodexSessionManager; it never receives the learning home or plugin root.
+  'main/session/codexTranscript.ts': 'app userData — codex-transcripts/<desktop-session-id>.jsonl, normalized for the existing read-only replay/export pipeline',
+  'main/session/codexTranscript.test.ts': 'os tmpdir — ephemeral transcript-store fixtures',
+  'main/session/pluginResolver.test.ts': 'os tmpdir — ephemeral fake Claude/Codex plugin cache fixtures',
   'main/session/updateCheck.ts': 'app userData — update-check cache',
   'main/session/permissionConfig.ts': 'os tmpdir — per-session MCP config',
   // 2026-08-30 — Windows only, and nowhere near the learning home. Two tiny

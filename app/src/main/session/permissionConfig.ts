@@ -45,7 +45,7 @@ const DISALLOWED_BASH_PATTERNS = [
  * (what they're for, when to call them, that they're all advisory) is
  * provider-independent, so it's authored exactly once. */
 export function buildAppendSystemPrompt(toolPrefix: string): string {
-  return `You are running headless, driven by a custom desktop app (Engram Desktop) rather than an interactive terminal. Three things differ from a normal interactive Claude Code session:
+  return `You are running headless, driven by a custom desktop app (Engram Desktop) rather than an interactive terminal. Three things differ from a normal interactive agent session:
 
 1. The native AskUserQuestion tool does not exist in this session. Whenever your instructions (the /engram:learn, /engram:review, or /engram:coach skill, or the shared dialogue-grammar.md) say to call AskUserQuestion, call the MCP tool ${toolPrefix}ask_user_question instead, with the exact same arguments (question, header, options as an array of {label, description}, multiSelect). It behaves identically — it blocks until the learner picks an answer in the app UI.
 

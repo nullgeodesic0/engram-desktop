@@ -17,7 +17,8 @@ import {
 } from './explorableProtocol'
 import { bridgeServer } from './bridge/bridgeServer'
 import { getNotifierSettings, setNotifierSettings } from './session/notifierState'
-import { getAuthSettings, setAuthMode, setLocalModelSettings, setOpencodeModelSettings, setSubscriptionModelSettings } from './session/authSettings'
+import { getAuthSettings, setAuthMode, setCodexModelSettings, setLocalModelSettings, setOpencodeModelSettings, setSubscriptionModelSettings } from './session/authSettings'
+import { listCodexModels, verifyCodexSubscription } from './session/codexModels'
 import { isLoopbackUrl, listLocalModels, probeLocalModel } from './session/localModel'
 import { checkOpencodeSetup, probeOpencodeModel } from './session/opencodeCapability'
 import { apiKeyStore, isPlausibleApiKey } from './session/auth'
@@ -36,6 +37,7 @@ import { createDeepLinkQueue } from './deepLinkQueue'
 import { execCli, isMac, isWindows } from './platform'
 import { sweepOrphanTutors } from './session/orphanSweep'
 import type { EnvironmentCheckResult } from '../shared/types'
+import { flushAllCodexTranscripts } from './session/codexTranscript'
 
 // Installed before anything else can throw — see crashLog.ts's own doctrine
 // comment for why this exists (previously: zero handler at all, so a main-
@@ -119,12 +121,12 @@ if (!gotSingleInstanceLock) {
   })
 }
 
-/** Surfaces the two silent-failure modes a packaged app can hit (Engram plugin not
- * found, `claude` not resolvable outside a terminal's PATH) as real, checkable state
- * instead of a blank/broken window — see claudeResolver.ts for why the latter needs
- * more than a bare `spawn('claude', ...)`. */
+/** Surfaces packaged-app dependency failures as real, checkable state instead
+ * of a blank/broken window: the Engram plugin plus each supported local CLI.
+ * The selected provider decides which CLI can block entry. */
 async function checkEnvironment(): Promise<EnvironmentCheckResult> {
-  const result: EnvironmentCheckResult = { pluginOk: false, claudeOk: false }
+  const { authMode } = await getAuthSettings()
+  const result: EnvironmentCheckResult = { authMode, pluginOk: false, claudeOk: false, codexOk: false }
   try {
     const plugin = resolveEngramPlugin()
     result.pluginOk = true
@@ -132,16 +134,29 @@ async function checkEnvironment(): Promise<EnvironmentCheckResult> {
   } catch (err) {
     result.pluginError = err instanceof Error ? err.message : String(err)
   }
-  try {
-    const claudeBin = await resolveClaudeBinary()
-    // execCli, not execFile: on Windows the resolved binary is usually a
-    // `claude.cmd` batch shim, which Node refuses to execute directly.
-    await execCli(claudeBin, ['--version'], { timeout: 8000 })
-    result.claudeOk = true
-    result.claudePath = claudeBin
-  } catch (err) {
-    result.claudeError = err instanceof Error ? err.message : String(err)
-  }
+  await Promise.all([
+    (async () => {
+      try {
+        const claudeBin = await resolveClaudeBinary()
+        // execCli, not execFile: on Windows the resolved binary is usually a
+        // `.cmd` batch shim, which Node refuses to execute directly.
+        await execCli(claudeBin, ['--version'], { timeout: 8000 })
+        result.claudeOk = true
+        result.claudePath = claudeBin
+      } catch (err) {
+        result.claudeError = err instanceof Error ? err.message : String(err)
+      }
+    })(),
+    (async () => {
+      try {
+        const codexBin = await verifyCodexSubscription()
+        result.codexOk = true
+        result.codexPath = codexBin
+      } catch (err) {
+        result.codexError = err instanceof Error ? err.message : String(err)
+      }
+    })(),
+  ])
   return result
 }
 
@@ -520,7 +535,7 @@ app.whenReady().then(() => {
   // never crosses this boundary outward — status carries presence + last4.
   ipcMain.handle('auth:getSettings', () => getAuthSettings())
   ipcMain.handle('auth:setMode', (_e, mode: unknown) => {
-    if (mode !== 'subscription' && mode !== 'apiKey' && mode !== 'local' && mode !== 'opencodeCursor') {
+    if (mode !== 'subscription' && mode !== 'codexSubscription' && mode !== 'apiKey' && mode !== 'local' && mode !== 'opencodeCursor') {
       throw new Error(`auth:setMode: invalid mode: ${JSON.stringify(mode)}`)
     }
     return setAuthMode(mode)
@@ -567,6 +582,11 @@ app.whenReady().then(() => {
   ipcMain.handle('auth:setSubscriptionModel', (_e, model: unknown) => {
     if (typeof model !== 'string') throw new Error('auth:setSubscriptionModel: model must be a string')
     return setSubscriptionModelSettings(model)
+  })
+  ipcMain.handle('auth:listCodexModels', () => listCodexModels())
+  ipcMain.handle('auth:setCodexModel', (_e, model: unknown) => {
+    if (typeof model !== 'string') throw new Error('auth:setCodexModel: model must be a string')
+    return setCodexModelSettings(model)
   })
   ipcMain.handle('auth:keyStatus', () => apiKeyStore().status())
   ipcMain.handle('auth:setApiKey', (_e, key: unknown) => {
@@ -685,12 +705,21 @@ app.whenReady().then(() => {
 // directly, bypassing this handler entirely) actually exits.
 app.on('window-all-closed', () => {})
 
-app.on('before-quit', () => {
+let transcriptFlushComplete = false
+app.on('before-quit', (event) => {
+  if (!transcriptFlushComplete) {
+    event.preventDefault()
+    void Promise.all([abortAllSessions(), flushAllCodexTranscripts()]).finally(() => {
+      transcriptFlushComplete = true
+      app.quit()
+    })
+    return
+  }
   stopReviewNotifier()
   stopPackScheduler()
   // Children FIRST, then the bridge: a tutor killed after its bridge is
   // gone can race one last doomed HTTP call into the void.
-  abortAllSessions()
+  void abortAllSessions()
   bridgeServer.stop()
   void stopLinkServer()
 })

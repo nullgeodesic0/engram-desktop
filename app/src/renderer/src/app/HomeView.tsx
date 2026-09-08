@@ -8,6 +8,7 @@ import type {
   ActiveExperiment,
   ReceiptsHistory,
   Misconception,
+  AuthSettings,
 } from '../../../shared/types'
 import { SkeletonBar, SkeletonGrid } from '../components/Skeleton'
 import { emitPulse } from '../../../shared/neuralFieldBus'
@@ -31,6 +32,8 @@ import { computeTopicGrade, computeCrossTopicGPA, letterColorClass, type TopicGr
 import { allPicks } from '../shared/calibrationStore'
 import { ActivityStrip } from '../components/charts/ActivityStrip'
 import { MathRenderer } from '../components/MathRenderer'
+import { SUBSCRIPTION_MODEL_OPTIONS } from '../../../shared/subscriptionModels'
+import { environmentIsReady } from '../../../shared/environmentStatus'
 
 const LAST_SEEN_STREAK_KEY = 'engram-desktop:last-seen-streak-days'
 const LAST_SEEN_DUE_KEY = 'engram-desktop:last-seen-due-now'
@@ -394,6 +397,7 @@ export function HomeView({
   // own `refreshTopics` uses, just scoped to the active bucket rather than
   // every topic (this is decoration, not the shelf's own resume affordance).
   const [resumableTopics, setResumableTopics] = useState<Set<string>>(new Set())
+  const [authSettings, setAuthSettings] = useState<AuthSettings | null>(null)
   // Work that exists but has not been graded. This was invisible in the app,
   // so a stashed production sat in limbo until a later session happened to
   // pick it up.
@@ -484,6 +488,7 @@ export function HomeView({
     })
     window.engram.topics().then(setTopics)
     window.engram.environmentCheck().then(setEnvCheck)
+    window.engram.getAuthSettings().then(setAuthSettings)
     // Feeds the Grades teaser, TopicCard badges, and the needs-attention
     // callout below — same `misconceptions()`/`artifactList()` IPC calls
     // GradesView/ArtifactGalleryView already make, no new handlers.
@@ -548,7 +553,7 @@ export function HomeView({
   const active = topics?.filter((t) => topicBucket(t) === 'active') ?? []
   const consolidated = topics?.filter((t) => topicBucket(t) === 'consolidated') ?? []
   const notStarted = topics?.filter((t) => topicBucket(t) === 'notStarted') ?? []
-  const envBroken = envCheck !== null && !(envCheck.claudeOk && envCheck.pluginOk)
+  const envBroken = envCheck !== null && !environmentIsReady(envCheck)
 
   // Grades — computed once every input is loaded, `completed` mode (matches
   // GradesView's own default, per the user's explicit call): the GPA and
@@ -620,6 +625,25 @@ export function HomeView({
   if (gpa?.available && gpa.letter) teasers.grades = `GPA ${gpa.letter}`
   if (artifactCount != null) teasers.artifacts = `${artifactCount} artifact${artifactCount === 1 ? '' : 's'}`
 
+  const conversationRuntime = authSettings ? (() => {
+    if (authSettings.authMode === 'codexSubscription') {
+      return { provider: 'Codex', model: authSettings.codexModel || 'Default' }
+    }
+    if (authSettings.authMode === 'opencodeCursor') {
+      return { provider: 'OpenCode', model: authSettings.opencodeModel || 'Default' }
+    }
+    if (authSettings.authMode === 'local') {
+      return { provider: 'Claude', model: authSettings.localModel || 'Local model' }
+    }
+    const explicit = SUBSCRIPTION_MODEL_OPTIONS.find((option) => option.value === authSettings.subscriptionModel)
+    return {
+      provider: 'Claude',
+      model: authSettings.authMode === 'subscription'
+        ? (explicit?.label ?? (authSettings.subscriptionModel || 'Default'))
+        : 'API default',
+    }
+  })() : undefined
+
   return (
     <div className="p-8 flex flex-col gap-8 w-full h-full overflow-y-auto">
       {/* Register 1 — the masthead: greeting, atlas size, and the day's one
@@ -661,7 +685,14 @@ export function HomeView({
             due-count plate, not after it. */}
         <div className="flex flex-col gap-3">
           <SectionBanner label="Sections" />
-          <MainMenuView nav={nav} teasers={teasers} activity={activity} visited={visited} onGoView={onGoView} />
+          <MainMenuView
+            nav={nav}
+            teasers={teasers}
+            activity={activity}
+            visited={visited}
+            conversationRuntime={conversationRuntime}
+            onGoView={onGoView}
+          />
         </div>
 
         {/* The briefing plate — Home's own ready-room, now in ReadyRoomPlate's
@@ -800,7 +831,7 @@ export function HomeView({
         {topics === null && <SkeletonGrid count={3} />}
         {/* The empty-state decision itself (guided card vs. plain invitation) must wait on
             envCheck — topics() is a cheap readdir that routinely resolves before
-            environmentCheck() finishes spawning `claude --version` (up to ~10s). Without this
+            environmentCheck() finishes checking the selected provider CLI (up to ~10s). Without this
             gate, a broken environment would flash the healthy "Begin your atlas" card first,
             and a click during that flash lands in a Learn session that's guaranteed to fail.
             Real topic data never waits on this — only these two empty-state branches do. */}
@@ -812,8 +843,8 @@ export function HomeView({
               Two things first.
             </div>
             <p className="text-sm text-[var(--color-text-dim)] max-w-md">
-              Engram Desktop scripts the Claude Code CLI directly — both of these need to be in place before a topic
-              can start.
+              Engram Desktop drives the provider selected in Settings — that CLI and the Engram learning engine need
+              to be available before a topic can start.
             </p>
             <div className="w-full">
               <EnvironmentSteps result={envCheck} />
