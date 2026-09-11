@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { resolveCliBinaryWith, windowsVariants, type ResolverDeps } from './cliResolver'
+import {
+  clearCliBinaryCache,
+  resolveCliBinary,
+  resolveCliBinaryWith,
+  windowsVariants,
+  type ResolverDeps,
+} from './cliResolver'
 
 /** A deps object where nothing is found anywhere, so each test can opt one
  * tier into succeeding and assert that the tiers above it were preferred. */
@@ -138,5 +144,19 @@ describe('windowsVariants', () => {
       'C:\\bin\\claude.cmd',
       'C:\\bin\\claude.bat',
     ])
+  })
+})
+
+describe('resolveCliBinary cache', () => {
+  it('retries an unresolved command after it becomes available while the app is running', async () => {
+    const name = 'engram-test-late-installed-cli'
+    clearCliBinaryCache(name)
+
+    expect(await resolveCliBinary({ name })).toBe(name)
+    expect(await resolveCliBinary({
+      name,
+      posix: () => [process.execPath],
+      windows: () => [process.execPath],
+    })).toBe(process.execPath)
   })
 })

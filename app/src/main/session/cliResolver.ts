@@ -199,8 +199,9 @@ export function defaultResolverDeps(): ResolverDeps {
 
 /**
  * `resolveCliBinaryWith` against the real machine, memoised per spec name.
- * Resolution costs a login-shell spawn in the worst case, and the answer
- * cannot change while the app runs, so every caller shares one result.
+ * Successful resolution costs a login-shell spawn in the worst case, so every
+ * caller shares it. A bare-name fallback is deliberately not cached: a user
+ * can install a missing CLI while the app remains open, then retry the action.
  */
 const cache = new Map<string, string>()
 
@@ -208,7 +209,7 @@ export async function resolveCliBinary(spec: CliSpec): Promise<string> {
   const hit = cache.get(spec.name)
   if (hit) return hit
   const resolved = await resolveCliBinaryWith(spec, defaultResolverDeps())
-  cache.set(spec.name, resolved)
+  if (resolved !== spec.name) cache.set(spec.name, resolved)
   return resolved
 }
 
