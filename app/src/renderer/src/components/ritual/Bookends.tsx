@@ -111,7 +111,7 @@ export const SessionCeremony = memo(function SessionCeremony({
           specifically (Gawrilow & Gollwitzer 2008). */}
       {commitment ? (
         <div className="border-t border-[var(--color-hairline)] pt-3 flex flex-col gap-1">
-          <span className="label-data text-[10px] uppercase tracking-[0.2em] text-[var(--color-text-faint)]">your return plan</span>
+          <span className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-faint)]">your return plan</span>
           <div className="font-(family-name:--font-serif) text-sm text-[var(--color-ink-warm)] flex items-baseline gap-1 flex-wrap">
             <MathRenderer text={commitment} inlineOnly />
             <span className="label-data text-[10px] text-[var(--color-text-faint)]">— signed</span>

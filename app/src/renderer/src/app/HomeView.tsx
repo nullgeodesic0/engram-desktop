@@ -197,7 +197,7 @@ function HomeMasthead({
             in view when the cue arrives (Gollwitzer & Sheeran 2006). */}
         {commitment && (
           <p className="text-sm text-[var(--color-ink-warm)] leading-relaxed">
-            <span className="label-data text-[10px] uppercase tracking-[0.2em] text-[var(--color-text-faint)] mr-2">
+            <span className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-faint)] mr-2">
               your plan
             </span>
             <MathRenderer text={`${commitment.cue} → ${commitment.action}`} inlineOnly />
