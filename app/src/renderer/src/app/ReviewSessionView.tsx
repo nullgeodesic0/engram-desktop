@@ -43,7 +43,7 @@ import { StatFraction } from '../components/ui/StatFraction'
 import { ErrorPanel } from '../components/ErrorPanel'
 import { recordConfidence, latestPickFor } from '../shared/calibrationStore'
 import { extractTicketFromMessages, type ParsedTicket } from '../shared/ticketParser'
-import { composeReviewKickoff, composeResumeNudge, detectResumeState, capForMins } from '../shared/reviewKickoff'
+import { composeReviewKickoff, composeResumeNudge, detectResumeState } from '../shared/reviewKickoff'
 import { loadCheckpointAllNodes } from '../shared/checkpointAllNodesPref'
 import { loadSittingPrefs, saveSittingMins, type SittingPrefs } from '../shared/sittingPrefs'
 import { useDateRollover } from '../shared/dateRollover'
@@ -51,7 +51,7 @@ import { recallDueNodes, quickShare, type RecallDueEntry } from '../shared/check
 import { TicketCard } from '../components/ritual/TicketCard'
 import { ActionChips, type SuggestedAction } from '../components/ritual/ActionChips'
 import { bridgeUiIntent } from '../../../shared/bridgeUiIntents'
-import { planSitting, secondsForTopic, humanMinutes, type PaceModel } from '../../../shared/sittingPace'
+import { buildPaceModel, planSitting, secondsForTopic, humanMinutes, type PaceModel } from '../../../shared/sittingPace'
 import { saveDraft, loadDraft, clearDraft } from '../shared/composerDrafts'
 import { ReadyRoomPlate } from '../components/ritual/ReadyRoomPlate'
 import { ReviewHorizon } from '../components/ReviewHorizon'
@@ -1165,9 +1165,10 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
       const planTopics = queue
         .filter((q) => !sittingPrefs.focusTopic || q.topic === sittingPrefs.focusTopic)
         .map((q) => q.topic)
-      sessionCapRef.current = pace
-        ? planSitting(sittingPrefs.mins, planTopics, pace).items
-        : capForMins(sittingPrefs.mins)
+      // No pace model yet (still loading, or the read failed): plan at the
+      // same default the ruler draws with, so the plate, the ruler and the
+      // tutor's cap all describe one sitting.
+      sessionCapRef.current = planSitting(sittingPrefs.mins, planTopics, pace ?? buildPaceModel([])).items
     }
     const kickoff = composeReviewKickoff({
       style: sittingPrefs.style,
@@ -1179,13 +1180,11 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
       focusTopic: resume ? null : sittingPrefs.focusTopic,
       allNodeTypes: checkpointAllNodesOn,
       // Measured, not assumed — see shared/sittingPace.ts.
-      plannedItems: pace
-        ? planSitting(
-            sittingPrefs.mins,
-            queueRef.current.filter((d) => !sittingPrefs.focusTopic || d.topic === sittingPrefs.focusTopic).map((d) => d.topic),
-            pace,
-          ).items
-        : undefined,
+      plannedItems: planSitting(
+        sittingPrefs.mins,
+        queueRef.current.filter((d) => !sittingPrefs.focusTopic || d.topic === sittingPrefs.focusTopic).map((d) => d.topic),
+        pace ?? buildPaceModel([]),
+      ).items,
     })
 
     const { sessionId: sid } = resume

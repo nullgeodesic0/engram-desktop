@@ -1,6 +1,6 @@
 import { useCallback, useId, useRef } from 'react'
 import { humanizeNodeId } from '../../../../shared/humanizeId'
-import { humanMinutes } from '../../../../shared/sittingPace'
+import { DEFAULT_SECONDS_PER_ITEM, humanMinutes } from '../../../../shared/sittingPace'
 import { buildRuler, snapToItem, stepBudget, type Ruler, type RulerItem } from '../../shared/sittingRuler'
 import type { PaceModel } from '../../../../shared/sittingPace'
 
@@ -67,6 +67,8 @@ export function SittingRuler({
   // Dragging always snaps to an item edge, so this is normally absent.
   const slackSeconds = Math.max(0, budgetMins * 60 - ruler.plannedSeconds)
   const showSlack = slackSeconds >= 60 && ruler.items < ruler.segments.length
+  // No history at all: every segment is the bare default, not a measurement.
+  const assumedPace = !pace || pace.overallMedianSeconds === null
 
   return (
     <div className="flex flex-col gap-2">
@@ -79,21 +81,26 @@ export function SittingRuler({
           behind the value announcement rather than interrupting it. */}
       <div className="flex items-baseline justify-between gap-3 flex-wrap" aria-live="polite">
         <span className="label-data text-xs text-[var(--color-text-primary)]">
-          <span className="text-[var(--color-ink-warm)]">{humanMinutes(ruler.plannedSeconds)}</span>
-          {' · '}
-          {ruler.items} {ruler.items === 1 ? 'item' : 'items'}
-          {throughName && (
+          <span className="text-[var(--color-ink-warm)]">
+            {ruler.items} {ruler.items === 1 ? 'item' : 'items'}
+          </span>
+          {` · about ${humanMinutes(ruler.plannedSeconds)}`}
+          {throughName && ruler.items < ruler.segments.length && (
             <>
-              {' · through '}
+              {' · stops after '}
               <span className="text-[var(--color-text-dim)]">{throughName}</span>
             </>
           )}
         </span>
-        <span className="fig-caption shrink-0">
+        <span className="fig-caption">
           {ruler.items === ruler.segments.length
             ? 'the whole queue'
-            : `of ${ruler.segments.length} · ${humanMinutes(ruler.totalSeconds)} for all`}
+            : `all ${ruler.segments.length} · about ${humanMinutes(ruler.totalSeconds)}`}
           {showSlack && ` · ${humanMinutes(slackSeconds)} spare, the next item needs more`}
+          {/* Say where the minutes come from while they are a guess. A
+              number the learner cannot account for is one they cannot plan
+              around, and the default is only a starting point. */}
+          {assumedPace && ` · estimated at ${humanMinutes(DEFAULT_SECONDS_PER_ITEM)} each until your own pace is measured`}
         </span>
       </div>
 
@@ -164,13 +171,14 @@ export function SittingRuler({
               opacity: s.inside ? 1 : i === ruler.items ? 0.85 : 0.5,
             }}
           >
-            {/* Overdue tick — the same danger mark HealthRing already uses for
-                a due node, so "at risk" reads the same way in both places. */}
+            {/* Overdue tick, in warm ink. Overdue is workload, not a
+                mistake: danger ink is reserved for misconceptions
+                (DESIGN.md's Reserved Danger Rule). */}
             {s.overdueDays > 0 && (
               <span
                 aria-hidden="true"
                 className="absolute left-0 right-0 bottom-0 h-[3px]"
-                style={{ background: 'var(--color-ink-danger)', opacity: s.inside ? 1 : 0.45 }}
+                style={{ background: 'var(--color-ink-warm-dim)', opacity: s.inside ? 1 : 0.45 }}
               />
             )}
           </div>
@@ -209,7 +217,7 @@ export function SittingRuler({
 
       <div className="flex items-baseline justify-between gap-3">
         <span className="fig-caption">
-          Fig. — the queue in triage order, {pace ? 'each item as wide as it costs you' : 'all items at the same assumed minute until you have a pace'}; a red foot marks one already overdue
+          Fig. — the queue in triage order, {assumedPace ? 'every item the same assumed length until you have a pace' : 'each item as wide as it costs you'}; an underline marks one already overdue
         </span>
         {ruler.overruns && (
           <span className="fig-caption text-[var(--color-ink-warm)] shrink-0">

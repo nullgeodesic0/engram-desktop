@@ -198,7 +198,7 @@ A narrow-band palette of ink colors on a warmed near-black, where hue carries me
 
 **The Consolidation Axis Rule.** Cool and warm are not "accent 1" and "accent 2." Cool means *not yet consolidated*; warm means *survived*. A warm accent on something that has not consolidated is a defect, not a style choice. Nothing may be recolored along this axis for visual balance.
 
-**The Reserved Danger Rule.** Danger ink marks a learner's struggle or a lapsed memory. It is never the color of a validation error, a failed network call, a destructive-action button, or a generic alert. Those need their own treatment — usually text, not hue.
+**The Reserved Danger Rule.** Danger ink marks a learner's struggle or a lapsed memory. It is never the color of a validation error, a failed network call, a destructive-action button, or a generic alert. Those need their own treatment — usually text, not hue. Nor is it the color of work that is merely due or overdue: a due count, an overdue note, the sitting ruler's overdue underline and the topic ring's due notch are the schedule's state, not the learner's mistake, so they take warm ink and spell the fact out in words.
 
 *One standing exception: the window close control in `TitleBar`.* Its red is not this product's semantics but the platform's — a macOS traffic light that is not red reads as broken chrome, and no learner will mistake the window controls for a grade. The exception is exactly one control, and it does not generalize to destructive actions inside the app, which stay under the rule.
 

@@ -52,10 +52,13 @@ export interface PaceModel {
  * overall median is itself only a fallback. */
 const MIN_TOPIC_SAMPLES = 3
 
-/** What to assume with no history at all. Kept at the app's historical
- * assumption so a first-run learner sees exactly today's behaviour rather
- * than a number invented here. */
-export const DEFAULT_SECONDS_PER_ITEM = 60
+/** What to assume with no history at all. Four minutes, not the app's
+ * historical one: this learner's measured median across every topic is
+ * about 5 min/item (table above, and PRODUCT.md's ~4.6), so a one-minute
+ * default made a new learner's first estimate four to five times too short.
+ * Rounded down to a figure a person can say, and replaced by the learner's
+ * own median as soon as one exists. */
+export const DEFAULT_SECONDS_PER_ITEM = 240
 
 function median(xs: number[]): number {
   const s = [...xs].sort((a, b) => a - b)
@@ -133,11 +136,16 @@ export function planSitting(minutes: number, dueTopics: string[], model: PaceMod
   return { items, predictedSeconds: spent, overruns: spent > budget }
 }
 
-/** Round to something a person would say out loud. */
+/** Round to something a person would say out loud.
+ *
+ * Whole minutes up to an hour. Five-minute steps used to start at ten, which
+ * printed a 12-minute queue as "10 min for all" right beside a 10-minute
+ * preset, so the two read as the same thing when they were not. Past an
+ * hour, nobody plans to the minute. */
 export function humanMinutes(seconds: number): string {
   const mins = seconds / 60
   if (mins < 1) return 'under a minute'
-  if (mins < 10) return `${Math.round(mins)} min`
+  if (mins < 60) return `${Math.round(mins)} min`
   return `${Math.round(mins / 5) * 5} min`
 }
 
@@ -159,7 +167,10 @@ export function humanMinutes(seconds: number): string {
 export function sittingOptions(totalSeconds: number): number[] {
   const round5 = (mins: number): number => Math.max(5, Math.round(mins / 5) * 5)
   if (!Number.isFinite(totalSeconds) || totalSeconds <= 0) return [5, 10, 25]
-  const full = round5(totalSeconds / 60)
+  // The full clear rounds UP. Rounded to nearest, a 12-minute queue offered
+  // "10 min · all", a budget that by its own arithmetic stops two items
+  // short of all.
+  const full = Math.max(5, Math.ceil(totalSeconds / 60 / 5) * 5)
   const opts = [round5(full / 4), round5(full / 2), full]
   return [...new Set(opts)].sort((a, b) => a - b)
 }
