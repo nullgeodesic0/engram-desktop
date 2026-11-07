@@ -4,7 +4,7 @@ import App from './App'
 import { EnvironmentGate } from './components/EnvironmentGate'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { BootSplash } from './components/BootSplash'
-import { NaveGround, applyGrain } from './components/NaveGround'
+import { NaveGround } from './components/NaveGround'
 import { applyStoredTheme, reapplyIfSystem } from './shared/theme'
 import './index.css'
 import './fonts'
@@ -14,10 +14,6 @@ import './fonts'
 // first paint and the app never flashes its Night Atlas dark palette before
 // snapping to light (or vice versa). See shared/theme.ts.
 applyStoredTheme()
-
-// The grain tile the Nave ground and the paper sheets share, made once before
-// first paint so nothing reflows when it lands.
-applyGrain()
 
 /** Follows live OS theme changes while the user hasn't made an explicit
  * choice (reapplyIfSystem() is a no-op once they have). The Nave ground is

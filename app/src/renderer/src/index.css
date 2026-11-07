@@ -2182,9 +2182,12 @@
    frame, and every blurred panel re-sampling it on each of those frames.
 
    Nave is the ground: rough paper grain, long soft light and a faint arch (components/NaveGround.tsx). Folio is the sheet:
-   a top-level card is opaque paper with two sheets peeking out behind and a
+   a top-level card is opaque plain paper with two sheets peeking out behind and a
    dog-ear. Rules kept from the source:
-     - Grain is one static tile, a background image, never over text.
+     - Grain is one static tile (assets/grain.png), a background image,
+       never over text. It is a real file, not a data URL in a custom
+       property: a ~50KB `var()` was re-resolved on every style recalc of
+       every sheet, and repainting it cost more than the tilt itself.
      - The one motion is the shafts' slow sway: transform and opacity only,
        paused when the window is not focused. No canvas per frame, no
        filter, no backdrop-filter anywhere in the app.
@@ -2220,8 +2223,8 @@
     background-image:
       linear-gradient(115deg, color-mix(in srgb, var(--nf-ray-ink) 4%, transparent) 0%, transparent 38%),
       linear-gradient(color-mix(in srgb, var(--color-void) var(--nf-wash), transparent), color-mix(in srgb, var(--color-void) var(--nf-wash), transparent)),
-      var(--look-grain, none),
-      var(--look-grain, none);
+      url('./assets/grain.png'),
+      url('./assets/grain.png');
     background-size: auto, auto, 200px, 340px;
     background-position: 0 0, 0 0, 0 0, 70px 110px;
     background-repeat: no-repeat, no-repeat, repeat, repeat;
@@ -2260,7 +2263,7 @@
   /* The shafts sway, slowly: the ground's one motion, as in RaftHad's Nave
      Folio. Transform and opacity only, on three small layers the compositor
      moves without repainting anything, so it costs no main-thread work.
-     It stops when the window loses focus or is hidden (`data-awake`, set in
+     It runs in sub-pixel steps (see below) and stops when the window loses focus or is hidden (`data-awake`, set in
      main.tsx) and is gone under reduced motion. */
   @keyframes nf-sway {
     from {
@@ -2276,6 +2279,10 @@
     .nf-shaft {
       will-change: transform, opacity;
       animation: nf-sway 16s ease-in-out infinite alternate;
+      /* Stepped: ~4 frames a second instead of 60. The shafts travel ~52px
+         over 16s, so each step is under a pixel on a soft gradient and reads
+         as the same glide, at about a fifth of the compositor work. */
+      animation-timing-function: steps(64);
     }
     .nf-shaft.s2 { animation-duration: 13s; animation-delay: -8s; }
     .nf-shaft.s3 { animation-duration: 19s; animation-delay: -4s; }
@@ -2298,7 +2305,7 @@
     border: 1px solid var(--nf-line);
     border-bottom: 0;
     border-radius: 160px 160px 0 0;
-    background-image: var(--look-grain, none);
+    background-image: url('./assets/grain.png');
     background-size: 200px;
     opacity: 0.22;
     -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 30%, #000 70%, transparent 100%);
@@ -2308,18 +2315,17 @@
     .nf-bigarch { display: none; }
   }
   /* Folio: a top-level card is a sheet of paper. Opaque (nothing behind it
-     moves, and there is no blur to see through), the grain under a paper
-     wash, square shoulders, two sheets peeking out below, and a dog-ear. */
+     moves, and there is no blur to see through), plain paper, square shoulders, two sheets peeking out below, and a dog-ear. */
   .panel,
   .panel-raised,
   .panel-plate {
     --nf-sheet: var(--color-surface);
     position: relative;
-    background-color: var(--nf-sheet);
-    background-image:
-      linear-gradient(color-mix(in srgb, var(--nf-sheet) 90%, transparent), color-mix(in srgb, var(--nf-sheet) 90%, transparent)),
-      var(--look-grain, none);
-    background-size: auto, 200px;
+    /* Plain paper: the grain lives on the ground only. On the sheets it was
+       re-rastered on every hover (promote, tilt, settle), which was most of
+       the renderer's work while the pointer moved, for a difference you could
+       barely see. */
+    background: var(--nf-sheet);
     border-color: var(--nf-line);
     border-radius: 4px;
     box-shadow:

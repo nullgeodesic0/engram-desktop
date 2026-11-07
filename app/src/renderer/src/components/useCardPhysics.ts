@@ -255,6 +255,11 @@ interface TiltState {
   pointerY: number
   idleX: number
   idleY: number
+  /** The card's rect, read once when the hover starts and dropped on scroll,
+   * resize and hover end. Reading it every frame forced a style/layout flush
+   * per frame (the previous frame's `--tilt-*` writes had dirtied style), which
+   * was most of the renderer's CPU while the pointer moved over a card. */
+  rect: DOMRect | null
 }
 
 const states = new WeakMap<HTMLElement, TiltState>()
@@ -367,6 +372,7 @@ function register(el: HTMLElement): void {
     phaseX: rand(0, 2 * Math.PI),
     phaseY: rand(0, 2 * Math.PI),
     promoted: false,
+    rect: null,
     scale,
     tier,
     // Until the first measurement lands, behave exactly as the flat tier did.
@@ -436,7 +442,7 @@ function tick(now: number): void {
       // where the cursor is within the row. Pressing INTO the plate: cursor near the top
       // edge → +rotateX (top recedes); near the right edge → +rotateY
       // (right recedes).
-      const rect = el.getBoundingClientRect()
+      const rect = st.rect ?? (st.rect = el.getBoundingClientRect())
       if (rect.width > 0 && rect.height > 0) {
         measure(st, rect)
         const nx = clamp01((st.px - rect.left) / rect.width)
@@ -582,6 +588,7 @@ function attach(container: HTMLElement): () => void {
     const st = states.get(el)
     if (!st) return
     st.hovered = false
+    st.rect = null
     // Keep it driven so it glides back to idle drift / flat.
     driven.add(el)
     ensureLoop()
@@ -597,6 +604,7 @@ function attach(container: HTMLElement): () => void {
     for (const el of next) {
       const st = states.get(el)
       if (!st) continue
+      if (!st.hovered) st.rect = null
       st.hovered = true
       st.px = clientX
       st.py = clientY
@@ -649,12 +657,24 @@ function attach(container: HTMLElement): () => void {
   // listener on the container alone would never hear them.
   const onAnyScroll = (): void => {
     lastScrollAt = performance.now()
+    for (const el of hoverChain) {
+      const st = states.get(el)
+      if (st) st.rect = null
+    }
     // Keep the loop awake so hovered cards can drain to idle rather than
     // freezing mid-tilt until the next pointer event.
     for (const el of hoverChain) driven.add(el)
     ensureLoop()
   }
   container.addEventListener('scroll', onAnyScroll, { capture: true, passive: true })
+  // A resize moves cards without a scroll: re-read the hovered rects.
+  const onResize = (): void => {
+    for (const el of hoverChain) {
+      const st = states.get(el)
+      if (st) st.rect = null
+    }
+  }
+  window.addEventListener('resize', onResize, { passive: true })
 
   container.addEventListener('pointerover', onPointerOver, { passive: true })
   container.addEventListener('pointerout', onPointerOut, { passive: true })
@@ -663,6 +683,7 @@ function attach(container: HTMLElement): () => void {
   return () => {
     mo.disconnect()
     container.removeEventListener('scroll', onAnyScroll, { capture: true })
+    window.removeEventListener('resize', onResize)
     container.removeEventListener('pointerover', onPointerOver)
     container.removeEventListener('pointerout', onPointerOut)
     container.removeEventListener('pointermove', onPointerMove)
