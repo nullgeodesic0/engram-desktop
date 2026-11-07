@@ -6,14 +6,16 @@ import { humanizeNodeId } from '../../../shared/humanizeId'
 function barColor(rate: number | null): string {
   if (rate == null) return 'var(--color-surface-3)'
   if (rate >= 0.85) return 'var(--color-ink-warm)'
-  if (rate < 0.6) return 'var(--color-ink-danger)'
+  // A hard week is not a mistake: neutral, never danger ink (DESIGN.md's
+  // Reserved Danger Rule keeps red for misconceptions).
+  if (rate < 0.6) return 'var(--color-text-faint)'
   return 'var(--color-ink-cool)'
 }
 
 function gradeColor(grade: string | null): string {
   if (grade === 'recalled') return 'var(--color-ink-warm)'
   if (grade === 'partial') return 'var(--color-ink-cool)'
-  if (grade === 'lapsed') return 'var(--color-ink-danger)'
+  if (grade === 'lapsed') return 'var(--color-text-dim)'
   return 'var(--color-text-faint)'
 }
 

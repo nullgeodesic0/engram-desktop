@@ -123,7 +123,7 @@ export function ArtifactGalleryView({ onGoLearn, onOpenNode }: ArtifactGalleryVi
       <div className="flex flex-col gap-3">
         <PageHeader
           title="Artifacts"
-          subtitle="Interactive explorables the artifact-smith has built for threshold concepts."
+          subtitle="Interactive explorables, built for the hardest concepts in your topics."
         />
         {totalCount > 0 && (
           <input
@@ -162,9 +162,9 @@ export function ArtifactGalleryView({ onGoLearn, onOpenNode }: ArtifactGalleryVi
 
       {artifacts?.length === 0 && !error && (
         <div className="flex flex-col items-start gap-2">
-          <div className="fig-caption">Fig. — no explorables built yet; threshold concepts earn them.</div>
+          <div className="fig-caption">Fig. — no explorables yet</div>
           <div className="text-sm text-[var(--color-text-dim)]">
-            No explorables registered yet — they’re built during /learn sessions on threshold nodes.
+            None yet. One is built during a Learn session when you reach a threshold concept, the kind most people get stuck on.
           </div>
           {onGoLearn && <Button variant="ghost" onClick={onGoLearn}>Continue learning</Button>}
         </div>
