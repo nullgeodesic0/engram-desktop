@@ -55,8 +55,8 @@ it. D5 pins every file in this directory by content hash, asserts the
 load-bearing sentences of each pedagogy overlay, and verifies the INSTALLED
 plugin still carries the applied markers — so a `claude plugin update` that
 silently reverts a pedagogy overlay is a gate failure, not a shrug. The
-quick-checkpoint protocol (below) is the first and, so far, only such
-exception.
+quick-checkpoint protocol (below) was the first such exception; the
+mobile-walk and step-sized protocols followed under the same terms.
 
 ## Current overlays
 
@@ -70,6 +70,14 @@ exception.
   `--source quick-mc` receipts), inserted into `skills/review/SKILL.md` ahead
   of the assessor-audit section. A pedagogy overlay under the widened
   charter above — read its constitutional-exception header before touching it.
+- **`engram/review-skill.step-sized-protocol.md`** — the learner-elected
+  step-sized review style for derivation-style items (the plan plus one
+  pivotal step instead of a full re-derivation; `good` at best,
+  `--source step-probe` receipts, and a full-solve floor after two
+  step-sized reviews in a row), inserted into `skills/review/SKILL.md` after
+  the checkpoint protocol and before the assessor audit. Elected per sitting
+  by the review kickoff when the default-on Settings toggle is on. A
+  pedagogy overlay under the widened charter — read its header first.
 - **`engram/dialogue-grammar.checkpoint-exception.md`** — the one-sentence
   companion inserted after `skills/_shared/dialogue-grammar.md`'s hard-rules
   section, so the model is never left adjudicating a live contradiction

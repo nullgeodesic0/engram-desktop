@@ -34,10 +34,25 @@ function allVariants(): Array<{ label: string; kickoff: string }> {
         for (const retest of [null, RETEST]) {
           for (const recallDueNodes of [[], ['binet-equation', 'virial-theorem']]) {
             for (const allNodeTypes of [false, true]) {
-              out.push({
-                label: `${style}/${mins}/${digestLines.length ? 'digest' : 'no-digest'}/${retest ? 'retest' : 'no-retest'}/${recallDueNodes.length ? 'floor' : 'no-floor'}/${allNodeTypes ? 'all-nodes' : 'triage'}`,
-                kickoff: composeReviewKickoff({ style, mins, totalDue: 43, recallDueNodes, retest, digestLines, allNodeTypes }),
-              })
+              for (const stepSized of [false, true]) {
+                for (const focusTopic of [null, 'grad-quantum-mechanics']) {
+                  out.push({
+                    label: `${style}/${mins}/${digestLines.length ? 'digest' : 'no-digest'}/${retest ? 'retest' : 'no-retest'}/${recallDueNodes.length ? 'floor' : 'no-floor'}/${allNodeTypes ? 'all-nodes' : 'triage'}/${stepSized ? 'step' : 'full'}/${focusTopic ?? 'mixed'}`,
+                    kickoff: composeReviewKickoff({
+                      style,
+                      mins,
+                      totalDue: 43,
+                      recallDueNodes,
+                      retest,
+                      digestLines,
+                      allNodeTypes,
+                      stepSized,
+                      focusTopic,
+                      fullSolveNodes: stepSized ? ['hamilton-jacobi-theory'] : [],
+                    }),
+                  })
+                }
+              }
             }
           }
         }
@@ -219,5 +234,28 @@ describe('composeReviewKickoff — one topic at a time', () => {
     // Checkpoint carries its own protocol; the focus clause must not displace it.
     const m = composeReviewKickoff({ ...base, style: 'checkpoint', focusTopic: 't' })
     expect(m).toContain('/engram:review quick')
+  })
+})
+
+describe('step-sized election', () => {
+  const STEP = 'step-sized style described in the review skill'
+  const base = { style: 'standard' as SittingStyle, totalDue: 20, recallDueNodes: [], retest: null, digestLines: [] as string[] }
+
+  it('names the protocol on every standard shape when on, and names the full-solve floor', () => {
+    for (const mins of [10, 25] as SittingMins[]) {
+      for (const focusTopic of [null, 'grad-quantum-mechanics']) {
+        for (const digestLines of [[], DIGEST]) {
+          const k = composeReviewKickoff({ ...base, mins, focusTopic, digestLines, stepSized: true, fullSolveNodes: ['virial-theorem'] })
+          expect(k.includes(STEP), `${mins}/${focusTopic}/${digestLines.length}`).toBe(true)
+          expect(k.includes('These need a full solve this time: virial-theorem.')).toBe(true)
+        }
+      }
+    }
+  })
+
+  it('never names it when off, on checkpoint sittings, or on a retest', () => {
+    expect(composeReviewKickoff({ ...base, mins: 10, stepSized: false }).includes(STEP)).toBe(false)
+    expect(composeReviewKickoff({ ...base, style: 'checkpoint', mins: 10, stepSized: true }).includes(STEP)).toBe(false)
+    expect(composeReviewKickoff({ ...base, mins: 10, retest: RETEST, stepSized: true }).includes(STEP)).toBe(false)
   })
 })

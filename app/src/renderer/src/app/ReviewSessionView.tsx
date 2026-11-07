@@ -47,7 +47,8 @@ import { composeReviewKickoff, composeResumeNudge, detectResumeState, capForMins
 import { loadCheckpointAllNodes } from '../shared/checkpointAllNodesPref'
 import { loadSittingPrefs, saveSittingMins, type SittingPrefs } from '../shared/sittingPrefs'
 import { useDateRollover } from '../shared/dateRollover'
-import { recallDueNodes, quickShare, type RecallDueEntry } from '../shared/checkpointEvidence'
+import { recallDueNodes, fullSolveDueNodes, quickShare, type RecallDueEntry } from '../shared/checkpointEvidence'
+import { loadStepSized } from '../shared/stepSizedPref'
 import { TicketCard } from '../components/ritual/TicketCard'
 import { ActionChips, type SuggestedAction } from '../components/ritual/ActionChips'
 import { bridgeUiIntent } from '../../../shared/bridgeUiIntents'
@@ -1206,6 +1207,8 @@ export function ReviewSessionView({
       digestLines,
       focusTopic: resume ? null : sittingPrefs.focusTopic,
       allNodeTypes: checkpointAllNodesOn,
+      stepSized: loadStepSized(),
+      fullSolveNodes: checkpointBooks.fullSolveDue.map((e) => e.node),
       // Measured, not assumed — see shared/sittingPace.ts.
       plannedItems: pace
         ? planSitting(
@@ -1793,8 +1796,9 @@ export function ReviewSessionView({
   // sends no floor list, never blocks the plate.
   const [checkpointBooks, setCheckpointBooks] = useState<{
     recallDue: RecallDueEntry[]
+    fullSolveDue: RecallDueEntry[]
     share: { quick: number; total: number } | null
-  }>({ recallDue: [], share: null })
+  }>({ recallDue: [], fullSolveDue: [], share: null })
   useEffect(() => {
     if (phase !== 'ready' && !detachedFromSitting) return
     let cancelled = false
@@ -1802,7 +1806,11 @@ export function ReviewSessionView({
       .receiptsHistory()
       .then((h) => {
         if (cancelled) return
-        setCheckpointBooks({ recallDue: recallDueNodes(h.receipts), share: quickShare(h.receipts) })
+        setCheckpointBooks({
+          recallDue: recallDueNodes(h.receipts),
+          fullSolveDue: fullSolveDueNodes(h.receipts),
+          share: quickShare(h.receipts),
+        })
       })
       .catch(() => {
         /* no books — plate renders without the meter, kickoff sends no floor list */

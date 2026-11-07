@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { recallDueNodes, quickShare, lintCheckpointReceipts, CHECKPOINT_SOURCE } from './checkpointEvidence'
+import { recallDueNodes, quickShare, lintCheckpointReceipts, CHECKPOINT_SOURCE, fullSolveDueNodes, STEP_SOURCE } from './checkpointEvidence'
 import type { RawReceipt } from '../../../shared/types'
 
 function receipt(over: Partial<RawReceipt>): RawReceipt {
@@ -77,5 +77,18 @@ describe('lintCheckpointReceipts', () => {
   })
   it('clean receipts produce no lints', () => {
     expect(lintCheckpointReceipts([receipt({}), receipt(Q)])).toEqual([])
+  })
+})
+
+describe('fullSolveDueNodes', () => {
+  it('puts a node on the full-solve floor after two step-probe reviews in a row', () => {
+    const rows = [
+      receipt({ node: 'a', ts: '2026-11-01', source: STEP_SOURCE }),
+      receipt({ node: 'a', ts: '2026-11-04', source: STEP_SOURCE }),
+      receipt({ node: 'b', ts: '2026-11-01', source: STEP_SOURCE }),
+      receipt({ node: 'b', ts: '2026-11-04', source: 'self' }),
+      receipt({ node: 'c', ts: '2026-11-04', source: STEP_SOURCE }),
+    ]
+    expect(fullSolveDueNodes(rows).map((e) => e.node)).toEqual(['a'])
   })
 })

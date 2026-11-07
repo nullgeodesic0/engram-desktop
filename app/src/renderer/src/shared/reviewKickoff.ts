@@ -85,10 +85,23 @@ export interface ComposeOptions {
    * about HOW the widened protocol works — that stays the skill file's
    * business, same as the plain checkpoint branch below. */
   allNodeTypes?: boolean
+  /** The Settings-level "step-sized reviews for derivations" toggle (ON by
+   * default — see shared/stepSizedPref.ts). Standard sittings only: when
+   * true the kickoff NAMES the step-sized protocol the review skill defines
+   * via the D5-pinned overlay, and that naming is the per-sitting election
+   * the overlay activates on. Says nothing about how the protocol works. */
+  stepSized?: boolean
+  /** Nodes on the full-solve floor (two step-sized reviews in a row — see
+   * checkpointEvidence.ts's fullSolveDueNodes). Named so the tutor serves
+   * the whole derivation for them this time. */
+  fullSolveNodes?: string[]
 }
 
 export function composeReviewKickoff(opts: ComposeOptions): string {
   const { style, mins, totalDue, recallDueNodes, retest, digestLines, focusTopic, allNodeTypes } = opts
+  const stepSized = opts.stepSized === true
+  const fullSolve = opts.fullSolveNodes ?? []
+  const solve = fullSolve.length > 0 ? ` These need a full solve this time: ${fullSolve.join(', ')}.` : ''
 
   if (retest) {
     return `/engram:review
@@ -120,10 +133,22 @@ I have about ${mins} minutes. Please work in triage order and cover what fits �
   // FILTER the learner chose, not a reordering — the engine still sequences
   // within the topic, and everything else simply stays due. Placed after the
   // checkpoint branch so an elected checkpoint sitting keeps its protocol.
+  if (focusTopic && stepSized) {
+    return `/engram:review
+
+Just ${focusTopic} today — I want one topic at a time, and everything else can stay due. I have about ${mins} minutes, so please size it with due --topic ${focusTopic} --cap ${n} and run the normal review flow. For derivation-style items I would like the step-sized style described in the review skill.${solve}`
+  }
+
   if (focusTopic) {
     return `/engram:review
 
 Just ${focusTopic} today — I want one topic at a time, and everything else can stay due. I have about ${mins} minutes, so please size it with due --topic ${focusTopic} --cap ${n} and run the normal review flow.`
+  }
+
+  if (mins !== 10 && stepSized) {
+    return `/engram:review
+
+I have about ${mins} minutes today. A capped set of about ${n} items fits — please size the sitting with due --cap ${n} and run the normal review flow; whatever does not fit just stays due. For derivation-style items I would like the step-sized style described in the review skill.${solve}`
   }
 
   if (mins !== 10) {
@@ -132,12 +157,26 @@ Just ${focusTopic} today — I want one topic at a time, and everything else can
 I have about ${mins} minutes today. A capped set of about ${n} items fits — please size the sitting with due --cap ${n} and run the normal review flow; whatever does not fit just stays due.`
   }
 
+  if (digestLines.length > 0 && stepSized) {
+    return `/engram:review
+
+Open misconceptions currently filed in the engine's ledger for topics in this due queue:
+${digestLines.join('\n')}
+These are filed open; "misconception resolve --id <ID>" records a demonstrated correction. For derivation-style items I would like the step-sized style described in the review skill.${solve}`
+  }
+
   if (digestLines.length > 0) {
     return `/engram:review
 
 Open misconceptions currently filed in the engine's ledger for topics in this due queue:
 ${digestLines.join('\n')}
 These are filed open for this queue's nodes; "misconception resolve --id <ID>" records a demonstrated correction. I'd like the chance to show these are fixed where they naturally come up.`
+  }
+
+  if (stepSized) {
+    return `/engram:review
+
+For derivation-style items I would like the step-sized style described in the review skill.${solve}`
   }
 
   return '/engram:review'

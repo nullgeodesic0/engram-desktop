@@ -29,6 +29,7 @@ import { getStoredThemeChoice, setThemeChoice, type ThemeChoice } from '../share
 import { deviceNoun, updateCommands } from '../shared/platform'
 import { SUBSCRIPTION_MODEL_OPTIONS } from '../../../shared/subscriptionModels'
 import { punctualityCounts, setPunctualityCounts } from '../shared/gradePrefs'
+import { loadStepSized, saveStepSized } from '../shared/stepSizedPref'
 
 // The install flow differs per platform (a .app copied into /Applications, an
 // NSIS installer, an AppImage), so the list is resolved at render time rather
@@ -588,6 +589,7 @@ export function SettingsView() {
   const [sounds, setSounds] = useState(soundOn())
   const [checkpointAllNodesOn, setCheckpointAllNodesOn] = useState(loadCheckpointAllNodes())
   const [punctualityOn, setPunctualityOn] = useState(punctualityCounts())
+  const [stepSizedOn, setStepSizedOn] = useState(loadStepSized())
   const [exporting, setExporting] = useState(false)
   const [exportResult, setExportResult] = useState<string | null>(null)
   const [notifier, setNotifier] = useState<NotifierSettings | null>(null)
@@ -1005,6 +1007,19 @@ export function SettingsView() {
           hint="Off by default. When on, an elected Checkpoint sitting may walk ANY node as a chain of picks — including threshold, lapsed, transfer-ready, and procedure nodes normally held to free recall. The recall floor still applies: two checkpoint reviews in a row still force the next one back to real production."
           current={checkpointAllNodesOn ? 'on' : 'off'}
           onPick={(v) => setCheckpointAllNodes(v)}
+          options={[
+            { value: 'off', label: 'Off' },
+            { value: 'on', label: 'On' },
+          ]}
+        />
+        <PickerRow
+          label="Step-sized reviews for derivations"
+          hint="On by default. A review of a multi-step derivation or problem asks for the plan and the one pivotal step instead of the whole thing, so an item takes a few minutes rather than ten or more. Every third review of the same item is still a full solve. Receipts are stamped step-probe so they stay distinguishable."
+          current={stepSizedOn ? 'on' : 'off'}
+          onPick={(v) => {
+            saveStepSized(v === 'on')
+            setStepSizedOn(v === 'on')
+          }}
           options={[
             { value: 'off', label: 'Off' },
             { value: 'on', label: 'On' },
