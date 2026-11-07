@@ -85,23 +85,28 @@ import { SkeletonBar } from '../components/Skeleton'
 import { InkNode } from '../components/ui/InkNode'
 import { HealthRing } from '../components/ui/HealthRing'
 import { PinTackIcon } from '../components/ui/PinTackIcon'
-import { TopicCard } from '../components/TopicCard'
-import { SectionBanner } from '../components/ui/SectionBanner'
-import { SegmentedControl } from '../components/ui/SegmentedControl'
 import { topicBucket } from '../shared/topicShelf'
 import { pendingQuestion } from '../shared/pendingQuestion'
 import { PinnedQuestion } from '../components/PinnedQuestion'
-import { sortTopics, TOPIC_SORT_OPTIONS, type TopicSortKey } from '../shared/topicSort'
+import { sortTopics, type TopicSortKey } from '../shared/topicSort'
 import { loadTopicSort, saveTopicSort, loadTopicGroup, saveTopicGroup, type TopicGroupKey } from '../shared/topicSortPrefs'
-import { groupTopicsByFolder, TOPIC_GROUP_OPTIONS } from '../shared/topicFolders'
+import { normalizeFolderName } from '../shared/topicFolders'
 import {
   loadFolderRegistry,
   saveFolderRegistry,
   addFolderToRegistry,
   removeFolderFromRegistry,
   allFolderNames,
+  loadFolderOrder,
+  saveFolderOrder,
+  orderFolders,
+  moveFolder,
+  renameFolderInRegistry,
 } from '../shared/folderRegistry'
-import { FolderShelf } from '../components/FolderShelf'
+import { LibraryRail, LibraryToolbar, TopicLibraryList, BulkBar, type LibraryView } from '../components/TopicLibrary'
+import { NameDialog } from '../components/NameDialog'
+import { ArchiveTopicDialog } from '../components/ArchiveTopicDialog'
+import { partitionArchived } from '../shared/archive'
 import { EnvironmentSteps } from '../components/EnvironmentSteps'
 import { extractTicketFromMessages, type ParsedTicket } from '../shared/ticketParser'
 import { TicketCard } from '../components/ritual/TicketCard'
@@ -209,61 +214,6 @@ function TopicListSkeleton() {
           </div>
         </div>
       ))}
-    </div>
-  )
-}
-
-/** A group of shelf rows under a small subheading — hidden entirely (no
- * heading, no empty stack) when the bucket is empty, same discipline as
- * Home's TopicGroup (HomeView.tsx) — same three-bucket grammar, just laid out
- * as a vertical shelf instead of a grid. */
-function LearnTopicGroup({
-  heading,
-  caption,
-  topics,
-  resumableTopics,
-  morphingTopic,
-  onOpen,
-  onSettings,
-  onStartFresh,
-  hideFolderChip,
-}: {
-  heading: string
-  caption?: string
-  topics: TopicListEntry[]
-  resumableTopics: Set<string>
-  /** The single row mid-morph into the session, if any. */
-  morphingTopic: string | null
-  onOpen: (t: TopicListEntry) => void
-  onSettings: (t: TopicListEntry) => void
-  onStartFresh: (t: TopicListEntry) => void
-  /** True when this group's own heading IS the folder name. */
-  hideFolderChip?: boolean
-}) {
-  if (topics.length === 0) return null
-  return (
-    <div className="flex flex-col gap-2">
-      {/* The caption belongs to the banner, so it sits AT it (-mt-1) rather
-          than at the group's own interval — at gap-2 it read as a third
-          sibling floating between the banner and the cards, giving the group
-          four evenly-spaced steps and therefore no rhythm at all. */}
-      <SectionBanner label={heading} count={topics.length} />
-      {caption && <span className="text-xs text-[var(--color-text-faint)] -mt-1">{caption}</span>}
-      <div className="flex flex-col gap-3">
-        {topics.map((t) => (
-          <TopicCard
-            key={t.topic}
-            variant="shelf"
-            topic={t}
-            hideFolderChip={hideFolderChip}
-            resumable={resumableTopics.has(t.topic)}
-            morphing={morphingTopic === t.topic}
-            onOpen={() => onOpen(t)}
-            onSettings={() => onSettings(t)}
-            onStartFresh={() => onStartFresh(t)}
-          />
-        ))}
-      </div>
     </div>
   )
 }
@@ -417,6 +367,8 @@ interface LearnSessionViewProps {
    * open map, never switches topics — which would silently no-op a chip
    * click for any node outside whatever topic the map last had open. */
   onOpenNode?: (topicId: string, nodeId: string) => void
+  /** The library's "Open in Topic Map": the map, on this topic. */
+  onOpenMap?: (topicId: string) => void
 }
 
 export function LearnSessionView({
@@ -429,6 +381,7 @@ export function LearnSessionView({
   newTopicPrefill,
   onNewTopicPrefillConsumed,
   onOpenNode,
+  onOpenMap,
 }: LearnSessionViewProps = {}) {
   // Topic-list state
   const [topics, setTopics] = useState<TopicListEntry[] | null>(null)
@@ -2072,34 +2025,95 @@ export function LearnSessionView({
   // would be a small surprise every time.
   const [organizing, setOrganizing] = useState(false)
   const [folderRegistry, setFolderRegistry] = useState<string[]>(loadFolderRegistry)
-  const [newFolderDraft, setNewFolderDraft] = useState<string | null>(null)
+  // The topic library (components/TopicLibrary.tsx): which place in the
+  // rail is open, the find-a-topic filter, organize mode's selection, the
+  // learner's own folder order, and the two dialogs the ⋯ menus open.
+  const [libraryView, setLibraryView] = useState<LibraryView>({ kind: 'all' })
+  const [libraryQuery, setLibraryQuery] = useState('')
+  const [selectedTopics, setSelectedTopics] = useState<Set<string>>(new Set())
+  const [folderOrder, setFolderOrder] = useState<string[]>(loadFolderOrder)
+  const [nameDialog, setNameDialog] = useState<
+    | { kind: 'newFolder'; fileIds: string[] }
+    | { kind: 'renameFolder'; name: string }
+    | { kind: 'renameTopic'; topic: TopicListEntry }
+    | null
+  >(null)
+  const [archiveFor, setArchiveFor] = useState<TopicListEntry[] | null>(null)
+  const libraryFolders = useMemo(
+    () => orderFolders(allFolderNames(topics ?? [], folderRegistry), folderOrder),
+    [topics, folderRegistry, folderOrder],
+  )
 
   /** Writes one topic's folder, preserving every other setting — the
    * settings record is read-modify-written rather than reconstructed, so
    * filing can never clobber a topic's instructions or context files. */
-  async function fileTopic(topicId: string, folder: string | null) {
-    const current = await window.engram.getTopicSettings(topicId)
-    await window.engram.setTopicSettings(topicId, { ...current, folder })
+  async function fileTopics(topicIds: string[], folder: string | null) {
+    for (const id of topicIds) {
+      const current = await window.engram.getTopicSettings(id)
+      await window.engram.setTopicSettings(id, { ...current, folder })
+    }
     refreshTopics()
   }
 
-  function createFolder(raw: string) {
-    const next = addFolderToRegistry(folderRegistry, raw)
+  /** Registers a folder (so it exists while empty) and, when topics were
+   * waiting on it ("Move to folder → New folder…"), files them into it. The
+   * rail always lists every folder, so no view switch is needed to see it. */
+  async function createFolder(raw: string, fileIds: string[] = []) {
+    const name = normalizeFolderName(raw)
+    if (!name) return
+    const next = addFolderToRegistry(folderRegistry, name)
     setFolderRegistry(next)
     saveFolderRegistry(next)
-    setNewFolderDraft(null)
-    // A brand-new folder is only visible in folder mode — switch there
-    // rather than creating something the learner can't see.
-    if (topicGroup !== 'folder') {
-      setTopicGroup('folder')
-      saveTopicGroup('folder')
+    if (fileIds.length > 0) {
+      await fileTopics(fileIds, name)
+      setSelectedTopics(new Set())
     }
+  }
+
+  /** Renames a folder by re-filing every topic in it (folders are labels on
+   * topics — topicFolders.ts) and carrying its registry entry and its place
+   * in the learner's order across. */
+  async function renameFolder(from: string, raw: string) {
+    const to = normalizeFolderName(raw)
+    if (!to || to === from) return
+    const inIt = (topics ?? []).filter((t) => (t.folder ?? '').trim().toLowerCase() === from.toLowerCase())
+    const reg = renameFolderInRegistry(folderRegistry, from, to)
+    const nextReg = reg.some((n) => n.toLowerCase() === to.toLowerCase()) ? reg : [...reg, to]
+    setFolderRegistry(nextReg)
+    saveFolderRegistry(nextReg)
+    const order = libraryFolders.map((n) => (n.toLowerCase() === from.toLowerCase() ? to : n))
+    setFolderOrder(order)
+    saveFolderOrder(order)
+    if (libraryView.kind === 'folder' && libraryView.name.toLowerCase() === from.toLowerCase()) {
+      setLibraryView({ kind: 'folder', name: to })
+    }
+    await fileTopics(
+      inIt.map((t) => t.topic),
+      to,
+    )
+  }
+
+  /** The display-name override (TopicSettings.displayTitle) — presentational
+   * only; the engine's own title and the topic id never change. An empty or
+   * engine-identical name clears the override. */
+  async function renameTopic(t: TopicListEntry, raw: string) {
+    const name = raw.trim()
+    const engineTitle = t.engineTitle ?? t.title
+    const current = await window.engram.getTopicSettings(t.topic)
+    await window.engram.setTopicSettings(t.topic, { ...current, displayTitle: name && name !== engineTitle ? name : null })
+    refreshTopics()
+  }
+
+  async function restoreTopic(t: TopicListEntry) {
+    await window.engram.retireTopic(t.topic, true)
+    refreshTopics()
   }
 
   function deleteEmptyFolder(name: string) {
     const next = removeFolderFromRegistry(folderRegistry, name)
     setFolderRegistry(next)
     saveFolderRegistry(next)
+    if (libraryView.kind === 'folder' && libraryView.name.toLowerCase() === name.toLowerCase()) setLibraryView({ kind: 'all' })
   }
   // Minimap Precision fix (second report on the same bug) — jumps straight to
   // the checkpoint's OWN `CheckpointAnchor`, never the host message; see
@@ -2309,114 +2323,50 @@ export function LearnSessionView({
               // in the same column the rows below do instead of being flung
               // to opposite ends of the window.
               <header className="shrink-0 -mx-8 px-8 pb-2 border-b border-[var(--color-hairline)]">
-                <div className="page-measure flex flex-col gap-2">
+                <div className="page-measure library-measure flex flex-col gap-2">
                 <h1 className="font-(family-name:--font-serif) text-[length:var(--text-display)] text-[var(--color-text-primary)]">Learn</h1>
                 {/* One plain line, not a display numeral: how many topics
                     you have is not the thing this page is for, and the big
                     figure made it the largest object on the screen. Hidden
                     until topics have loaded so it never flashes "0 topics". */}
                 {topics !== null && topics.length > 0 && (() => {
-                  const atlasDue = topics.reduce((sum, t) => sum + t.due, 0)
+                  // Live topics only (archive.ts): an archived topic is never
+                  // "due" and is not one of the topics you are working on.
+                  const { live, archived } = partitionArchived(topics)
+                  const atlasDue = live.reduce((sum, t) => sum + t.due, 0)
                   return (
-                    <div className="flex items-end justify-between gap-4">
+                    <div className="flex items-end justify-between gap-4 flex-wrap">
                       <div className="label-data text-sm text-[var(--color-text-dim)] pb-1">
-                        {topics.length} {topics.length === 1 ? 'topic' : 'topics'}
+                        {live.length} {live.length === 1 ? 'topic' : 'topics'}
                         {' · '}
                         {atlasDue > 0 ? (
                           <span className="text-[var(--color-ink-warm)]">{atlasDue} due for review</span>
                         ) : (
                           'nothing due for review'
                         )}
+                        {archived.length > 0 && <span className="text-[var(--color-text-faint)]">{` · ${archived.length} archived`}</span>}
                       </div>
-                      {/* Hidden below two topics — a control that cannot
-                          change anything is noise. Orders WITHIN each shelf
-                          group; the groups themselves never move. */}
-                      {topics.length > 1 && (
-                        <div className="flex items-center gap-4 shrink-0 pb-1 flex-wrap justify-end">
-                          <div className="flex items-center gap-2">
-                            <span
-                              id="learn-topic-group-label"
-                              className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-faint)]"
-                            >
-                              group
-                            </span>
-                            <SegmentedControl<TopicGroupKey>
-                              ariaLabelledBy="learn-topic-group-label"
-                              options={TOPIC_GROUP_OPTIONS}
-                              value={topicGroup}
-                              onChange={(v) => {
-                                setTopicGroup(v)
-                                saveTopicGroup(v)
-                              }}
-                            />
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span
-                              id="learn-topic-sort-label"
-                              className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-faint)]"
-                            >
-                              sort
-                            </span>
-                            <SegmentedControl<TopicSortKey>
-                              ariaLabelledBy="learn-topic-sort-label"
-                              options={TOPIC_SORT_OPTIONS}
-                              value={topicSort}
-                              onChange={(v) => {
-                                setTopicSort(v)
-                                saveTopicSort(v)
-                              }}
-                            />
-                          </div>
-                          {/* Filing affordances. "New folder" is always
-                              offered (creating one switches to folder view,
-                              since an invisible new folder would be a dead
-                              end); Organize only makes sense once you're
-                              looking at folders. */}
-                          <div className="flex items-center gap-2">
-                            <Button variant="ghost" onClick={() => setNewFolderDraft('')}>
-                              New folder
-                            </Button>
-                            {topicGroup === 'folder' && (
-                              <Button
-                                variant={organizing ? 'primary' : 'ghost'}
-                                onClick={() => setOrganizing((v) => !v)}
-                              >
-                                {organizing ? 'Done' : 'Organize'}
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                      {newFolderDraft !== null && (
-                        <form
-                          className="flex items-center gap-2 justify-end"
-                          onSubmit={(e) => {
-                            e.preventDefault()
-                            createFolder(newFolderDraft)
+                      <div className="pb-1">
+                        <LibraryToolbar
+                          query={libraryQuery}
+                          onQuery={setLibraryQuery}
+                          group={topicGroup}
+                          onGroup={(v) => {
+                            setTopicGroup(v)
+                            saveTopicGroup(v)
                           }}
-                        >
-                          <input
-                            autoFocus
-                            value={newFolderDraft}
-                            onChange={(e) => setNewFolderDraft(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Escape') setNewFolderDraft(null)
-                            }}
-                            placeholder="Folder name"
-                            aria-label="New folder name"
-                            className="focus-ring panel px-3 py-1.5 text-sm bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] text-[var(--color-text-primary)]"
-                          />
-                          <Button variant="primary" type="submit" disabled={newFolderDraft.trim().length === 0}>
-                            Create
-                          </Button>
-                          {/* type="button" — a bare <button> inside a form
-                              defaults to submit, so Cancel would create the
-                              folder it means to abandon. */}
-                          <Button variant="ghost" type="button" onClick={() => setNewFolderDraft(null)}>
-                            Cancel
-                          </Button>
-                        </form>
-                      )}
+                          sort={topicSort}
+                          onSort={(v) => {
+                            setTopicSort(v)
+                            saveTopicSort(v)
+                          }}
+                          organizing={organizing}
+                          onOrganize={() => {
+                            setOrganizing((v) => !v)
+                            setSelectedTopics(new Set())
+                          }}
+                        />
+                      </div>
                     </div>
                   )
                 })()}
@@ -2445,7 +2395,8 @@ export function LearnSessionView({
         // learner's own current sort, so the pick is deterministic and follows
         // the ordering they chose rather than a hidden second rule. Null when
         // nothing is in progress; see ContinueHero on why there is no runner-up.
-        const allSorted = sortTopics(topics ?? [], topicSort)
+        // Never an archived topic (archive.ts): it is history, not work.
+        const allSorted = sortTopics(partitionArchived(topics ?? []).live, topicSort)
         const hero = allSorted.find((t) => topicBucket(t) === 'active' && resumableTopics.has(t.topic)) ?? null
         // The list below is ALWAYS the complete atlas — the hero does not
         // remove its topic from it.
@@ -2466,14 +2417,10 @@ export function LearnSessionView({
         // points at keeps its own dogear and `continuing` chip because the
         // library should describe every topic honestly whether or not
         // something above it is pointing at one.
-        const allTopics = topics ?? []
-        const active = sortTopics(allTopics.filter((t) => topicBucket(t) === 'active'), topicSort)
-        const consolidated = sortTopics(allTopics.filter((t) => topicBucket(t) === 'consolidated'), topicSort)
-        const notStarted = sortTopics(allTopics.filter((t) => topicBucket(t) === 'notStarted'), topicSort)
         const envBroken = envCheck !== null && !environmentIsReady(envCheck)
         return (
-          <div className="flex-1 min-h-0 overflow-y-auto">
-            <div className="page-measure flex flex-col gap-3">
+          <div className="flex-1 min-h-0 overflow-y-auto [scrollbar-gutter:stable]">
+            <div className="page-measure library-measure flex flex-col gap-3 pb-20">
             {topics === null && (
               <>
                 <div className="fig-caption">reading your topics…</div>
@@ -2522,90 +2469,103 @@ export function LearnSessionView({
               </Card>
             )}
 
-            {/* Extra air below, not just the list's own gap — the hero is a
-                different register from the ladder, and at the same interval
-                it read as simply the first, largest row. */}
-            {/* Hidden while organizing. Filing is a focused, whole-shelf task
-                — every row becomes a drag handle with a folder picker — and a
-                large card that is deliberately NOT draggable sitting on top of
-                that reads as a bug rather than a shortcut. The topic is still
-                right there in its folder, which is the point. */}
-            {hero && !organizing && (
-              <div className="pb-3">
-                <ContinueHero topic={hero} morphing={morphingTopic === hero.topic} onOpen={() => openTopic(hero)} />
-              </div>
-            )}
-
             {topics !== null && topics.length > 0 && (
-              <div className="flex flex-col gap-6">
-                {topicGroup === 'folder' ? (
-                  // The learner's own filing replaces the state buckets —
-                  // one grouping at a time, because two nested groupings on
-                  // one shelf read as a filing cabinet, not a shelf. Every
-                  // topic still appears exactly once (groupTopicsByFolder is
-                  // a partition), sorted inside its folder by the same key.
-                  // While organizing, empty folders and an empty Unfiled
-                  // stay drawn so every drop target exists before the drag.
-                  <FolderShelf
-                    groups={groupTopicsByFolder(topics, topicSort, {
-                      alwaysShow: organizing ? allFolderNames(topics, folderRegistry) : undefined,
-                      includeEmptyUnfiled: organizing,
-                    })}
+              <div className="flex gap-7 items-start">
+                <LibraryRail
+                  view={libraryView}
+                  onView={(v) => {
+                    setLibraryView(v)
+                    setSelectedTopics(new Set())
+                  }}
+                  liveTopics={partitionArchived(topics).live}
+                  archivedCount={partitionArchived(topics).archived.length}
+                  folders={libraryFolders}
+                  organizing={organizing}
+                  onNewFolder={() => setNameDialog({ kind: 'newFolder', fileIds: [] })}
+                  onRenameFolder={(name) => setNameDialog({ kind: 'renameFolder', name })}
+                  onMoveFolder={(name, dir) => {
+                    const next = moveFolder(libraryFolders, name, dir)
+                    setFolderOrder(next)
+                    saveFolderOrder(next)
+                  }}
+                  onDeleteFolder={deleteEmptyFolder}
+                  canDeleteFolder={(name) => !topics.some((t) => (t.folder ?? '').trim().toLowerCase() === name.toLowerCase())}
+                  onDropTopic={(id, folder) => void fileTopics([id], folder)}
+                />
+                <div className="flex-1 min-w-0">
+                  <TopicLibraryList
+                    view={libraryView}
+                    topics={topics}
+                    group={topicGroup}
+                    sort={topicSort}
+                    query={libraryQuery}
                     organizing={organizing}
-                    allFolders={allFolderNames(topics, folderRegistry)}
+                    selected={selectedTopics}
+                    onToggleSelect={(id) =>
+                      setSelectedTopics((prev) => {
+                        const next = new Set(prev)
+                        if (next.has(id)) next.delete(id)
+                        else next.add(id)
+                        return next
+                      })
+                    }
+                    folders={libraryFolders}
                     resumableTopics={resumableTopics}
                     morphingTopic={morphingTopic}
-                    onOpen={openTopic}
-                    onSettings={setSettingsFor}
-                    onStartFresh={startFreshForTopic}
-                    onFile={(id, folder) => void fileTopic(id, folder)}
-                    onDeleteFolder={deleteEmptyFolder}
+                    onDropTopic={(id, folder) => void fileTopics([id], folder)}
+                    hero={
+                      /* Extra air below — the hero is a different register
+                         from the ladder. Hidden while organizing or
+                         searching (TopicLibraryList decides). A shortcut, not
+                         a relocation: the topic stays in its group and folder
+                         below — see ContinueHero's own comment. */
+                      hero && (
+                        <div className="pb-1">
+                          <ContinueHero topic={hero} morphing={morphingTopic === hero.topic} onOpen={() => openTopic(hero)} />
+                        </div>
+                      )
+                    }
+                    footer={
+                      /* The shelf's last card, not a floating button below
+                         the list — see AddTerritoryCard's doctrine comment. */
+                      <AddTerritoryCard
+                        onClick={() => {
+                          setModalPrefill(null)
+                          setNewerLinkIgnored(false)
+                          setNewTopicOpen(true)
+                        }}
+                        blocked={rateLimitBlocking}
+                      />
+                    }
+                    actions={{
+                      onOpen: openTopic,
+                      onOpenMap: (t) => onOpenMap?.(t.topic),
+                      onFile: (ids, folder) => void fileTopics(ids, folder),
+                      onNewFolderFor: (ids) => setNameDialog({ kind: 'newFolder', fileIds: ids }),
+                      onRename: (t) => setNameDialog({ kind: 'renameTopic', topic: t }),
+                      onSettings: setSettingsFor,
+                      onStartFresh: startFreshForTopic,
+                      onArchive: (ts) => setArchiveFor(ts),
+                      onRestore: (t) => void restoreTopic(t),
+                    }}
                   />
-                ) : (
-                  <>
-                <LearnTopicGroup
-                  heading="Continue learning"
-                  topics={active}
-                  resumableTopics={resumableTopics}
-                  morphingTopic={morphingTopic}
-                  onOpen={openTopic}
-                  onSettings={setSettingsFor}
-                  onStartFresh={startFreshForTopic}
-                />
-                <LearnTopicGroup
-                  heading="Consolidated"
-                  caption="fully encoded — held by review alone"
-                  topics={consolidated}
-                  resumableTopics={resumableTopics}
-                  morphingTopic={morphingTopic}
-                  onOpen={openTopic}
-                  onSettings={setSettingsFor}
-                  onStartFresh={startFreshForTopic}
-                />
-                <LearnTopicGroup
-                  heading="Not started"
-                  topics={notStarted}
-                  resumableTopics={resumableTopics}
-                  morphingTopic={morphingTopic}
-                  onOpen={openTopic}
-                  onSettings={setSettingsFor}
-                  onStartFresh={startFreshForTopic}
-                />
-                  </>
-                )}
-                {/* The shelf's last card, not a floating button below the list —
-                    see AddTerritoryCard's doctrine comment. */}
-                <AddTerritoryCard
-                  onClick={() => {
-                    setModalPrefill(null)
-                    setNewerLinkIgnored(false)
-                    setNewTopicOpen(true)
-                  }}
-                  blocked={rateLimitBlocking}
-                />
+                </div>
               </div>
             )}
             </div>
+            {organizing && (
+              <BulkBar
+                count={selectedTopics.size}
+                folders={libraryFolders}
+                onMove={(folder) => {
+                  void fileTopics([...selectedTopics], folder)
+                  setSelectedTopics(new Set())
+                }}
+                onNewFolder={() => setNameDialog({ kind: 'newFolder', fileIds: [...selectedTopics] })}
+                onArchive={() => setArchiveFor((topics ?? []).filter((t) => selectedTopics.has(t.topic)))}
+                onClear={() => setSelectedTopics(new Set())}
+              />
+            )}
           </div>
         )
       })()}
@@ -2875,6 +2835,60 @@ export function LearnSessionView({
             // call, so one refetch is all it takes.
             refreshTopics()
           }}
+        />
+      )}
+      {nameDialog?.kind === 'newFolder' && (
+        <NameDialog
+          title="New folder"
+          subtitle={
+            nameDialog.fileIds.length > 0
+              ? `${nameDialog.fileIds.length} topic${nameDialog.fileIds.length === 1 ? '' : 's'} will be filed here`
+              : undefined
+          }
+          label="Folder name"
+          placeholder="e.g. Physics Quals"
+          confirmLabel={nameDialog.fileIds.length > 0 ? 'Create and move' : 'Create'}
+          validate={(v) => (libraryFolders.some((f) => f.toLowerCase() === v.toLowerCase()) ? 'A folder with that name already exists.' : null)}
+          onConfirm={(v) => createFolder(v, nameDialog.fileIds)}
+          onClose={() => setNameDialog(null)}
+        />
+      )}
+      {nameDialog?.kind === 'renameFolder' && (
+        <NameDialog
+          title="Rename folder"
+          label="Folder name"
+          initial={nameDialog.name}
+          confirmLabel="Rename"
+          hint="Every topic in it moves with it."
+          validate={(v) =>
+            v.toLowerCase() !== nameDialog.name.toLowerCase() && libraryFolders.some((f) => f.toLowerCase() === v.toLowerCase())
+              ? 'A folder with that name already exists.'
+              : null
+          }
+          onConfirm={(v) => renameFolder(nameDialog.name, v)}
+          onClose={() => setNameDialog(null)}
+        />
+      )}
+      {nameDialog?.kind === 'renameTopic' && (
+        <NameDialog
+          title="Rename topic"
+          subtitle={nameDialog.topic.engineTitle ? `engine title: ${nameDialog.topic.engineTitle}` : undefined}
+          label="Display name"
+          initial={nameDialog.topic.title}
+          confirmLabel="Rename"
+          hint="Only how it’s shown in this app. Your progress and history are untouched."
+          onConfirm={(v) => renameTopic(nameDialog.topic, v)}
+          onClose={() => setNameDialog(null)}
+        />
+      )}
+      {archiveFor && archiveFor.length > 0 && (
+        <ArchiveTopicDialog
+          topics={archiveFor}
+          onArchived={() => {
+            setSelectedTopics(new Set())
+            refreshTopics()
+          }}
+          onClose={() => setArchiveFor(null)}
         />
       )}
       {newTopicOpen && (

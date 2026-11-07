@@ -1408,6 +1408,12 @@
     margin-inline: auto;
   }
 
+  /* Learn's topic library: the shelf's measure plus the library rail, so the
+     list itself keeps the width it had before the rail existed. */
+  .library-measure {
+    max-width: 82rem;
+  }
+
   /* The transcript dissolves into both edges rather than being cut off at
      them. A mask (not an overlay gradient) so it works over the void, over a
      panel, and under the floating session cards alike — nothing has to know

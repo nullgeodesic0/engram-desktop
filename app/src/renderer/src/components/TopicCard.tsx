@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import type { TopicListEntry } from '../../../shared/types'
 import { TopicTitle } from '../components/TopicTitle'
 import { InkNode } from './ui/InkNode'
@@ -64,7 +65,7 @@ interface TopicCardProps {
    * folder picker. The picker is not decoration — HTML5 drag-and-drop is
    * mouse-only, so without it organizing would be unreachable by keyboard. */
   organizing?: boolean
-  /** The custom dataTransfer type the shelf listens for (FolderShelf owns
+  /** The custom dataTransfer type the shelf listens for (TopicLibrary owns
    * the constant; passed in so this component has no import cycle). */
   dragType?: string
   folderOptions?: string[]
@@ -79,6 +80,19 @@ interface TopicCardProps {
    * health signals: HealthRing is the coverage/due shape, the letter is the
    * accountability number. Absent on shelf/drilldown call sites. */
   grade?: TopicGradeResult['overall']
+  /** Shelf only: drawn before the health ring — Learn's organize-mode
+   * selection checkbox. */
+  leading?: ReactNode
+  /** Shelf only: replaces the start-over and settings buttons at the row's
+   * end — Learn's ⋯ menu, or an archived row's Restore button. */
+  actions?: ReactNode
+  /** Shelf only: replaces the state chips (an archived row's
+   * "archived Oct 21 · final grade C" line). */
+  chipsOverride?: { label: string; className: string }[]
+  /** Shelf only: outlined as part of an organize-mode selection. */
+  selected?: boolean
+  /** Shelf only: an archived row, drawn a step quieter. */
+  quiet?: boolean
 }
 
 /** One topic card, shared by Home's grid and Learn's shelf — same InkNode +
@@ -87,7 +101,7 @@ interface TopicCardProps {
  * (Learn's old local card omitted InkNode and the `learning` chip entirely;
  * Home's never showed a due chip since HealthRing's danger notch already
  * carries that signal here). */
-export function TopicCard({ variant, topic: t, onOpen, resumable = false, onSettings, onStartFresh, grade, hideFolderChip, organizing, dragType, folderOptions, currentFolder, onFile, showConstellation = true, morphing = false }: TopicCardProps) {
+export function TopicCard({ variant, topic: t, onOpen, resumable = false, onSettings, onStartFresh, grade, hideFolderChip, organizing, dragType, folderOptions, currentFolder, onFile, showConstellation = true, morphing = false, leading, actions, chipsOverride, selected = false, quiet = false }: TopicCardProps) {
   const total = t.states.new + t.states.learning + t.states.review
 
   if (variant === 'tile') {
@@ -143,8 +157,9 @@ export function TopicCard({ variant, topic: t, onOpen, resumable = false, onSett
       }
       className={`frame-hover tilt-card panel px-5 py-4 flex items-center justify-between gap-4${resumable ? ' dogear' : ''}${
         organizing ? ' cursor-grab active:cursor-grabbing' : ''
-      }`}
+      }${selected ? ' outline outline-[1.5px] outline-[var(--color-accent-cta)]' : ''}${quiet ? ' opacity-90' : ''}`}
     >
+      {leading}
       {/* No InkNode glyph on the shelf row: beside the HealthRing and the
           topic's own constellation it was a third mark saying the same
           thing, and the eye had to skip it to reach the title. */}
@@ -164,7 +179,7 @@ export function TopicCard({ variant, topic: t, onOpen, resumable = false, onSett
         </div>
         <div className="text-xs text-[var(--color-text-faint)] line-clamp-1">{t.goal}</div>
         <div className="flex gap-3 text-xs label-data mt-1">
-          {topicChips(t, { includeFolder: !hideFolderChip }).map((c) => (
+          {(chipsOverride ?? topicChips(t, { includeFolder: !hideFolderChip })).map((c) => (
             <span key={c.label} className={c.className}>
               {c.label}
             </span>
@@ -200,7 +215,8 @@ export function TopicCard({ variant, topic: t, onOpen, resumable = false, onSett
           ))}
         </select>
       )}
-      {resumable && onStartFresh && (
+      {actions}
+      {!actions && resumable && onStartFresh && (
         <IconButton
           onClick={(e) => {
             e.stopPropagation()
@@ -212,7 +228,7 @@ export function TopicCard({ variant, topic: t, onOpen, resumable = false, onSett
           <RefreshIcon />
         </IconButton>
       )}
-      {onSettings && (
+      {!actions && onSettings && (
         <IconButton onClick={onSettings} title="Topic settings" aria-label="Topic settings">
           <GearIcon />
         </IconButton>

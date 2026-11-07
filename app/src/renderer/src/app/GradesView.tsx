@@ -13,7 +13,7 @@ import type {
   WeekRetention,
 } from '../../../shared/types'
 import {
-  computeTopicGrade,
+  computeShownTopicGrade,
   computeCrossTopicGPA,
   computeTopicGradeTrend,
   weeklyTrendCutoffs,
@@ -30,6 +30,7 @@ import {
 } from '../shared/topicGrade'
 import { topicWeekRetention } from '../shared/topicMetrics'
 import { allPicks } from '../shared/calibrationStore'
+import { formatArchivedDate, partitionArchived, useCountArchived } from '../shared/archive'
 import { SectionBanner } from '../components/ui/SectionBanner'
 import { PlateFigure } from '../components/ui/PlateFigure'
 import { Button } from '../components/ui/Button'
@@ -351,15 +352,22 @@ function TopicRosterRow({
   entry,
   grade,
   trend,
+  archivedNote,
   onOpen,
 }: {
   entry: TopicListEntry
   grade: TopicGradeResult
   trend: TopicGradeTrendPoint[]
+  /** Set for an archived topic: replaces the trend arrow (a frozen grade
+   * has no trend) and quiets the row. */
+  archivedNote?: string
   onOpen: () => void
 }) {
   return (
-    <button onClick={onOpen} className="tilt-card panel-raised px-4 py-3 flex items-center justify-between gap-4 w-full text-left frame-hover">
+    <button
+      onClick={onOpen}
+      className={`tilt-card panel-raised px-4 py-3 flex items-center justify-between gap-4 w-full text-left frame-hover${archivedNote ? ' opacity-75' : ''}`}
+    >
       <div className="min-w-0">
         <div className="text-sm text-[var(--color-text-primary)] truncate"><TopicTitle title={entry.title} /></div>
         <div className="label-data text-[10px] text-[var(--color-text-faint)] mt-0.5">
@@ -367,11 +375,41 @@ function TopicRosterRow({
         </div>
       </div>
       <div className="flex items-center gap-2 shrink-0">
-        <TrendArrow trend={trend} />
+        {archivedNote ? (
+          <span className="label-data text-[10px] text-[var(--color-text-faint)]">{archivedNote}</span>
+        ) : (
+          <TrendArrow trend={trend} />
+        )}
         <span className={`figure-display text-3xl ${letterColorClass(grade.overall.letter)}`}>
           {grade.overall.available ? grade.overall.letter : '—'}
         </span>
       </div>
+    </button>
+  )
+}
+
+/** The shared "Count archived topics" switch (archive.ts), shown here only
+ * when there is something archived for it to change. */
+function ArchivedSwitch({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      onClick={() => onChange(!on)}
+      className="focus-ring flex items-center gap-2 text-xs text-[var(--color-text-dim)] hover:text-[var(--color-text-primary)]"
+    >
+      <span
+        aria-hidden="true"
+        className={`relative inline-block w-7 h-4 rounded-full transition-colors ${
+          on ? 'bg-[var(--color-ink-warm)]' : 'bg-[var(--color-surface-3)]'
+        }`}
+      >
+        <span
+          className={`absolute top-0.5 w-3 h-3 rounded-full bg-[var(--color-void)] transition-[left] ${on ? 'left-3.5' : 'left-0.5'}`}
+        />
+      </span>
+      Count archived topics in GPA
     </button>
   )
 }
@@ -422,6 +460,9 @@ export function GradesView({ onGoSitting, onOpenLedger }: { onGoSitting?: (sessi
   // headline GPA grades the work actually done; the total-work lens stays
   // one toggle away.
   const [mode, setMode] = useState<GradeMode>('completed')
+  // archive.ts rule 2: archived topics stay out of the GPA unless this
+  // shared switch (also in Settings) says otherwise.
+  const [includeArchived, setIncludeArchived] = useCountArchived()
   const [openGraph, setOpenGraph] = useState<TopicGraph | null>(null)
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set())
   const [lapsedOnly, setLapsedOnly] = useState(false)
@@ -482,12 +523,15 @@ export function GradesView({ onGoSitting, onOpenLedger }: { onGoSitting?: (sessi
   const picks = allPicks()
   // Settings' "Punctuality counts toward grades" (shared/gradePrefs.ts).
   const countPunctuality = punctualityCounts()
-  const grades = new Map<string, TopicGradeResult>(
+  // Live grade for an active topic, frozen final grade for an archived one
+  // (computeShownTopicGrade; archive.ts rule 3).
+  const grades = new Map<string, TopicGradeResult & { final: boolean }>(
     topics.map((t) => [
       t.topic,
-      computeTopicGrade({ receipts, topic: t.topic, topicEntry: t, misconceptions, days, picks, mode, countPunctuality }),
+      computeShownTopicGrade({ receipts, topicEntry: t, misconceptions, days, picks, mode, countPunctuality }),
     ]),
   )
+  const { live: liveTopics, archived: archivedTopics } = partitionArchived(topics)
 
   // Grade trend — completed-mode only (see computeHistoricalTopicGrade's own
   // doctrine comment), computed once per topic regardless of the current
@@ -497,11 +541,21 @@ export function GradesView({ onGoSitting, onOpenLedger }: { onGoSitting?: (sessi
   const trends = new Map<string, TopicGradeTrendPoint[]>(
     topics.map((t) => [
       t.topic,
-      computeTopicGradeTrend({ receipts, topic: t.topic, misconceptions, days, picks, cutoffs, countPunctuality }),
+      computeTopicGradeTrend({
+        receipts,
+        topic: t.topic,
+        misconceptions,
+        days,
+        picks,
+        // An archived topic's trend ends where its grade froze.
+        cutoffs: t.archivedAt ? cutoffs.filter((c) => c <= t.archivedAt!) : cutoffs,
+        countPunctuality,
+      }),
     ]),
   )
 
-  const gpa = computeCrossTopicGPA(topics, grades)
+  const gpaTopics = includeArchived ? topics : liveTopics
+  const gpa = computeCrossTopicGPA(gpaTopics, grades)
 
   const open = openTopic ? topics.find((t) => t.topic === openTopic) : null
   const openGrade = openTopic ? grades.get(openTopic) : null
@@ -547,9 +601,10 @@ export function GradesView({ onGoSitting, onOpenLedger }: { onGoSitting?: (sessi
             value={openGrade.overall.available ? openGrade.overall.letter : '—'}
             title={open.title}
             note={
-              openGrade.overall.available
+              (openGrade.overall.available
                 ? `${Math.round(openGrade.overall.score ?? 0)} composite`
-                : 'not enough data yet for an overall grade'
+                : 'not enough data yet for an overall grade') +
+              (openGrade.final ? ` · final grade, frozen ${formatArchivedDate(open.archivedAt)} when archived` : '')
             }
             tone={LETTER_TONE[openGrade.overall.letter ?? ''] ?? 'dim'}
           />
@@ -635,19 +690,28 @@ export function GradesView({ onGoSitting, onOpenLedger }: { onGoSitting?: (sessi
         <PlateFigure
           value={gpa.available ? gpa.letter : '—'}
           title="GPA across your topics"
-          note={gpa.available ? `composite across ${gpa.topicsCounted} of ${topics.length} topics` : 'not enough data yet'}
+          note={
+            gpa.available
+              ? `composite across ${gpa.topicsCounted} of ${gpaTopics.length} ${includeArchived ? 'topics, archived included' : 'active topics'}`
+              : 'not enough data yet'
+          }
           tone={LETTER_TONE[gpa.letter ?? ''] ?? 'dim'}
         />
-        <ModeToggle mode={mode} onChange={setMode} />
+        <div className="flex flex-col items-end gap-2 self-start">
+          <ModeToggle mode={mode} onChange={setMode} />
+          {archivedTopics.length > 0 && (
+            <ArchivedSwitch on={includeArchived} onChange={setIncludeArchived} />
+          )}
+        </div>
       </div>
-      <SectionBanner label="Grades" count={topics.length} />
+      <SectionBanner label="Grades" count={liveTopics.length} />
       {health && (
         <div className="label-data text-[10px] text-[var(--color-text-faint)]">
           Grader self-audit: {health.verdict} — see Coach → Grader Audit. Not a factor in any topic's grade below.
         </div>
       )}
       <div className="flex flex-col gap-2">
-        {topics.map((t) => {
+        {liveTopics.map((t) => {
           const grade = grades.get(t.topic)
           if (!grade) return null
           return (
@@ -661,7 +725,31 @@ export function GradesView({ onGoSitting, onOpenLedger }: { onGoSitting?: (sessi
           )
         })}
         {topics.length === 0 && <div className="fig-caption">No topics yet — start one from Learn.</div>}
+        {topics.length > 0 && liveTopics.length === 0 && (
+          <div className="fig-caption">Every topic is archived — their final grades are below.</div>
+        )}
       </div>
+      {archivedTopics.length > 0 && (
+        <>
+          <SectionBanner label="Archived · final grades" count={archivedTopics.length} className="mt-2" />
+          <div className="flex flex-col gap-2">
+            {archivedTopics.map((t) => {
+              const grade = grades.get(t.topic)
+              if (!grade) return null
+              return (
+                <TopicRosterRow
+                  key={t.topic}
+                  entry={t}
+                  grade={grade}
+                  trend={[]}
+                  archivedNote={`final · archived ${formatArchivedDate(t.archivedAt) || 'earlier'} · ${includeArchived ? 'in GPA' : 'not in GPA'}`}
+                  onOpen={() => setOpenTopic(t.topic)}
+                />
+              )
+            })}
+          </div>
+        </>
+      )}
     </div>
   )
 }

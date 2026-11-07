@@ -36,10 +36,16 @@ export async function computeDueBuckets(days: number, holdingStabilityDays?: num
     topics.map(async (t) => {
       try {
         const g = (await window.engram.topicGraph(t.topic)) as {
-          nodes?: Record<string, { state?: string; fsrs?: { due?: string | null; s?: number | null } }>
+          nodes?: Record<string, { state?: string; retired?: unknown; fsrs?: { due?: string | null; s?: number | null } }>
         }
         if (!g?.nodes) return
         for (const node of Object.values(g.nodes)) {
+          // A retired node (an archived topic, or one concept dropped) never
+          // comes due again — the engine's own `due` skips it, so the
+          // forecast must too (archive.ts, rule 1). Same predicate as
+          // engram.py's is_retired: a retired block not yet restored.
+          const r = node?.retired as { restored?: unknown } | null | undefined
+          if (r && typeof r === 'object' && r.restored == null) continue
           if (holdingStabilityDays != null) {
             const s = node?.fsrs?.s
             if (typeof s === 'number' && s >= holdingStabilityDays) holdingCount += 1

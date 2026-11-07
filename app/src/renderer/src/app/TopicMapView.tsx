@@ -19,6 +19,8 @@ import { Button } from '../components/ui/Button'
 import { PageHeader } from '../components/ui/PageHeader'
 import { SegmentedControl } from '../components/ui/SegmentedControl'
 import { sortTopics, TOPIC_SORT_OPTIONS, type TopicSortKey } from '../shared/topicSort'
+import { isArchivedTopic, partitionArchived } from '../shared/archive'
+import { loadFolderOrder } from '../shared/folderRegistry'
 import { loadTopicSort, saveTopicSort, loadTopicGroup, saveTopicGroup, type TopicGroupKey } from '../shared/topicSortPrefs'
 import { groupTopicsByFolder, TOPIC_GROUP_OPTIONS } from '../shared/topicFolders'
 import { Modal } from '../components/ui/Modal'
@@ -311,6 +313,10 @@ interface TopicMapViewProps {
    * resets openNode until the matching graph is in). */
   deepLinkNode?: { topicId: string; nodeId: string } | null
   onDeepLinkConsumed?: () => void
+  /** Open on this topic's map (Learn's "Open in Topic Map"), no node
+   * selected. Read once, at mount — this view remounts on every visit. */
+  deepLinkTopic?: string | null
+  onDeepLinkTopicConsumed?: () => void
   /** Jump to the Learn view scoped to a topic — used by "Continue in Learn" actions. */
   onGoTopic?: (topicId: string) => void
   /** Jump to the Learn view to start a fresh topic — used by the unmapped-atlas empty state. */
@@ -324,6 +330,8 @@ interface TopicMapViewProps {
 
 export function TopicMapView({
   deepLinkNode,
+  deepLinkTopic,
+  onDeepLinkTopicConsumed,
   onDeepLinkConsumed,
   onGoTopic,
   onNewTopic,
@@ -487,7 +495,10 @@ export function TopicMapView({
       setTopicsLoaded(true)
       // Open on the FIRST TAB AS DRAWN, not the engine's own list order —
       // otherwise the opening map is some topic in the middle of the strip.
-      if (ts.length > 0 && !deepLinkNode && !spotlightNode) setSelectedTopic(sortTopics(ts, topicSort)[0].topic)
+      if (deepLinkTopic && ts.some((t) => t.topic === deepLinkTopic)) {
+        setSelectedTopic(deepLinkTopic)
+        onDeepLinkTopicConsumed?.()
+      } else if (ts.length > 0 && !deepLinkNode && !spotlightNode) setSelectedTopic(sortTopics(ts, topicSort)[0].topic)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -798,9 +809,37 @@ export function TopicMapView({
             group-by pick (topicSortPrefs) — each folder its own labelled
             row, so the strip reads the same way Learn's shelf does. Flat
             otherwise, exactly as before. */}
-        {topicGroup === 'folder' ? (
+        {(() => {
+          // Archived topics gather in their own quiet row at the end of the
+          // strip (archive.ts) — still one click away, never between two
+          // live topics or inside a folder row of work.
+          const { live, archived } = partitionArchived(topics)
+          const tab = (t: TopicListEntry, dim = false) => (
+            <button
+              key={t.topic}
+              onClick={() => setSelectedTopic(t.topic)}
+              title={dim ? `${t.title} (archived)` : t.title}
+              aria-pressed={selectedTopic === t.topic}
+              className={`${selectedTopic === t.topic ? CTRL_FILLED : CTRL_QUIET} max-w-64 truncate text-left${
+                dim && selectedTopic !== t.topic ? ' opacity-60' : ''
+              }`}
+            >
+              <TopicTitle title={t.title || t.topic} />
+            </button>
+          )
+          const archivedRow = archived.length > 0 && (
+            <div className="flex items-baseline gap-3">
+              <span className="label-data text-[11px] uppercase tracking-[0.1em] shrink-0 w-28 truncate text-[var(--color-text-faint)]">
+                Archived
+              </span>
+              <div role="group" aria-label="Archived topics" className="flex items-center gap-x-3 gap-y-2 flex-wrap">
+                {sortTopics(archived, topicSort).map((t) => tab(t, true))}
+              </div>
+            </div>
+          )
+          return topicGroup === 'folder' ? (
           <div className="flex flex-col gap-2">
-            {groupTopicsByFolder(topics, topicSort).map((g) => (
+            {groupTopicsByFolder(live, topicSort, { order: loadFolderOrder() }).map((g) => (
               <div key={g.name} className="flex items-baseline gap-3">
                 <span
                   className={`label-data text-[11px] uppercase tracking-[0.1em] shrink-0 w-28 truncate ${
@@ -811,36 +850,25 @@ export function TopicMapView({
                   {g.name}
                 </span>
                 <div role="group" aria-label={g.name} className="flex items-center gap-x-3 gap-y-2 flex-wrap">
-                  {g.topics.map((t) => (
-                    <button
-                      key={t.topic}
-                      onClick={() => setSelectedTopic(t.topic)}
-                      title={t.title}
-                      aria-pressed={selectedTopic === t.topic}
-                      className={`${selectedTopic === t.topic ? CTRL_FILLED : CTRL_QUIET} max-w-64 truncate text-left`}
-                    >
-                      <TopicTitle title={t.title || t.topic} />
-                    </button>
-                  ))}
+                  {g.topics.map((t) => tab(t))}
                 </div>
               </div>
             ))}
+            {archivedRow}
+          </div>
+        ) : archived.length > 0 ? (
+          <div className="flex flex-col gap-2">
+            <div role="group" aria-label="Topics" className="flex items-center gap-x-3 gap-y-2 flex-wrap">
+              {sortedTopics.filter((t) => !isArchivedTopic(t)).map((t) => tab(t))}
+            </div>
+            {archivedRow}
           </div>
         ) : (
           <div role="group" aria-label="Topics" className="flex items-center gap-x-3 gap-y-2 flex-wrap">
-            {sortedTopics.map((t) => (
-              <button
-                key={t.topic}
-                onClick={() => setSelectedTopic(t.topic)}
-                title={t.title}
-                aria-pressed={selectedTopic === t.topic}
-                className={`${selectedTopic === t.topic ? CTRL_FILLED : CTRL_QUIET} max-w-64 truncate text-left`}
-              >
-                <TopicTitle title={t.title || t.topic} />
-              </button>
-            ))}
+            {sortedTopics.map((t) => tab(t))}
           </div>
-        )}
+        )
+        })()}
       </div>
 
       {error && (() => {

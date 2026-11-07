@@ -15,6 +15,7 @@
   "include": ["src/main/**/*", "src/preload/**/*", "src/shared/**/*",
     "electron.vite.config.ts",
     "src/renderer/src/shared/topicGrade.ts",
+    "src/renderer/src/shared/archiveRules.ts",
     "src/renderer/src/shared/topicMetrics.ts",
     "src/renderer/src/shared/weekDigest.ts"]
 }

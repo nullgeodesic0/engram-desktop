@@ -1,4 +1,8 @@
 import type { TopicListEntry } from '../../../shared/types'
+import { isArchivedTopic } from './archive'
+
+// Re-exported so existing importers keep one name for the one predicate.
+export { isArchivedTopic }
 
 /**
  * One topic ordering, shared by every surface that lists topics — Learn's
@@ -36,13 +40,6 @@ export const TOPIC_SORT_OPTIONS: { value: TopicSortKey; label: string; descripti
   { value: 'progress', label: 'Progress', description: 'furthest consolidated first' },
   { value: 'size', label: 'Size', description: 'largest maps first' },
 ]
-
-/** Every node retired — the archive state topicChips already renders as its
- * own single chip. `retired` is sparse (older engines omit it), so an absent
- * count reads as "not archived", never as zero-of-zero. */
-export function isArchivedTopic(t: TopicListEntry): boolean {
-  return t.retired != null && t.nodes > 0 && t.retired >= t.nodes
-}
 
 /** Share of the map that has reached `review` — the engine's own definition
  * of a consolidated node. A topic with no nodes at all reads as 0 rather

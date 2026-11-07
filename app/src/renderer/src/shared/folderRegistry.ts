@@ -74,3 +74,61 @@ export function allFolderNames(topics: TopicListEntry[], registry: string[]): st
   }
   return [...seen.values()].sort((a, b) => a.localeCompare(b))
 }
+
+// ------------------------------------------------------------ folder order
+//
+// The learner's own folder order (Learn's library rail, organize mode's
+// up/down controls). Like the registry, view state in localStorage: an order
+// lost costs alphabetical folders, never a topic. Names absent from the
+// stored order sort after it, alphabetically, so a brand-new folder lands at
+// the end without needing to be written here first.
+
+const ORDER_KEY = 'engram-folder-order'
+
+export function loadFolderOrder(): string[] {
+  try {
+    const raw = localStorage.getItem(ORDER_KEY)
+    const parsed = raw ? (JSON.parse(raw) as unknown) : null
+    return Array.isArray(parsed) ? parsed.filter((n): n is string => typeof n === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+export function saveFolderOrder(names: string[]): void {
+  try {
+    localStorage.setItem(ORDER_KEY, JSON.stringify(names))
+  } catch {
+    // best-effort
+  }
+}
+
+/** `names` ordered by the stored order (case-insensitive), the rest after
+ * it alphabetically. */
+export function orderFolders(names: string[], order: string[]): string[] {
+  const rank = new Map(order.map((n, i) => [n.toLowerCase(), i]))
+  return [...names].sort((a, b) => {
+    const ra = rank.get(a.toLowerCase())
+    const rb = rank.get(b.toLowerCase())
+    if (ra !== undefined && rb !== undefined) return ra - rb
+    if (ra !== undefined) return -1
+    if (rb !== undefined) return 1
+    return a.localeCompare(b)
+  })
+}
+
+/** Moves `name` one place up (-1) or down (+1) within `names` (already in
+ * display order) and returns the new full order to save. */
+export function moveFolder(names: string[], name: string, dir: -1 | 1): string[] {
+  const i = names.findIndex((n) => n.toLowerCase() === name.toLowerCase())
+  const j = i + dir
+  if (i < 0 || j < 0 || j >= names.length) return names
+  const next = [...names]
+  ;[next[i], next[j]] = [next[j], next[i]]
+  return next
+}
+
+/** Renames a folder in the registry and the stored order, keeping its place. */
+export function renameFolderInRegistry(registry: string[], from: string, to: string): string[] {
+  return registry.map((n) => (n.toLowerCase() === from.toLowerCase() ? to : n))
+}
