@@ -39,7 +39,7 @@ import { SegmentedControl } from '../components/ui/SegmentedControl'
 function gradeColor(grade: string | null): string {
   if (grade === 'recalled') return 'var(--color-ink-warm)'
   if (grade === 'partial') return 'var(--color-ink-cool)'
-  if (grade === 'lapsed') return 'var(--color-ink-danger)'
+  if (grade === 'lapsed') return 'var(--color-text-dim)'
   return 'var(--color-text-faint)'
 }
 
@@ -524,7 +524,6 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts, coachHomeSi
           </div>
         ) : (
           <div className="tilt-card panel px-4 py-4 flex flex-col gap-5 mt-1">
-            <div className="fig-caption">Chart below reflects: {rangeText}</div>
             <RetentionCurve data={weeksInRange} />
             <ActivityStrip data={daysInRange} />
           </div>
@@ -627,7 +626,7 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts, coachHomeSi
                 <div className="flex gap-4 text-xs label-data">
                   <span className="text-[var(--color-ink-warm)]">{t.states.review} review</span>
                   <span className="text-[var(--color-ink-cool)]">{t.states.new} new</span>
-                  {due > 0 && <span className="text-[var(--color-ink-danger)]">{due} due</span>}
+                  {due > 0 && <span className="text-[var(--color-ink-warm)]">{due} due</span>}
                 </div>
               </button>
             )

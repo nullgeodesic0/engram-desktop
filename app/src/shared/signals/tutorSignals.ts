@@ -362,7 +362,10 @@ export function isMarkBoundaryToolUse(name: string, input: Record<string, unknow
       tool === 'propose_transcription' ||
       tool === 'render_checks' ||
       tool === 'render_timeline' ||
-      tool === 'define_term'
+      tool === 'define_term' ||
+      // The lecture-notes card sits between the tutor's "notes are ready"
+      // line and the walk that follows, like every other content card.
+      tool === 'publish_lecture_notes'
     ) {
       return true
     }

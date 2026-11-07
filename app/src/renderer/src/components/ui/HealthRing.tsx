@@ -2,8 +2,9 @@ import { memo } from 'react'
 import { useChartHover } from '../charts/useChartHover'
 import { ChartTooltip } from '../charts/ChartTooltip'
 
-/** A topic's state at a glance: warm arc = consolidated fraction, danger
- * notch = reviews due. The Ink Plate's progress readout miniaturized to
+/** A topic's state at a glance: warm arc = consolidated fraction, warm
+ * notch = reviews due (workload, so never danger ink — that is reserved for
+ * misconceptions). The Ink Plate's progress readout miniaturized to
  * every place a topic is named. */
 export const HealthRing = memo(function HealthRing({
   consolidated,
@@ -47,7 +48,7 @@ export const HealthRing = memo(function HealthRing({
             opacity="0.9"
           />
         )}
-        {due > 0 && <circle cx={size / 2} cy="2.5" r="2" fill="var(--color-ink-danger)" />}
+        {due > 0 && <circle cx={size / 2} cy="2.5" r="2" fill="var(--color-ink-warm)" stroke="var(--color-surface)" strokeWidth={1} />}
       </svg>
       {hover && (
         <ChartTooltip x={hover.x} y={hover.y}>

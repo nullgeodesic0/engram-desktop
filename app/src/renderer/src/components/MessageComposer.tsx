@@ -2,7 +2,7 @@ import { useMemo , useState } from 'react'
 import { MarkdownPreview } from './MarkdownPreview'
 import { LatexEditor } from './LatexEditor'
 import { fileName } from './ChatMessageView'
-import { CTRL_QUIET, ctrlFilled, type EnvAccent } from '../shared/controlChrome'
+import { CTRL_QUIET, ctrlFilled, ctrlSolid, type EnvAccent } from '../shared/controlChrome'
 import { imagesFromPaste, imagesFromDrop, dragCarriesImage } from '../shared/incomingImages'
 import { scanLatex, describeScan } from '../shared/latexSyntax'
 import { countUnicodeMath, unicodeToLatex } from '../shared/latexEditing'
@@ -84,6 +84,7 @@ export function MessageComposer({
   accent = 'warm',
 }: MessageComposerProps) {
   const filled = ctrlFilled(accent)
+  const canSubmit = production.trim().length > 0 && !disabledReason
 
   function submit() {
     onSubmit()
@@ -126,7 +127,9 @@ export function MessageComposer({
   }
 
   return (
-    <div className="shrink-0 flex flex-col gap-2 border border-[var(--color-edge)] p-3 bg-[color-mix(in_srgb,var(--color-surface)_92%,transparent)]">
+    // `transcript-measure`: the dock sits on the same column as the
+    // conversation above it, instead of running edge to edge past it.
+    <div className="transcript-measure shrink-0 flex flex-col gap-2 border border-[var(--color-edge)] p-3 bg-[color-mix(in_srgb,var(--color-surface)_92%,transparent)]">
       {attachedFiles.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {attachedFiles.map((path) => (
@@ -287,10 +290,13 @@ export function MessageComposer({
         </div>
         <div className="flex items-center gap-2">
           <span className="kbd-hint">{shortcutLabel('⌘⏎')}</span>
+          {/* Readable at rest, solid once there is something to send. The
+              old 40%-faded tint all but vanished against the dock, so the
+              one action that ends a turn was the hardest thing to find. */}
           <button
             onClick={submit}
-            disabled={!production.trim() || !!disabledReason}
-            className={`${filled} disabled:opacity-40`}
+            disabled={!canSubmit}
+            className={canSubmit ? ctrlSolid(accent) : `${CTRL_QUIET} cursor-not-allowed`}
           >
             Submit
           </button>

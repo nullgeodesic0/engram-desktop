@@ -87,9 +87,10 @@ import { HealthRing } from '../components/ui/HealthRing'
 import { PinTackIcon } from '../components/ui/PinTackIcon'
 import { TopicCard } from '../components/TopicCard'
 import { SectionBanner } from '../components/ui/SectionBanner'
-import { PlateFigure } from '../components/ui/PlateFigure'
 import { SegmentedControl } from '../components/ui/SegmentedControl'
-import { topicBucket, topicChips } from '../shared/topicShelf'
+import { topicBucket } from '../shared/topicShelf'
+import { pendingQuestion } from '../shared/pendingQuestion'
+import { PinnedQuestion } from '../components/PinnedQuestion'
 import { sortTopics, TOPIC_SORT_OPTIONS, type TopicSortKey } from '../shared/topicSort'
 import { loadTopicSort, saveTopicSort, loadTopicGroup, saveTopicGroup, type TopicGroupKey } from '../shared/topicSortPrefs'
 import { groupTopicsByFolder, TOPIC_GROUP_OPTIONS } from '../shared/topicFolders'
@@ -109,6 +110,20 @@ import { ExportCommand } from '../components/ui/ExportCommand'
 import { FlowChain } from '../components/ritual/FlowChain'
 import { trailingRecalled } from '../../../shared/gradeResult'
 import { paperSlide, warmTone } from '../shared/soundscape'
+import { LectureNotesPanel } from '../components/LectureNotesPanel'
+import { loadLectureNotesOn } from '../shared/lectureNotesPref'
+import {
+  onLectureNotesRead,
+  onOpenLectureNotes,
+  setLectureNotesLocked,
+  type LectureNotesRef,
+} from '../shared/lectureNotesBus'
+import {
+  LECTURE_NOTES_OFF,
+  LECTURE_NOTES_ON,
+  lectureNotesElectedInTranscript,
+  lectureNotesReadMessage,
+} from '../../../shared/lectureNotesKickoff'
 
 // isNextNodeCommand / pretestRateNode / parseMisconceptionAdds /
 // looksLikeArtifactSetCommand / isArtifactSmithSpawnEvent / isSubagentSpawnTool /
@@ -285,15 +300,31 @@ function LearnTopicGroup({
  */
 function ContinueHero({ topic: t, onOpen, morphing }: { topic: TopicListEntry; onOpen: () => void; morphing: boolean }) {
   const total = t.states.new + t.states.learning + t.states.review
-  const chips = topicChips(t).map((c) => c.label)
+  // What "continue" will actually open: the engine's own next node for this
+  // topic. The card used to repeat the row's chips, which said nothing the
+  // row below did not; the next concept is the one fact only this card has.
+  // Absent until it loads, and simply absent if the engine has no next node.
+  const [nextId, setNextId] = useState<string | null>(null)
+  useEffect(() => {
+    let live = true
+    setNextId(null)
+    window.engram
+      .nextNode(t.topic)
+      .then((r) => {
+        if (live) setNextId(r.id)
+      })
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+  }, [t.topic])
   return (
-    <div className="tilt-card panel-plate dogear px-6 py-5 flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
-      <div className="flex flex-col gap-2 min-w-0 flex-1">
+    <div className="tilt-card panel-plate dogear px-6 py-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-3">
+      <div className="flex flex-col gap-1.5 min-w-0 flex-1">
         <span className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-ink-warm)]">
           Pick up where you left off
         </span>
         <div className="flex items-center gap-3 min-w-0">
-          <InkNode id={t.topic} variant="filled" size={18} />
           <HealthRing consolidated={t.states.review} total={total} due={t.due} size={22} />
           <TopicTitle
             title={t.title}
@@ -301,13 +332,15 @@ function ContinueHero({ topic: t, onOpen, morphing }: { topic: TopicListEntry; o
             style={morphing ? { viewTransitionName: 'learn-morph-title' } : undefined}
           />
         </div>
+        {nextId && (
+          <div className="label-data text-xs text-[var(--color-text-dim)]">
+            next concept · <span className="text-[var(--color-text-primary)]">{humanizeNodeId(nextId)}</span>
+          </div>
+        )}
         {/* The goal at readable size and on the text ramp. In the row it is
             `text-faint`, one-line-clamped — the most human thing on the page
             (what this topic is FOR) set as the faintest. */}
         {t.goal && <p className="text-sm text-[var(--color-text-dim)] leading-relaxed line-clamp-2">{t.goal}</p>}
-        {chips.length > 0 && (
-          <div className="label-data text-[10px] text-[var(--color-text-faint)]">{chips.join(' · ')}</div>
-        )}
       </div>
       <Button variant="primary" size="lg" onClick={onOpen} className="shrink-0">
         Continue
@@ -477,6 +510,15 @@ export function LearnSessionView({
   const [jobs, setJobs] = useState<Job[]>([])
   const [contextUsage, setContextUsage] = useState<{ usedTokens: number; contextWindow: number } | null>(null)
   const [currentBeat, setCurrentBeat] = useState<string | null>(null)
+  // Lecture notes (Settings → Lecture notes). `notesOpen` is the reader
+  // drawer beside the transcript; `latestNotes` is the most recent set of
+  // notes this sitting produced, which the header button reopens.
+  const [notesOpen, setNotesOpen] = useState<LectureNotesRef | null>(null)
+  const [latestNotes, setLatestNotes] = useState<LectureNotesRef | null>(null)
+  // A Settings change the tutor has not heard about yet in a resumed
+  // sitting (resume sends no kickoff). Prefixed to the learner's next turn,
+  // in their own words, then cleared.
+  const pendingNotesElectionRef = useRef<string | null>(null)
   const [currentNodeId, setCurrentNodeId] = useState<string | null>(null)
   const [beatTrail, setBeatTrail] = useState<Map<string, BeatOutcome>>(new Map())
   const [nodePosition, setNodePosition] = useState<string | null>(null)
@@ -692,6 +734,34 @@ export function LearnSessionView({
   // one" — see `bareProbeHeaderExceptionApplies`. Reset wherever the flag is.
   const boundaryRunRef = useRef({ count: 0, interactive: false })
 
+  // Lecture notes: the transcript card's two gestures arrive as window
+  // events (see lectureNotesBus.ts). Read through refs so the listeners are
+  // attached once and always see the live sitting.
+  const sendLearnerTurnRef = useRef<(text: string, files: string[], fromComposer?: boolean) => Promise<void>>(async () => {})
+  const busyRef = useRef(false)
+  busyRef.current = busy
+  useEffect(() => {
+    const offOpen = onOpenLectureNotes((ref) => setNotesOpen(ref))
+    const offRead = onLectureNotesRead((ref) => {
+      if (!sessionIdRef.current || busyRef.current) return
+      setNotesOpen(null)
+      void sendLearnerTurnRef.current(lectureNotesReadMessage(ref.title), [], false)
+    })
+    return () => {
+      offOpen()
+      offRead()
+    }
+  }, [])
+  // Closed for the cold VERIFY probe (the learner chose this): the beat
+  // stepper's own `verify` state, set from the tutor's VERIFY label, is the
+  // signal. It lifts as soon as the walk moves on to any other beat or node.
+  const notesLocked = started && currentBeat === 'verify'
+  useEffect(() => {
+    setLectureNotesLocked(notesLocked)
+    if (notesLocked) setNotesOpen(null)
+  }, [notesLocked])
+  useEffect(() => () => setLectureNotesLocked(false), [])
+
   function pushMark(m: DistributiveOmit<RitualMark, 'id' | 'atIndex'>) {
     setMarks((prev) => [
       ...prev,
@@ -727,6 +797,9 @@ export function LearnSessionView({
   // openTopic's preamble (switching into a topic, whether resumed or fresh). Does NOT
   // include started/activeTopic/viewingHistoryId/refreshTopics — those vary by caller.
   function resetSessionEphemera() {
+    setNotesOpen(null)
+    setLatestNotes(null)
+    pendingNotesElectionRef.current = null
     setMessages([])
     setJobs([])
     setContextUsage(null)
@@ -922,6 +995,17 @@ export function LearnSessionView({
         case 'figure':
           pushMark({ kind: 'figure', title: intent.title, body: intent.body })
           break
+        case 'lecture-notes': {
+          // Only accepted notes reach this channel (main forwards after it
+          // has stored them). Open the reader straight away: the protocol
+          // has the tutor wait until the learner says they have read them.
+          const ref = { topic: intent.topic, node: intent.node, title: intent.title }
+          setMarks((prev) => prev.map((m) => (m.kind === 'lecture-notes' ? { ...m, awaitingRead: false } : m)))
+          pushMark({ kind: 'lecture-notes', ...ref, accepted: true, awaitingRead: true })
+          setLatestNotes(ref)
+          setNotesOpen(ref)
+          break
+        }
         case 'comparison':
           pushMark({ kind: 'comparison', title: intent.title, left: intent.left, right: intent.right })
           break
@@ -1576,6 +1660,17 @@ export function LearnSessionView({
       // live session's own marks (should this ever race a second hydration)
       // are never clobbered.
       setMarks((prev) => (prev.length === 0 ? deriveRitualMarks(lines) : prev))
+      // Lecture notes: reopen-able from the header, and tell a resumed tutor
+      // about a Settings change it has not heard (resume sends no kickoff).
+      const replayedNotes = deriveRitualMarks(lines).filter(
+        (m): m is Extract<typeof m, { kind: 'lecture-notes' }> => m.kind === 'lecture-notes' && m.accepted === true,
+      )
+      const lastNotes = replayedNotes[replayedNotes.length - 1]
+      if (lastNotes) setLatestNotes({ topic: lastNotes.topic, node: lastNotes.node, title: lastNotes.title })
+      const elected = lectureNotesElectedInTranscript(lines) === true
+      const wantNotes = loadLectureNotesOn()
+      if (wantNotes && !elected) pendingNotesElectionRef.current = LECTURE_NOTES_ON
+      else if (!wantNotes && elected) pendingNotesElectionRef.current = LECTURE_NOTES_OFF
     } else {
       setMessages([])
       setContextUsage(null)
@@ -1586,7 +1681,8 @@ export function LearnSessionView({
     // A fresh start still waits on the model's first response as before.
     setBusy(!priorId)
 
-    const message = `Use the /engram:learn skill to continue the "${topic.title}" topic (topic id: "${topic.topic}") specifically — I've already picked it from the app's topic list, no need to ask which topic.`
+    let message = `Use the /engram:learn skill to continue the "${topic.title}" topic (topic id: "${topic.topic}") specifically — I've already picked it from the app's topic list, no need to ask which topic.`
+    if (!priorId && loadLectureNotesOn()) message += `\n\n${LECTURE_NOTES_ON}`
     const { sessionId: sid } = await window.engram.resumeSession(message, 'learn', topic.topic)
     sessionIdRef.current = sid
     setSessionId(sid)
@@ -1611,7 +1707,8 @@ export function LearnSessionView({
       .then((h) => setWalkNumber(h.length + 1))
       .catch(() => setWalkNumber(null))
     fetchCommitment()
-    const message = `Use the /engram:learn skill to start a fresh session on the "${topic.title}" topic (topic id: "${topic.topic}") — I've explicitly chosen to start over rather than continue any prior session on this topic.`
+    let message = `Use the /engram:learn skill to start a fresh session on the "${topic.title}" topic (topic id: "${topic.topic}") — I've explicitly chosen to start over rather than continue any prior session on this topic.`
+    if (loadLectureNotesOn()) message += `\n\n${LECTURE_NOTES_ON}`
     const { sessionId: sid } = await window.engram.startSession(message, 'learn', topic.topic)
     sessionIdRef.current = sid
     setSessionId(sid)
@@ -1644,6 +1741,7 @@ export function LearnSessionView({
     if (contextFiles.length > 0) {
       message += `\n\nContext files to Read and draw on while building the curriculum:\n${contextFiles.map((p) => `- ${p}`).join('\n')}`
     }
+    if (loadLectureNotesOn()) message += `\n\n${LECTURE_NOTES_ON}`
     const { sessionId: sid } = await window.engram.startSession(message, 'learn')
     sessionIdRef.current = sid
     setSessionId(sid)
@@ -1727,22 +1825,42 @@ export function LearnSessionView({
 
   async function submitProduction() {
     if (!sessionId || !production.trim() || busy) return
-    const text = production.trim()
-    const files = attachedFiles
+    await sendLearnerTurn(production.trim(), attachedFiles)
+  }
+
+  /** One learner turn — the composer's submit, and the lecture-notes card's
+   * "I've read them" button (a learner click, so a learner turn). */
+  async function sendLearnerTurn(text: string, files: string[], fromComposer = true) {
+    if (!sessionId) return
     setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'user', text, attachments: files, timestamp: Date.now() }])
     setBusy(true)
-    clearDraft(draftId)
-    setProduction('')
-    setAttachedFiles([])
+    // A button-sent turn leaves whatever the learner has half-typed alone.
+    if (fromComposer) {
+      clearDraft(draftId)
+      setProduction('')
+      setAttachedFiles([])
+    }
     setSuggestedActions([])
     // The model already has the Read tool allowlisted (see permissionConfig.ts) — naming
     // the paths here is enough for it to pull the content in itself, no upload needed.
-    const sentText =
+    let sentText =
       files.length > 0
         ? `${text}\n\n[Attached files — read these for context: ${files.join(', ')}]`
         : text
+    // The learner has spoken, so no older notes card is still waiting on them.
+    setMarks((prev) =>
+      prev.some((m) => m.kind === 'lecture-notes' && m.awaitingRead)
+        ? prev.map((m) => (m.kind === 'lecture-notes' ? { ...m, awaitingRead: false } : m))
+        : prev,
+    )
+    if (pendingNotesElectionRef.current) {
+      sentText = `${pendingNotesElectionRef.current}\n\n${sentText}`
+      pendingNotesElectionRef.current = null
+    }
     await window.engram.sendMessage(sessionId, sentText)
   }
+
+  sendLearnerTurnRef.current = sendLearnerTurn
 
   async function answerAsk(requestId: string, chosen: string[] | null) {
     const mark = marks.find((m): m is Extract<RitualMark, { kind: 'ask' }> => m.kind === 'ask' && m.requestId === requestId)
@@ -1936,6 +2054,7 @@ export function LearnSessionView({
   )
   const summaryCtl = makePeek(summaryLeaveTimer, setSummaryPeek)
   const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null)
+  const pendingQ = useMemo(() => pendingQuestion(messages), [messages])
   // The shelf's ordering pick (appended hook, KeepMounted append rule) —
   // applied INSIDE each of the three buckets, never across them: the
   // bucketing answers "what state is this topic in", the sort answers
@@ -2077,6 +2196,21 @@ export function LearnSessionView({
                 }
                 commands={
                   <>
+                    {latestNotes && (
+                      <button
+                        onClick={() => setNotesOpen((open) => (open ? null : latestNotes))}
+                        disabled={notesLocked}
+                        aria-pressed={notesOpen != null}
+                        title={notesLocked ? 'Closed while you answer the final check from memory' : `Lecture notes · ${latestNotes.title}`}
+                        className={`focus-ring label-data text-[11px] uppercase tracking-[0.1em] shrink-0 px-2 py-0.5 border disabled:opacity-40 ${
+                          notesOpen
+                            ? 'border-[var(--color-ink-warm)] text-[var(--color-ink-warm)] bg-[color-mix(in_srgb,var(--color-ink-warm)_18%,transparent)]'
+                            : 'border-[var(--color-ink-warm-dim)] text-[var(--color-ink-warm)] hover:text-[var(--color-text-primary)]'
+                        }`}
+                      >
+                        Lecture notes
+                      </button>
+                    )}
                     {activeTopic && (
                       <button
                         onClick={() => setHistoryDrawerOpen(true)}
@@ -2177,29 +2311,23 @@ export function LearnSessionView({
               <header className="shrink-0 -mx-8 px-8 pb-2 border-b border-[var(--color-hairline)]">
                 <div className="page-measure flex flex-col gap-2">
                 <h1 className="font-(family-name:--font-serif) text-[length:var(--text-display)] text-[var(--color-text-primary)]">Learn</h1>
-                {/* The shelf's briefing figure (ui/PlateFigure — the ready-room
-                    grammar): territory count as the headline, the atlas-wide due
-                    total as its note. Same numbers the old faint one-line
-                    subtitle carried, read off the same already-fetched `topics`
-                    list (each entry's own `.due`), not a second fetch. Hidden
-                    until topics have loaded so it never flashes "0 territories"
-                    before the real count lands. */}
+                {/* One plain line, not a display numeral: how many topics
+                    you have is not the thing this page is for, and the big
+                    figure made it the largest object on the screen. Hidden
+                    until topics have loaded so it never flashes "0 topics". */}
                 {topics !== null && topics.length > 0 && (() => {
                   const atlasDue = topics.reduce((sum, t) => sum + t.due, 0)
                   return (
                     <div className="flex items-end justify-between gap-4">
-                      <PlateFigure
-                        value={topics.length}
-                        tone="primary"
-                        title={topics.length === 1 ? 'topic' : 'topics'}
-                        note={
-                          atlasDue > 0 ? (
-                            <span className="text-[var(--color-ink-warm)]">{atlasDue} due for review</span>
-                          ) : (
-                            'nothing due for review'
-                          )
-                        }
-                      />
+                      <div className="label-data text-sm text-[var(--color-text-dim)] pb-1">
+                        {topics.length} {topics.length === 1 ? 'topic' : 'topics'}
+                        {' · '}
+                        {atlasDue > 0 ? (
+                          <span className="text-[var(--color-ink-warm)]">{atlasDue} due for review</span>
+                        ) : (
+                          'nothing due for review'
+                        )}
+                      </div>
                       {/* Hidden below two topics — a control that cannot
                           change anything is noise. Orders WITHIN each shelf
                           group; the groups themselves never move. */}
@@ -2603,6 +2731,14 @@ export function LearnSessionView({
                 )}
               </div>
             </ChatScrollRegion>
+            {/* Lecture notes reader — beside the transcript, above the
+                composer dock (never covering it), so the learner can read
+                and type in the same view. */}
+            {notesOpen && !notesLocked && (
+              <div className="absolute top-0 right-0 bottom-0 z-20 w-[min(600px,50%)] min-w-[360px]">
+                <LectureNotesPanel topic={notesOpen.topic} node={notesOpen.node} onClose={() => setNotesOpen(null)} />
+              </div>
+            )}
             {/* The walk's closing ceremony — no longer an inline shrink-0
                 block stealing transcript height: the shared bottom-edge
                 overlay (ritual/SummaryOverlay, same grammar as Review's
@@ -2686,6 +2822,18 @@ export function LearnSessionView({
               rather than the composer vanishing outright the way it did
               under the old modal. Every other `busy` reason still hides it
               exactly as before. */}
+          {/* The question being answered, pinned above the composer once it
+              has scrolled out of view (research rule: the probe stays
+              pinned). Hidden while the tutor is still writing. */}
+          {!busy && pendingQ && (
+            <PinnedQuestion
+              text={pendingQ.text}
+              msgIndex={pendingQ.index}
+              scrollEl={scrollEl}
+              nodeIds={chipNodeIds}
+              nodeChipTopic={activeTopic?.topic}
+            />
+          )}
           {(!busy || tutorActivity.activity.kind === 'awaiting-ask') && (
             <MessageComposer
               production={production}

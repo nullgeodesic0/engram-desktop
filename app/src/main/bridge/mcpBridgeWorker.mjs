@@ -171,6 +171,35 @@ server.registerTool(
   },
 )
 
+server.registerTool(
+  'publish_lecture_notes',
+  {
+    title: 'Publish Lecture Notes',
+    description:
+      "ONLY when this sitting's opening message (or a later learner message) says the learner turned Lecture Notes on: hand the app the lecture notes for ONE node that is new to the learner, before its OPEN A GAP beat. The app saves them as a PDF on that node and shows them beside the transcript. Never call this otherwise, never for a node the learner has already encoded, and never for the capstone. The full protocol is the 'Lecture notes' section of the learn skill; these are its writing rules.\n\n" +
+      "WHAT THE NOTES MUST DO: teach everything this node's rubric checks, well enough that a learner who reads them carefully can meet the rubric after the walk. NEVER include the node's probe or transfer_probe, never work the probe's own instance, and never present the rubric as a list — teach the ideas, do not hand over the test.\n\n" +
+      "SHAPE (markdown, these headings in this order, 400–900 words, about a five-minute read): '# <concept name>', then one italic line '*<topic title> · concept <n> of <N>*'; '## Why this matters' (two or three sentences tying the concept to the learner's goal: the question it answers); '## What you already have' (one line per prerequisite from the node's requires, naming the idea it lends — the bridge from familiar to new); '## The idea' (a concrete case first, then the general statement; bold a key term only where it is defined, define every symbol at first use, $…$ and $$…$$ for math); '## Worked example' (one fully worked, correct instance that is NOT the probe's, each step opening with a short label naming its purpose — 'Set up:', 'Apply the rule:', 'Check:'); '## The common mistake' (refutation form: state the tempting wrong idea plainly, say it is wrong, then why the right idea holds — use the learner's own logged misconception in their words when one fits); '## Where it leads' (the node this unlocks and one contrast with a neighbour); '## In three sentences' (the whole idea, three sentences).\n\n" +
+      "LANGUAGE: talk to the learner as 'you' in plain, active, conversational sentences. One idea per paragraph, sentences short. One name per idea: never swap synonyms for a term once it is defined. Nothing interesting-but-irrelevant: no history, anecdote, or trivia unless the rubric needs it. No 'simply', 'obviously', 'clearly', 'just', no praise, no motivational lines, no questions for the learner to answer inside the notes (the walk's own beats do that). State things exactly; hedge only where the subject is genuinely uncertain.\n\n" +
+      "The reply tells you whether the notes were accepted and, if not, why — fix them and call again on the same turn. After an accepted call, say one short line that the notes are ready and wait for the learner to say they have read them.",
+    inputSchema: {
+      topic: z.string(),
+      node: z.string(),
+      title: z.string(),
+      markdown: z.string(),
+    },
+  },
+  async ({ topic, node, title, markdown }) => {
+    try {
+      const result = await postJson(`/bridge/${encodeURIComponent(SESSION_ID)}/lecture-notes`, { topic, node, title, markdown })
+      return { content: [{ type: 'text', text: JSON.stringify(result) }] }
+    } catch (err) {
+      // The app could not take them (it closed, or the relay failed). Say so
+      // plainly so the tutor carries on with the walk instead of retrying.
+      return { content: [{ type: 'text', text: JSON.stringify({ accepted: false, reasons: [`the app could not receive the notes: ${err instanceof Error ? err.message : String(err)}`] }) }] }
+    }
+  },
+)
+
 server.registerTool('session_phase', {
   title: 'Session Phase',
   description: 'Advisory, best-effort: signal the coarse session phase so the app can stage its chrome (opening plate, grading shimmer, closing ceremony). Call at each transition: intake (new-topic interview), pretest, walk (teaching nodes), grading (assessor running), closing (wrap-up).',

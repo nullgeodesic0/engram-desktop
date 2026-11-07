@@ -98,3 +98,14 @@ mobile-walk and step-sized protocols followed under the same terms.
   sentence rather than an edit to it, so each exception stays paired with
   the one protocol that licenses it and either can be removed without
   stranding the other's sentence.
+- **`engram/learn-skill.lecture-notes-protocol.md`** — the learner-elected
+  Lecture Notes protocol: for a node the learner has never encoded, the tutor
+  writes short notes (published with the `publish_lecture_notes` bridge tool,
+  rendered to a PDF the app keeps), waits until the learner has read them,
+  then runs all eight beats with PREDICT/STRUGGLE moved to an instance the
+  notes did not work and VERIFY cold with the reader closed. Inserted into
+  `skills/learn/SKILL.md` ahead of the assessor. The third pedagogy overlay:
+  it buys an exception to the commit-before-content rule, so read its
+  constitutional-exception header before touching it.
+- **`engram/dialogue-grammar.lecture-notes-exception.md`** — the one-sentence
+  companion for the lecture-notes protocol, a sibling of the other two.

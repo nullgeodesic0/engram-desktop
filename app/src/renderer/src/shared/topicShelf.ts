@@ -23,12 +23,13 @@ export function topicBucket(t: TopicListEntry): TopicBucket {
 }
 
 /** Only the node states actually present, review-first — so a fully-encoded
- * topic reads as "16 review" instead of a padded "16 review · 0 new", and an
+ * topic reads as "16 in review" instead of a padded "16 review · 0 new", and an
  * actively-encoding one shows its mid-flight `learning` count instead of
  * hiding it (the original card never rendered `states.learning` at all).
  * Unified across Home's tiles and Learn's shelf rows: review-warm,
- * encoding-cool, new-cool-dim, and — only when the topic actually has
- * something due — due-danger, matching Learn's local TopicCard's own
+ * learning-cool, new-cool-dim, and — only when the topic actually has
+ * something due — due-warm (workload, never danger ink, which is reserved
+ * for misconceptions), matching Learn's local TopicCard's own
  * hand-rolled due chip (it never went through this function before; Home's
  * `TopicTile` never showed a due chip at all, relying on HealthRing's danger
  * notch alone — this brings both callers onto one chip vocabulary without
@@ -57,9 +58,9 @@ export function topicChips(
   if (folder && opts.includeFolder !== false) {
     chips.push({ label: folder, className: 'text-[var(--color-text-faint)]' })
   }
-  if (t.states.review > 0) chips.push({ label: `${t.states.review} review`, className: 'text-[var(--color-ink-warm)]' })
-  if (t.states.learning > 0) chips.push({ label: `${t.states.learning} encoding`, className: 'text-[var(--color-ink-cool)]' })
+  if (t.states.review > 0) chips.push({ label: `${t.states.review} in review`, className: 'text-[var(--color-ink-warm)]' })
+  if (t.states.learning > 0) chips.push({ label: `${t.states.learning} learning`, className: 'text-[var(--color-ink-cool)]' })
   if (t.states.new > 0) chips.push({ label: `${t.states.new} new`, className: 'text-[var(--color-ink-cool-dim)]' })
-  if (t.due > 0) chips.push({ label: `${t.due} due`, className: 'text-[var(--color-ink-danger)]' })
+  if (t.due > 0) chips.push({ label: `${t.due} due`, className: 'text-[var(--color-ink-warm)]' })
   return chips
 }

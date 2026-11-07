@@ -1,5 +1,6 @@
+import { loadLectureNotesOn, saveLectureNotesOn } from '../shared/lectureNotesPref'
 import type { DrainSummary, LinkStatus, LocalModelProbe, OpencodeProbe, OpencodeSetupStatus, PairingOffer } from '../../../shared/types'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type {
   ApiKeyStatus,
   AuthSettings,
@@ -18,7 +19,6 @@ import { describeProbe as describeProbeVerdict } from '../../../shared/localMode
 import { describeOpencodeProbe as describeOpencodeProbeVerdict } from '../../../shared/opencodeVerdict'
 import { Button } from '../components/ui/Button'
 import { Modal } from '../components/ui/Modal'
-import { DendriteDivider } from '../components/ui/DendriteDivider'
 import { loadCheckpointAllNodes, saveCheckpointAllNodes } from '../shared/checkpointAllNodesPref'
 import { CopyButton } from '../components/ui/CopyButton'
 import { PageHeader } from '../components/ui/PageHeader'
@@ -359,6 +359,68 @@ function ToggleRow({
   )
 }
 
+/** Settings has sixteen sections in one scroll. This index lists them and
+ * jumps to each one. It reads the section titles from the page itself (each
+ * section opens with a SectionBanner), so a section added later appears here
+ * without a second list to keep in step. The current section is the last one
+ * whose top has scrolled past the top of the page. */
+function SettingsIndex({ rootRef }: { rootRef: React.RefObject<HTMLDivElement | null> }) {
+  const [sections, setSections] = useState<{ label: string; el: HTMLElement }[]>([])
+  const [current, setCurrent] = useState(0)
+
+  useEffect(() => {
+    const root = rootRef.current
+    if (!root) return
+    const collect = () => {
+      const found = [...root.querySelectorAll<HTMLElement>('.section-banner')]
+        .map((b) => ({ label: (b.textContent ?? '').trim(), el: (b.closest('.panel') as HTMLElement | null) ?? b }))
+        .filter((s) => s.label.length > 0)
+      setSections((prev) =>
+        prev.length === found.length && prev.every((p, i) => p.label === found[i].label && p.el === found[i].el) ? prev : found,
+      )
+    }
+    collect()
+    const mo = new MutationObserver(collect)
+    mo.observe(root, { childList: true, subtree: true })
+    return () => mo.disconnect()
+  }, [rootRef])
+
+  useEffect(() => {
+    const root = rootRef.current
+    if (!root || sections.length === 0) return
+    const onScroll = () => {
+      const top = root.getBoundingClientRect().top + 48
+      let idx = 0
+      sections.forEach((s, i) => {
+        if (s.el.getBoundingClientRect().top <= top) idx = i
+      })
+      setCurrent(idx)
+    }
+    onScroll()
+    root.addEventListener('scroll', onScroll, { passive: true })
+    return () => root.removeEventListener('scroll', onScroll)
+  }, [rootRef, sections])
+
+  return (
+    <nav aria-label="Settings sections" className="!col-start-1 !mb-0 row-start-2 row-span-[100] self-start sticky top-0 flex flex-col">
+      {sections.map((s, i) => (
+        <button
+          key={s.label}
+          onClick={() => s.el.scrollIntoView({ block: 'start', behavior: 'smooth' })}
+          aria-current={i === current ? 'true' : undefined}
+          className={`focus-ring text-left label-data text-[11px] uppercase tracking-[0.1em] px-2.5 py-1.5 border-l-2 transition-colors duration-[var(--dur-fast)] ${
+            i === current
+              ? 'border-[var(--color-ink-warm)] text-[var(--color-text-primary)]'
+              : 'border-[var(--color-hairline)] text-[var(--color-text-dim)] hover:text-[var(--color-text-primary)]'
+          }`}
+        >
+          {s.label}
+        </button>
+      ))}
+    </nav>
+  )
+}
+
 function PickerRow<T extends string>({
   label,
   hint,
@@ -378,7 +440,11 @@ function PickerRow<T extends string>({
         <div className="text-sm text-[var(--color-text-primary)]">{label}</div>
         {hint && <div className="text-xs text-[var(--color-text-faint)]">{hint}</div>}
       </div>
-      <SegmentedControl options={options} value={current} onChange={onPick} />
+      {/* A plain flex row so the control is only as wide as its options;
+          stretched across the column it read as one long empty bar. */}
+      <div className="flex">
+        <SegmentedControl options={options} value={current} onChange={onPick} />
+      </div>
     </div>
   )
 }
@@ -578,6 +644,7 @@ function CompanionSection() {
 }
 
 export function SettingsView() {
+  const rootRef = useRef<HTMLDivElement>(null)
   const [model, setModel] = useState<LearnerModel | null>(null)
   const [sessionActive, setSessionActive] = useState(false)
   const [cueInput, setCueInput] = useState('')
@@ -588,6 +655,7 @@ export function SettingsView() {
   const [rhythmValueInput, setRhythmValueInput] = useState('')
   const [sounds, setSounds] = useState(soundOn())
   const [checkpointAllNodesOn, setCheckpointAllNodesOn] = useState(loadCheckpointAllNodes())
+  const [lectureNotesOn, setLectureNotesOnState] = useState(loadLectureNotesOn())
   const [punctualityOn, setPunctualityOn] = useState(punctualityCounts())
   const [stepSizedOn, setStepSizedOn] = useState(loadStepSized())
   const [exporting, setExporting] = useState(false)
@@ -922,8 +990,18 @@ export function SettingsView() {
   const artifactsValue = model.settings.artifacts === 'threshold-only' ? 'threshold' : model.settings.artifacts
 
   return (
-    <div className="p-8 flex flex-col gap-6 w-full h-full overflow-y-auto">
+    // Two columns without re-nesting the sections: the root is a grid, the
+    // header spans both columns, the index sits in the first, and every
+    // section lands in a readable second column instead of stretching
+    // across the whole window. Row spacing is a margin, not `gap-y`: the
+    // index spans every implicit row, and a row gap would be added between
+    // each of those empty rows too.
+    <div
+      ref={rootRef}
+      className="p-8 w-full h-full overflow-y-auto grid grid-cols-[12rem_minmax(0,48rem)] gap-x-10 content-start [&>*]:col-start-2 [&>*]:mb-6 [&>*:first-child]:col-start-1 [&>*:first-child]:col-span-2"
+    >
       <PageHeader title="Settings" />
+      <SettingsIndex rootRef={rootRef} />
 
       {sessionActive && (
         <div className="panel border-[var(--color-ink-warm-dim)] px-4 py-3 text-sm text-[var(--color-ink-warm)]">
@@ -957,6 +1035,19 @@ export function SettingsView() {
             { value: 'off', label: 'Off' },
             { value: 'threshold', label: 'Threshold nodes' },
             { value: 'eager', label: 'Eager' },
+          ]}
+        />
+        <PickerRow
+          label="Lecture notes"
+          hint="Before each concept that's new to you, the tutor writes short notes (a PDF) for you to read first. Then the usual loop runs, and the notes close while you answer the final check from memory. Applies from the next new concept."
+          current={lectureNotesOn ? 'on' : 'off'}
+          onPick={(v) => {
+            saveLectureNotesOn(v === 'on')
+            setLectureNotesOnState(v === 'on')
+          }}
+          options={[
+            { value: 'off', label: 'Off' },
+            { value: 'on', label: 'On' },
           ]}
         />
         <PickerRow
@@ -1042,7 +1133,6 @@ export function SettingsView() {
 
       <div className="panel px-5 py-5 flex flex-col gap-3">
         <SectionBanner label="Return commitment" className="border-t-0" />
-        <DendriteDivider />
         {model.settings.commitment && !editingCommitment ? (
           <>
             <div className="text-sm text-[var(--color-text-dim)]">
@@ -1127,7 +1217,6 @@ export function SettingsView() {
 
       <div className="panel px-5 py-5 flex flex-col gap-3">
         <SectionBanner label="Interests" className="border-t-0" />
-        <DendriteDivider />
         <div className="text-xs text-[var(--color-text-faint)]">
           The tutor leans on these for analogies and examples. Adding is instant; the intake conversation is where they
           get pruned (the engine has no remove operation).
@@ -1159,7 +1248,6 @@ export function SettingsView() {
 
       <div className="panel px-5 py-5 flex flex-col gap-3">
         <SectionBanner label="Goals" className="border-t-0" />
-        <DendriteDivider />
         <div className="fig-caption">
           Fig. — standing aims the tutor mines for examples and relevance, same as interests above.
         </div>
@@ -1180,7 +1268,6 @@ export function SettingsView() {
 
       <div className="panel px-5 py-5 flex flex-col gap-3">
         <SectionBanner label="Accessibility" className="border-t-0" />
-        <DendriteDivider />
         <div className="fig-caption">
           Fig. — declared needs (dyslexia, ADHD, color vision, and the like) the tutor always honors as dials — a
           need, never a “learning style” guess.
@@ -1202,7 +1289,6 @@ export function SettingsView() {
 
       <div className="panel px-5 py-5 flex flex-col gap-3">
         <SectionBanner label="Rhythms" className="border-t-0" />
-        <DendriteDivider />
         <div className="fig-caption">
           Fig. — session telemetry (length, cadence, time-of-day yield) the coach reads alongside your session log
           to suggest, never impose, a better schedule.
@@ -1240,7 +1326,6 @@ export function SettingsView() {
 
       <div className="panel px-5 py-5 flex flex-col gap-5">
         <SectionBanner label="Background & notifications" className="border-t-0" />
-        <DendriteDivider />
         <ToggleRow
           label="Launch at login"
           hint="Keeps Engram Desktop running in the menu bar so reminders work without opening it first"
@@ -1324,7 +1409,6 @@ export function SettingsView() {
 
       <div className="panel px-5 py-5 flex flex-col gap-3">
         <SectionBanner label="Authentication" className="border-t-0" />
-        <DendriteDivider />
         <ToggleRow
           label="Session provider"
           hint={
@@ -1538,7 +1622,6 @@ export function SettingsView() {
             thing to a folder you choose, as a plain snapshot in time.
           </div>
         </div>
-        <DendriteDivider />
         <div className="flex items-center gap-3">
           <Button variant="ghost" onClick={exportData} disabled={exporting} className="self-start">
             {exporting ? 'Exporting…' : 'Export learning data'}
@@ -1556,7 +1639,6 @@ export function SettingsView() {
             always taken first.
           </div>
         </div>
-        <DendriteDivider />
         <div className="flex items-center gap-3">
           <Button variant="ghost" onClick={doBackupNow} disabled={backingUp} className="self-start">
             {backingUp ? 'Backing up…' : 'Back up now'}
@@ -1581,7 +1663,6 @@ export function SettingsView() {
             authenticated <span className="label-data">gh</span> CLI — nothing is sent anywhere, no embedded token.
           </div>
         </div>
-        <DendriteDivider />
         {version && (
           <div className="text-sm text-[var(--color-text-dim)]">
             Version <span className="label-data text-[var(--color-text-primary)]">{version}</span>
@@ -1601,7 +1682,6 @@ export function SettingsView() {
             disk. Nothing runs until you ask for it below.
           </div>
         </div>
-        <DendriteDivider />
         {doctor && <DoctorFindings doctor={doctor} />}
         {doctorError && (
           <div className="panel border-[var(--color-ink-danger-dim)] px-3 py-2 text-xs text-[var(--color-ink-danger)]">
@@ -1621,13 +1701,11 @@ export function SettingsView() {
             just closed" has an actual reason attached the next time you look.
           </div>
         </div>
-        <DendriteDivider />
         <CrashLogSection entries={crashLog} />
       </div>
 
       <div className="panel px-5 py-5 flex flex-col gap-3">
         <SectionBanner label="Achievements" className="border-t-0" />
-        <DendriteDivider />
         <AchievementsPanel />
       </div>
 

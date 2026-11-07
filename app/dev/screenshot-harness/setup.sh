@@ -7,6 +7,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"; H="${1:?fake HOME dir}"
 rm -rf "$H"; mkdir -p "$H/.claude/local" "$H/.fonts"
 python3 -I "$HERE/seed.py" "$H"
 cp "$HERE/fake-claude.mjs" "$H/.claude/local/claude"; chmod +x "$H/.claude/local/claude"
+cp "$HERE/lecture-notes.md" "$H/.claude/local/lecture-notes.md"
 # Optional: Jost renamed "Futura" so label type renders like macOS (needs fonttools+brotli).
 if python3 -c 'import fontTools, brotli' 2>/dev/null; then
   T="$(mktemp -d)"; (cd "$T" && npm pack @fontsource/jost@5 >/dev/null 2>&1 && tar xzf fontsource-jost-*.tgz)
