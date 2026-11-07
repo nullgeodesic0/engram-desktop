@@ -1062,7 +1062,7 @@ export function SettingsView() {
           The tutor leans on these for analogies and examples. Adding is instant; the intake conversation is where they
           get pruned (the engine has no remove operation).
         </div>
-        {model.interests.length > 0 && (
+        {(model.interests?.length ?? 0) > 0 && (
           <div className="flex flex-wrap gap-2">
             {model.interests.map((i) => (
               <span key={i} className="text-xs px-2 py-1 rounded-lg bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] text-[var(--color-text-dim)]">
@@ -1093,7 +1093,7 @@ export function SettingsView() {
         <div className="fig-caption">
           Fig. — standing aims the tutor mines for examples and relevance, same as interests above.
         </div>
-        {model.goals.length > 0 ? (
+        {(model.goals?.length ?? 0) > 0 ? (
           <div className="flex flex-wrap gap-2">
             {model.goals.map((g) => (
               <span key={g} className="text-xs px-2 py-1 rounded-lg bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] text-[var(--color-text-dim)]">
@@ -1115,7 +1115,7 @@ export function SettingsView() {
           Fig. — declared needs (dyslexia, ADHD, color vision, and the like) the tutor always honors as dials — a
           need, never a “learning style” guess.
         </div>
-        {model.accessibility.length > 0 ? (
+        {(model.accessibility?.length ?? 0) > 0 ? (
           <div className="flex flex-wrap gap-2">
             {model.accessibility.map((a) => (
               <span key={a} className="text-xs px-2 py-1 rounded-lg bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] text-[var(--color-text-dim)]">
@@ -1137,9 +1137,9 @@ export function SettingsView() {
           Fig. — session telemetry (length, cadence, time-of-day yield) the coach reads alongside your session log
           to suggest, never impose, a better schedule.
         </div>
-        {Object.keys(model.rhythms).length > 0 && (
+        {Object.keys(model.rhythms ?? {}).length > 0 && (
           <div className="flex flex-wrap gap-2">
-            {Object.entries(model.rhythms).map(([k, v]) => (
+            {Object.entries(model.rhythms ?? {}).map(([k, v]) => (
               <span key={k} className="text-xs px-2 py-1 rounded-lg bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] text-[var(--color-text-dim)]">
                 {k}: {String(v)}
               </span>
