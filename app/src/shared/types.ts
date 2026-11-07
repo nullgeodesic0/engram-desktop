@@ -78,6 +78,22 @@ export interface EngramNode {
   state: NodeState
   artifact: string | null
   capstone?: boolean
+  /** Engine v1.14+: the architect flags genuinely element-interactive nodes
+   * `"high"` (it gates the tutor's contrast-first opening off). Emitted only
+   * as `"high"`; absent on every other node and on older graphs. */
+  interactivity?: 'high'
+  /** Engine v1.14+: an authored contrasting-case set the tutor may open a
+   * concept node with (P18). Pre-teaching material: the cases are served
+   * BEFORE the learner commits to a rule, so no app surface should show them
+   * unprompted (checkDoctrine D4 guards `contrast` like `claim`). Absent on
+   * most nodes and on older graphs. */
+  contrast?: NodeContrast
+}
+
+export interface NodeContrast {
+  deep_feature: string
+  cases: string[]
+  invite: string
 }
 
 export interface NextNodeResult {
@@ -132,6 +148,12 @@ export interface DueItem {
    * absent on `--limit` reads and on older engines; never assume (same
    * discipline as every other sparse projection in this file). */
   effectively_relearn?: boolean
+  /** Engine v1.14+: already-encoded, unretired `contrasts_with` siblings
+   * (never the node itself), carried so `/review` can serve its optional
+   * discrimination step without a second engine call. Each entry carries the
+   * sibling's `claim`, so this is answer material exactly like `claim`
+   * above. Absent on older engines. */
+  contrasts_with?: { id: string; claim: string }[]
 }
 
 /** The `due --cap` payload shape (engine v1.3+): the same items, ranked by
@@ -498,10 +520,17 @@ export interface RawReceipt {
    * "self". */
   source: string | null
   /** engram.py's own `production_truncated`: this receipt's stored production
-   * was cut at PRODUCTION_MAX (800 chars). The cap applies to the receipt AND
-   * the stash — it is record-wide policy, not a stash quirk — and the app only
-   * reports it. */
+   * was cut at PRODUCTION_MAX (800 chars up to engine 1.11.1, 2400 since
+   * 1.11.2). The cap applies to the receipt AND the stash — it is record-wide
+   * policy, not a stash quirk — and the app only reports it. From 1.11.2 the
+   * engine carries the flag from its own stash record, so it no longer
+   * depends on the assessor remembering to echo it. */
   productionTruncated?: boolean
+  /** Engine v1.14+: the assessor's 0/1/2 score of the learner's analogy
+   * alignment sentence (P19). A transfer correlate the engine records but
+   * never lets move the grade, so nothing here may treat it as one. Null
+   * when the receipt carries none (most receipts, and every older one). */
+  alignmentQuality?: 0 | 1 | 2 | null
 }
 
 export interface ReceiptsHistory {

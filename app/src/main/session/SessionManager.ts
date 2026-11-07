@@ -165,8 +165,10 @@ export class SessionManager extends EventEmitter {
       cwd: homedir(),
       stdio: ['pipe', 'pipe', 'pipe'],
       // ENGRAM_ROOT: the skills' own engine-locator bootstrap probes
-      // $OPENCODE_PLUGIN_ROOT → $CLAUDE_PLUGIN_ROOT → $CODEX_PLUGIN_ROOT →
-      // $ENGRAM_ROOT → … for a dir containing scripts/engram.py. None of the
+      // $ZCODE_PLUGIN_ROOT → $OPENCODE_PLUGIN_ROOT → $CLAUDE_PLUGIN_ROOT →
+      // $CODEX_PLUGIN_ROOT → $ENGRAM_ROOT → … (engine 1.15) for a dir
+      // containing scripts/engram.py; buildSessionEnv strips stray exports of
+      // the ones ahead of ENGRAM_ROOT that Claude Code never sets. None of the
       // plugin-root vars exist in this headless spawn, so without this the
       // locator exits 2 on the FIRST engram call of nearly every sitting
       // (real-transcript evidence: "engram: engine not found — set

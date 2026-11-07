@@ -20,6 +20,18 @@ import type { AuthMode } from '../../shared/types'
 
 const AUTH_VARS = ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN'] as const
 
+/** Plugin-root variables the skills' engine locator checks BEFORE
+ * `ENGRAM_ROOT` (engine 1.15: `$ZCODE_PLUGIN_ROOT` → `$OPENCODE_PLUGIN_ROOT`
+ * → `$CLAUDE_PLUGIN_ROOT` → `$CODEX_PLUGIN_ROOT` → `$ENGRAM_ROOT` → …), and
+ * that no provider this app drives ever sets for a sitting. Inherited from a
+ * shell that also runs ZCode or OpenCode, one of them would silently point
+ * the tutor at a different install's engram.py than the one the app resolved
+ * and reads from — version skew between the dialogue and the app's own
+ * reads. `ZCODE_PLUGIN_ROOT` also flips the plugin's SessionStart hook to
+ * JSON output. `CLAUDE_PLUGIN_ROOT` is deliberately absent: Claude Code
+ * itself owns that one. */
+export const FOREIGN_PLUGIN_ROOT_VARS = ['ZCODE_PLUGIN_ROOT', 'OPENCODE_PLUGIN_ROOT'] as const
+
 export function buildSessionEnv(
   base: NodeJS.ProcessEnv,
   engramRoot: string,
@@ -34,6 +46,9 @@ export function buildSessionEnv(
 ): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...base, ENGRAM_ROOT: engramRoot }
   for (const v of AUTH_VARS) delete env[v]
+  // CODEX_PLUGIN_ROOT too: in a Claude sitting nothing sets it, so a stray
+  // export would outrank ENGRAM_ROOT exactly like the two above.
+  for (const v of [...FOREIGN_PLUGIN_ROOT_VARS, 'CODEX_PLUGIN_ROOT']) delete env[v]
   // BASE_URL is stripped unconditionally too, for the same reason the auth
   // vars are: a shell that exports it (a proxy experiment, another tool's
   // launcher) would otherwise silently redirect tutoring to an endpoint the

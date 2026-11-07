@@ -12,6 +12,14 @@ describe('buildCodexSessionEnv', () => {
     expect(env.PATH).toBe(`/shim${delimiter}/bin`)
     expect(base.OPENAI_API_KEY).toBe('paid')
   })
+
+  it('strips plugin roots the engine locator would check ahead of CODEX_PLUGIN_ROOT', () => {
+    const base = { PATH: '/bin', ZCODE_PLUGIN_ROOT: '/zcode/engram', OPENCODE_PLUGIN_ROOT: '/oc/engram' }
+    const env = buildCodexSessionEnv(base, '/plugins/engram')
+    expect(env.ZCODE_PLUGIN_ROOT).toBeUndefined()
+    expect(env.OPENCODE_PLUGIN_ROOT).toBeUndefined()
+    expect(env.CODEX_PLUGIN_ROOT).toBe('/plugins/engram')
+  })
 })
 
 describe('buildCodexSubscriptionEnv', () => {

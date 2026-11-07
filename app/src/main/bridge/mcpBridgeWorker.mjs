@@ -266,7 +266,7 @@ server.registerTool('report_verdict', {
 server.registerTool('render_comparison', {
   title: 'Render Comparison',
   description:
-    "Advisory, best-effort: draw a contrast case as two labelled columns instead of two paragraphs — the move you already make when a misconception needs a boundary drawn (canonical vs grand canonical, the learner's approach vs the correct one, before vs after). `left`/`right` each take a short `label` and a `body`; LaTeX is rendered. Say the same thing in your prose as you normally would; this only sets it side by side. Subject to the same timing rules as anything else you say — never use it to show a canonical answer earlier than your instructions allow.",
+    "Advisory, best-effort: draw a contrast case as two labelled columns instead of two paragraphs — the move you already make when a misconception needs a boundary drawn (canonical vs grand canonical, the learner's approach vs the correct one, before vs after). `left`/`right` each take a short `label` and a `body`; LaTeX is rendered. Say the same thing in your prose as you normally would; this only sets it side by side. Subject to the same timing rules as anything else you say — never use it to show a canonical answer earlier than your instructions allow. When the two columns are cases the learner still has to tell apart (a /review discrimination pair, a contrast-first opening), label them neutrally ('Case 1' / 'Case 2'): a concept name on a column answers the question before they do. It holds exactly two columns, so a three-to-five case contrast set stays in prose.",
   inputSchema: {
     title: z.string().optional(),
     left: z.object({ label: z.string(), body: z.string() }),

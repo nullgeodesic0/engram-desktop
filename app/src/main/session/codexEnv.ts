@@ -1,4 +1,5 @@
 import { delimiter } from 'node:path'
+import { FOREIGN_PLUGIN_ROOT_VARS } from './sessionEnv'
 
 const CODEX_API_VARS = ['OPENAI_API_KEY', 'OPENAI_API_TOKEN', 'CODEX_API_KEY'] as const
 
@@ -22,6 +23,9 @@ export function buildCodexSessionEnv(
     ENGRAM_ROOT: engramRoot,
     CODEX_PLUGIN_ROOT: engramRoot,
   }
+  // The engine locator checks these ahead of CODEX_PLUGIN_ROOT, so a stray
+  // shell export would override the root set just above.
+  for (const name of FOREIGN_PLUGIN_ROOT_VARS) delete env[name]
   if (pathPrefixDir) {
     const key = Object.keys(env).find((name) => name.toUpperCase() === 'PATH') ?? 'PATH'
     env[key] = env[key] ? `${pathPrefixDir}${delimiter}${env[key]}` : pathPrefixDir
