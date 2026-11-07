@@ -234,7 +234,7 @@ function AssignmentRowView({
         // (link ink, hover wash, alignment) unchanged.
         className="focus-ring w-full flex items-center justify-between gap-3 py-1.5 px-2 -mx-2 text-left hover:bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] transition-colors duration-[var(--dur-fast)]"
       >
-        <span className="label-data text-[10px] uppercase tracking-wide text-[var(--color-ink-cool)] shrink-0">
+        <span className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-ink-cool)] shrink-0">
           {KIND_LABEL[row.kind]} ↗
         </span>
         {right}
@@ -243,7 +243,7 @@ function AssignmentRowView({
   }
   return (
     <div className="flex items-center justify-between gap-3 py-1.5">
-      <span className="label-data text-[10px] uppercase tracking-wide text-[var(--color-text-dim)] shrink-0">
+      <span className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-dim)] shrink-0">
         {KIND_LABEL[row.kind]}
       </span>
       {right}
@@ -371,7 +371,7 @@ function ModeToggle({ mode, onChange }: { mode: GradeMode; onChange: (m: GradeMo
         <button
           key={m}
           onClick={() => onChange(m)}
-          className={`label-data text-[10px] uppercase tracking-wide px-2.5 py-1 border ${
+          className={`label-data text-[11px] uppercase tracking-[0.1em] px-2.5 py-1 border ${
             mode === m
               ? 'border-[var(--color-ink-warm)] text-[var(--color-ink-warm)]'
               : 'border-[var(--color-hairline)] text-[var(--color-text-faint)]'
@@ -572,7 +572,7 @@ export function GradesView({ onGoSitting, onOpenLedger }: { onGoSitting?: (sessi
           <SectionBanner label="Assignments" count={assignments.length} className="flex-1" />
           <button
             onClick={() => setLapsedOnly((v) => !v)}
-            className={`label-data text-[10px] uppercase tracking-wide px-2.5 py-1 border shrink-0 ${
+            className={`label-data text-[11px] uppercase tracking-[0.1em] px-2.5 py-1 border shrink-0 ${
               lapsedOnly
                 ? 'border-[var(--color-ink-danger)] text-[var(--color-ink-danger)]'
                 : 'border-[var(--color-hairline)] text-[var(--color-text-faint)]'

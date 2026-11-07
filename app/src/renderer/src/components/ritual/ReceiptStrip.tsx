@@ -13,7 +13,7 @@ import { ProseMarkdown } from '../ProseMarkdown'
 export const ReceiptStrip = memo(function ReceiptStrip({ strip }: { strip: ParsedReceiptStrip }) {
   return (
     <div className="tilt-card-soft panel-raised px-4 py-3 border-l-2" style={{ borderLeftColor: 'var(--color-ink-warm-dim)' }}>
-      <div className="label-data text-[10px] tracking-[0.22em] uppercase text-[var(--color-ink-warm)]">
+      <div className="label-data text-[11px] tracking-[0.1em] uppercase text-[var(--color-ink-warm)]">
         {strip.heading ?? 'Receipt'}
       </div>
       <div className="mt-2 flex flex-col gap-1">

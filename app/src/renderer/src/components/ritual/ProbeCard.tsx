@@ -57,13 +57,13 @@ export const ProbeCard = memo(function ProbeCard({
           {humanizeNodeId(header.node)}
         </span>
         {header.topic && (
-          <span className="label-data text-[10px] uppercase tracking-wider text-[var(--color-text-dim)]">
+          <span className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-dim)]">
             {header.topic}
           </span>
         )}
         {header.threshold && (
           <span
-            className="label-data text-[10px] uppercase tracking-wider"
+            className="label-data text-[11px] uppercase tracking-[0.1em]"
             style={{ color: 'var(--color-ink-violet)' }}
             title="A threshold concept — the topic hinges on this one"
           >

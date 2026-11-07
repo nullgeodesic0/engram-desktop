@@ -21,7 +21,7 @@ export const ACCENT: Record<EnvAccent, { ink: string; dim: string }> = {
 }
 
 export const CTRL =
-  'focus-ring tilt-card-rail label-data text-[10px] uppercase tracking-[0.16em] px-2.5 py-1 border transition-colors duration-[var(--dur-fast)]'
+  'focus-ring tilt-card-rail label-data text-[11px] uppercase tracking-[0.1em] px-2.5 py-1 border transition-colors duration-[var(--dur-fast)]'
 
 export const CTRL_QUIET = `${CTRL} border-[var(--color-edge)] text-[var(--color-text-dim)] hover:text-[var(--color-text-primary)]`
 

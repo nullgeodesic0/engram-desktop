@@ -294,7 +294,7 @@ export function MisconceptionLedger({
         {!error &&
           groups.map((g) => (
             <div key={g.topic} className="flex flex-col gap-2">
-              <div className="label-data uppercase tracking-wide text-[10px] text-[var(--color-text-faint)]">
+              <div className="label-data uppercase tracking-[0.1em] text-[11px] text-[var(--color-text-faint)]">
                 {g.topic}
               </div>
               {g.open.length > 0 && (

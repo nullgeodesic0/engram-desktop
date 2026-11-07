@@ -1859,7 +1859,7 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
           {phase !== 'loading' && (
             <button
               onClick={() => setHistoryDrawerOpen(true)}
-              className="focus-ring cmd-item label-data text-[10px] uppercase tracking-[0.16em] shrink-0"
+              className="focus-ring cmd-item label-data text-[11px] uppercase tracking-[0.1em] shrink-0"
             >
               History
             </button>
@@ -1887,7 +1887,7 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
             // out of the count as the sitting narrows).
             const topicCount = new Set(queue.map((q) => q.topic)).size
             return (
-              <span className="label-data text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-faint)]">
+              <span className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-faint)]">
                 {sessionGrades.length} of {sessionTotal}
                 {topicCount > 0 && ` · ${topicCount} ${topicCount === 1 ? 'topic' : 'topics'}`}
               </span>
@@ -1895,7 +1895,7 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
           }
           if (phase === 'ready') return undefined
           return (
-            <span className="label-data text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-faint)]">
+            <span className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-faint)]">
               {queue.length} due
             </span>
           )
@@ -1912,7 +1912,7 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
                 phases.) */}
             <button
               onClick={() => setHistoryDrawerOpen(true)}
-              className="focus-ring cmd-item label-data text-[10px] uppercase tracking-[0.16em] shrink-0"
+              className="focus-ring cmd-item label-data text-[11px] uppercase tracking-[0.1em] shrink-0"
             >
               History
             </button>
@@ -1923,7 +1923,7 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
               <button
                 onClick={backToReviewPage}
                 title="Back to the review page (a live sitting keeps running)"
-                className="focus-ring cmd-item label-data text-[10px] uppercase tracking-[0.16em] shrink-0"
+                className="focus-ring cmd-item label-data text-[11px] uppercase tracking-[0.1em] shrink-0"
               >
                 Back
               </button>
@@ -2238,7 +2238,7 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
                           index.css's dogear doctrine comment. */}
                       <div key={current.id} className={`relative panel ${probePinned ? 'dogear' : ''} flex flex-col mb-2`}>
                         <div className="detail-title-band flex items-center justify-between gap-3 px-5 py-2">
-                          <span className="label-data text-[10px] tracking-[0.22em] uppercase text-[var(--color-ink-warm)] inline-flex items-baseline gap-1.5">
+                          <span className="label-data text-[11px] tracking-[0.1em] uppercase text-[var(--color-ink-warm)] inline-flex items-baseline gap-1.5">
                             review ·{' '}
                             <StatFraction n={sessionGrades.length + 1} d={sessionTotal} className="text-[10px]" />
                           </span>
@@ -2266,7 +2266,7 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
                           <MathRenderer text={current.probe} className="text-sm text-[var(--color-text-primary)] leading-relaxed" />
                         </div>
                         <div className="detail-footer px-5 py-1.5">
-                          <span className="label-data text-[10px] text-[var(--color-text-faint)] uppercase tracking-wider">
+                          <span className="label-data text-[11px] text-[var(--color-text-faint)] uppercase tracking-[0.1em]">
                             probe
                           </span>
                           <button

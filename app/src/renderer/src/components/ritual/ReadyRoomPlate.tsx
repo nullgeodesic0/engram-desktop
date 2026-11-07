@@ -260,7 +260,7 @@ export const ReadyRoomPlate = memo(function ReadyRoomPlate({
               has both — and the ALL pill is where "clear the focus" lives,
               which is why the separate focus-chip row below could go. */}
           <div className="flex items-center gap-2.5">
-            <span className="label-data text-[10px] uppercase tracking-[0.28em] text-[var(--color-text-dim)] shrink-0">
+            <span className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-dim)] shrink-0">
               Due by topic
             </span>
             {focusChoices.length > 1 && (

@@ -37,7 +37,7 @@ export function HelpSheet({ open, onClose }: { open: boolean; onClose: () => voi
           <div className="flex flex-col gap-4">
             {SHORTCUT_GROUPS.map((group) => (
               <div key={group.heading} className="flex flex-col gap-1.5">
-                <div className="label-data uppercase tracking-wide text-[10px] text-[var(--color-text-faint)]">
+                <div className="label-data uppercase tracking-[0.1em] text-[11px] text-[var(--color-text-faint)]">
                   {group.heading}
                 </div>
                 <div className="flex flex-col gap-1">

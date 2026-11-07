@@ -289,7 +289,7 @@ function ContinueHero({ topic: t, onOpen, morphing }: { topic: TopicListEntry; o
   return (
     <div className="tilt-card panel-plate dogear px-6 py-5 flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
       <div className="flex flex-col gap-2 min-w-0 flex-1">
-        <span className="label-data text-[10px] uppercase tracking-[0.28em] text-[var(--color-ink-warm)]">
+        <span className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-ink-warm)]">
           Pick up where you left off
         </span>
         <div className="flex items-center gap-3 min-w-0">
@@ -333,7 +333,7 @@ function AddTerritoryCard({ onClick, blocked }: { onClick: () => void; blocked: 
     >
       <span className="text-lg leading-none text-[var(--color-text-faint)]">+</span>
       <div className="flex flex-col gap-0.5">
-        <span className="text-sm text-[var(--color-text-dim)]">Chart a new territory</span>
+        <span className="text-sm text-[var(--color-text-dim)]">Start a new topic</span>
         {blocked && (
           <span className="label-data text-[10px] text-[var(--color-ink-danger)]">blocked — rate limit in effect</span>
         )}
@@ -2044,7 +2044,7 @@ export function LearnSessionView({
                   currentNodeId || nodePosition || walkNumber != null ? (
                     <div
                       key={currentNodeId ?? 'none'}
-                      className="label-data text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-faint)] flex items-center gap-1.5 min-w-0"
+                      className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-faint)] flex items-center gap-1.5 min-w-0"
                     >
                       {currentNodeId && (
                         <span className="text-[var(--color-ink-warm)] truncate">{humanizeNodeId(currentNodeId)}</span>
@@ -2077,7 +2077,7 @@ export function LearnSessionView({
                     {activeTopic && (
                       <button
                         onClick={() => setHistoryDrawerOpen(true)}
-                        className="focus-ring cmd-item label-data text-[10px] uppercase tracking-[0.16em] shrink-0"
+                        className="focus-ring cmd-item label-data text-[11px] uppercase tracking-[0.1em] shrink-0"
                       >
                         History
                       </button>
@@ -2088,7 +2088,7 @@ export function LearnSessionView({
                     <button
                       onClick={backToTopics}
                       title="Leave this session view (the session keeps running)"
-                      className="focus-ring cmd-item label-data text-[10px] uppercase tracking-[0.16em] shrink-0"
+                      className="focus-ring cmd-item label-data text-[11px] uppercase tracking-[0.1em] shrink-0"
                     >
                       All topics
                     </button>
@@ -2181,12 +2181,12 @@ export function LearnSessionView({
                       <PlateFigure
                         value={topics.length}
                         tone="primary"
-                        title={topics.length === 1 ? 'territory in the atlas' : 'territories in the atlas'}
+                        title={topics.length === 1 ? 'topic' : 'topics'}
                         note={
                           atlasDue > 0 ? (
-                            <span className="text-[var(--color-ink-warm)]">{atlasDue} due across the atlas</span>
+                            <span className="text-[var(--color-ink-warm)]">{atlasDue} due for review</span>
                           ) : (
-                            'nothing due across the atlas'
+                            'nothing due for review'
                           )
                         }
                       />
@@ -2198,7 +2198,7 @@ export function LearnSessionView({
                           <div className="flex items-center gap-2">
                             <span
                               id="learn-topic-group-label"
-                              className="label-data text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-faint)]"
+                              className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-faint)]"
                             >
                               group
                             </span>
@@ -2215,7 +2215,7 @@ export function LearnSessionView({
                           <div className="flex items-center gap-2">
                             <span
                               id="learn-topic-sort-label"
-                              className="label-data text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-faint)]"
+                              className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-faint)]"
                             >
                               sort
                             </span>
@@ -2366,7 +2366,7 @@ export function LearnSessionView({
             )}
             {topics !== null && topics.length === 0 && envCheck !== null && !envBroken && (
               <Card className="px-5 py-4 flex flex-col gap-3 items-start">
-                <div className="fig-caption">Fig. — no territories mapped yet</div>
+                <div className="fig-caption">Fig. — no topics yet</div>
                 <div className="font-(family-name:--font-serif) text-[length:var(--text-display)] text-[var(--color-text-primary)]">
                   Every topic starts as a first-principles map.
                 </div>

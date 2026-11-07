@@ -227,7 +227,7 @@ The licensed faces **are the design.** They live on the author's machine and are
   - **Prose h3** (0.8125rem, Neue Haas medium, uppercase, `0.1em` tracking, `--color-text-dim`)
   - **Prose lede** (`1.06em` of prose, first paragraph only, and only when a second paragraph exists)
 - **Caption** (`--text-caption`, 0.75rem, Epoca Pro Medium Italic, `--color-text-dim`): the `.fig-caption` utility — the "Fig. N —" atlas caption, used for stats, empty states, and any line that comments on the interface rather than being it.
-- **Label** (`--text-data`, 0.8125rem, Futura with `font-variant-numeric: tabular-nums`, `letter-spacing: 0.02em`): the `.label-data` utility. All chrome controls, chips, and figures. In control chrome it drops to 10px uppercase with `0.16em` tracking.
+- **Label** (`--text-data`, 0.8125rem, Futura with `font-variant-numeric: tabular-nums`, `letter-spacing: 0.02em`): the `.label-data` utility. All chrome controls, chips, and figures. In control chrome it drops to 11px uppercase with `0.1em` tracking (design review 2 raised it from 10px at 0.16–0.28em, which read as texture rather than words). No uppercase label goes below 11px.
 
 ### Named Rules
 
@@ -298,12 +298,14 @@ Three named form devices carry state:
 - **Shape:** hard right angle (`0px`), hairline border.
 - **Primary:** `--color-accent-cta` fill (amber in dark, `#3d5266` grayish blue in light) on void text, `px-4 py-3` for the composer's send action. Hover moves to `--color-accent-cta-hover`.
 - **Hover / Focus:** color transitions at `--dur-fast` (120ms) via a global `button { transition }` rule, plus the app-wide press transform (`button:active` → `scale(0.97)`). Focus is always `.focus-ring` — a 2px `--color-ink-warm` outline at `2px` offset, never a bespoke treatment.
-- **Chrome controls (`CTRL`):** the app-wide idiom for page-level controls — `.label-data` at 10px uppercase, `0.16em` tracking, `px-2.5 py-1`, hairline border, rail-tier tilt. Transparent at rest (`CTRL_QUIET`, dim text → primary text on hover). The **filled** variant marks importance — an active toggle, a lens, a primary action — as a 16% wash of the environment accent with a dim-ink border.
+- **Chrome controls (`CTRL`):** the app-wide idiom for page-level controls — `.label-data` at 11px uppercase, `0.1em` tracking, `px-2.5 py-1`, hairline border, rail-tier tilt. Transparent at rest (`CTRL_QUIET`, dim text → primary text on hover). The **filled** variant marks importance — an active toggle, a lens, a primary action — as a 16% wash of the environment accent with a dim-ink border.
 
 ### The Environment Accent
 Shared chrome carries a per-environment identity: **Learn accents warm** (encoding new ground), **Review accents cool** (retrieval under test). It travels as an explicit `EnvAccent` prop on shared components, never a context provider, and `ctrlFilled()` returns one of two *static* template strings so Tailwind's JIT sees both literal class lists. **Semantic inks — grade colors, threshold violet, danger — never route through the environment accent.**
 
-The split also governs the doors: Home's main menu inks Learn warm and Review cool, so the one screen that opens both environments states which is which. Coach and Artifacts take violet there — the definition of violet names those surfaces. Grades, Topic Map and Settings stay neutral, because a section with no true ink must not be given one; the palette's rules only hold their force while nothing wears an ink it has not earned.
+Navigation is one tab strip (`CommandStrip`) on every screen, Home included. Design review 2 (2026-11-07) retired Home's Sections menu, which duplicated the strip and pushed the learner's own study below the fold. Sections with no true ink stay neutral there, because the palette's rules only hold their force while nothing wears an ink it has not earned.
+
+**Plain words over metaphor in controls and counts.** The atlas register belongs to captions, figures and ornament. Counts, buttons and empty states say "topics", not "territories".
 
 ### Chips
 - **Style:** `.label-data` at 10px, `px-1.5 py-0.5`, hairline border, a 68% `surface-3` wash, dim text.
