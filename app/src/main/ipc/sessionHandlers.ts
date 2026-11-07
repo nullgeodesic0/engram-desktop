@@ -11,6 +11,7 @@ import { getTopicSettings, setTopicSettings, type TopicSettings } from '../sessi
 import { readTranscript } from '../session/transcriptReader'
 import { exportSitting } from '../session/exportSitting'
 import { exportMap } from '../session/exportMap'
+import { getLectureNotes, listLectureNotes, openLectureNotesPdf, saveLectureNotesPdfCopy } from '../session/lectureNotesStore'
 import { backupNow, describeArchive, restoreFromArchive, pickBackupArchivePath, getBackupInfo } from '../session/backup'
 import type { ExportSittingRequest, ExportSittingResult, ExportMapRequest, SessionIndexEntry, SessionProvider } from '../../shared/types'
 
@@ -262,6 +263,15 @@ export function registerSessionHandlers(win: BrowserWindow): void {
   // rationale as session:export above.
   ipcMain.handle('map:export', (_e, req: ExportMapRequest): Promise<ExportSittingResult> =>
     exportMap(activeWindow, req),
+  )
+
+  // Lecture notes (see session/lectureNotesStore.ts). Read-and-open only:
+  // notes are written solely by the tutor's publish_lecture_notes call.
+  ipcMain.handle('lectureNotes:list', (_e, topicId: string) => listLectureNotes(topicId))
+  ipcMain.handle('lectureNotes:get', (_e, topicId: string, nodeId: string) => getLectureNotes(topicId, nodeId))
+  ipcMain.handle('lectureNotes:openPdf', (_e, topicId: string, nodeId: string) => openLectureNotesPdf(topicId, nodeId))
+  ipcMain.handle('lectureNotes:savePdf', (_e, topicId: string, nodeId: string) =>
+    saveLectureNotesPdfCopy(activeWindow, topicId, nodeId),
   )
 
   // Backup & restore (see session/backup.ts) — the one destructive-capable

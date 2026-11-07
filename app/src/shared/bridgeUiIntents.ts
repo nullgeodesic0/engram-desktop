@@ -111,6 +111,7 @@ export type BridgeUiIntent =
   | { kind: 'phase'; phase: string }
   | { kind: 'beat-outcome'; beat: string; outcome: BeatOutcome }
   | { kind: 'figure'; title: string | null; body: string }
+  | { kind: 'lecture-notes'; topic: string; node: string; title: string }
   | { kind: 'ticket'; ticket: IntentTicket }
   | { kind: 'actions'; actions: IntentAction[] }
   | { kind: 'progress-note'; text: string }
@@ -471,6 +472,17 @@ export function bridgeUiIntent(tool: string, rawPayload: unknown): BridgeUiInten
       const title = optStr(payload.title)
       if (title === false) return null
       return { kind: 'timeline', title, events }
+    }
+
+    case 'publish_lecture_notes': {
+      // Live, main forwards the stored summary (no body); on replay this is
+      // the tool_use input itself (with the body). Only the three fields
+      // both shapes share are read — the card fetches the rest from the store.
+      const topic = str(payload.topic)
+      const node = str(payload.node)
+      const title = str(payload.title)
+      if (!topic || !node || !title) return null
+      return { kind: 'lecture-notes', topic, node, title }
     }
 
     case 'define_term': {

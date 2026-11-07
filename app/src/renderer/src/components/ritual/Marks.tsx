@@ -1,3 +1,4 @@
+import { LectureNotesCard } from './LectureNotesCard'
 import { memo, type ReactNode } from 'react'
 import { humanizeNodeId } from '../../../../shared/humanizeId'
 import { MarkdownPreview } from '../MarkdownPreview'
@@ -123,6 +124,10 @@ export type RitualMark = { id: string; atIndex: number } & (
   | { kind: 'crossing'; nodeId: string; verb?: string }
   | { kind: 'stamp' }
   | { kind: 'figure'; title: string | null; body: string }
+  // `accepted: false` (a refused publish the tutor then fixed) renders
+  // nothing; `awaitingRead` is set only on the live sitting's newest notes
+  // until the learner next speaks.
+  | { kind: 'lecture-notes'; topic: string; node: string; title: string; accepted: boolean | null; awaitingRead?: boolean }
   | { kind: 'atlas'; topic: string | null }
   | { kind: 'phase'; phase: string }
   | { kind: 'diagnostic'; items: DiagnosticPlateItem[] }
@@ -381,6 +386,11 @@ export function MarkView({
   if (mark.kind === 'beat') content = <BeatMarkCard beat={mark.beat} content={suppressBeatExcerpt ? '' : mark.content} />
   else if (mark.kind === 'crossing') content = <NodeCrossingDivider nodeId={mark.nodeId} verb={mark.verb} />
   else if (mark.kind === 'figure') content = <FigureCard title={mark.title} body={mark.body} />
+  else if (mark.kind === 'lecture-notes')
+    content =
+      mark.accepted === false ? null : (
+        <LectureNotesCard topic={mark.topic} node={mark.node} title={mark.title} awaitingRead={mark.awaitingRead ?? false} />
+      )
   else if (mark.kind === 'atlas') content = <AtlasBirth topic={mark.topic} />
   else if (mark.kind === 'phase') content = <Frontispiece phase={mark.phase} />
   else if (mark.kind === 'diagnostic') content = <DiagnosticPlate items={mark.items} />

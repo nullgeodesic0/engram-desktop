@@ -1,3 +1,5 @@
+import { LectureNotesPanel } from '../components/LectureNotesPanel'
+import type { LectureNotesSummary } from '../../../shared/lectureNotes'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { TopicListEntry, TopicGraph, MapAnnotations, NodeProvenance, ProvenanceEvent, Misconception, RawReceipt } from '../../../shared/types'
 import { RetentionCurve } from '../components/RetentionCurve'
@@ -348,6 +350,27 @@ export function TopicMapView({
   const [decayReady, setDecayReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedNode, setSelectedNode] = useState<string | null>(null)
+  // Lecture notes saved for this topic's nodes (see lectureNotesStore.ts),
+  // keyed by node id, and the one open in the reader drawer.
+  const [notesByNode, setNotesByNode] = useState<Map<string, LectureNotesSummary>>(new Map())
+  const [notesReader, setNotesReader] = useState<string | null>(null)
+  useEffect(() => setNotesReader(null), [selectedTopic])
+  useEffect(() => {
+    let alive = true
+    if (!selectedTopic) {
+      setNotesByNode(new Map())
+      return
+    }
+    window.engram
+      .listLectureNotes(selectedTopic)
+      .then((list) => alive && setNotesByNode(new Map(list.map((n) => [n.node, n]))))
+      .catch(() => alive && setNotesByNode(new Map()))
+    return () => {
+      alive = false
+    }
+    // Re-read on node selection too: a sitting running in the background may
+    // have written notes since the map was opened.
+  }, [selectedTopic, selectedNode])
   const [openNode, setOpenNode] = useState<string | null>(null)
   // Node whose explorable is currently open in the in-app viewer — separate
   // from selectedNode/openNode so the drawer, the full-node modal, and the
@@ -1184,6 +1207,48 @@ export function TopicMapView({
                 </div>
               </div>
 
+              {/* Lecture notes for this concept — written by the tutor the
+                  first time the learner starts it with Lecture notes on. */}
+              {(() => {
+                const notes = notesByNode.get(selectedNode!)
+                return (
+                  <div className="px-4 py-3 flex flex-col gap-2 border-b border-[var(--color-hairline)]">
+                    <div className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-dim)]">Lecture notes</div>
+                    {notes ? (
+                      <>
+                        <div className="font-(family-name:--font-serif) text-sm text-[var(--color-text-primary)]">{notes.title}</div>
+                        <div className="label-data text-[10px] uppercase tracking-[0.1em] text-[var(--color-text-faint)]">
+                          {[
+                            notes.pages ? `${notes.pages} ${notes.pages === 1 ? 'page' : 'pages'}` : null,
+                            `written ${new Date(notes.writtenAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setNotesReader(selectedNode)}
+                            className="focus-ring label-data text-[11px] uppercase tracking-[0.1em] px-2.5 py-1 border border-[var(--color-ink-warm)] bg-[var(--color-ink-warm)] text-[var(--color-void)]"
+                          >
+                            Read notes
+                          </button>
+                          <button
+                            onClick={() => void window.engram.openLectureNotesPdf(selectedTopic!, selectedNode!)}
+                            className="focus-ring label-data text-[11px] uppercase tracking-[0.1em] px-2.5 py-1 border border-[var(--color-edge)] text-[var(--color-text-dim)] hover:text-[var(--color-text-primary)]"
+                          >
+                            Open PDF
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="text-xs leading-relaxed text-[var(--color-text-dim)]">
+                        Not written yet. With Lecture notes on in Settings, the tutor writes them the first time you start this concept.
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
+
               <div className="p-4 flex flex-col gap-3 divide-y divide-[var(--color-hairline)] [&>*:not(:first-child)]:pt-3">
                 <div className="flex gap-1.5 flex-wrap">
                   {node.capstone && (
@@ -1522,6 +1587,12 @@ export function TopicMapView({
         initialSessionId={historyDrawer?.sessionId}
         anchorIndex={historyDrawer?.anchorIndex}
       />
+
+      {notesReader && selectedTopic && (
+        <div className="fixed right-0 bottom-0 top-[70px] z-40 w-[min(640px,55vw)] min-w-[380px]">
+          <LectureNotesPanel topic={selectedTopic} node={notesReader} onClose={() => setNotesReader(null)} />
+        </div>
+      )}
     </div>
   )
 }
