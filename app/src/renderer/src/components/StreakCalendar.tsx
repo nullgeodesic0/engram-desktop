@@ -15,7 +15,7 @@ function levelColor(count: number, max: number): string {
 function gradeColor(grade: string | null): string {
   if (grade === 'recalled') return 'var(--color-ink-warm)'
   if (grade === 'partial') return 'var(--color-ink-cool)'
-  if (grade === 'lapsed') return 'var(--color-ink-danger)'
+  if (grade === 'lapsed') return 'var(--color-text-dim)'
   return 'var(--color-text-faint)'
 }
 

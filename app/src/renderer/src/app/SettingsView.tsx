@@ -28,6 +28,8 @@ import { friendlyErrorText } from '../shared/friendlyError'
 import { getStoredThemeChoice, setThemeChoice, type ThemeChoice } from '../shared/theme'
 import { deviceNoun, updateCommands } from '../shared/platform'
 import { SUBSCRIPTION_MODEL_OPTIONS } from '../../../shared/subscriptionModels'
+import { punctualityCounts, setPunctualityCounts } from '../shared/gradePrefs'
+import { loadStepSized, saveStepSized } from '../shared/stepSizedPref'
 
 // The install flow differs per platform (a .app copied into /Applications, an
 // NSIS installer, an AppImage), so the list is resolved at render time rather
@@ -654,6 +656,8 @@ export function SettingsView() {
   const [sounds, setSounds] = useState(soundOn())
   const [checkpointAllNodesOn, setCheckpointAllNodesOn] = useState(loadCheckpointAllNodes())
   const [lectureNotesOn, setLectureNotesOnState] = useState(loadLectureNotesOn())
+  const [punctualityOn, setPunctualityOn] = useState(punctualityCounts())
+  const [stepSizedOn, setStepSizedOn] = useState(loadStepSized())
   const [exporting, setExporting] = useState(false)
   const [exportResult, setExportResult] = useState<string | null>(null)
   const [notifier, setNotifier] = useState<NotifierSettings | null>(null)
@@ -826,6 +830,21 @@ export function SettingsView() {
 
   async function toggleDockBadge(v: string) {
     const next = await window.engram.setNotifierSettings({ dockBadgeEnabled: v === 'on' })
+    setNotifier(next)
+  }
+
+  async function setBadgeStyle(v: string) {
+    const next = await window.engram.setNotifierSettings({ badgeStyle: v === 'count' ? 'count' : 'sitting' })
+    setNotifier(next)
+  }
+
+  async function setSittingMinutes(v: string) {
+    const next = await window.engram.setNotifierSettings({ sittingMinutes: Number(v) })
+    setNotifier(next)
+  }
+
+  async function setReminderTime(v: string | null) {
+    const next = await window.engram.setNotifierSettings({ reminderTime: v && /^\d{1,2}:\d{2}$/.test(v) ? v : null })
     setNotifier(next)
   }
 
@@ -1033,7 +1052,7 @@ export function SettingsView() {
         />
         <PickerRow
           label="Focus profile"
-          hint="Dials pacing/feedback for ADHD — never changes pedagogy"
+          hint="Dials pacing and feedback for ADHD. In the app it also keeps the review question pinned above the composer and suggests a break every 25 minutes instead of 45. Never changes what is asked or how it is graded."
           current={model.settings.profile === 'adhd' ? 'on' : 'off'}
           onPick={(v) => setFocus(v as 'on' | 'off')}
           options={[
@@ -1079,6 +1098,32 @@ export function SettingsView() {
           hint="Off by default. When on, an elected Checkpoint sitting may walk ANY node as a chain of picks — including threshold, lapsed, transfer-ready, and procedure nodes normally held to free recall. The recall floor still applies: two checkpoint reviews in a row still force the next one back to real production."
           current={checkpointAllNodesOn ? 'on' : 'off'}
           onPick={(v) => setCheckpointAllNodes(v)}
+          options={[
+            { value: 'off', label: 'Off' },
+            { value: 'on', label: 'On' },
+          ]}
+        />
+        <PickerRow
+          label="Step-sized reviews for derivations"
+          hint="On by default. A review of a multi-step derivation or problem asks for the plan and the one pivotal step instead of the whole thing, so an item takes a few minutes rather than ten or more. Every third review of the same item is still a full solve. Receipts are stamped step-probe so they stay distinguishable."
+          current={stepSizedOn ? 'on' : 'off'}
+          onPick={(v) => {
+            saveStepSized(v === 'on')
+            setStepSizedOn(v === 'on')
+          }}
+          options={[
+            { value: 'off', label: 'Off' },
+            { value: 'on', label: 'On' },
+          ]}
+        />
+        <PickerRow
+          label="Punctuality counts toward grades"
+          hint="How close to the due date reviews happen. Late reviews still work (the scheduler adjusts), so this measures your calendar more than your learning. When off it is still shown on Grades, at no weight."
+          current={punctualityOn ? 'on' : 'off'}
+          onPick={(v) => {
+            setPunctualityCounts(v === 'on')
+            setPunctualityOn(v === 'on')
+          }}
           options={[
             { value: 'off', label: 'Off' },
             { value: 'on', label: 'On' },
@@ -1142,6 +1187,31 @@ export function SettingsView() {
               </div>
             </div>
           </>
+        )}
+        {notifier && (
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex flex-col gap-0.5 min-w-0">
+              <span className="text-sm text-[var(--color-text-primary)]">Remind me at</span>
+              <span className="text-xs text-[var(--color-text-faint)] max-w-[52ch]">
+                Ties the reminder to your plan: one notification a day at this time if anything is due, instead of
+                repeat reminders. Leave empty to keep the cadence below.
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="time"
+                aria-label="Reminder time"
+                value={notifier.reminderTime ?? ''}
+                onChange={(e) => void setReminderTime(e.target.value || null)}
+                className="focus-ring panel px-2 py-1 text-sm bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] text-[var(--color-text-primary)]"
+              />
+              {notifier.reminderTime && (
+                <Button variant="ghost" onClick={() => void setReminderTime(null)}>
+                  Clear
+                </Button>
+              )}
+            </div>
+          </div>
         )}
       </div>
 
@@ -1294,7 +1364,7 @@ export function SettingsView() {
             )}
             <ToggleRow
               label="Dock badge"
-              hint="Shows the number of reviews due on the app icon"
+              hint="A number on the app icon when reviews are waiting"
               current={notifier.dockBadgeEnabled ? 'on' : 'off'}
               onPick={toggleDockBadge}
               options={[
@@ -1302,6 +1372,31 @@ export function SettingsView() {
                 { value: 'on', label: 'On' },
               ]}
             />
+            {notifier.dockBadgeEnabled && (
+              <ToggleRow
+                label="Badge shows"
+                hint="“One sitting” counts what fits a sitting at your measured pace, so the number stops growing after a few days away. “Everything due” is the full backlog."
+                current={notifier.badgeStyle}
+                onPick={setBadgeStyle}
+                options={[
+                  { value: 'sitting', label: 'One sitting' },
+                  { value: 'count', label: 'Everything due' },
+                ]}
+              />
+            )}
+            {(notifier.dockBadgeEnabled || notifier.remindersEnabled) && (
+              <ToggleRow
+                label="Sitting size"
+                hint="The sitting the badge and the reminder describe"
+                current={String(notifier.sittingMinutes)}
+                onPick={setSittingMinutes}
+                options={[
+                  { value: '15', label: '15 min' },
+                  { value: '25', label: '25 min' },
+                  { value: '45', label: '45 min' },
+                ]}
+              />
+            )}
           </>
         )}
         <div className="flex items-center gap-3">

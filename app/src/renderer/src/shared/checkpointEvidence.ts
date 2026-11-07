@@ -64,6 +64,39 @@ export function recallDueNodes(receipts: RawReceipt[]): RecallDueEntry[] {
   return out.sort((a, b) => (a.topic + a.node < b.topic + b.node ? -1 : 1))
 }
 
+/** Source stamp for a step-sized review (the D5-pinned step-sized overlay):
+ * a multi-step derivation reviewed by its plan plus one pivotal step instead
+ * of a full re-derivation. Kept distinguishable forever, like quick-mc. */
+export const STEP_SOURCE = 'step-probe'
+
+/** Two step-sized reviews in a row put a node on the full-solve floor: the
+ * next review is the whole derivation. Step probes keep a long chain cheap
+ * to review; the floor keeps the learner able to run the chain end to end. */
+export const FULL_SOLVE_AFTER = 2
+
+/** Nodes whose last `FULL_SOLVE_AFTER` review receipts are all step-probe
+ * stamped — named in the kickoff as needing a full solve this time. Same
+ * population and reset semantics as `recallDueNodes`. */
+export function fullSolveDueNodes(receipts: RawReceipt[]): RecallDueEntry[] {
+  const byNode = new Map<string, RawReceipt[]>()
+  for (const r of reviewRows(receipts)) {
+    const key = `${r.topic}/${r.node}`
+    const rows = byNode.get(key) ?? []
+    rows.push(r)
+    byNode.set(key, rows)
+  }
+  const out: RecallDueEntry[] = []
+  for (const [key, rows] of byNode) {
+    rows.sort(byTsAscending)
+    const tail = rows.slice(-FULL_SOLVE_AFTER)
+    if (tail.length === FULL_SOLVE_AFTER && tail.every((r) => r.source === STEP_SOURCE)) {
+      const [topic, node] = key.split('/')
+      out.push({ topic, node })
+    }
+  }
+  return out.sort((a, b) => (a.topic + a.node < b.topic + b.node ? -1 : 1))
+}
+
 /** The quiet meter: of the most recent `windowSize` review receipts (across
  * all topics), how many were checkpoint-stamped. Null when there are no
  * review receipts at all — a meter with no data renders nothing, never a

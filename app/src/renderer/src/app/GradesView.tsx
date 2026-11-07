@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { punctualityCounts } from '../shared/gradePrefs'
 import { TopicTitle } from '../components/TopicTitle'
 import { PageHeader } from '../components/ui/PageHeader'
 import type {
@@ -101,7 +102,7 @@ function SubgradeTile({
     >
       <div className="flex items-baseline justify-between gap-2">
         <div className="text-xs text-[var(--color-text-dim)] uppercase tracking-wide">{meta.label}</div>
-        <div className="label-data text-[10px] text-[var(--color-text-faint)] shrink-0">{Math.round(component.weight * 100)}% of grade</div>
+        <div className="label-data text-[10px] text-[var(--color-text-faint)] shrink-0">{component.weight === 0 ? 'not counted · see Settings' : `${Math.round(component.weight * 100)}% of grade`}</div>
       </div>
       <div className={`label-data text-2xl font-medium ${letterColorClass(component.letter)}`}>
         {component.available ? component.letter : <span className="text-[var(--color-text-faint)] text-base">not enough data yet</span>}
@@ -477,10 +478,12 @@ export function GradesView({ onGoSitting, onOpenLedger }: { onGoSitting?: (sessi
   }
 
   const picks = allPicks()
+  // Settings' "Punctuality counts toward grades" (shared/gradePrefs.ts).
+  const countPunctuality = punctualityCounts()
   const grades = new Map<string, TopicGradeResult>(
     topics.map((t) => [
       t.topic,
-      computeTopicGrade({ receipts, topic: t.topic, topicEntry: t, misconceptions, days, picks, mode }),
+      computeTopicGrade({ receipts, topic: t.topic, topicEntry: t, misconceptions, days, picks, mode, countPunctuality }),
     ]),
   )
 
@@ -492,7 +495,7 @@ export function GradesView({ onGoSitting, onOpenLedger }: { onGoSitting?: (sessi
   const trends = new Map<string, TopicGradeTrendPoint[]>(
     topics.map((t) => [
       t.topic,
-      computeTopicGradeTrend({ receipts, topic: t.topic, misconceptions, days, picks, cutoffs }),
+      computeTopicGradeTrend({ receipts, topic: t.topic, misconceptions, days, picks, cutoffs, countPunctuality }),
     ]),
   )
 

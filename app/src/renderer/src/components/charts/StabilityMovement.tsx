@@ -8,7 +8,7 @@ import { ChartTooltip } from './ChartTooltip'
 const GRADE_COLOR: Record<GradeResult['grade'], string> = {
   recalled: 'var(--color-ink-warm)',
   partial: 'var(--color-ink-cool)',
-  lapsed: 'var(--color-ink-danger)',
+  lapsed: 'var(--color-text-dim)',
 }
 
 interface MovementRow {

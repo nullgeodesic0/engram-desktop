@@ -90,6 +90,15 @@ const OVERLAYS: Overlay[] = [
         contentFile: 'engram/review-skill.quick-checkpoint-protocol.md',
         beforeLine: '## 3 · Assessor audit (keep self-grading honest)',
       },
+      {
+        // The learner-elected step-sized protocol for derivation-style items
+        // — a PEDAGOGY overlay under the widened charter. Same slot as the
+        // checkpoint protocol (after it, still before §3), because its audit
+        // rule must be read before the audit section.
+        id: 'step-sized-protocol',
+        contentFile: 'engram/review-skill.step-sized-protocol.md',
+        beforeLine: '## 3 · Assessor audit (keep self-grading honest)',
+      },
     ],
   },
   {

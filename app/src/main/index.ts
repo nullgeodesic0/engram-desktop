@@ -36,7 +36,7 @@ import { buildNewTopicPrefill } from './deepLink'
 import { createDeepLinkQueue } from './deepLinkQueue'
 import { execCli, isMac, isWindows } from './platform'
 import { sweepOrphanTutors } from './session/orphanSweep'
-import type { EnvironmentCheckResult } from '../shared/types'
+import type { EnvironmentCheckResult, NotifierSettings } from '../shared/types'
 import { flushAllCodexTranscripts } from './session/codexTranscript'
 
 // Installed before anything else can throw — see crashLog.ts's own doctrine
@@ -603,11 +603,12 @@ app.whenReady().then(() => {
   ipcMain.handle('notifier:getSettings', () => getNotifierSettings())
   ipcMain.handle(
     'notifier:setSettings',
-    async (_e, patch: { remindersEnabled?: boolean; cadenceMinutes?: number; dockBadgeEnabled?: boolean }) => {
+    async (_e, patch: Partial<NotifierSettings>) => {
       const next = await setNotifierSettings(patch)
       // Clear right away rather than waiting for the next poll — a toggle the
       // user just flipped off should stop lying to them immediately.
       if (!next.dockBadgeEnabled) setTaskbarBadge(mainWindow, 0, resourcePath)
+      else void refreshDueCount(sendDueCount)
       return next
     },
   )

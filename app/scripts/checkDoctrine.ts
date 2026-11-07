@@ -898,7 +898,22 @@ for (const f of FILES) {
 // see. The remaining two `[Attached files — read these for context: ${}]`
 // literals (LearnSessionView.tsx/ReviewSessionView.tsx) are the UNRELATED
 // generic file-attach flow (attachFiles, not attachHandwriting) — untouched.
-const PINNED_MESSAGE_HASH = '5d71ba792b280530'
+// 2026-11-07 re-pin: four standard-sitting kickoffs gain a step-sized
+// twin, sent when the Settings-level "step-sized reviews for derivations"
+// toggle is on (ON by default — shared/stepSizedPref.ts). Each twin is the
+// existing literal plus one sentence in the learner's navigational voice,
+// "For derivation-style items I would like the step-sized style described
+// in the review skill", which names a protocol the review skill itself
+// defines via the D5-pinned review-skill.step-sized-protocol.md overlay —
+// the same licence the checkpoint kickoff has, and that overlay activates
+// ONLY on this per-sitting request. The interpolated `solve` sentence names
+// the app-computed full-solve floor (nodes with two step-probe receipts in a
+// row), exactly as `floor` names the recall floor for checkpoints. The
+// digest twin shortens "filed open for this queue's nodes" to "filed open"
+// to stay inside the 400-char collector net. Nothing says how to teach or
+// judge. Written as complete literals, never an appended variable, so every
+// byte reaches this set. Verified captured un-truncated in the current set.
+const PINNED_MESSAGE_HASH = 'ff5773f7b19e68ba'
 if (sha(injectedMessages.sort().join('\n')) !== PINNED_MESSAGE_HASH) {
   fail(
     'D3.kickoff',
@@ -1125,6 +1140,18 @@ const PINNED_OVERLAY_HASHES: Record<string, string> = {
   // pack scheduler itself identifies as already-encoded-and-due — a tutor
   // never infers "this one can be brief" on its own.
   'learn-skill.mobile-walk-protocol.md': '4f85d56bd5c0b370',
+  // 2026-11-07 — the step-sized protocol for derivation-style review items
+  // (a pedagogy overlay under the widened charter). Reviewing a multi-step
+  // derivation by re-deriving it whole measured 8–14 min an item on the
+  // author's graduate topics; this reviews the plan plus the one pivotal
+  // step instead. Its bargain: opt-in per sitting via the kickoff sentence
+  // (default-on Settings toggle, but the overlay fires only on the sitting's
+  // own request); `good` at best, never `easy`; a permanent
+  // `--source step-probe` stamp; the full-solve floor (two step-probe
+  // reviews in a row → the next is a full solve, computed by the app from
+  // those stamps); and lapsed, relearn, transfer-ready, experiment-arm and
+  // never-fully-solved items keep the normal protocol.
+  'review-skill.step-sized-protocol.md': '1970659f49b664fd',
   'dialogue-grammar.mobile-walk-exception.md': '9cbbd325856c2c76',
   // 2026-11-07 — Lecture Notes, a pedagogy overlay: written notes before beat
   // 1 of a never-encoded node, which the commit-before-content rule forbids
@@ -1230,6 +1257,16 @@ const LOAD_BEARING: Record<string, string[]> = {
     'A third learner-elected exception, this one to the commit-before-content rule',
     'Everywhere else, and by default everywhere, the rule above stands exactly as written.',
   ],
+  'review-skill.step-sized-protocol.md': [
+    'Run this protocol ONLY when the learner\'s opening message for this sitting explicitly asks for the step-sized style',
+    'NEVER `easy`',
+    '`effectively_relearn: true`',
+    '`transfer_ready: true`',
+    'it has no receipt from a full solve yet',
+    'that is the full-solve floor, and the floor is the deal',
+    '--source step-probe',
+    'the assessor grades what was asked, never the whole chain',
+  ],
 }
 for (const [file, needles] of Object.entries(LOAD_BEARING)) {
   if (!overlayFiles.includes(file)) continue
@@ -1270,6 +1307,7 @@ try {
     // add a row in the same commit that adds a pedagogy insertion.
     const EXPECTED_MARKERS: Array<[string, string]> = [
       ['skills/review/SKILL.md', 'engram-desktop-overlay:quick-checkpoint-protocol:start'],
+      ['skills/review/SKILL.md', 'engram-desktop-overlay:step-sized-protocol:start'],
       ['skills/_shared/dialogue-grammar.md', 'engram-desktop-overlay:checkpoint-exception:start'],
       ['skills/learn/SKILL.md', 'engram-desktop-overlay:mobile-walk-protocol:start'],
       ['skills/_shared/dialogue-grammar.md', 'engram-desktop-overlay:mobile-walk-exception:start'],

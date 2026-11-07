@@ -200,8 +200,11 @@ export function computeTopicGrade(inputs: {
    * defaults to today; computeHistoricalTopicGrade passes its cutoff so
    * grace is cutoff-relative and consistent with the resolved_ts mapping. */
   asOf?: string
+  /** False drops punctuality from the overall (it is still computed and
+   * shown, at weight 0). Defaults to true. See shared/gradePrefs.ts. */
+  countPunctuality?: boolean
 }): TopicGradeResult {
-  const { receipts, topic, topicEntry, misconceptions, days, picks, mode, asOf = localToday() } = inputs
+  const { receipts, topic, topicEntry, misconceptions, days, picks, mode, asOf = localToday(), countPunctuality = true } = inputs
 
   // --- recall accuracy: blended (recalled+partial)/n across every bucket,
   // not any single bucket — the buckets are time-since-encode windows, and a
@@ -235,7 +238,7 @@ export function computeTopicGrade(inputs: {
   const PUNCTUALITY_ZERO_AT_DAYS = 14
   const punctualityComponent: ComponentGrade =
     punctuality.n < COMPONENT_MIN_N.punctuality || punctuality.medianDaysLate === null
-      ? notEnoughData(WEIGHTS.punctuality)
+      ? notEnoughData(countPunctuality ? WEIGHTS.punctuality : 0)
       : (() => {
           const score = Math.max(0, Math.min(100, 100 - (punctuality.medianDaysLate / PUNCTUALITY_ZERO_AT_DAYS) * 100))
           return {
@@ -244,7 +247,7 @@ export function computeTopicGrade(inputs: {
             raw: punctuality.medianDaysLate,
             score,
             letter: scoreToLetter(score),
-            weight: WEIGHTS.punctuality,
+            weight: countPunctuality ? WEIGHTS.punctuality : 0,
           }
         })()
 
@@ -398,13 +401,15 @@ export function computeHistoricalTopicGrade(inputs: {
   days: DayActivity[]
   picks: ConfidencePick[]
   cutoff: string
+  countPunctuality?: boolean
 }): TopicGradeResult {
-  const { receipts, topic, misconceptions, days, picks, cutoff } = inputs
+  const { receipts, topic, misconceptions, days, picks, cutoff, countPunctuality = true } = inputs
   const cutoffMs = new Date(`${cutoff}T23:59:59`).getTime()
 
   return computeTopicGrade({
     receipts: receipts.filter((r) => r.ts <= cutoff),
     topic,
+    countPunctuality,
     topicEntry: undefined, // coverage is never available historically — see doctrine comment above
     // A resolution only counts from its own date: a row resolved AFTER the
     // cutoff was still open as of the cutoff, so it maps back to 'open' here
@@ -441,11 +446,12 @@ export function computeTopicGradeTrend(inputs: {
   days: DayActivity[]
   picks: ConfidencePick[]
   cutoffs: string[]
+  countPunctuality?: boolean
 }): TopicGradeTrendPoint[] {
-  const { receipts, topic, misconceptions, days, picks, cutoffs } = inputs
+  const { receipts, topic, misconceptions, days, picks, cutoffs, countPunctuality = true } = inputs
   return cutoffs.map((cutoff) => ({
     cutoff,
-    result: computeHistoricalTopicGrade({ receipts, topic, misconceptions, days, picks, cutoff }),
+    result: computeHistoricalTopicGrade({ receipts, topic, misconceptions, days, picks, cutoff, countPunctuality }),
   }))
 }
 

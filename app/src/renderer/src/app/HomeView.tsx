@@ -31,8 +31,12 @@ import { allPicks } from '../shared/calibrationStore'
 import { ActivityStrip } from '../components/charts/ActivityStrip'
 import { MathRenderer } from '../components/MathRenderer'
 import { environmentIsReady } from '../../../shared/environmentStatus'
+import { planSitting, humanMinutes, type PaceModel } from '../../../shared/sittingPace'
+import { loadSittingPrefs } from '../shared/sittingPrefs'
+import { punctualityCounts } from '../shared/gradePrefs'
+import { rhythmSummary, rhythmLabel, freshStartReason, weekStartYmd, type FreshStartReason } from '../shared/studyRhythm'
 
-const LAST_SEEN_STREAK_KEY = 'engram-desktop:last-seen-streak-days'
+const LAST_FRESH_WEEK_KEY = 'engram-desktop:last-fresh-week'
 const LAST_SEEN_DUE_KEY = 'engram-desktop:last-seen-due-now'
 const FLASHBACK_MIN_DAYS_AGO = 3
 /**
@@ -137,40 +141,70 @@ function greeting(): string {
 function HomeMasthead({
   dueNow,
   topicCount,
-  paceSeconds,
+  sitting,
+  freshStart,
+  commitment,
   pulse,
   onPulseEnd,
+  onStartSitting,
   onGoReview,
 }: {
   dueNow: number
   topicCount: number | null
-  paceSeconds: number | null
+  /** Today's sitting at the saved budget and this learner's measured pace.
+   * Null until the pace model and the due queue have loaded. */
+  sitting: { items: number; seconds: number; minutes: number } | null
+  freshStart: FreshStartReason
+  commitment: { cue: string; action: string } | null
   pulse: boolean
   onPulseEnd: () => void
+  onStartSitting: () => void
   onGoReview: () => void
 }) {
   const live = dueNow > 0
+  // The figure is the SITTING, not the backlog. A raw due count grows every
+  // day away and turns the front door into a debt notice — the exact
+  // signal that stops a learner with ADHD from starting at all. The full
+  // count is still stated, once, as a quiet line under the figure.
+  const items = sitting ? Math.min(sitting.items, dueNow) : dueNow
+  const rest = dueNow - items
+  const heading =
+    freshStart === 'gap' ? 'Welcome back.' : freshStart === 'new-week' ? 'A new week.' : `${greeting()}.`
   return (
     // `items-end`: the two columns share a bottom edge, so the plate reads as
     // one band rather than a tall figure floating beside a short greeting.
     <div className="tilt-card panel-plate px-8 py-7 flex flex-wrap items-end justify-between gap-x-12 gap-y-7">
-      <div className="flex flex-col gap-2 min-w-0">
+      <div className="flex flex-col gap-2 min-w-0 max-w-[44ch]">
         <h1 className="font-(family-name:--font-serif) text-[clamp(1.75rem,3.2vw,2.75rem)] leading-[1.05] tracking-[-0.01em] text-[var(--color-text-primary)]">
-          {greeting()}.
+          {heading}
         </h1>
-        {topicCount !== null && (
-          <p className="text-sm text-[var(--color-text-dim)]">
-            {topicCount} {topicCount === 1 ? 'topic' : 'topics'} in your atlas
+        {/* Fresh start: a temporal landmark named out loud (Dai, Milkman &
+            Riis 2014). It never counts the days away — the point is that
+            nothing carries over but the next sitting. */}
+        {freshStart && live ? (
+          <p className="text-sm text-[var(--color-text-dim)] leading-relaxed">
+            Nothing carries over except what is in front of you. One sitting is the whole ask today.
+          </p>
+        ) : (
+          topicCount !== null && (
+            <p className="text-sm text-[var(--color-text-dim)]">
+              {topicCount} {topicCount === 1 ? 'topic' : 'topics'} in your atlas
+            </p>
+          )
+        )}
+        {/* The return commitment, where it is read every day rather than
+            only at the close of a sitting. An if-then plan works by being
+            in view when the cue arrives (Gollwitzer & Sheeran 2006). */}
+        {commitment && (
+          <p className="text-sm text-[var(--color-ink-warm)] leading-relaxed">
+            <span className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-faint)] mr-2">
+              your plan
+            </span>
+            <MathRenderer text={`${commitment.cue} → ${commitment.action}`} inlineOnly />
           </p>
         )}
       </div>
 
-      {/* The day's one live signal. Kept to a figure, its title, its basis,
-          and the single action — anything else belongs to the Standing plate
-          below, which is where it now lives. */}
-      {/* The action sits BESIDE the figure, not under it: stacked, this column
-          ran ~90px taller than the greeting and left a hole above it. Level,
-          the whole plate is one band. */}
       <div className="flex items-end gap-8 shrink-0 flex-wrap">
         <div className="flex items-baseline gap-4">
           <span
@@ -179,23 +213,36 @@ function HomeMasthead({
             } ${pulse ? 'pulse-once' : ''}`}
             onAnimationEnd={pulse ? onPulseEnd : undefined}
           >
-            {dueNow}
+            {live ? items : 0}
           </span>
           <div className="flex flex-col gap-1">
             <span className="text-sm text-[var(--color-text-primary)]">
-              {live ? 'due for recall now' : 'nothing due right now'}
+              {live ? (items === 1 ? 'item in today’s sitting' : 'items in today’s sitting') : 'nothing due right now'}
             </span>
-            {live && paceSeconds !== null && (
+            {live && sitting && (
               <span className="label-data text-xs text-[var(--color-text-dim)]">
-                about {Math.round((dueNow * paceSeconds) / 60)} min at your pace
+                about {humanMinutes(sitting.seconds)} at your pace
+              </span>
+            )}
+            {live && rest > 0 && (
+              <span className="label-data text-xs text-[var(--color-text-faint)]">
+                {dueNow} due in all · the rest can wait
               </span>
             )}
           </div>
         </div>
         {live && (
-          <Button variant="primary" size="lg" onClick={onGoReview}>
-            Clear today’s reviews
-          </Button>
+          <div className="flex flex-col items-start gap-2">
+            <Button variant="primary" size="lg" onClick={onStartSitting}>
+              Start the sitting
+            </Button>
+            <button
+              onClick={onGoReview}
+              className="focus-ring label-data text-[11px] text-[var(--color-text-dim)] hover:text-[var(--color-text-primary)] transition-colors duration-[var(--dur-fast)]"
+            >
+              {sitting ? `change the ${sitting.minutes}-min budget` : 'choose a budget first'}
+            </button>
+          </div>
         )}
       </div>
     </div>
@@ -323,6 +370,8 @@ function TopicGroup({
 
 interface HomeViewProps {
   onGoReview: () => void
+  /** One-click start of a standard sitting at the saved budget. */
+  onStartSitting: () => void
   onGoTopic: (topicId: string) => void
   onNewTopic: () => void
   /** Deep-link targets for the "Recently viewed" row below — same
@@ -351,6 +400,7 @@ interface HomeViewProps {
  * back here. */
 export function HomeView({
   onGoReview,
+  onStartSitting,
   onGoTopic,
   onNewTopic,
   onGoNode,
@@ -378,7 +428,10 @@ export function HomeView({
   const [activeExperiment, setActiveExperiment] = useState<ActiveExperiment | null>(null)
   const [pendingProductions, setPendingProductions] = useState<number>(0)
   const [updateBehind, setUpdateBehind] = useState(false)
-  const [paceSeconds, setPaceSeconds] = useState<number | null>(null)
+  const [paceModel, setPaceModel] = useState<PaceModel | null>(null)
+  const [dueTopics, setDueTopics] = useState<string[] | null>(null)
+  const [commitment, setCommitment] = useState<{ cue: string; action: string } | null>(null)
+  const [freshStart, setFreshStart] = useState<FreshStartReason>(null)
   // Which "Continue learning" topic actually has an in-progress Learn
   // session — the one card in that group that earns `.dogear` ("the one
   // you're in"). Same `lastSessionFor('learn', …)` probe LearnSessionView's
@@ -404,7 +457,22 @@ export function HomeView({
     window.engram
       .sittingPace()
       .then((m) => {
-        if (alive && m && m.overallMedianSeconds) setPaceSeconds(m.overallMedianSeconds)
+        if (alive && m) setPaceModel(m)
+      })
+      .catch(() => {})
+    // The due queue in engine order, so today's sitting is planned exactly
+    // the way the Review ready plate will plan it (same planSitting walk).
+    window.engram
+      .due()
+      .then((all) => {
+        if (alive) setDueTopics(all.map((d) => d.topic))
+      })
+      .catch(() => {})
+    window.engram
+      .model()
+      .then((m) => {
+        const c = m?.settings?.commitment
+        if (alive && c && (c.cue || c.action)) setCommitment({ cue: c.cue, action: c.action })
       })
       .catch(() => {})
     // Cached only — no network from Home. The daily auto-check refreshes it.
@@ -447,11 +515,27 @@ export function HomeView({
       if (typeof s.active_experiment === 'string' && s.active_experiment.length > 0) {
         window.engram.activeExperiment().then(setActiveExperiment)
       }
-      // A genuinely new streak day, not just "streak_days > 0" on every visit —
-      // localStorage is fine here (renderer-local, decorative, not app state).
-      const lastSeen = Number(localStorage.getItem(LAST_SEEN_STREAK_KEY) ?? '0')
-      if (s.streak_days > lastSeen) emitPulse('streak')
-      localStorage.setItem(LAST_SEEN_STREAK_KEY, String(s.streak_days))
+      // No streak pulse. A celebrated consecutive-day count is the one
+      // number that can be lost in a day, and losing it is measurably
+      // demotivating; see shared/studyRhythm.ts. In its place, a return
+      // after a gap (or the first visit of a new week) is framed as a
+      // fresh start. localStorage only remembers which Monday that framing
+      // was last shown on, so it appears at most once a week.
+      let lastFreshWeek: string | null = null
+      try {
+        lastFreshWeek = localStorage.getItem(LAST_FRESH_WEEK_KEY)
+      } catch {
+        // storage unavailable: the framing may repeat, nothing worse
+      }
+      const fresh = freshStartReason(s.adherence?.return?.days_since_last_session, lastFreshWeek)
+      setFreshStart(fresh)
+      if (fresh === 'new-week') {
+        try {
+          localStorage.setItem(LAST_FRESH_WEEK_KEY, weekStartYmd())
+        } catch {
+          // best-effort
+        }
+      }
 
       // Due-now chip: single pulse only on a real increase since last seen —
       // never on a decrease (clearing reviews) and never on the very first
@@ -470,7 +554,7 @@ export function HomeView({
       if (newlyUnlocked.length > 0) {
         await window.engram.recordUnlockedAchievements(newlyUnlocked.map((a) => a.id))
         setToastQueue(newlyUnlocked)
-        emitPulse('streak')
+        emitPulse('recalled')
       }
     })
     window.engram.topics().then(setTopics)
@@ -558,6 +642,7 @@ export function HomeView({
             days: receiptsHistory.days,
             picks: allPicks(),
             mode: 'completed',
+            countPunctuality: punctualityCounts(),
           }),
         ]),
       )
@@ -583,6 +668,15 @@ export function HomeView({
     return null
   })()
 
+  // Today's sitting: the saved budget, walked over the due queue in engine
+  // order at this learner's own pace — the same planSitting call the Review
+  // ready plate makes, so the number on Home is the number the sitting runs.
+  const sitting = (() => {
+    if (!paceModel || !dueTopics || dueTopics.length === 0) return null
+    const minutes = loadSittingPrefs().mins
+    const plan = planSitting(minutes, dueTopics, paceModel)
+    return { items: plan.items, seconds: plan.predictedSeconds, minutes }
+  })()
 
   return (
     <div className="p-8 flex flex-col gap-8 w-full h-full overflow-y-auto">
@@ -597,9 +691,12 @@ export function HomeView({
             <HomeMasthead
               dueNow={stats.due_now}
               topicCount={topics?.length ?? null}
-              paceSeconds={paceSeconds}
+              sitting={sitting}
+              freshStart={freshStart}
+              commitment={commitment}
               pulse={duePulse}
               onPulseEnd={() => setDuePulse(false)}
+              onStartSitting={onStartSitting}
               onGoReview={onGoReview}
             />
           ) : (
@@ -663,10 +760,13 @@ export function HomeView({
                 needsAttention ? 'border-t border-[var(--color-hairline)] pt-3' : ''
               }`}
             >
+              {/* Rhythm, not streak: a rolling count of days studied. It
+                  recovers on its own and never shows a zero to climb back
+                  from after one day off. See shared/studyRhythm.ts. */}
               <div className="flex items-center justify-between gap-2 text-xs">
-                <span className="text-[var(--color-text-primary)]">Streak</span>
+                <span className="text-[var(--color-text-primary)]">Rhythm</span>
                 <span className="label-data text-[var(--color-text-dim)] shrink-0">
-                  {stats.streak_days} {stats.streak_days === 1 ? 'day' : 'days'}
+                  {receiptsHistory ? rhythmLabel(rhythmSummary(receiptsHistory.days)) : '…'}
                 </span>
               </div>
               {receiptsHistory && <ActivityStrip data={receiptsHistory.days} />}

@@ -169,6 +169,9 @@ export default function App() {
   // (the deepLink idiom, not the signal-counter one: Review may be mounting
   // for the first time when this fires and must still see it).
   const [retestRequest, setRetestRequest] = useState<Misconception | null>(null)
+  // Home's one-click sitting start — a fresh token per press, consumed by
+  // ReviewSessionView once its ready plate has loaded.
+  const [quickStartRequest, setQuickStartRequest] = useState<number | null>(null)
   // App-level ledger instance — Grades' conceptual tile and the palette open
   // it from outside Coach; both instances are closed by default and fetch
   // only when opened, so the double-mount is free. Coach keeps its own.
@@ -457,6 +460,10 @@ export default function App() {
             <div key="home" className="view-transition h-full">
               <HomeView
                 onGoReview={() => goToView('review')}
+                onStartSitting={() => {
+                  setQuickStartRequest(Date.now())
+                  goToView('review')
+                }}
                 onGoTopic={goToTopic}
                 onNewTopic={() => setView('learn')}
                 onGoNode={goToNode}
@@ -486,6 +493,8 @@ export default function App() {
                 onActivity={(a) => setActivity((prev) => ({ ...prev, review: a }))}
                 retestRequest={retestRequest}
                 onRetestConsumed={() => setRetestRequest(null)}
+                quickStartRequest={quickStartRequest}
+                onQuickStartConsumed={() => setQuickStartRequest(null)}
               />
             </KeepMounted>
           )}

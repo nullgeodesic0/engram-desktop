@@ -2,6 +2,9 @@ import { app, Notification } from 'electron'
 import { engramRead } from '../engramCli/readOnly'
 import { getNotifierSettings, getNotifiedSignature, recordNotified } from './notifierState'
 import type { NotifierSettings } from '../../shared/types'
+import { measurePace } from './paceScan'
+import { planSitting, humanMinutes, type PaceModel } from '../../shared/sittingPace'
+import { badgeFigure, reminderDue, notificationCopy } from './reminderPolicy'
 
 const CHECK_INTERVAL_MS = 5 * 60_000 // poll every 5 min; the settings' cadence throttles actual notifications, not this poll
 
@@ -31,10 +34,38 @@ export function installBadgeSetter(fn: (count: number) => void): void {
   badgeSetter = fn
 }
 
-/** Mirrors the due count onto the app icon — 0 clears it, both when the
- * setting is off and when nothing is due. */
-function updateBadge(settings: NotifierSettings, dueCount: number): void {
-  badgeSetter(settings.dockBadgeEnabled ? dueCount : 0)
+/** The pace model is a transcript scan — cheap but not free — so it is cached
+ * for an hour; the badge only needs to be roughly right about a sitting. */
+let paceCache: { at: number; model: PaceModel } | null = null
+async function paceModel(): Promise<PaceModel | null> {
+  if (paceCache && Date.now() - paceCache.at < 60 * 60_000) return paceCache.model
+  try {
+    const model = await measurePace()
+    paceCache = { at: Date.now(), model }
+    return model
+  } catch {
+    return null
+  }
+}
+
+interface SittingFit {
+  items: number
+  seconds: number
+}
+
+async function fitSitting(settings: NotifierSettings, due: DueItemLite[]): Promise<SittingFit | null> {
+  if (due.length === 0) return { items: 0, seconds: 0 }
+  const model = await paceModel()
+  if (!model) return null
+  const plan = planSitting(settings.sittingMinutes, due.map((d) => d.topic), model)
+  return { items: plan.items, seconds: plan.predictedSeconds }
+}
+
+/** Mirrors today's sitting (or, in `count` style, the raw due count) onto the
+ * app icon — 0 clears it, both when the setting is off and when nothing is
+ * due. */
+function updateBadge(settings: NotifierSettings, dueCount: number, fit: SittingFit | null): void {
+  badgeSetter(badgeFigure(settings, dueCount, fit?.items ?? null))
 }
 
 /**
@@ -47,7 +78,8 @@ function updateBadge(settings: NotifierSettings, dueCount: number): void {
 async function checkAndMaybeNotify(onClick: () => void, onDueCount?: (count: number) => void): Promise<void> {
   const settings = await getNotifierSettings()
   const due = await currentDue().catch(() => [])
-  updateBadge(settings, due.length)
+  const fit = await fitSitting(settings, due)
+  updateBadge(settings, due.length, fit)
   onDueCount?.(due.length)
 
   if (!settings.remindersEnabled) return
@@ -55,21 +87,21 @@ async function checkAndMaybeNotify(onClick: () => void, onDueCount?: (count: num
 
   const signature = due.map((d) => `${d.topic}:${d.id}`).sort().join(',')
   const { lastNotifiedAt, lastSignature } = await getNotifiedSignature()
-  const elapsedMs = lastNotifiedAt ? Date.now() - new Date(lastNotifiedAt).getTime() : Infinity
-  if (signature === lastSignature && elapsedMs < settings.cadenceMinutes * 60_000) return
+  if (!reminderDue(settings, { lastNotifiedAt, lastSignature, signature }, new Date())) return
 
-  fireNotification(due.length, onClick)
+  fireNotification(settings, due.length, fit, onClick)
   await recordNotified(signature)
 }
 
 /** The action button only renders on macOS when the app is signed and the
  * notification style allows it — `on('click')` (anywhere on the banner) stays
  * the primary, always-working navigation path; the button is an extra. */
-function fireNotification(count: number, onClick: () => void): void {
+function fireNotification(settings: NotifierSettings, count: number, fit: SittingFit | null, onClick: () => void): void {
+  const copy = notificationCopy(settings, count, fit ? { items: fit.items, minutes: humanMinutes(fit.seconds) } : null)
   const n = new Notification({
-    title: count === 1 ? '1 review due' : `${count} reviews due`,
-    body: 'Engram Desktop — clear them in a couple of minutes.',
-    actions: [{ type: 'button', text: 'Review now' }],
+    title: copy.title,
+    body: copy.body,
+    actions: [{ type: 'button', text: 'Start the sitting' }],
   })
   n.on('click', onClick)
   n.on('action', onClick)
@@ -97,10 +129,11 @@ export function stopReviewNotifier(): void {
 export async function checkReviewsNow(onClick: () => void, onDueCount?: (count: number) => void): Promise<{ dueCount: number }> {
   const settings = await getNotifierSettings()
   const due = await currentDue().catch(() => [])
-  updateBadge(settings, due.length)
+  const fit = await fitSitting(settings, due)
+  updateBadge(settings, due.length, fit)
   onDueCount?.(due.length)
   if (due.length > 0) {
-    fireNotification(due.length, onClick)
+    fireNotification(settings, due.length, fit, onClick)
     const signature = due.map((d) => `${d.topic}:${d.id}`).sort().join(',')
     await recordNotified(signature)
   }
@@ -115,7 +148,7 @@ export async function checkReviewsNow(onClick: () => void, onDueCount?: (count: 
 export async function refreshDueCount(onDueCount?: (count: number) => void): Promise<{ dueCount: number }> {
   const settings = await getNotifierSettings()
   const due = await currentDue().catch(() => [])
-  updateBadge(settings, due.length)
+  updateBadge(settings, due.length, await fitSitting(settings, due))
   onDueCount?.(due.length)
   return { dueCount: due.length }
 }

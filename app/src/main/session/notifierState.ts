@@ -13,6 +13,9 @@ const DEFAULTS: NotifierState = {
   remindersEnabled: true,
   cadenceMinutes: 30,
   dockBadgeEnabled: true,
+  badgeStyle: 'sitting',
+  sittingMinutes: 25,
+  reminderTime: null,
   lastNotifiedAt: null,
   lastSignature: null,
 }
@@ -34,16 +37,20 @@ async function write(state: NotifierState): Promise<void> {
   await writeFile(statePath(), JSON.stringify(state, null, 2), 'utf-8')
 }
 
+function settingsOf(state: NotifierState): NotifierSettings {
+  const { remindersEnabled, cadenceMinutes, dockBadgeEnabled, badgeStyle, sittingMinutes, reminderTime } = state
+  return { remindersEnabled, cadenceMinutes, dockBadgeEnabled, badgeStyle, sittingMinutes, reminderTime }
+}
+
 export async function getNotifierSettings(): Promise<NotifierSettings> {
-  const { remindersEnabled, cadenceMinutes, dockBadgeEnabled } = await read()
-  return { remindersEnabled, cadenceMinutes, dockBadgeEnabled }
+  return settingsOf(await read())
 }
 
 export async function setNotifierSettings(patch: Partial<NotifierSettings>): Promise<NotifierSettings> {
   const state = await read()
   const next = { ...state, ...patch }
   await write(next)
-  return { remindersEnabled: next.remindersEnabled, cadenceMinutes: next.cadenceMinutes, dockBadgeEnabled: next.dockBadgeEnabled }
+  return settingsOf(next)
 }
 
 export async function getNotifiedSignature(): Promise<{ lastNotifiedAt: string | null; lastSignature: string | null }> {

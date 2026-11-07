@@ -305,6 +305,18 @@ export interface NotifierSettings {
   remindersEnabled: boolean
   cadenceMinutes: number
   dockBadgeEnabled: boolean
+  /** What the dock badge counts. `sitting` (the default) is the number of
+   * items that fit one sitting of `sittingMinutes` at the learner's measured
+   * pace, so the badge never grows into a backlog figure after a few days
+   * away. `count` is the raw due count, the pre-2026-11 behaviour. */
+  badgeStyle: 'sitting' | 'count'
+  /** The sitting size the badge and the reminder describe, in minutes. */
+  sittingMinutes: number
+  /** Local "HH:MM" at which to remind, tied to the learner's return
+   * commitment. When set, the reminder fires once a day at or after this
+   * time (if anything is due) instead of on the rolling cadence. Null keeps
+   * the cadence. */
+  reminderTime: string | null
 }
 
 /** Dual-mode auth (suite doctrine, mirrored from Observatory Desktop).

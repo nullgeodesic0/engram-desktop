@@ -5,6 +5,7 @@ import type { EngramStats, ReceiptsHistory, ReceiptItem, TopicGraph, TopicListEn
 import { CoachSessionPanel } from '../components/CoachSessionPanel'
 import { SkeletonBar, SkeletonGrid } from '../components/Skeleton'
 import { StreakCalendar } from '../components/StreakCalendar'
+import { rhythmSummary } from '../shared/studyRhythm'
 import { RetentionTrend } from '../components/RetentionTrend'
 import { quickShare } from '../shared/checkpointEvidence'
 import { RetentionCurve } from '../components/charts/RetentionCurve'
@@ -359,7 +360,12 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts, coachHomeSi
         <div className="grid grid-cols-3 gap-3">
           <StatBlock label="Due now" value={String(stats.due_now)} />
           <StatBlock label="Pending grading" value={String(stats.pending_verify)} />
-          <StatBlock label="Streak" value={`${stats.streak_days}d`} />
+          {/* Days studied in the last 30, not a consecutive streak: it cannot
+              be lost in one missed day (see shared/studyRhythm.ts). */}
+          <StatBlock
+            label="Days studied · 30d"
+            value={history ? String(rhythmSummary(history.days).month) : '…'}
+          />
         </div>
       </div>
 

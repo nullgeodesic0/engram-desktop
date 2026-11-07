@@ -15,11 +15,38 @@ import { memo, useEffect, useState } from 'react'
  * (ContextGauge, the export status line). `running` stops the interval
  * (session ended/left) without unmounting the display — it freezes at
  * whatever it last read rather than disappearing. */
+/** Time-blindness support (2026-11). Two optional additions, both quiet:
+ *
+ * - `budgetMinutes`: the clock also says how much of the declared budget is
+ *   left, then "budget reached — a complete sitting" once it is spent. Time
+ *   shown as remaining-of-budget is the accommodation; elapsed alone asks the
+ *   learner to do the subtraction their sense of time is worst at. Reaching
+ *   the budget is stated as completion, never as overrun.
+ * - `breakEveryMinutes`: at each multiple, a one-line break suggestion with a
+ *   dismiss. Micro-breaks restore vigour but only longer breaks helped
+ *   performance on demanding tasks (Albulescu et al. 2022), so the copy asks
+ *   for a real one. */
+export function pacerState(
+  elapsedSeconds: number,
+  budgetMinutes: number | null | undefined,
+  breakEveryMinutes: number | null | undefined,
+): { leftMinutes: number | null; budgetReached: boolean; breakIndex: number } {
+  const budget = budgetMinutes && budgetMinutes > 0 ? budgetMinutes * 60 : null
+  const leftMinutes = budget === null ? null : Math.max(0, Math.ceil((budget - elapsedSeconds) / 60))
+  const breakIndex =
+    breakEveryMinutes && breakEveryMinutes > 0 ? Math.floor(elapsedSeconds / (breakEveryMinutes * 60)) : 0
+  return { leftMinutes, budgetReached: budget !== null && elapsedSeconds >= budget, breakIndex }
+}
+
 export const SittingClock = memo(function SittingClock({
   startedAt,
   running,
   label,
+  budgetMinutes = null,
+  breakEveryMinutes = null,
 }: {
+  budgetMinutes?: number | null
+  breakEveryMinutes?: number | null
   /** `Date.now()` at fresh-start or resume — never the engine's own record
    * of when a sitting FIRST began; see the doctrine comment above for why
    * that distinction matters for a resumed session. */
@@ -38,10 +65,34 @@ export const SittingClock = memo(function SittingClock({
   const totalSeconds = Math.max(0, Math.floor((now - startedAt) / 1000))
   const mm = Math.floor(totalSeconds / 60)
   const ss = totalSeconds % 60
+  const pace = pacerState(totalSeconds, budgetMinutes, breakEveryMinutes)
+  const [dismissedBreak, setDismissedBreak] = useState(0)
+  const showBreak = running && pace.breakIndex > 0 && pace.breakIndex > dismissedBreak
   return (
-    <span className="label-data text-[10px] font-mono text-[var(--color-text-faint)] tabular-nums shrink-0">
-      {String(mm).padStart(2, '0')}:{String(ss).padStart(2, '0')}
-      {label ? ` · ${label}` : ''}
+    <span className="inline-flex items-center gap-2 shrink-0">
+      <span className="label-data text-[10px] font-mono text-[var(--color-text-faint)] tabular-nums">
+        {String(mm).padStart(2, '0')}:{String(ss).padStart(2, '0')}
+        {label ? ` · ${label}` : ''}
+        {pace.leftMinutes !== null &&
+          (pace.budgetReached
+            ? ' · budget reached — a complete sitting'
+            : ` · ${pace.leftMinutes} min left of ${budgetMinutes}`)}
+      </span>
+      {showBreak && (
+        <span
+          role="status"
+          className="label-data text-[10px] text-[var(--color-ink-cool)] inline-flex items-center gap-1.5 border border-[var(--color-ink-cool-dim)] px-1.5 py-0.5"
+        >
+          {pace.breakIndex * (breakEveryMinutes ?? 0)} min in · stand up for a few minutes, it helps the next hour
+          <button
+            onClick={() => setDismissedBreak(pace.breakIndex)}
+            aria-label="Dismiss break suggestion"
+            className="focus-ring no-press text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]"
+          >
+            ×
+          </button>
+        </span>
+      )}
     </span>
   )
 })

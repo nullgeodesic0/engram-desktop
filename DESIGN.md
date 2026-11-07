@@ -198,7 +198,7 @@ A narrow-band palette of ink colors on a warmed near-black, where hue carries me
 
 **The Consolidation Axis Rule.** Cool and warm are not "accent 1" and "accent 2." Cool means *not yet consolidated*; warm means *survived*. A warm accent on something that has not consolidated is a defect, not a style choice. Nothing may be recolored along this axis for visual balance.
 
-**The Reserved Danger Rule.** Danger ink marks a learner's struggle or a lapsed memory. It is never the color of a validation error, a failed network call, a destructive-action button, or a generic alert. Those need their own treatment — usually text, not hue. Nor is it the color of work that is merely due or overdue: a due count, an overdue note, the sitting ruler's overdue underline and the topic ring's due notch are the schedule's state, not the learner's mistake, so they take warm ink and spell the fact out in words.
+**The Reserved Danger Rule.** Danger ink marks a learner's struggle: a misconception filed, a topic sliding to a D or F. It does not mark a lapsed memory — a lapse is the scheduler working, the card simply comes back sooner, and it renders in neutral dim ink with future-tense copy ("back sooner"). A transcript of red receipts reads as a failure report to the learners who can least afford one (emotion dysregulation in adult ADHD, g = 1.17). Danger ink is never the color of a validation error, a failed network call, a destructive-action button, or a generic alert. Those need their own treatment — usually text, not hue. Nor is it the color of work that is merely due or overdue: a due count, an overdue note, the sitting ruler's overdue underline and the topic ring's due notch are the schedule's state, not the learner's mistake, so they take warm ink and spell the fact out in words.
 
 *One standing exception: the window close control in `TitleBar`.* Its red is not this product's semantics but the platform's — a macOS traffic light that is not red reads as broken chrome, and no learner will mistake the window controls for a grade. The exception is exactly one control, and it does not generalize to destructive actions inside the app, which stay under the rule.
 
@@ -309,7 +309,7 @@ Navigation is one tab strip (`CommandStrip`) on every screen, Home included. Des
 
 ### Chips
 - **Style:** `.label-data` at 10px, `px-1.5 py-0.5`, hairline border, a 68% `surface-3` wash, dim text.
-- **State:** selected chips take the environment accent's filled treatment; a removable chip's inline dismiss brightens to primary text on hover — never danger ink, which the Reserved Danger Rule above keeps for a learner's lapse.
+- **State:** selected chips take the environment accent's filled treatment; a removable chip's inline dismiss brightens to primary text on hover — never danger ink, which the Reserved Danger Rule above keeps for a learner's struggle.
 
 ### Cards / Containers
 - **Corner style:** `0px`.
@@ -343,7 +343,7 @@ Tutor prose in this transcript is set as a page rather than as chat: its own ser
 ## Do's and Don'ts
 
 ### Do:
-- **Do** encode state in ink: cool for unconsolidated, warm for survived, violet for synthesis, danger for lapse.
+- **Do** encode state in ink: cool for unconsolidated, warm for survived, violet for synthesis, danger for misconceptions and struggle, neutral dim for a lapse.
 - **Do** route every learner- or tutor-authored string through the math renderer, including titles, chips, labels, and captions.
 - **Do** use the two motion tokens — `--dur-fast` 120ms for buttons and color shifts, `--dur-base` 200ms with `--ease-out-soft` for panels, rows, cards, and view transitions.
 - **Do** reach for `.panel`, `.panel-raised`, `.panel-plate`, `.label-data`, `.fig-caption`, `.focus-ring`, and the `CTRL` recipes before writing new chrome. The idioms exist; a new one is a claim that all of them are wrong.
