@@ -1043,31 +1043,6 @@ export function SettingsView() {
       <div className="panel px-5 py-5 flex flex-col gap-3">
         <SectionBanner label="Return commitment" className="border-t-0" />
         <DendriteDivider />
-        {notifier && (
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            <div className="flex flex-col gap-0.5 min-w-0">
-              <span className="text-sm text-[var(--color-text-primary)]">Remind me at</span>
-              <span className="text-xs text-[var(--color-text-faint)] max-w-[52ch]">
-                Ties the reminder to your plan: one notification a day at this time if anything is due, instead of
-                repeat reminders. Leave empty to keep the cadence below.
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="time"
-                aria-label="Reminder time"
-                value={notifier.reminderTime ?? ''}
-                onChange={(e) => void setReminderTime(e.target.value || null)}
-                className="focus-ring panel px-2 py-1 text-sm bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] text-[var(--color-text-primary)]"
-              />
-              {notifier.reminderTime && (
-                <Button variant="ghost" onClick={() => void setReminderTime(null)}>
-                  Clear
-                </Button>
-              )}
-            </div>
-          </div>
-        )}
         {model.settings.commitment && !editingCommitment ? (
           <>
             <div className="text-sm text-[var(--color-text-dim)]">
@@ -1122,6 +1097,31 @@ export function SettingsView() {
               </div>
             </div>
           </>
+        )}
+        {notifier && (
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex flex-col gap-0.5 min-w-0">
+              <span className="text-sm text-[var(--color-text-primary)]">Remind me at</span>
+              <span className="text-xs text-[var(--color-text-faint)] max-w-[52ch]">
+                Ties the reminder to your plan: one notification a day at this time if anything is due, instead of
+                repeat reminders. Leave empty to keep the cadence below.
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="time"
+                aria-label="Reminder time"
+                value={notifier.reminderTime ?? ''}
+                onChange={(e) => void setReminderTime(e.target.value || null)}
+                className="focus-ring panel px-2 py-1 text-sm bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] text-[var(--color-text-primary)]"
+              />
+              {notifier.reminderTime && (
+                <Button variant="ghost" onClick={() => void setReminderTime(null)}>
+                  Clear
+                </Button>
+              )}
+            </div>
+          </div>
         )}
       </div>
 
