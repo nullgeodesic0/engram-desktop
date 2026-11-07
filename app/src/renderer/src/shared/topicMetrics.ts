@@ -110,7 +110,7 @@ export function rangeBounds(key: RangeKey, now: Date = new Date()): DateRange | 
  * Local calendar-date formatting only (`T00:00:00`, never toISOString/UTC),
  * matching TopicDrilldownView's own `formatDate`. */
 export function rangeCaption(key: RangeKey, bounds: DateRange | null): string {
-  if (!bounds) return 'all time — last 180 days'
+  if (!bounds) return 'last 180 days' // the receipts history window; "all time" here contradicted itself
   const fmt = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   const opt = RANGE_OPTIONS.find((o) => o.value === key)
   return `${opt?.label ?? key} — ${fmt(bounds.from)}–${fmt(bounds.to)}`

@@ -21,6 +21,7 @@ import { loadTopicSort, saveTopicSort, loadTopicGroup, saveTopicGroup, type Topi
 import { groupTopicsByFolder, TOPIC_GROUP_OPTIONS } from '../shared/topicFolders'
 import { Modal } from '../components/ui/Modal'
 import { MathRenderer } from '../components/MathRenderer'
+import { TopicTitle } from '../components/TopicTitle'
 import { SessionHistoryDrawer } from '../components/SessionHistoryDrawer'
 import { ExplorableViewer } from '../components/ExplorableViewer'
 import { friendlyErrorText } from '../shared/friendlyError'
@@ -795,7 +796,7 @@ export function TopicMapView({
                       aria-pressed={selectedTopic === t.topic}
                       className={`${selectedTopic === t.topic ? CTRL_FILLED : CTRL_QUIET} max-w-64 truncate text-left`}
                     >
-                      {t.topic}
+                      <TopicTitle title={t.title || t.topic} />
                     </button>
                   ))}
                 </div>
@@ -812,7 +813,7 @@ export function TopicMapView({
                 aria-pressed={selectedTopic === t.topic}
                 className={`${selectedTopic === t.topic ? CTRL_FILLED : CTRL_QUIET} max-w-64 truncate text-left`}
               >
-                {t.topic}
+                <TopicTitle title={t.title || t.topic} />
               </button>
             ))}
           </div>

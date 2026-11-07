@@ -126,7 +126,7 @@ export function MessageComposer({
   }
 
   return (
-    <div className="shrink-0 flex flex-col gap-2 border border-[var(--color-edge)] p-3">
+    <div className="shrink-0 flex flex-col gap-2 border border-[var(--color-edge)] p-3 bg-[color-mix(in_srgb,var(--color-surface)_92%,transparent)]">
       {attachedFiles.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {attachedFiles.map((path) => (

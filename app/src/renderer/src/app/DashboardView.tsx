@@ -400,7 +400,7 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts, coachHomeSi
         <>
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="text-xs text-[var(--color-text-dim)]">
-              Range — <span className="label-data text-[var(--color-text-primary)]">{rangeText}</span>
+              Showing <span className="label-data text-[var(--color-text-primary)]">{rangeText}</span>
             </div>
             <SegmentedControl
               options={RANGE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}

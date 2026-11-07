@@ -63,7 +63,7 @@ export function CommandStrip({
   }
 
   return (
-    <div className="shrink-0 flex items-stretch gap-0.5 px-3 border-b border-[var(--color-hairline)] bg-[color-mix(in_srgb,var(--color-surface)_62%,transparent)]">
+    <div className="shrink-0 flex items-stretch gap-0.5 px-3 border-b border-[var(--color-hairline)] bg-[color-mix(in_srgb,var(--color-surface)_92%,transparent)]">
       {home && tab(home)}
       {GROUP_ORDER.map((group) => {
         const items = nav.filter((n) => n.id !== 'home' && (NAV_GROUPS[n.id] ?? 'explore') === group)
