@@ -1,7 +1,7 @@
 {
   "name": "engram-desktop",
   "version": "0.1.5",
-  "description": "A custom desktop app for the Engram Claude Code learning plugin \u2014 scripts the claude CLI directly, no API billing.",
+  "description": "A custom desktop app for the Engram Claude Code learning plugin — scripts the claude CLI directly, no API billing.",
   "author": {
     "name": "Tyler Hadsell",
     "email": "52475218+nullgeodesic0@users.noreply.github.com"
@@ -38,13 +38,11 @@
     "@fontsource/inter": "^5.3.0",
     "@fontsource/space-grotesk": "^5.3.0",
     "@modelcontextprotocol/sdk": "^1.0.0",
-    "@types/three": "^0.185.1",
     "cross-spawn": "^7.0.6",
     "katex": "^0.18.0",
     "marked": "^18.0.6",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "three": "^0.185.1",
     "which": "^5.0.0",
     "zod": "^3.24.0"
   },

@@ -216,7 +216,7 @@ export function NodeTable({
 
       <div className="flex-1 min-h-0 overflow-auto px-3 pb-3">
         <table className="w-full text-xs border-collapse">
-          <thead className="sticky top-0 bg-[color-mix(in_srgb,var(--color-surface)_92%,transparent)] backdrop-blur-md z-10">
+          <thead className="sticky top-0 bg-[var(--color-surface)] z-10">
             <tr className="border-b border-[var(--color-hairline)]">
               {COLUMNS.map((col) => {
                 const active = sortKey === col.key

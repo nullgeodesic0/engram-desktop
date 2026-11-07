@@ -158,13 +158,13 @@ Santiago Ramón y Cajal drew the nervous system in sepia ink on paper — patien
 
 The metaphor is not decoration. This app is a window onto a spaced-repetition engine and it exists to make a learner sit down for half an hour and retrieve difficult material from memory. An atlas is exactly the right register for that: it is a record made carefully, over time, of something the maker was trying to understand. So the interface behaves like an instrument panel rather than a product tour. It states what it measured, it does not congratulate, and it holds a dense transcript legibly for the length of a real sitting. Density is a feature — this is a surface people read, not glance at.
 
-The system's own tension is that it is simultaneously very dark, very sharp, and very physical. Right angles everywhere, hairline borders, translucent glass over an ambient field, and a card-scale 3D tilt just barely above the threshold of perception. Nothing here is soft. But nothing here shouts either: the whole palette lives in a narrow band of luminance and the loudest thing on screen is usually one amber word.
+The system's own tension is that it is simultaneously very dark, very sharp, and very physical. Right angles everywhere, hairline borders, paper sheets over a still Nave ground, and a card-scale 3D tilt just barely above the threshold of perception. Nothing here is soft. But nothing here shouts either: the whole palette lives in a narrow band of luminance and the loudest thing on screen is usually one amber word.
 
 **Key Characteristics:**
 - Warm-black ground (`#0d0e12`), warm paper text (`#e6dfd0`) — never a cold gray/white pairing.
 - Zero radius everywhere by decree; `rounded-full` is the single reserved exception for organic marks.
 - Semantic ink: color encodes memory state, not visual hierarchy.
-- Near-opaque glass panels (90–97% fill, 12px blur) over an ambient field that always paints behind content, at reduced strength.
+- Opaque Folio sheets (grain under a paper wash, two sheets peeking out behind, a dog-ear) over the Nave ground: static paper grain, three slow-swaying light shafts, a hairline arch and two gutter windows holding knots. No blur and no WebGL anywhere; see index.css's Nave Folio block and components/NaveGround.tsx.
 - Card physics on demand — dashboard cards tilt toward the pointer while hovered and sit flat and aligned at rest.
 - Two motion durations for the entire app: 120ms and 200ms.
 
@@ -254,7 +254,7 @@ Responsiveness is a desktop concern rather than a mobile one — this is a macOS
 Hybrid, and unusually literal about it. Depth comes from four stacked mechanisms, all four of which are signature:
 
 1. **Tonal layering** — three surface tiers (`surface` / `surface-2` / `surface-3`) establish rank before any shadow does.
-2. **Glass** — panels are near-opaque (`color-mix` at 90% for `.panel`, 92% for `.panel-raised` and `.panel-plate`) over `backdrop-filter: blur(12px)`, so the ambient field reads in the gutters and only faintly through a card. Inside the transcript (`.chat-glass`) the fill is 97%: prose is read for half an hour and nothing should move behind it. The light theme uses 92/94/94/97/97%. The field itself (`.neural-field-root`) sits at `z-index: -1` and 45% opacity (60% in light), so it can never paint over unpositioned text. Design review 1 (2026-11-07) raised these from 62–82% after lines were seen crossing nav labels, the transcript and Submit.
+2. **Folio sheets** (2026-11-07, after RaftHad's Nave Folio) — `.panel`, `.panel-raised` and `.panel-plate` are opaque paper: the grain tile under a 90% wash of the surface, 4px shoulders, two sheets stacked below in box-shadow and a 14px dog-ear. A sheet inside a sheet, a form field, and every card in a transcript (`.chat-glass`) is one flat sheet with no stack or dog-ear. This replaced glass over `backdrop-filter: blur(12px)` above the WebGL NeuralField, which together redrew and re-blurred the window every frame and were the app's idle heat. The ground (`.nf-ground`) sits at `z-index: -1`; its shafts and gutter windows are switched off while a transcript is open (`data-shafts`), and the shafts' sway pauses whenever the window is unfocused (`data-awake`).
 3. **Shadow** — a single two-part recipe: a hairline top catch-light plus a soft, high-offset drop. Direction is theme-aware: a near-black bruise on the dark ground, a low-alpha warm-ink lift on the pale one.
 4. **Card physics** — dashboard cards (`.tilt-card`) sit in shallow 3D through `perspective(1200px)` and respond to the pointer while hovered: a damped tilt (≤3.2° at the edges) where the corner under the cursor dips *away*, as if pressed. At rest every card is flat. The original idle drift was retired in design review 1 (2026-11-07) because it held bordered cards visibly out of alignment and moved text while it was read; transcript (`.tilt-card-soft`) and rail (`.tilt-card-rail`) surfaces no longer move at all.
 
@@ -313,8 +313,8 @@ Navigation is one tab strip (`CommandStrip`) on every screen, Home included. Des
 
 ### Cards / Containers
 - **Corner style:** `0px`.
-- **Background:** `.panel` (surface, 90%), `.panel-raised` (surface-2, 92%), `.panel-plate` (surface 92% with a warm inset frame). Inside `.chat-glass` both step up to 97%.
-- **Shadow strategy:** see Elevation — catch-light plus soft drop, `backdrop-filter: blur(12px)`.
+- **Background:** `.panel` (surface), `.panel-raised` (surface-2), `.panel-plate` (surface with a warm inset frame), all opaque with the grain under a paper wash. Inside `.chat-glass` they are 97% and flat.
+- **Shadow strategy:** see Elevation — the Folio stack (two hairline sheets below), no blur.
 - **Border:** `1px solid var(--color-edge)`.
 - **Internal padding:** `px-3 py-2.5` standard; `gap-1` tight, `gap-1.5` default.
 

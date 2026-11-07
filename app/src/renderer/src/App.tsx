@@ -292,6 +292,16 @@ export default function App() {
     prevReviewActive.current = activity.review.active
   }, [activity.review.active])
 
+  // The Nave ground's light shafts belong to the overview pages. While a
+  // transcript is open (a live Learn or Review session, or Coach, whose view
+  // id is 'dashboard') long reading sits on plain paper, so they are
+  // switched off — see NaveGround.
+  const shaftsOff =
+    view === 'dashboard' || (view === 'learn' && activity.learn.active) || (view === 'review' && activity.review.active)
+  useEffect(() => {
+    document.documentElement.dataset.shafts = shaftsOff ? 'off' : 'on'
+  }, [shaftsOff])
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       // F9: none of this global nav/help wiring should fire while a

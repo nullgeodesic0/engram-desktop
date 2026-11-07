@@ -68,6 +68,13 @@ const CLICK_SLOP = 4
  * neighbours visibly resettle, low enough that a plate at rest looks at
  * rest rather than perpetually trembling. Reheated higher on drag. */
 const IDLE_ALPHA = 0.02
+/** How many frames the simulation may keep ticking at IDLE_ALPHA before the
+ * plate is declared at rest (~3s at 60fps). At idle alpha the forces never
+ * quite balance — a few nodes keep creeping just above REST_SPEED — so
+ * without this budget `simHot` stayed true forever and an untouched map
+ * repainted every frame (~35% GPU at idle on a software renderer). Anything
+ * that reheats (a drag, a region focus, new data, new settings) resets it. */
+const IDLE_SETTLE_FRAMES = 180
 /** Lowered from an initial 0.5 — a reader reported "very large shaking
  * effects" on other nodes while dragging. Traced (layout.test.ts's own
  * diagnostic sweep) to `stepSimulation`'s repulsion term: force scales
@@ -123,6 +130,7 @@ export class GraphEngine {
   private flight: { plan: ReturnType<typeof planFlight>; start: number } | null = null
   private simAlpha = IDLE_ALPHA
   private simHot = false
+  private idleHotFrames = 0
   private settings: AtlasGraphSettings = DEFAULT_GRAPH_SETTINGS
   /** `performance.now()` of the most recent NEW selection — set in
    * `update()`, read (and its window checked) by both painters via
@@ -178,6 +186,7 @@ export class GraphEngine {
       invalidateHullCache(this.layout)
     }
     this.simAlpha = Math.max(this.simAlpha, IDLE_ALPHA)
+    this.idleHotFrames = 0
     this.dirty = true
   }
 
@@ -242,6 +251,7 @@ export class GraphEngine {
       this.layout = buildLayout(props.graph, Math.max(1, this.width), Math.max(1, this.height), props.regions)
       applyDisplaySettings(this.layout, this.settings.display)
       this.simAlpha = IDLE_ALPHA
+      this.idleHotFrames = 0
       invalidateHullCache(this.layout)
       if (graphChanged) this.fitToContent(true)
     }
@@ -546,6 +556,10 @@ export class GraphEngine {
         const cx = this.width / 2
         const cy = this.height / 2
         this.simHot = tickLayout(this.layout, this.simAlpha, cx, cy, this.settings.forces)
+        // Idle budget: past IDLE_SETTLE_FRAMES at idle alpha, the plate is at
+        // rest even if the forces are still creeping — stop asking for frames.
+        if (this.simAlpha > IDLE_ALPHA || this.draggingNode) this.idleHotFrames = 0
+        else if (this.simHot && ++this.idleHotFrames > IDLE_SETTLE_FRAMES) this.simHot = false
         if (this.simHot) invalidateHullCache(this.layout)
         // Idle alpha decays toward rest once a reheat (drag) has settled, so
         // the plate does not stay perpetually "warm" after the interaction
