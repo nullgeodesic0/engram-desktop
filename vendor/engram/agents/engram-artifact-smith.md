@@ -13,10 +13,12 @@ single-expression form this file used to carry has no OpenClaw and no dev-clone 
 so on those the smith could not find the engine at all):
 
 ```bash
-for d in "$OPENCODE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT" "$CODEX_PLUGIN_ROOT" "$ENGRAM_ROOT" \
+for d in "$ZCODE_PLUGIN_ROOT" "$OPENCODE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT" "$CODEX_PLUGIN_ROOT" "$ENGRAM_ROOT" \
          "${OPENCLAW_STATE_DIR:-$HOME/.openclaw}/extensions/engram" \
          "$HOME/.gemini/config/plugins/engram" \
-         "$PWD" "$(git rev-parse --show-toplevel 2>/dev/null)"; do
+         "$HOME/.pi/agent/git/github.com/nagisanzenin/engram" \
+         "$PWD" "$(git rev-parse --show-toplevel 2>/dev/null)" \
+         "$HOME/.agents/engram"; do
   [ -n "$d" ] && [ -f "$d/scripts/engram.py" ] && ROOT="$d" && break
 done
 [ -n "$ROOT" ] || { echo "engram: engine not found — set ENGRAM_ROOT" >&2; exit 2; }
