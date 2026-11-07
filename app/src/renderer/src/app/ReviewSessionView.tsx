@@ -240,6 +240,7 @@ export function ReviewSessionView({
   const [sessionGrades, setSessionGrades] = useState<GradeResult[]>([])
   const [streakDays, setStreakDays] = useState<number | null>(null)
   const [commitment, setCommitment] = useState<string | null>(null)
+  const [focusProfile, setFocusProfile] = useState(false)
   const [chamber, setChamber] = useState(false)
   // Three session cards, three edges, three tacks: the ticket slides in from
   // the LEFT, the probe collapses UPWARD (Learn's masthead grammar), and the
@@ -515,6 +516,13 @@ export function ReviewSessionView({
       .model()
       .then((m) => {
         setMomentumOn(m.settings.momentum !== 'off')
+        // Focus profile (settings.profile = 'adhd'): app-side it pins the
+        // probe above the composer by default (working-memory support: the
+        // question never scrolls away while typing) and shortens the break
+        // interval. Never changes what is asked or how it is graded.
+        const focus = m.settings.profile === 'adhd'
+        setFocusProfile(focus)
+        if (focus) setProbePinned(true)
         // The return commitment closes the review ceremony too — it used to
         // be passed as null here, so a review-only learner never saw it.
         const c = m.settings.commitment
@@ -1973,7 +1981,13 @@ export function ReviewSessionView({
                     same slot and same treatment Learn gives it. */}
                 {progressNote && <MathRenderer text={progressNote} inlineOnly className="fig-caption truncate min-w-0" />}
                 {sittingStartedAt !== null && (
-                  <SittingClock startedAt={sittingStartedAt} running={phase === 'in-session'} label="this sitting" />
+                  <SittingClock
+                    startedAt={sittingStartedAt}
+                    running={phase === 'in-session'}
+                    label="this sitting"
+                    budgetMinutes={sittingPrefs.mins}
+                    breakEveryMinutes={focusProfile ? 25 : 45}
+                  />
                 )}
                 {contextUsage && (
                   <ContextGauge usedTokens={contextUsage.usedTokens} contextWindow={contextUsage.contextWindow} />

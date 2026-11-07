@@ -33,6 +33,7 @@ import { MathRenderer } from '../components/MathRenderer'
 import { environmentIsReady } from '../../../shared/environmentStatus'
 import { planSitting, humanMinutes, type PaceModel } from '../../../shared/sittingPace'
 import { loadSittingPrefs } from '../shared/sittingPrefs'
+import { punctualityCounts } from '../shared/gradePrefs'
 import { rhythmSummary, rhythmLabel, freshStartReason, weekStartYmd, type FreshStartReason } from '../shared/studyRhythm'
 
 const LAST_FRESH_WEEK_KEY = 'engram-desktop:last-fresh-week'
@@ -641,6 +642,7 @@ export function HomeView({
             days: receiptsHistory.days,
             picks: allPicks(),
             mode: 'completed',
+            countPunctuality: punctualityCounts(),
           }),
         ]),
       )

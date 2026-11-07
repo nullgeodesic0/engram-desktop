@@ -504,6 +504,8 @@ export function LearnSessionView({
   const tutorActivity = useTutorActivity()
   const [walkNumber, setWalkNumber] = useState<number | null>(null)
   const [commitment, setCommitment] = useState<string | null>(null)
+  // Focus profile: shortens the in-session break suggestion to 25 min.
+  const [focusProfile, setFocusProfile] = useState(false)
   const [momentumOn, setMomentumOn] = useState(true)
   const [lastWalk, setLastWalk] = useState<{ graded: number; shaky: string[] } | null>(null)
   const [closedUnexpectedly, setClosedUnexpectedly] = useState(false)
@@ -1455,6 +1457,7 @@ export function LearnSessionView({
         // cosmetic, but the learner's "no momentum language" choice governs
         // it too (dialogue-grammar.md's opt-out, honored beyond the dialogue).
         setMomentumOn(m.settings.momentum !== 'off')
+        setFocusProfile(m.settings.profile === 'adhd')
       })
       .catch(() => setCommitment(null))
   }
@@ -2134,7 +2137,14 @@ export function LearnSessionView({
                       {progressNote && (
                         <MathRenderer text={progressNote} inlineOnly className="fig-caption truncate min-w-0" />
                       )}
-                      {sittingStartedAt !== null && <SittingClock startedAt={sittingStartedAt} running label="this sitting" />}
+                      {sittingStartedAt !== null && (
+                        <SittingClock
+                          startedAt={sittingStartedAt}
+                          running
+                          label="this sitting"
+                          breakEveryMinutes={focusProfile ? 25 : 45}
+                        />
+                      )}
                       {contextUsage && (
                         <ContextGauge usedTokens={contextUsage.usedTokens} contextWindow={contextUsage.contextWindow} />
                       )}
