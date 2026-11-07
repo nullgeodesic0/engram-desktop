@@ -7,9 +7,9 @@
 | Upstream | https://github.com/nagisanzenin/engram (`git@github.com:nagisanzenin/engram.git`) |
 | Author | Quan Duong (`nagisanzenin`) |
 | License | MIT — see `engram/LICENSE`, preserved verbatim |
-| Pinned version | **1.10.1** |
-| Pinned commit | **c576e9b** ("Merge: v1.10.1 — the plugin directory that was pretending to be two things") |
-| Snapshot taken | 2026-08-01, from a clean `~/.claude/plugins/marketplaces/engram` checkout |
+| Pinned version | **1.15.1** |
+| Pinned commit | **0590eb8** ("Merge: v1.15.1 — what the post-release review caught") |
+| Snapshot taken | 2026-11-07, from a clean clone of upstream `main` (tree identical to tag `v1.15.1`) |
 | Excluded from snapshot | `.git/`, `node_modules/` — everything else is verbatim |
 
 ### Why this exists
@@ -25,12 +25,19 @@ non-events:
 - **Unreviewed drift.** The app is developed and tested against a known
   plugin version. This snapshot pins exactly what that version is.
 
-This is a **cold copy, not a runtime path.** Nothing in the app reads from
-`vendor/` — at runtime the app resolves `engram.py` from the *installed*
-plugin (`app/src/main/session/pluginResolver.ts`, highest version under
-`~/.claude/plugins/cache/engram/engram/`), and `claude` sessions load the
-`/engram:*` skills from that same install. Keeping a single runtime source
-avoids version skew between the app's engine calls and the CLI's skills.
+This snapshot is also the app's **bundled fallback engine**. Packaged builds
+ship it as `engram-plugin/` (electron-builder `extraResources`), and dev runs
+read it straight from `vendor/engram`. At runtime
+`app/src/main/session/pluginResolver.ts` picks the **highest version** among
+the Claude Code cache (`~/.claude/plugins/cache/engram/engram/`), the Codex
+cache (`~/.codex/plugins/cache/engram/engram/`) and this bundle, so a newer
+installed plugin always wins and an older one is upgraded to this engine.
+`claude` sessions still load the `/engram:*` skills from the learner's own
+install. That skew is only ever "newer engine, older skills", which is the safe
+direction: every engine release since 1.10 has been additive (new optional
+fields, no removed commands or flags). Keep the installed plugin current with
+`claude plugin update engram@engram` anyway, so the skills get the new
+pedagogy too.
 
 The snapshot is **pristine upstream**. This repo's local customizations are
 deliberately NOT baked in — they live in `plugin-overlays/` and are applied
@@ -44,7 +51,7 @@ Recreate an installed version from this snapshot, then re-apply overlays:
 ```bash
 # 1. Place the snapshot where the plugin cache expects it
 mkdir -p ~/.claude/plugins/cache/engram/engram
-cp -R vendor/engram ~/.claude/plugins/cache/engram/engram/1.10.1
+cp -R vendor/engram ~/.claude/plugins/cache/engram/engram/1.15.1
 
 # 2. Re-apply this repo's local customizations
 cd app && npm run apply:plugin-overlay

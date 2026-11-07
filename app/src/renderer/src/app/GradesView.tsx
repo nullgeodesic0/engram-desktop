@@ -209,15 +209,17 @@ function AssignmentRowView({
         </span>
       )}
       {row.productionTruncated && (
-        // The engine caps a stored production at 800 characters (engram.py's
-        // PRODUCTION_MAX) and flags it. The cap covers the receipt as well as
-        // the stash, so this is what the permanent record kept — not a stash
-        // quirk. Shown because a silently partial archive is worse than a
-        // short one you know about; the grade itself is unaffected, and the
-        // full text is still your own message in the sitting.
+        // The engine caps a stored production (engram.py's PRODUCTION_MAX:
+        // 800 characters up to engine 1.11.1, 2400 since 1.11.2) and flags it.
+        // The cap covers the receipt as well as the stash, so this is what the
+        // permanent record kept — not a stash quirk. Shown because a silently
+        // partial archive is worse than a short one you know about. The copy
+        // names no number because the cap a receipt was written under depends
+        // on the engine version that wrote it; the full text is still the
+        // learner's own message in the sitting.
         <span
           className="label-data text-[9px] tracking-[0.14em] px-1.5 py-px border"
-          title="The archived copy of this answer was cut at 800 characters by the engine. Your full answer is in the sitting itself — open it from here."
+          title="The archived copy of this answer was cut short by the engine’s length limit. Your full answer is in the sitting itself — open it from here."
           style={{
             color: 'var(--color-ink-warm)',
             borderColor: 'var(--color-ink-warm-dim)',

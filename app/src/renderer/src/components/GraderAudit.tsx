@@ -60,6 +60,14 @@ const VERDICT_LABEL: Record<string, string> = {
   incomplete: 'Incomplete',
   'insufficient-runs': 'Insufficient runs',
   'insufficient-data': 'Insufficient data',
+  // Badge-expiry verdicts. stale-model / stale-age exist since engine 1.9;
+  // stale-gold is new in 1.14, and 1.14's own gold-set growth (86 → 89 items)
+  // trips it on every audit earned before the upgrade, so learners see it the
+  // first time they open this panel on the new engine. The engine's own
+  // `reasons` line below says exactly what changed.
+  'stale-gold': 'Expired — the gold set changed',
+  'stale-model': 'Expired — a different model is grading now',
+  'stale-age': 'Expired — too old to vouch for today’s grader',
 }
 
 function verdictTone(verdict: string): string {

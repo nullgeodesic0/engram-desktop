@@ -498,7 +498,7 @@ export interface AssignmentRow {
    * this file — checkpoint receipts are full-weight by locked decision; the
    * schedule penalty is the corrective, not the grade. */
   source: string | null
-  /** The engine cut this receipt's stored production at 800 chars. */
+  /** The engine cut this receipt's stored production at its PRODUCTION_MAX (800 chars before engine 1.11.2, 2400 since). */
   productionTruncated?: boolean
 }
 

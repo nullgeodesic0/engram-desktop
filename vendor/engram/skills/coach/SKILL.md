@@ -10,10 +10,18 @@ You are the coach: you adapt **only from receipts and telemetry, never vibes**, 
 
 ```bash
 # Resolve the engine. RUN THIS BLOCK VERBATIM — do not substitute a path you guessed.
-for d in "$OPENCODE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT" "$CODEX_PLUGIN_ROOT" "$ENGRAM_ROOT" \
+# Order: ZCode's plugin root first (ZCode exports the legacy CLAUDE_PLUGIN_ROOT too,
+# so its own var must be checked before it), then OpenCode / Claude Code / Codex, dev
+# clone (ENGRAM_ROOT — Pi's extension exports this), OpenClaw's extension dir, the
+# Antigravity staging path, Pi's git-install path, the working tree ($PWD / git
+# toplevel), and LAST the shared agent home (~/.agents/engram — the clone route for
+# platforms that read ~/.agents; last so it can shadow nothing). First one exists wins.
+for d in "$ZCODE_PLUGIN_ROOT" "$OPENCODE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT" "$CODEX_PLUGIN_ROOT" "$ENGRAM_ROOT" \
          "${OPENCLAW_STATE_DIR:-$HOME/.openclaw}/extensions/engram" \
          "$HOME/.gemini/config/plugins/engram" \
-         "$PWD" "$(git rev-parse --show-toplevel 2>/dev/null)"; do
+         "$HOME/.pi/agent/git/github.com/nagisanzenin/engram" \
+         "$PWD" "$(git rev-parse --show-toplevel 2>/dev/null)" \
+         "$HOME/.agents/engram"; do
   [ -n "$d" ] && [ -f "$d/scripts/engram.py" ] && ENGRAM="$d/scripts/engram.py" && break
 done
 if [ -z "$ENGRAM" ]; then
@@ -26,7 +34,7 @@ python3 "$ENGRAM" experiment list
 python3 "$ENGRAM" misconception list
 ```
 
-**Spawning agents.** "Spawn **engram-assessor**" means a *fresh-context* child running that agent's definition — via your platform's subagent/Task tool (the type may be namespaced, e.g. `engram:engram-assessor`). **If your only mechanism is a generic `sessions_spawn`, read `skills/_shared/subagents.md` first.** Either way the audit's three runs are three separate spawns with no shared context — independence is the whole point.
+**Spawning agents.** "Spawn **engram-assessor**" means a *fresh-context* child running that agent's definition — via your platform's subagent/Task tool (the type may be namespaced, e.g. `engram:engram-assessor`). **If your child-spawn mechanism takes no `engram-*` agent type — a generic `sessions_spawn`, a generic Agent tool, or no spawn tool at all (Pi) — read `skills/_shared/subagents.md` first**: it registers no agent definitions on those surfaces, so you point the child at the file and construct the isolation yourself. Either way the audit's three runs are three separate spawns with no shared context — independence is the whole point.
 
 ## 0 · The binding constraint — report this FIRST, before any other number (v0.6)
 
@@ -219,12 +227,14 @@ python3 "$ENGRAM" experiment start --json '{
 ```bash
 python3 "$ENGRAM" experiment start --preset probe-variation
 python3 "$ENGRAM" experiment start --preset topic-reconstruction
+python3 "$ENGRAM" experiment start --preset contrast-first
 ```
 
-These are the two review-format changes the evidence audit licensed **as experiments and not as defaults** (`docs/13` §2.3). Each design file ships in `experiments/` — so *what was registered* is a checked-in artifact rather than a matter of memory — and each names its own **threat to validity** before any datum exists:
+These are the format changes the evidence audits licensed **as experiments and not as defaults** (`docs/13` §2.3; `docs/16` §7). Each design file ships in `experiments/` — so *what was registered* is a checked-in artifact rather than a matter of memory — and each names its own **threat to validity** before any datum exists:
 
 - **probe-variation** — varied wording vs the stored probe. Direction well-evidenced (varied cues beat constant ones for the same target, and the benefit compounds with spacing); **never tested on rubric-graded conceptual recall**, which is all Engram serves. Threat: *difficulty drift* — vary the wording, never what is being asked. Both arms are graded by the **blind assessor**, so the metric's receipts come from one oracle.
 - **topic-reconstruction** — rebuild the topic's argument skeleton from memory vs the ordinary queue. Strong single-session science, **zero spaced-session studies**. Threat: *time-on-task* — cap both arms to the same minutes, or you measure time, not method.
+- **contrast-first** (v1.14, `docs/16`) — the contrasting-cases + invention opening vs resolve-first, on concept nodes that pass every P18 gate. Direction meta-analytic (PS-I g = 0.36 for conceptual/transfer); **untested at solo chat-session length**, which is exactly the question — the corpus's own duration finding says stacking fidelity features into short sittings stops paying. Threat: *measurement blindness* — this benefit reliably hides from sequestered recall, so the metric is `transfer_fired`; a null on `retention_7d` would be expected even if the move works, and settles nothing.
 
 Say plainly which one they're running and why it is a question rather than a feature. If they ask "shouldn't Engram just do the better one?" — the honest answer is that nobody knows which is better *for this material*, and finding out on their own receipts is the point.
 

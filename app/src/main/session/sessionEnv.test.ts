@@ -10,6 +10,23 @@ describe('buildSessionEnv', () => {
     expect(env.HOME).toBe('/Users/x')
   })
 
+  it('strips stray plugin roots that would outrank ENGRAM_ROOT in the skills\' engine locator', () => {
+    const base = {
+      PATH: '/usr/bin',
+      ZCODE_PLUGIN_ROOT: '/zcode/engram',
+      OPENCODE_PLUGIN_ROOT: '/oc/engram',
+      CODEX_PLUGIN_ROOT: '/codex/engram',
+      CLAUDE_PLUGIN_ROOT: '/claude/engram',
+    }
+    const env = buildSessionEnv(base, '/plugins/engram/1.15.1')
+    expect(env.ZCODE_PLUGIN_ROOT).toBeUndefined()
+    expect(env.OPENCODE_PLUGIN_ROOT).toBeUndefined()
+    expect(env.CODEX_PLUGIN_ROOT).toBeUndefined()
+    // Claude Code owns this one; the app leaves it alone.
+    expect(env.CLAUDE_PLUGIN_ROOT).toBe('/claude/engram')
+    expect(env.ENGRAM_ROOT).toBe('/plugins/engram/1.15.1')
+  })
+
   it('strips stray Anthropic auth vars so a shell export can never flip sessions onto API billing', () => {
     const base = { PATH: '/usr/bin', ANTHROPIC_API_KEY: 'sk-stray', ANTHROPIC_AUTH_TOKEN: 'tok-stray' }
     const env = buildSessionEnv(base, '/root')

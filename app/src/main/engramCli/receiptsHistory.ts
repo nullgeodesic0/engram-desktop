@@ -19,6 +19,7 @@ interface ReceiptLine {
   relearn?: boolean
   source?: string
   production_truncated?: boolean
+  alignment_quality?: number
 }
 
 export interface ReceiptItem {
@@ -91,12 +92,17 @@ export interface RawReceipt {
    * treat null as "self". */
   source: string | null
   /** engram.py's own flag: this receipt's stored production was cut at
-   * PRODUCTION_MAX (800 chars). The engine sets it on BOTH the stash and the
+   * PRODUCTION_MAX (800 chars up to engine 1.11.1, 2400 since 1.11.2). The
+   * engine sets it on BOTH the stash and the
    * receipt — the cap is record-wide policy, not a stash quirk — and the app
    * only reports it. Nothing was lost from the sitting itself: the full text
    * is the learner's own message in the transcript, which History still
    * holds. */
   productionTruncated: boolean
+  /** Engine v1.14+: the assessor's 0/1/2 analogy-alignment score (P19),
+   * validated as a literal by the engine. A transfer correlate that never
+   * moves the grade; null on receipts that carry none. */
+  alignmentQuality?: 0 | 1 | 2 | null
 }
 
 export interface ReceiptsHistory {
@@ -199,6 +205,10 @@ async function readReceiptsHistoryUncached(): Promise<ReceiptsHistory> {
           relearn: entry.relearn === true,
           source: typeof entry.source === 'string' ? entry.source : null,
           productionTruncated: entry.production_truncated === true,
+          alignmentQuality:
+            entry.alignment_quality === 0 || entry.alignment_quality === 1 || entry.alignment_quality === 2
+              ? entry.alignment_quality
+              : null,
         })
 
         const entryDate = new Date(`${entry.ts}T00:00:00Z`)

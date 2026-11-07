@@ -1012,7 +1012,10 @@ const PINNED_ANSWER_READERS: Record<string, string> = {
 }
 // Property access AND destructuring/shorthand, so `const { claim } = node`
 // can't slip past a check that only looked for `node.claim`.
-const ANSWER_FIELDS = /\.(claim|rubric|transfer_probe)\b|[{,]\s*(claim|rubric|transfer_probe)\s*[,}:]/
+// `contrast` (engine v1.14+) joins them: the authored case set is served
+// BEFORE the learner commits to a rule (P18), so showing it unprompted spoils
+// the opening the same way a shown claim spoils a probe.
+const ANSWER_FIELDS = /\.(claim|rubric|transfer_probe|contrast)\b|[{,]\s*(claim|rubric|transfer_probe|contrast)\s*[,}:]/
 for (const f of FILES) {
   if (!ANSWER_FIELDS.test(TEXT.get(f)!)) continue
   if (!(f in PINNED_ANSWER_READERS)) {
