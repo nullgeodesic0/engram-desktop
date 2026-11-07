@@ -89,6 +89,8 @@ import { TopicCard } from '../components/TopicCard'
 import { SectionBanner } from '../components/ui/SectionBanner'
 import { SegmentedControl } from '../components/ui/SegmentedControl'
 import { topicBucket } from '../shared/topicShelf'
+import { pendingQuestion } from '../shared/pendingQuestion'
+import { PinnedQuestion } from '../components/PinnedQuestion'
 import { sortTopics, TOPIC_SORT_OPTIONS, type TopicSortKey } from '../shared/topicSort'
 import { loadTopicSort, saveTopicSort, loadTopicGroup, saveTopicGroup, type TopicGroupKey } from '../shared/topicSortPrefs'
 import { groupTopicsByFolder, TOPIC_GROUP_OPTIONS } from '../shared/topicFolders'
@@ -1950,6 +1952,7 @@ export function LearnSessionView({
   )
   const summaryCtl = makePeek(summaryLeaveTimer, setSummaryPeek)
   const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null)
+  const pendingQ = useMemo(() => pendingQuestion(messages), [messages])
   // The shelf's ordering pick (appended hook, KeepMounted append rule) —
   // applied INSIDE each of the three buckets, never across them: the
   // bucketing answers "what state is this topic in", the sort answers
@@ -2686,6 +2689,18 @@ export function LearnSessionView({
               rather than the composer vanishing outright the way it did
               under the old modal. Every other `busy` reason still hides it
               exactly as before. */}
+          {/* The question being answered, pinned above the composer once it
+              has scrolled out of view (research rule: the probe stays
+              pinned). Hidden while the tutor is still writing. */}
+          {!busy && pendingQ && (
+            <PinnedQuestion
+              text={pendingQ.text}
+              msgIndex={pendingQ.index}
+              scrollEl={scrollEl}
+              nodeIds={chipNodeIds}
+              nodeChipTopic={activeTopic?.topic}
+            />
+          )}
           {(!busy || tutorActivity.activity.kind === 'awaiting-ask') && (
             <MessageComposer
               production={production}
