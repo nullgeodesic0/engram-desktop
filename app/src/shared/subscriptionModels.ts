@@ -33,18 +33,38 @@ export const SUBSCRIPTION_MODEL_OPTIONS: SubscriptionModelOption[] = [
     description: 'Whatever the CLI itself defaults to — currently Opus.',
   },
   {
-    value: 'claude-haiku-4-5-20251001',
-    label: 'Haiku 4.5',
+    value: 'claude-haiku-5-5',
+    label: 'Haiku 5.5',
     description: 'Fastest, and the lightest on a usage allotment — the right pick for most sittings on a small plan.',
   },
   {
-    value: 'claude-sonnet-5',
-    label: 'Sonnet 5',
+    value: 'claude-sonnet-5-5',
+    label: 'Sonnet 5.5',
     description: 'A middle ground: noticeably more capable than Haiku, still far lighter than Opus.',
   },
   {
-    value: 'claude-opus-5',
-    label: 'Opus 5',
+    value: 'claude-opus-5-5',
+    label: 'Opus 5.5',
+    description: 'Very capable, and heavy on a small plan’s usage allotment.',
+  },
+  {
+    value: 'claude-fable-5-1',
+    label: 'Fable 5.1',
     description: 'The most capable tier, and the one that empties a small plan’s usage allotment fastest.',
   },
 ]
+
+/**
+ * Explicit picks from earlier lineups, mapped to their current successor so a
+ * saved setting keeps meaning the same tier after the picker drops the old id.
+ */
+export const RETIRED_SUBSCRIPTION_MODELS: Record<string, string> = {
+  'claude-haiku-4-5-20251001': 'claude-haiku-5-5',
+  'claude-haiku-4-5': 'claude-haiku-5-5',
+  'claude-sonnet-5': 'claude-sonnet-5-5',
+  'claude-opus-5': 'claude-opus-5-5',
+}
+
+export function currentSubscriptionModel(model: string): string {
+  return RETIRED_SUBSCRIPTION_MODELS[model] ?? model
+}

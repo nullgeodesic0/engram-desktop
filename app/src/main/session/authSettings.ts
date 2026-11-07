@@ -7,6 +7,7 @@ import { join } from 'node:path'
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import type { AuthMode, AuthSettings } from '../../shared/types'
 import { DEFAULT_LOCAL_BASE_URL } from './localModel'
+import { currentSubscriptionModel } from '../../shared/subscriptionModels'
 
 export const DEFAULT_OPENCODE_MODEL = 'auto'
 
@@ -51,8 +52,12 @@ export function normalizeAuthSettings(raw: unknown): AuthSettings {
       // Unlike opencodeModel, an EMPTY string is a real, meaningful choice
       // here ("Claude Code default" — see subscriptionModels.ts), not a
       // missing value to fall back from. Only a non-string in the file
-      // (corruption, a hand-edit) falls back to the default.
-      subscriptionModel: typeof parsed.subscriptionModel === 'string' ? parsed.subscriptionModel.trim() : DEFAULTS.subscriptionModel,
+      // (corruption, a hand-edit) falls back to the default. A pick from a
+      // retired lineup moves to that tier's current model.
+      subscriptionModel:
+        typeof parsed.subscriptionModel === 'string'
+          ? currentSubscriptionModel(parsed.subscriptionModel.trim())
+          : DEFAULTS.subscriptionModel,
       codexModel: typeof parsed.codexModel === 'string' ? parsed.codexModel.trim() : DEFAULTS.codexModel,
   }
 }
