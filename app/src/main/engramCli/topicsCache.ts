@@ -1,4 +1,4 @@
-import { readdir, stat } from 'node:fs/promises'
+import { readdir, readFile, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { engramRead } from './readOnly'
@@ -45,7 +45,7 @@ export async function getTopicsCached(): Promise<TopicListEntry[]> {
   if (cache && cache.signature === signature) {
     topics = cache.topics
   } else {
-    topics = await engramRead<TopicListEntry[]>('topics')
+    topics = await withRetirementDetail(await engramRead<TopicListEntry[]>('topics'))
     cache = { signature, topics }
   }
   // Display-rename overlay — applied per CALL on top of the cache, never
@@ -62,6 +62,52 @@ export async function getTopicsCached(): Promise<TopicListEntry[]> {
     const renamed = renames[t.topic] ? { ...t, engineTitle: t.title, title: renames[t.topic] } : t
     return folders[t.topic] ? { ...renamed, folder: folders[t.topic] } : renamed
   })
+}
+
+/** Mirrors engram.py's `is_retired` exactly: a `retired` block that has not
+ * been restored. Shape-defensive the same way (a hand-edited string is not a
+ * retirement). */
+function isRetiredNode(node: unknown): node is { retired: { ts?: unknown } } {
+  if (!node || typeof node !== 'object') return false
+  const r = (node as { retired?: unknown }).retired
+  return !!r && typeof r === 'object' && (r as { restored?: unknown }).restored == null
+}
+
+/**
+ * For every topic with at least one retired node, reads its graph once to add
+ * the two facts `engram.py topics` does not emit: the live (non-retired) state
+ * counts and, for a fully archived topic, the date it was archived. Runs only
+ * on a cache miss (graph mtimes changed), and only for topics that have
+ * retired anything, so the common case reads no extra files at all. A graph
+ * that cannot be read leaves its entry exactly as the engine sent it.
+ */
+async function withRetirementDetail(topics: TopicListEntry[]): Promise<TopicListEntry[]> {
+  return Promise.all(
+    topics.map(async (t) => {
+      if (!t.retired) return t
+      try {
+        const g = JSON.parse(await readFile(join(GRAPHS_DIR, `${t.topic}.json`), 'utf-8')) as {
+          nodes?: Record<string, { state?: unknown; retired?: unknown }>
+        }
+        const live = { review: 0, learning: 0, new: 0 }
+        let latest: string | null = null
+        let liveCount = 0
+        for (const node of Object.values(g.nodes ?? {})) {
+          if (isRetiredNode(node)) {
+            const ts = node.retired.ts
+            if (typeof ts === 'string' && (latest === null || ts > latest)) latest = ts.slice(0, 10)
+            continue
+          }
+          liveCount++
+          const st = node && typeof node.state === 'string' ? node.state : 'new'
+          if (st === 'review' || st === 'learning' || st === 'new') live[st]++
+        }
+        return { ...t, liveStates: live, archivedAt: liveCount === 0 ? latest : null }
+      } catch {
+        return t
+      }
+    }),
+  )
 }
 
 export function invalidateTopicsCache(): void {

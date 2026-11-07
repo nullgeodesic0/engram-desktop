@@ -102,6 +102,10 @@ export async function buildMobileOverview(
 
   const overview: MobileTopicOverview[] = []
   for (const entry of topics) {
+    // An archived topic (every node retired) is history, not work: it never
+    // comes due and the phone menu leads with what can be done, so it is left
+    // off entirely (renderer/src/shared/archive.ts, rule 1).
+    if (entry.retired != null && entry.nodes > 0 && entry.retired >= entry.nodes) continue
     const packedNodes = await packedFor(entry.topic)
     overview.push({
       topic: entry.topic,

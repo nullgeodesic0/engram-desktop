@@ -1,4 +1,5 @@
 import type { TopicListEntry } from '../../../shared/types'
+import { isArchivedTopic } from './archive'
 
 /**
  * A topic's node counts sort it into exactly one of three states — never
@@ -44,7 +45,7 @@ export function topicChips(
   // says so and nothing else — its state counts still exist but reviews
   // never come due, and a row of live-looking chips would misread as an
   // active topic.
-  if (t.retired != null && t.nodes > 0 && t.retired >= t.nodes) {
+  if (isArchivedTopic(t)) {
     return [{ label: 'archived', className: 'text-[var(--color-text-faint)]' }]
   }
   const chips: { label: string; className: string }[] = []

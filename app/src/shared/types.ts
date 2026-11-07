@@ -33,6 +33,17 @@ export interface TopicListEntry extends TopicSummary {
    * `nodes` when the whole topic is archived. Sparse: older engines omit
    * it; never assume. */
   retired?: number
+  /** Local YYYY-MM-DD the topic was archived (the latest node retirement
+   * date), set by `getTopicsCached` only when EVERY node is retired. The
+   * frozen "final grade" of an archived topic is computed as of this date.
+   * App-derived from the graph, never an engine field. */
+  archivedAt?: string | null
+  /** Node-state counts over the NON-retired nodes only, set by
+   * `getTopicsCached` whenever `retired > 0`. A partly retired topic's
+   * coverage reads these, so a concept the learner chose to drop never
+   * counts against them as unconsolidated. Absent means "nothing retired:
+   * `states` already is the live count". */
+  liveStates?: { review: number; learning: number; new: number }
   /** App-local folder this topic is filed under, overlaid by
    * `getTopicsCached` from topic-settings.json — NOT an engine field and
    * never written to any graph. Purely presentational grouping (see

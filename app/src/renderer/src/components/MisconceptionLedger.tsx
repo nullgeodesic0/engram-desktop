@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { archivedTopicIds } from '../shared/archive'
 import type { Misconception } from '../../../shared/types'
 import { humanizeNodeId } from '../../../shared/humanizeId'
 import { Modal } from './ui/Modal'
@@ -207,6 +208,10 @@ export function MisconceptionLedger({
   const [sessionLive, setSessionLive] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
+  // Archived topics' open rows are set aside (archive.ts rule 4): listed
+  // last, labelled, and never offered for re-test — nothing in an archived
+  // topic can come up for review until it is restored.
+  const [archived, setArchived] = useState<Set<string>>(new Set())
 
   // Modal unmounts its children whenever `open` is false (see Modal.tsx), so
   // this only actually runs while showing — but keying off `open` explicitly
@@ -228,10 +233,16 @@ export function MisconceptionLedger({
       .anySessionActive()
       .then(setSessionLive)
       .catch(() => setSessionLive(false))
+    window.engram
+      .topics()
+      .then((ts) => setArchived(archivedTopicIds(ts)))
+      .catch(() => setArchived(new Set()))
   }, [open, refreshKey])
 
-  const groups = rows ? groupByTopic(rows) : []
-  const openCount = rows ? rows.filter((r) => r.status === 'open').length : 0
+  const groups = (rows ? groupByTopic(rows) : []).sort(
+    (a, b) => Number(archived.has(a.topic)) - Number(archived.has(b.topic)),
+  )
+  const openCount = rows ? rows.filter((r) => r.status === 'open' && !archived.has(r.topic)).length : 0
 
   function goto(topicId: string, nodeId: string) {
     onClose()
@@ -296,6 +307,9 @@ export function MisconceptionLedger({
             <div key={g.topic} className="flex flex-col gap-2">
               <div className="label-data uppercase tracking-[0.1em] text-[11px] text-[var(--color-text-faint)]">
                 {g.topic}
+                {archived.has(g.topic) && g.open.length > 0 && (
+                  <span className="normal-case tracking-normal"> · archived — set aside, not counted until restored</span>
+                )}
               </div>
               {g.open.length > 0 && (
                 <div className="flex flex-col gap-2">
@@ -306,7 +320,7 @@ export function MisconceptionLedger({
                       onGoNode={onGoNode ? goto : undefined}
                       onResolve={resolve}
                       onRetest={
-                        onRetest
+                        onRetest && !archived.has(g.topic)
                           ? (r) => {
                               onClose()
                               onRetest(r)

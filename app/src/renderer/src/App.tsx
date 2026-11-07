@@ -180,6 +180,8 @@ export default function App() {
   const [misconceptionsEpoch, setMisconceptionsEpoch] = useState(0)
   const [deepLinkTopic, setDeepLinkTopic] = useState<string | null>(null)
   const [deepLinkNode, setDeepLinkNode] = useState<{ topicId: string; nodeId: string } | null>(null)
+  // Learn's "Open in Topic Map": the map opens on this topic, no node selected.
+  const [deepLinkMapTopic, setDeepLinkMapTopic] = useState<string | null>(null)
   // Tutor-initiated nudge to a specific node — pans the map if we're already
   // there, or badges the Topic Map nav item so the user can go look.
   const [pendingSpotlight, setPendingSpotlight] = useState<{ topicId: string; nodeId: string } | null>(null)
@@ -494,6 +496,10 @@ export default function App() {
                 newTopicPrefill={newTopicPrefill}
                 onNewTopicPrefillConsumed={() => setNewTopicPrefill(null)}
                 onOpenNode={goToNode}
+                onOpenMap={(topicId) => {
+                  setDeepLinkMapTopic(topicId)
+                  setView('topics')
+                }}
               />
             </KeepMounted>
           )}
@@ -514,6 +520,8 @@ export default function App() {
                 <TopicMapView
                   deepLinkNode={deepLinkNode}
                   onDeepLinkConsumed={() => setDeepLinkNode(null)}
+                  deepLinkTopic={deepLinkMapTopic}
+                  onDeepLinkTopicConsumed={() => setDeepLinkMapTopic(null)}
                   onGoTopic={goToTopic}
                   onNewTopic={() => setView('learn')}
                   spotlightNode={pendingSpotlight}

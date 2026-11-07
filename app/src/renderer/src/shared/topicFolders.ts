@@ -1,5 +1,6 @@
 import type { TopicListEntry } from '../../../shared/types'
 import { sortTopics, type TopicSortKey } from './topicSort'
+import { orderFolders } from './folderRegistry'
 
 /**
  * Folders are a VIEW over the topic list, not a location. Nothing moves on
@@ -76,7 +77,7 @@ export interface FolderGroup {
 export function groupTopicsByFolder(
   topics: TopicListEntry[],
   sortKey: TopicSortKey,
-  opts: { alwaysShow?: string[]; includeEmptyUnfiled?: boolean } = {},
+  opts: { alwaysShow?: string[]; includeEmptyUnfiled?: boolean; order?: string[] } = {},
 ): FolderGroup[] {
   const byFolder = new Map<string, TopicListEntry[]>()
   for (const name of opts.alwaysShow ?? []) {
@@ -94,8 +95,11 @@ export function groupTopicsByFolder(
     list.push(t)
     byFolder.set(name, list)
   }
-  const groups: FolderGroup[] = [...byFolder.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
+  // The learner's own folder order when one is stored (folderRegistry's
+  // orderFolders), alphabetical otherwise.
+  const ordered = orderFolders([...byFolder.keys()], opts.order ?? [])
+  const groups: FolderGroup[] = ordered
+    .map((name) => [name, byFolder.get(name) ?? []] as const)
     .map(([name, list]) => ({ name, unfiled: false, topics: sortTopics(list, sortKey) }))
   if (unfiled.length > 0 || opts.includeEmptyUnfiled) {
     groups.push({ name: UNFILED, unfiled: true, topics: sortTopics(unfiled, sortKey) })

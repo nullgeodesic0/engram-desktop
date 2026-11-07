@@ -29,6 +29,7 @@ import { getStoredThemeChoice, setThemeChoice, type ThemeChoice } from '../share
 import { deviceNoun, updateCommands } from '../shared/platform'
 import { SUBSCRIPTION_MODEL_OPTIONS } from '../../../shared/subscriptionModels'
 import { punctualityCounts, setPunctualityCounts } from '../shared/gradePrefs'
+import { useCountArchived } from '../shared/archive'
 import { loadStepSized, saveStepSized } from '../shared/stepSizedPref'
 
 // The install flow differs per platform (a .app copied into /Applications, an
@@ -657,6 +658,7 @@ export function SettingsView() {
   const [checkpointAllNodesOn, setCheckpointAllNodesOn] = useState(loadCheckpointAllNodes())
   const [lectureNotesOn, setLectureNotesOnState] = useState(loadLectureNotesOn())
   const [punctualityOn, setPunctualityOn] = useState(punctualityCounts())
+  const [countArchivedOn, setCountArchivedOn] = useCountArchived()
   const [stepSizedOn, setStepSizedOn] = useState(loadStepSized())
   const [exporting, setExporting] = useState(false)
   const [exportResult, setExportResult] = useState<string | null>(null)
@@ -1124,6 +1126,16 @@ export function SettingsView() {
             setPunctualityCounts(v === 'on')
             setPunctualityOn(v === 'on')
           }}
+          options={[
+            { value: 'off', label: 'Off' },
+            { value: 'on', label: 'On' },
+          ]}
+        />
+        <PickerRow
+          label="Count archived topics"
+          hint="Off by default. An archived topic keeps its map, sittings and history, but stays out of your GPA, Home, and Coach's recall, calibration, momentum and misconception counts. Its grade is frozen on the day you archive it. Turn this on to count archived topics in those numbers too."
+          current={countArchivedOn ? 'on' : 'off'}
+          onPick={(v) => setCountArchivedOn(v === 'on')}
           options={[
             { value: 'off', label: 'Off' },
             { value: 'on', label: 'On' },

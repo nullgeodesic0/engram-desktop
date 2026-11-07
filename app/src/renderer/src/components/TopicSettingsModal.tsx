@@ -289,8 +289,8 @@ export function TopicSettingsModal({ topicId, topicTitle, onClose }: TopicSettin
           <div className="flex flex-col gap-1.5">
             <p className="text-xs text-[var(--color-text-faint)]">
               {fullyArchived
-                ? 'Archived — every node is retired: no reviews come due and the frontier is closed, but the map, grades, and history all stay browsable. Restoring puts the nodes back on their schedules.'
-                : 'Archive stops the loop without erasing anything: every node retires, reviews stop coming due, and the topic quiets — map, grades, and history stay browsable. Reversible any time.'}
+                ? 'Archived — every node is retired: nothing comes due, it stays out of your GPA, Home and Coach numbers, and its grade is frozen as a final grade. The map, sittings and history stay browsable. Restoring puts every node back on its schedule.'
+                : 'Archive stops the loop without erasing anything: every node retires, nothing comes due, and it leaves your GPA, Home and Coach numbers with its grade frozen as a final grade. Open misconceptions are set aside. The map, sittings and history stay browsable. Reversible any time.'}
             </p>
             {fullyArchived ? (
               <button

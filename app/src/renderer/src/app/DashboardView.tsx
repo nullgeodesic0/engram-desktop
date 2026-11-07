@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { TopicTitle } from '../components/TopicTitle'
 import { type PaceModel, humanMinutes } from '../../../shared/sittingPace'
-import type { EngramStats, ReceiptsHistory, ReceiptItem, TopicGraph, TopicListEntry, ActiveExperiment } from '../../../shared/types'
+import type { EngramStats, ReceiptsHistory, ReceiptItem, TopicGraph, TopicListEntry, ActiveExperiment, Misconception } from '../../../shared/types'
+import {
+  countedOpenMisconceptions,
+  daysWithout,
+  excludedFromStats,
+  receiptsWithout,
+  useCountArchived,
+} from '../shared/archive'
 import { CoachSessionPanel } from '../components/CoachSessionPanel'
 import { SkeletonBar, SkeletonGrid } from '../components/Skeleton'
 import { StreakCalendar } from '../components/StreakCalendar'
@@ -32,6 +39,8 @@ import {
   rangeBounds,
   rangeCaption,
   topicWeekRetention,
+  computeRetentionBuckets,
+  computeMomentum,
   type RangeKey,
 } from '../shared/topicMetrics'
 import { SegmentedControl } from '../components/ui/SegmentedControl'
@@ -129,6 +138,15 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts, coachHomeSi
   // all call it the same way, and it's mtime-cached (topicsCache.ts), so this
   // is not a second parallel fetch of anything expensive.
   const [topicsList, setTopicsList] = useState<TopicListEntry[] | null>(null)
+  // The misconception rows themselves, so the open count can set aside an
+  // archived topic's (archive.ts rule 4) — stats.misconceptions_open is the
+  // engine's whole-library count and cannot.
+  const [misconceptions, setMisconceptions] = useState<Misconception[] | null>(null)
+  // archive.ts rule 2: Coach's recall, calibration, momentum and digest read
+  // only non-archived topics unless this shared switch is on. The activity
+  // calendar and "days studied" are history and stay whole.
+  const [includeArchived] = useCountArchived()
+  const exclude = useMemo(() => excludedFromStats(topicsList, includeArchived), [topicsList, includeArchived])
   const [ledgerOpen, setLedgerOpen] = useState(false)
   const [activeExperiment, setActiveExperiment] = useState<ActiveExperiment | null>(null)
   // Which topic's drilldown is open, if any — a view swap within this same
@@ -170,9 +188,14 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts, coachHomeSi
   const bounds = useMemo(() => rangeBounds(rangeKey), [rangeKey])
   const rangeText = rangeCaption(rangeKey, bounds)
   const daysInRange = useMemo(() => filterDaysByRange(history?.days ?? [], bounds), [history, bounds])
+  // The recall/calibration family's days: archived topics' items removed.
+  const liveDaysInRange = useMemo(() => daysWithout(daysInRange, exclude), [daysInRange, exclude])
   // Sorts the full receipt history to take the trailing window — memoized so
   // hover/detail re-renders don't re-sort thousands of rows (rerender-memo).
-  const quickShareOfHistory = useMemo(() => (history ? quickShare(history.receipts) : null), [history])
+  const quickShareOfHistory = useMemo(
+    () => (history ? quickShare(receiptsWithout(history.receipts, exclude)) : null),
+    [history, exclude],
+  )
   // Weekly rollup re-derived from the (possibly range-sliced) days, through
   // the SAME function TopicDrilldownView already uses for its own weekly
   // chart — not `history.weeks` (the main process's own pre-aggregation),
@@ -180,7 +203,7 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts, coachHomeSi
   // `history.weeks` exactly when unfiltered (see its own WEEKS_BACK doc
   // comment for the boundary bug that fix closed, and
   // scripts/checkTopicMetricsAgreement.ts for the check that pins it).
-  const weeksInRange = useMemo(() => topicWeekRetention(daysInRange), [daysInRange])
+  const weeksInRange = useMemo(() => topicWeekRetention(liveDaysInRange), [liveDaysInRange])
 
   // The detail panel (below) shows one calendar day's or one week's items,
   // opened by clicking a specific cell in StreakCalendar/RetentionTrend —
@@ -213,6 +236,7 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts, coachHomeSi
       .catch((e: Error) => setError(e.message))
     window.engram.receiptsHistory().then(setHistory)
     window.engram.topics().then(setTopicsList)
+    window.engram.misconceptions().then(setMisconceptions).catch(() => {})
   }, [])
 
   // topic -> due count, from `engram.py topics` (see topicsList's own doc
@@ -254,8 +278,25 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts, coachHomeSi
 
   const weekDigest = useMemo(() => {
     if (!history || !graphs) return null
-    return computeWeekDigest({ days: history.days, weeks: history.weeks, picks: allPicks(), graphs })
-  }, [history, graphs])
+    if (exclude.size === 0) return computeWeekDigest({ days: history.days, weeks: history.weeks, picks: allPicks(), graphs })
+    const liveDays = daysWithout(history.days, exclude)
+    return computeWeekDigest({ days: liveDays, weeks: topicWeekRetention(liveDays), picks: allPicks(), graphs })
+  }, [history, graphs, exclude])
+
+  // Retention and momentum: the engine's own numbers while nothing is left
+  // out (the oracle, as before); recomputed through topicMetrics.ts's
+  // field-level port over the non-archived topics once something is. The
+  // port is pinned to the engine by scripts/checkTopicMetricsAgreement.ts.
+  const liveRetention = useMemo(
+    () => (history && exclude.size > 0 ? computeRetentionBuckets(receiptsWithout(history.receipts, exclude)) : null),
+    [history, exclude],
+  )
+  const liveMomentum = useMemo(() => {
+    if (!history || !graphs || exclude.size === 0) return null
+    const liveGraphs: Record<string, TopicGraph> = {}
+    for (const [k, g] of Object.entries(graphs)) if (!exclude.has(k)) liveGraphs[k] = g
+    return computeMomentum(receiptsWithout(history.receipts, exclude), liveGraphs)
+  }, [history, graphs, exclude])
 
   // computeCalibration re-sorts/re-joins every local pick against every
   // receipt day — cheap today, but there is no reason to redo it on every
@@ -266,7 +307,10 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts, coachHomeSi
   // `daysInRange` (Task 4) — passing the range-filtered day set here is
   // enough to scope the whole join: a pick whose own local day isn't a key
   // in `daysInRange` simply finds no match and is dropped, correctly.
-  const cal = useMemo(() => (history ? computeCalibration(daysInRange, allPicks()) : null), [history, daysInRange])
+  const cal = useMemo(
+    () => (history ? computeCalibration(liveDaysInRange, allPicks().filter((p) => !exclude.has(p.topic))) : null),
+    [history, liveDaysInRange, exclude],
+  )
 
   // Misconceptions epoch — same base-ref idiom as coachHomeSignal above
   // (act on change from last-seen, never on mount). Appended at the END of
@@ -281,6 +325,7 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts, coachHomeSi
     window.engram.stats().then(setStats).catch(() => {})
     window.engram.receiptsHistory().then(setHistory).catch(() => {})
     window.engram.topics().then(setTopicsList).catch(() => {})
+    window.engram.misconceptions().then(setMisconceptions).catch(() => {})
   }, [misconceptionsEpoch])
 
   if (error) {
@@ -348,6 +393,15 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts, coachHomeSi
   // Narration order mirrors /coach: loop-closure gate first, then grader-health,
   // retention, transfer, calibration, momentum, misconceptions, backlog.
   const loopClosure = stats.adherence.loop_closure
+  const archivedIds = excludedFromStats(topicsList, false)
+  // Until the rows load, the engine's count stands in (it is right whenever
+  // nothing is archived, which is the common case).
+  const openCount = misconceptions
+    ? countedOpenMisconceptions(misconceptions, topicsList, includeArchived).length
+    : stats.misconceptions_open
+  const setAsideCount = misconceptions
+    ? misconceptions.filter((m) => m.status === 'open').length - openCount
+    : 0
 
   return (
     // `.corner-brackets` — Dashboard's main pane, one of the restyle's three
@@ -430,7 +484,7 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts, coachHomeSi
               </div>
               <RetentionTrend
                 weeks={weeksInRange}
-                days={daysInRange}
+                days={liveDaysInRange}
                 onSelectWeek={(weekStart, items) => setDetail({ label: `Week of ${weekStart}`, items })}
                 quickShare={quickShareOfHistory}
               />
@@ -498,7 +552,7 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts, coachHomeSi
             scripts/checkTopicMetricsAgreement.ts, which is what keeps the
             port from silently drifting off this number. */}
         <div className="grid grid-cols-5 gap-2">
-          {Object.entries(stats.retention.buckets).map(([bucket, b]) => (
+          {Object.entries(liveRetention ?? stats.retention.buckets).map(([bucket, b]) => (
             <StatCard
               key={bucket}
               label={bucket}
@@ -514,7 +568,11 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts, coachHomeSi
             topicMetrics.ts's "date range" header comment). Said in words
             here so a filtered chart just below never gets mistaken for a
             filtered StatCard above it. */}
-        <div className="fig-caption mt-1">n/rate above are the engine's own fixed windows — not affected by the range.</div>
+        <div className="fig-caption mt-1">
+          {liveRetention
+            ? 'n/rate above leave out archived topics (recomputed from your receipts) — not affected by the range.'
+            : "n/rate above are the engine's own fixed windows — not affected by the range."}
+        </div>
         {history === null ? (
           <div className="panel px-4 py-4 flex flex-col gap-4 mt-1">
             <SkeletonBar width="45%" height={12} />
@@ -564,16 +622,42 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts, coachHomeSi
             way it is in engram.py, and two of its three numbers below
             (stability gained, most durable) are graph-state reads with no
             date-range concept at all — see topicMetrics.ts's header comment. */}
-        <div className="fig-caption mb-1">Always the engine's own last {stats.momentum.window_days} days — not affected by the range above.</div>
-        <div className="grid grid-cols-3 gap-3">
-          <StatBlock label={`Reviews (${stats.momentum.window_days}d)`} value={String(stats.momentum.reviews_7d)} />
-          <StatBlock label="Stability gained" value={`+${stats.momentum.stability_gained_7d.toFixed(0)}d`} tone="warm" />
-          <StatBlock
-            label="Most durable"
-            value={stats.momentum.most_durable ? `${stats.momentum.most_durable.stability_days.toFixed(0)}d` : '—'}
-            caption={stats.momentum.most_durable ? humanizeNodeId(stats.momentum.most_durable.node) : undefined}
-          />
-        </div>
+        {(() => {
+          const m = liveMomentum
+            ? {
+                window: liveMomentum.windowDays,
+                reviews: liveMomentum.reviewsWindow,
+                gained: liveMomentum.stabilityGainedWindow,
+                durable: liveMomentum.mostDurable
+                  ? { node: liveMomentum.mostDurable.node, days: liveMomentum.mostDurable.stabilityDays }
+                  : null,
+              }
+            : {
+                window: stats.momentum.window_days,
+                reviews: stats.momentum.reviews_7d,
+                gained: stats.momentum.stability_gained_7d,
+                durable: stats.momentum.most_durable
+                  ? { node: stats.momentum.most_durable.node, days: stats.momentum.most_durable.stability_days }
+                  : null,
+              }
+          return (
+            <>
+              <div className="fig-caption mb-1">
+                Always the last {m.window} days — not affected by the range above
+                {liveMomentum ? '. Archived topics left out.' : '.'}
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <StatBlock label={`Reviews (${m.window}d)`} value={String(m.reviews)} />
+                <StatBlock label="Stability gained" value={`+${m.gained.toFixed(0)}d`} tone="warm" />
+                <StatBlock
+                  label="Most durable"
+                  value={m.durable ? `${m.durable.days.toFixed(0)}d` : '—'}
+                  caption={m.durable ? humanizeNodeId(m.durable.node) : undefined}
+                />
+              </div>
+            </>
+          )
+        })()}
       </Section>
 
       <Section title="Calibration">
@@ -603,7 +687,7 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts, coachHomeSi
             </div>
             <div className="fig-caption">Fig. — how your felt-sense tracks the assessor</div>
             <div className="tilt-card panel px-4 py-4 mt-1">
-              <CalibrationScatter data={{ picks: cal.picks, days: daysInRange }} />
+              <CalibrationScatter data={{ picks: cal.picks, days: liveDaysInRange }} />
             </div>
           </>
         )}
@@ -611,22 +695,32 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts, coachHomeSi
 
       <Section title="Topics">
         <div className="flex flex-col gap-2">
-          {stats.topics.map((t) => {
+          {[...stats.topics]
+            // Archived topics last, and quieter: browsable history, not work.
+            .sort((a, b) => Number(archivedIds.has(a.topic)) - Number(archivedIds.has(b.topic)))
+            .map((t) => {
             const due = dueByTopic.get(t.topic) ?? 0
+            const isArchived = archivedIds.has(t.topic)
             return (
               <button
                 key={t.topic}
                 onClick={() => setOpenTopic(t.topic)}
-                className="focus-ring tilt-card panel px-4 py-3 flex items-center justify-between text-left w-full hover:border-[var(--color-text-faint)] transition-colors"
+                className={`focus-ring tilt-card panel px-4 py-3 flex items-center justify-between text-left w-full hover:border-[var(--color-text-faint)] transition-colors${isArchived ? ' opacity-70' : ''}`}
               >
                 <div>
                   <div className="text-sm text-[var(--color-text-primary)]"><TopicTitle title={t.title} /></div>
                   <div className="label-data text-xs text-[var(--color-text-faint)]">{t.topic}</div>
                 </div>
                 <div className="flex gap-4 text-xs label-data">
+                  {isArchived ? (
+                    <span className="text-[var(--color-text-faint)]">archived</span>
+                  ) : (
+                    <>
                   <span className="text-[var(--color-ink-warm)]">{t.states.review} review</span>
                   <span className="text-[var(--color-ink-cool)]">{t.states.new} new</span>
                   {due > 0 && <span className="text-[var(--color-ink-warm)]">{due} due</span>}
+                    </>
+                  )}
                 </div>
               </button>
             )
@@ -634,14 +728,20 @@ export function DashboardView({ onNewTopic, onGoNode, onGoArtifacts, coachHomeSi
         </div>
       </Section>
 
-      {stats.misconceptions_open > 0 && (
+      {openCount > 0 && (
         <Section title="Misconceptions">
           <button
             onClick={() => setLedgerOpen(true)}
             className="focus-ring tilt-card panel px-4 py-3 flex items-center justify-between gap-3 w-full text-left hover:border-[var(--color-text-faint)] transition-colors"
           >
             <span className="text-sm text-[var(--color-text-primary)]">
-              {stats.misconceptions_open} open — noticed along the way, filed for re-testing.
+              {openCount} open — noticed along the way, filed for re-testing.
+              {setAsideCount > 0 && (
+                <span className="text-[var(--color-text-faint)]">
+                  {' '}
+                  {setAsideCount} more set aside on archived topics.
+                </span>
+              )}
             </span>
             <span className="text-xs text-[var(--color-ink-warm)] shrink-0">View →</span>
           </button>

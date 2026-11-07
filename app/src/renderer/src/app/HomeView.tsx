@@ -26,7 +26,8 @@ import { EnvironmentSteps } from '../components/EnvironmentSteps'
 import { ExperimentBanner } from '../components/ExperimentBanner'
 import { computeDueBuckets } from '../shared/dueBuckets'
 import { recentViews, type RecentView } from '../shared/recentlyViewed'
-import { computeTopicGrade, letterColorClass, type TopicGradeResult } from '../shared/topicGrade'
+import { computeShownTopicGrade, letterColorClass, type TopicGradeResult } from '../shared/topicGrade'
+import { partitionArchived } from '../shared/archive'
 import { allPicks } from '../shared/calibrationStore'
 import { ActivityStrip } from '../components/charts/ActivityStrip'
 import { MathRenderer } from '../components/MathRenderer'
@@ -489,7 +490,7 @@ export function HomeView({
 
   useEffect(() => {
     if (!topics) return
-    const active = topics.filter((t) => topicBucket(t) === 'active')
+    const active = partitionArchived(topics).live.filter((t) => topicBucket(t) === 'active')
     if (active.length === 0) {
       setResumableTopics(new Set())
       return
@@ -617,9 +618,13 @@ export function HomeView({
 
   // See topicBucket()'s doc comment — these three groups partition `topics`
   // exhaustively, so a topic is never dropped and never double-counted.
-  const active = topics?.filter((t) => topicBucket(t) === 'active') ?? []
-  const consolidated = topics?.filter((t) => topicBucket(t) === 'consolidated') ?? []
-  const notStarted = topics?.filter((t) => topicBucket(t) === 'notStarted') ?? []
+  // Archived topics are history, not work (archive.ts): they never enter the
+  // three state groups below, the topic count, or "needs attention" — Learn's
+  // Archived view is where they live.
+  const { live: liveTopics, archived: archivedTopics } = partitionArchived(topics ?? [])
+  const active = liveTopics.filter((t) => topicBucket(t) === 'active')
+  const consolidated = liveTopics.filter((t) => topicBucket(t) === 'consolidated')
+  const notStarted = liveTopics.filter((t) => topicBucket(t) === 'notStarted')
   const envBroken = envCheck !== null && !environmentIsReady(envCheck)
 
   // Grades — computed once every input is loaded, `completed` mode (matches
@@ -634,9 +639,8 @@ export function HomeView({
     ? new Map<string, TopicGradeResult>(
         topics.map((t) => [
           t.topic,
-          computeTopicGrade({
+          computeShownTopicGrade({
             receipts: receiptsHistory.receipts,
-            topic: t.topic,
             topicEntry: t,
             misconceptions,
             days: receiptsHistory.days,
@@ -655,7 +659,7 @@ export function HomeView({
   // signal fires — never invent something to say.
   const needsAttention = (() => {
     if (!topics || !grades) return null
-    const graded = topics
+    const graded = liveTopics
       .map((t) => ({ topic: t, grade: grades.get(t.topic) }))
       .filter((x): x is { topic: TopicListEntry; grade: TopicGradeResult } => x.grade?.overall.available === true)
       .sort((a, b) => (a.grade.overall.score ?? 0) - (b.grade.overall.score ?? 0))
@@ -663,7 +667,7 @@ export function HomeView({
     if (worst && (worst.grade.overall.letter === 'D' || worst.grade.overall.letter === 'F')) {
       return { topic: worst.topic, reason: `graded ${worst.grade.overall.letter}` as const }
     }
-    const mostDue = [...topics].sort((a, b) => b.due - a.due)[0]
+    const mostDue = [...liveTopics].sort((a, b) => b.due - a.due)[0]
     if (mostDue && mostDue.due > 0) return { topic: mostDue, reason: 'due' as const }
     return null
   })()
@@ -690,7 +694,7 @@ export function HomeView({
           {stats ? (
             <HomeMasthead
               dueNow={stats.due_now}
-              topicCount={topics?.length ?? null}
+              topicCount={topics ? liveTopics.length : null}
               sitting={sitting}
               freshStart={freshStart}
               commitment={commitment}
@@ -849,7 +853,7 @@ export function HomeView({
       <section className="flex flex-col gap-3">
         <SectionBanner
           label="Your topics"
-          count={topics !== null ? <StatFraction n={active.length} d={topics.length} /> : undefined}
+          count={topics !== null ? <StatFraction n={active.length} d={liveTopics.length} /> : undefined}
         />
         {topics === null && <SkeletonGrid count={3} />}
         {/* The empty-state decision itself (guided card vs. plain invitation) must wait on
@@ -926,7 +930,11 @@ export function HomeView({
               grades={grades}
               first={active.length === 0 && consolidated.length === 0}
             />
-            <div className="fig-caption">the atlas, grouped by where each topic stands</div>
+            <div className="fig-caption">
+              the atlas, grouped by where each topic stands
+              {archivedTopics.length > 0 &&
+                ` · ${archivedTopics.length} archived ${archivedTopics.length === 1 ? 'topic' : 'topics'} kept in Learn’s archive`}
+            </div>
           </div>
         )}
       </section>

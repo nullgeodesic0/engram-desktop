@@ -1,3 +1,4 @@
+import { isArchivedTopic, liveNodeCounts } from './archiveRules'
 import type { DayActivity, Misconception, RawReceipt, TopicListEntry } from '../../../shared/types'
 import type { ConfidencePick } from '../../../shared/confidence'
 import { computeRetentionBuckets, computeCalibration, RETENTION_BUCKET_MIN_N } from './topicMetrics'
@@ -258,12 +259,16 @@ export function computeTopicGrade(inputs: {
   // see GradeMode's own doctrine comment. ---
   const coverage: ComponentGrade = (() => {
     if (mode === 'completed') return notEnoughData(WEIGHTS.coverage)
-    if (!topicEntry || topicEntry.nodes === 0) return notEnoughData(WEIGHTS.coverage)
-    const ratio = topicEntry.states.review / topicEntry.nodes
+    if (!topicEntry) return notEnoughData(WEIGHTS.coverage)
+    // Over the NON-retired nodes only: a concept the learner chose to retire
+    // is not unfinished work and must not read as unconsolidated (archive.ts).
+    const live = liveNodeCounts(topicEntry)
+    if (live.nodes === 0) return notEnoughData(WEIGHTS.coverage)
+    const ratio = live.review / live.nodes
     const score = ratio * 100
     return {
       available: true,
-      n: topicEntry.nodes,
+      n: live.nodes,
       raw: ratio,
       score,
       letter: scoreToLetter(score),
@@ -609,4 +614,44 @@ export function groupAssignmentsByNode(rows: AssignmentRow[]): AssignmentGroup[]
     return bDate.localeCompare(aDate)
   })
   return groups
+}
+
+// ============================================================================
+// The grade a topic SHOWS — live for an active topic, frozen for an archived
+// one. An archived topic's grade is computed as of the day it was archived
+// (computeHistoricalTopicGrade, completed-work semantics) so it stops
+// drifting: nothing can be reviewed, and its open misconceptions would
+// otherwise age into the conceptual component forever. See archive.ts,
+// rule 3. Falls back to the live computation when the archive date is
+// unknown (an older engine, or a graph that could not be read).
+// ============================================================================
+
+export function computeShownTopicGrade(inputs: {
+  receipts: RawReceipt[]
+  topicEntry: TopicListEntry
+  misconceptions: Misconception[]
+  days: DayActivity[]
+  picks: ConfidencePick[]
+  mode: GradeMode
+  countPunctuality?: boolean
+}): TopicGradeResult & { final: boolean } {
+  const { receipts, topicEntry, misconceptions, days, picks, mode, countPunctuality } = inputs
+  if (isArchivedTopic(topicEntry) && topicEntry.archivedAt) {
+    return {
+      ...computeHistoricalTopicGrade({
+        receipts,
+        topic: topicEntry.topic,
+        misconceptions,
+        days,
+        picks,
+        cutoff: topicEntry.archivedAt,
+        countPunctuality,
+      }),
+      final: true,
+    }
+  }
+  return {
+    ...computeTopicGrade({ receipts, topic: topicEntry.topic, topicEntry, misconceptions, days, picks, mode, countPunctuality }),
+    final: false,
+  }
 }
