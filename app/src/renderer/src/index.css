@@ -2181,8 +2181,7 @@
    which together were the app's idle heat: a full-window scene redrawn every
    frame, and every blurred panel re-sampling it on each of those frames.
 
-   Nave is the ground: rough paper grain, long soft light, a faint arch and
-   two windows holding knots (components/NaveGround.tsx). Folio is the sheet:
+   Nave is the ground: rough paper grain, long soft light and a faint arch (components/NaveGround.tsx). Folio is the sheet:
    a top-level card is opaque paper with two sheets peeking out behind and a
    dog-ear. Rules kept from the source:
      - Grain is one static tile, a background image, never over text.
@@ -2195,8 +2194,6 @@
     --nf-orange: #f4a26b;
     --nf-violet: #c4b5fd;
     --nf-line: rgb(255 255 255 / 0.13);
-    --nf-win: #1a1a1d;
-    --nf-strand: #ffffff;
     --nf-ray: 7%;
     --nf-ray-ink: #ffffff;
     --nf-wash: 86%;
@@ -2205,8 +2202,6 @@
     --nf-orange: #b84a14;
     --nf-violet: #7c3aed;
     --nf-line: rgb(43 32 22 / 0.16);
-    --nf-win: #2b2016;
-    --nf-strand: #f4efe4;
     --nf-ray: 9%;
     --nf-ray-ink: #2b2016;
     --nf-wash: 90%;
@@ -2288,10 +2283,9 @@
       animation-play-state: paused;
     }
   }
-  /* Long reading sits on plain paper: App turns the shafts (and the gutter
-     windows, which would stand behind the composer) off while a transcript
-     is open. */
-  :root[data-shafts='off'] :is(.nf-shaft, .nf-ambient) {
+  /* Long reading sits on plain paper: App turns the shafts off while a
+     transcript is open. */
+  :root[data-shafts='off'] .nf-shaft {
     display: none;
   }
   /* A large outline arch behind the sheets, a hairline with faint grain. */
@@ -2310,54 +2304,9 @@
     -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 30%, #000 70%, transparent 100%);
     mask-image: linear-gradient(180deg, transparent 0, #000 30%, #000 70%, transparent 100%);
   }
-  /* Two windows at the foot of the right-hand gutter, only where the window
-     is wide enough to hold them clear of most content. */
-  .nf-ambient {
-    position: absolute;
-    right: 28px;
-    bottom: 0;
-    display: none;
-    align-items: flex-end;
-    gap: 12px;
-  }
-  @media (min-width: 1100px) {
-    .nf-ambient { display: flex; }
-  }
   @media (max-width: 1240px) {
     .nf-bigarch { display: none; }
   }
-  .nf-arch {
-    position: relative;
-    display: block;
-    flex: none;
-    overflow: hidden;
-    border-radius: 999px 999px 0 0;
-    background-color: var(--nf-win);
-    box-shadow: 0 0 0 1px var(--nf-line);
-  }
-  /* Light from the sill (warm) and the crown (violet), then grain over the
-     sky and the knot. */
-  .nf-arch::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background:
-      radial-gradient(ellipse at 50% 100%, color-mix(in srgb, var(--nf-orange) 46%, transparent), transparent 62%),
-      radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--nf-violet) 34%, transparent), transparent 58%);
-  }
-  .nf-arch::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background-image: var(--look-grain, none);
-    background-size: 200px;
-    opacity: 0.35;
-  }
-  .nf-arch svg { position: absolute; inset: 0; }
-  .nf-arch .nf-star { fill: var(--nf-strand); }
-  .nf-arch .nf-halo { fill: none; stroke: var(--nf-win); stroke-width: 5; }
-  .nf-arch .nf-strand { fill: none; stroke: var(--nf-strand); stroke-width: 2; stroke-linecap: round; }
-
   /* Folio: a top-level card is a sheet of paper. Opaque (nothing behind it
      moves, and there is no blur to see through), the grain under a paper
      wash, square shoulders, two sheets peeking out below, and a dog-ear. */
