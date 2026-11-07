@@ -860,12 +860,10 @@ export function TopicMapView({
 
       {graph && (
         <div className="flex-1 min-h-0 flex gap-4">
-          {/* The plate sits over the app's ambient NeuralField canvas, which
-              competes with the specimen for attention. A backdrop blur (plus
-              a whisper of surface tint) pushes that field out of focus behind
-              the map without touching the map's own ink — the plate reads as
-              the thing in focus, everything else as depth. */}
-          <div className="relative flex-1 min-w-0 flex flex-col rounded-xl overflow-hidden backdrop-blur-md bg-[var(--color-void)]/55">
+          {/* The plate sits on the still Nave ground. A solid void fill (no
+              backdrop blur: blur re-samples the page behind it on every
+              frame the map draws) keeps the specimen the thing in focus. */}
+          <div className="relative flex-1 min-w-0 flex flex-col rounded-xl overflow-hidden bg-[var(--color-void)]">
             {/* Plate header — the command bar. One cluster now owns every
                 view control: Export on the left; the lenses (replay, due
                 lens — previously buttons living inside the legend's Key

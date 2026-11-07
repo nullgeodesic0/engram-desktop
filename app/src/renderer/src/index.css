@@ -18,11 +18,14 @@
 @theme {
   /* "Night Atlas" — Cajal's sepia-ink neuron atlas inverted onto the night.
      The void warms slightly toward sepia; text is warm ink, not cold white. */
-  --color-void: #0d0e12;
-  --color-surface: #14151c;
-  --color-surface-2: #1c1e28;
-  --color-surface-3: #262937;
-  --color-hairline: #262a36;
+  /* Grounds moved toward RaftHad's Nave Folio dark paper (2026-11-07): the
+     same near-black, a breath less blue, so the warm/violet inks carry the
+     colour and the paper stays paper. */
+  --color-void: #0b0b0d;
+  --color-surface: #16161a;
+  --color-surface-2: #1c1c21;
+  --color-surface-3: #26262c;
+  --color-hairline: #26272c;
   /* Card edge ink — the outline every panel-class card draws. The bare
      hairline reads at only ~1.3:1 against the void/surface fills — below the
      visibility floor for a 1px line, so cards read as floating shadows with
@@ -239,42 +242,6 @@
   --color-text-primary: #2b2016;
   --color-text-dim: #6b5c46;
   --color-text-faint: #93856c;
-}
-
-/* NeuralField ambient layer under light (corrected): the reference image's
-   faint pale-gray radiating lines / concentric rings / small geometric marks
-   is essentially what an "ambient field" should look like on paper — sparse
-   pale technical linework, not glowing neurons. NeuralField.tsx's underlying
-   particle/line geometry (see that file's `paletteMode` prop) still drives
-   the motion, but under light it renders in "line-art" mode: additive
-   glow-blending is swapped for plain alpha-blended thin strokes, particle
-   glow sprites are replaced with small flat squares (the reference's
-   "small circles/squares at intersections"), and colors are sampled as a
-   single desaturated warm-gray ink rather than the cyan/violet/orange signal
-   triad — because a scattered rainbow of watermark lines would read as
-   decoration-gone-wrong rather than a faded technical diagram. This is a
-   faithful approximation of the reference, not a full match: the reference's
-   actual concentric-circle/radiating-line/diamond *composition* is a fixed
-   drawn diagram, while NeuralField's field is a live particle simulation —
-   reproducing the exact static geometry would mean an entirely separate
-   canvas layer. What's real here: genuine rendering-mode change (additive
-   glow → flat pale linework, sprites → geometric marks, tri-color → single
-   ink), still driven by the same live particle data. Kept at full opacity
-   (the mode change itself does the quieting) rather than also dimming via
-   opacity, which would just fade the linework into invisibility. */
-.neural-field-root {
-  /* Design review 1 (2026-11-07): the field is a fixed, positioned layer, so
-     with z-index auto it painted ABOVE every non-positioned element — nav
-     labels, headings, the transcript, the composer's Submit. -1 keeps it
-     strictly behind content (it still paints over the body's own
-     background, which lives on the root canvas). Dimmed so it reads as
-     weather in the gutters rather than as something moving behind text. */
-  z-index: -1;
-  opacity: 0.45;
-  transition: opacity var(--dur-base) var(--ease-out-soft);
-}
-:root[data-theme='light'] .neural-field-root {
-  opacity: 0.6;
 }
 
 @layer base {
@@ -790,7 +757,6 @@
       bottom right,
       0 0,
       0 0;
-    backdrop-filter: blur(14px);
   }
   /* Light theme: the sidebar stays a deliberate "night pane" — brand chrome
      is doctrine-separate from the semantic palette (see the doctrine comment
@@ -968,7 +934,6 @@
     border-radius: 0;
     box-shadow: inset 0 1px 0 rgba(228, 231, 237, 0.04), 0 8px 20px -12px rgba(0, 0, 0, 0.5);
     transition: border-color var(--dur-base) var(--ease-out-soft), box-shadow var(--dur-base) var(--ease-out-soft);
-    backdrop-filter: blur(12px);
   }
   .panel-raised {
     background: color-mix(in srgb, var(--color-surface-2) 92%, transparent);
@@ -976,7 +941,6 @@
     border-radius: 0;
     box-shadow: inset 0 1px 0 rgba(228, 231, 237, 0.05), 0 8px 20px -12px rgba(0, 0, 0, 0.5);
     transition: border-color var(--dur-base) var(--ease-out-soft), box-shadow var(--dur-base) var(--ease-out-soft);
-    backdrop-filter: blur(12px);
   }
   /* Verdict Anatomy's CanonicalPlate — the engraved specimen label. Same
      surface as `.panel`, but the accent is an inset hairline running the
@@ -1000,31 +964,9 @@
     border-radius: 0;
     box-shadow: inset 0 0 0 1px var(--color-ink-warm-dim), inset 0 1px 0 rgba(228, 231, 237, 0.04), 0 8px 20px -12px rgba(0, 0, 0, 0.5);
     transition: border-color var(--dur-base) var(--ease-out-soft), box-shadow var(--dur-base) var(--ease-out-soft);
-    backdrop-filter: blur(12px);
   }
-  /* Light theme (corrected back to bright paper): the ground is genuinely
-     pale again (--color-void L≈0.87), so the previous commit's shadow-
-     direction flip (light top-highlight was swapped for a dark-ink inset,
-     drop-shadow deepened toward warm-black) is reversed once more, back to
-     this token block's first-pass logic — verified fresh against the actual
-     new values here, not copy-pasted: a pale field behind the blur means a
-     card needs more of its own fill to read as a surface (glass alphas
-     bumped above the dark-theme base, 62/68/68/76/82% → 78/84/82/90/93%),
-     and a light top-edge catch-light plus a soft, low-alpha warm-ink drop
-     shadow reads as a lift off the page rather than the dark-mode
-     "bruise-black" drop needed on a dark ground. */
-  :root[data-theme='light'] .panel {
-    background: color-mix(in srgb, var(--color-surface) 92%, transparent);
-    box-shadow: inset 0 1px 0 rgba(255, 252, 244, 0.55), 0 8px 20px -12px rgba(43, 32, 22, 0.22);
-  }
-  :root[data-theme='light'] .panel-raised {
-    background: color-mix(in srgb, var(--color-surface-2) 94%, transparent);
-    box-shadow: inset 0 1px 0 rgba(255, 252, 244, 0.6), 0 8px 20px -12px rgba(43, 32, 22, 0.22);
-  }
-  :root[data-theme='light'] .panel-plate {
-    background: color-mix(in srgb, var(--color-surface) 94%, transparent);
-    box-shadow: inset 0 0 0 1px var(--color-ink-warm-dim), inset 0 1px 0 rgba(255, 252, 244, 0.55), 0 8px 20px -12px rgba(43, 32, 22, 0.22);
-  }
+  /* Light theme: the sheets themselves (opaque paper, the Folio stack) are
+     drawn by the Nave Folio block at the end of this file, for both themes. */
   :root[data-theme='light'] .chat-glass .panel {
     background: color-mix(in srgb, var(--color-surface) 97%, transparent);
   }
@@ -2231,4 +2173,194 @@
 .lecture-notes-doc strong {
   color: var(--color-ink-warm);
   font-weight: 500;
+}
+
+/* ── Nave Folio ─────────────────────────────────────────────────────────
+   After RaftHad's Nave Folio look (packages/web/src/theme/naveFolio there).
+   It replaced the NeuralField WebGL backdrop and the app-wide glass blur,
+   which together were the app's idle heat: a full-window scene redrawn every
+   frame, and every blurred panel re-sampling it on each of those frames.
+
+   Nave is the ground: rough paper grain, long soft light and a faint arch (components/NaveGround.tsx). Folio is the sheet:
+   a top-level card is opaque paper with two sheets peeking out behind and a
+   dog-ear. Rules kept from the source:
+     - Grain is one static tile, a background image, never over text.
+     - The one motion is the shafts' slow sway: transform and opacity only,
+       paused when the window is not focused. No canvas per frame, no
+       filter, no backdrop-filter anywhere in the app.
+     - Figures are drawn from tokens. */
+@layer components {
+  :root {
+    --nf-orange: #f4a26b;
+    --nf-violet: #c4b5fd;
+    --nf-line: rgb(255 255 255 / 0.13);
+    --nf-ray: 7%;
+    --nf-ray-ink: #ffffff;
+    --nf-wash: 86%;
+  }
+  :root[data-theme='light'] {
+    --nf-orange: #b84a14;
+    --nf-violet: #7c3aed;
+    --nf-line: rgb(43 32 22 / 0.16);
+    --nf-ray: 9%;
+    --nf-ray-ink: #2b2016;
+    --nf-wash: 90%;
+  }
+
+  /* The ground: fixed behind everything (z -1 keeps it under non-positioned
+     content but over the body's own fill), a faint wash from the top corner
+     over two layers of the one grain tile at different scales, so the repeat
+     breaks up and it reads as rough paper rather than a fine even screen. */
+  .nf-ground {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    overflow: hidden;
+    pointer-events: none;
+    background-image:
+      linear-gradient(115deg, color-mix(in srgb, var(--nf-ray-ink) 4%, transparent) 0%, transparent 38%),
+      linear-gradient(color-mix(in srgb, var(--color-void) var(--nf-wash), transparent), color-mix(in srgb, var(--color-void) var(--nf-wash), transparent)),
+      var(--look-grain, none),
+      var(--look-grain, none);
+    background-size: auto, auto, 200px, 340px;
+    background-position: 0 0, 0 0, 0 0, 70px 110px;
+    background-repeat: no-repeat, no-repeat, repeat, repeat;
+  }
+  /* The long light: three soft diagonal shafts, the first warm, the third
+     violet — the two accents, as light. Still. */
+  .nf-shaft {
+    position: absolute;
+    top: 60px;
+    left: var(--x);
+    width: var(--w);
+    height: 1100px;
+    transform-origin: 50% 0;
+    transform: rotate(var(--r));
+    background: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in srgb, var(--nf-ray-ink) calc(var(--a) * 0.4), transparent) 14%,
+      color-mix(in srgb, var(--nf-ray-ink) var(--a), transparent) 36%,
+      color-mix(in srgb, var(--nf-ray-ink) var(--a), transparent) 64%,
+      color-mix(in srgb, var(--nf-ray-ink) calc(var(--a) * 0.4), transparent) 86%,
+      transparent
+    );
+    -webkit-mask-image: linear-gradient(180deg, transparent 0, rgb(0 0 0 / 0.55) 9%, #000 22%, rgb(0 0 0 / 0.4) 55%, transparent 92%);
+    mask-image: linear-gradient(180deg, transparent 0, rgb(0 0 0 / 0.55) 9%, #000 22%, rgb(0 0 0 / 0.4) 55%, transparent 92%);
+  }
+  .nf-shaft::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--t, transparent) 18%, transparent) 36%, color-mix(in srgb, var(--t, transparent) 18%, transparent) 64%, transparent);
+  }
+  .nf-shaft.s1 { --x: 52%; --w: 240px; --r: 26deg; --a: calc(var(--nf-ray) * 1.4); --t: var(--nf-orange); }
+  .nf-shaft.s2 { --x: 72%; --w: 120px; --r: 30deg; --a: var(--nf-ray); }
+  .nf-shaft.s3 { --x: 36%; --w: 150px; --r: 22deg; --a: var(--nf-ray); --t: var(--nf-violet); }
+  /* The shafts sway, slowly: the ground's one motion, as in RaftHad's Nave
+     Folio. Transform and opacity only, on three small layers the compositor
+     moves without repainting anything, so it costs no main-thread work.
+     It stops when the window loses focus or is hidden (`data-awake`, set in
+     main.tsx) and is gone under reduced motion. */
+  @keyframes nf-sway {
+    from {
+      opacity: 0.55;
+      transform: translateX(-24px) rotate(var(--r));
+    }
+    to {
+      opacity: 1;
+      transform: translateX(28px) rotate(calc(var(--r) - 6deg));
+    }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .nf-shaft {
+      will-change: transform, opacity;
+      animation: nf-sway 16s ease-in-out infinite alternate;
+    }
+    .nf-shaft.s2 { animation-duration: 13s; animation-delay: -8s; }
+    .nf-shaft.s3 { animation-duration: 19s; animation-delay: -4s; }
+    :root[data-awake='false'] .nf-shaft {
+      animation-play-state: paused;
+    }
+  }
+  /* Long reading sits on plain paper: App turns the shafts off while a
+     transcript is open. */
+  :root[data-shafts='off'] .nf-shaft {
+    display: none;
+  }
+  /* A large outline arch behind the sheets, a hairline with faint grain. */
+  .nf-bigarch {
+    position: absolute;
+    top: 120px;
+    right: 5%;
+    width: 320px;
+    height: 420px;
+    border: 1px solid var(--nf-line);
+    border-bottom: 0;
+    border-radius: 160px 160px 0 0;
+    background-image: var(--look-grain, none);
+    background-size: 200px;
+    opacity: 0.22;
+    -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 30%, #000 70%, transparent 100%);
+    mask-image: linear-gradient(180deg, transparent 0, #000 30%, #000 70%, transparent 100%);
+  }
+  @media (max-width: 1240px) {
+    .nf-bigarch { display: none; }
+  }
+  /* Folio: a top-level card is a sheet of paper. Opaque (nothing behind it
+     moves, and there is no blur to see through), the grain under a paper
+     wash, square shoulders, two sheets peeking out below, and a dog-ear. */
+  .panel,
+  .panel-raised,
+  .panel-plate {
+    --nf-sheet: var(--color-surface);
+    position: relative;
+    background-color: var(--nf-sheet);
+    background-image:
+      linear-gradient(color-mix(in srgb, var(--nf-sheet) 90%, transparent), color-mix(in srgb, var(--nf-sheet) 90%, transparent)),
+      var(--look-grain, none);
+    background-size: auto, 200px;
+    border-color: var(--nf-line);
+    border-radius: 4px;
+    box-shadow:
+      0 1px 0 var(--nf-line),
+      0 8px 0 -4px var(--nf-sheet),
+      0 9px 0 -4px var(--nf-line),
+      0 16px 0 -8px var(--nf-sheet),
+      0 17px 0 -8px var(--nf-line);
+  }
+  .panel-raised { --nf-sheet: var(--color-surface-2); }
+  .panel-plate {
+    box-shadow:
+      inset 0 0 0 1px var(--color-ink-warm-dim),
+      0 1px 0 var(--nf-line),
+      0 8px 0 -4px var(--nf-sheet),
+      0 9px 0 -4px var(--nf-line),
+      0 16px 0 -8px var(--nf-sheet),
+      0 17px 0 -8px var(--nf-line);
+  }
+  .panel:not(.dogear)::before,
+  .panel-raised:not(.dogear)::before,
+  .panel-plate:not(.dogear)::before {
+    content: '';
+    position: absolute;
+    top: -1px;
+    right: -1px;
+    z-index: 2;
+    width: 14px;
+    height: 14px;
+    background: linear-gradient(225deg, var(--color-void) 50%, var(--nf-line) 50%);
+    pointer-events: none;
+  }
+  /* A sheet inside a sheet, a field, and every card in a transcript is one
+     flat sheet: no stack, no dog-ear. A conversation is read, not filed. */
+  :is(.panel, .panel-raised, .panel-plate) :is(.panel, .panel-raised, .panel-plate),
+  .chat-glass :is(.panel, .panel-raised, .panel-plate),
+  :is(input, textarea, select):is(.panel, .panel-raised, .panel-plate) {
+    box-shadow: 0 1px 0 var(--nf-line);
+  }
+  :is(.panel, .panel-raised, .panel-plate) :is(.panel, .panel-raised, .panel-plate):not(.dogear)::before,
+  .chat-glass :is(.panel, .panel-raised, .panel-plate):not(.dogear)::before {
+    display: none;
+  }
 }
