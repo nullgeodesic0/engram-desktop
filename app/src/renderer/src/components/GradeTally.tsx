@@ -1,19 +1,19 @@
 import type { GradeResult } from '../../../shared/gradeResult'
 
 /** Shared tally row for a session's graded results — recalled/partial/lapsed
- * counts plus an optional streak, in the label-data strip style both
+ * counts, in the label-data strip style both
  * ReviewSessionView and LearnSessionView render above/below their grade
  * cards. `label` is the item-count noun ("item(s)" for Review, "graded" for
  * Learn) so wording can differ per view while the counting logic stays
  * identical. */
 export function GradeTally({
   results,
-  streakDays,
   label,
   omitTotal = false,
 }: {
   results: GradeResult[]
-  streakDays: number | null
+  /** Accepted for call-site compatibility and deliberately not rendered. */
+  streakDays?: number | null
   label: string
   /** Skip the leading "{n} {label}" span — for hosts (SessionCeremony) whose
    * PlateFigure headline already states the total; the tally then reads as
@@ -33,14 +33,12 @@ export function GradeTally({
       <span className="text-[var(--color-ink-cool)]">
         {results.filter((g) => g.grade === 'partial').length} partial
       </span>
-      <span className="text-[var(--color-ink-danger)]">
-        {results.filter((g) => g.grade === 'lapsed').length} lapsed
+      {/* Neutral, future-tense: a lapse is a card coming back sooner, not
+          a failure (see ritual/GradeChip's GRADE_INK). No streak here —
+          a consecutive-day count is the one figure a day off can zero. */}
+      <span className="text-[var(--color-text-dim)]">
+        {results.filter((g) => g.grade === 'lapsed').length} back sooner
       </span>
-      {streakDays !== null && streakDays > 0 && (
-        <span>
-          {streakDays} day{streakDays === 1 ? '' : 's'} streak
-        </span>
-      )}
     </div>
   )
 }

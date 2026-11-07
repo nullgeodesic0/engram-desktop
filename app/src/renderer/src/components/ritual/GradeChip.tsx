@@ -4,11 +4,19 @@ import type { GradeResult } from '../../../../shared/gradeResult'
 /** The single source of the grade→ink mapping — GradeResultCard's badge and
  * return chip, VerdictRows' rating echo, and instrumentMoments' minimap
  * tones all resolve through this table, so "recalled is warm, partial is
- * cool, lapsed is danger" is stated exactly once. */
+ * cool, lapsed is neutral" is stated exactly once.
+ *
+ * LAPSED IS NOT DANGER (2026-11). A forgotten item is the scheduler working,
+ * not the learner failing: it simply comes back sooner. A transcript of red
+ * "Lapsed" receipts reads as a failure report, and emotion dysregulation is
+ * a large effect in adult ADHD (Beheshti et al. 2020, g = 1.17), so the
+ * honest grade is kept and the alarm is taken off it. Danger ink stays
+ * reserved for misconceptions — a wrong belief held, which IS worth a
+ * flag. See DESIGN.md's Reserved Danger Rule. */
 export const GRADE_INK: Record<GradeResult['grade'], { label: string; ink: string; dim: string }> = {
   recalled: { label: 'Recalled', ink: 'var(--color-ink-warm)', dim: 'var(--color-ink-warm-dim)' },
   partial: { label: 'Partial', ink: 'var(--color-ink-cool)', dim: 'var(--color-ink-cool-dim)' },
-  lapsed: { label: 'Lapsed', ink: 'var(--color-ink-danger)', dim: 'var(--color-ink-danger-dim)' },
+  lapsed: { label: 'Back sooner', ink: 'var(--color-text-dim)', dim: 'var(--color-edge)' },
 }
 
 /** ONE bordered grade chip — ink text, `-dim` border, 16% ink wash (the

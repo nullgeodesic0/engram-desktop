@@ -149,6 +149,13 @@ interface ReviewSessionViewProps {
    * misconception. App gates the button while a review session is live. */
   retestRequest?: Misconception | null
   onRetestConsumed?: () => void
+  /** Home's one-click "Start the sitting" (consume-and-clear, same idiom as
+   * `retestRequest`): begin a standard sitting at the saved budget as soon as
+   * the ready plate has loaded, skipping the second click. Task initiation is
+   * the hardest step for learners with ADHD, so the start costs one press.
+   * Consumed without starting when nothing is due or a sitting is live. */
+  quickStartRequest?: number | null
+  onQuickStartConsumed?: () => void
 }
 
 /** How many due items the ready page reads to draw its queue. Generous enough
@@ -158,7 +165,13 @@ interface ReviewSessionViewProps {
  * the plate is allowed to look at. */
 const READY_QUEUE_CAP = 30
 
-export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed }: ReviewSessionViewProps = {}) {
+export function ReviewSessionView({
+  onActivity,
+  retestRequest,
+  onRetestConsumed,
+  quickStartRequest,
+  onQuickStartConsumed,
+}: ReviewSessionViewProps = {}) {
   const [phase, setPhase] = useState<Phase>('loading')
   /** True only while the ready plate is morphing into the session header.
    * Exactly one element may hold a given `view-transition-name` at a time, so
@@ -226,6 +239,7 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
   const gradeSeq = useRef(0)
   const [sessionGrades, setSessionGrades] = useState<GradeResult[]>([])
   const [streakDays, setStreakDays] = useState<number | null>(null)
+  const [commitment, setCommitment] = useState<string | null>(null)
   const [chamber, setChamber] = useState(false)
   // Three session cards, three edges, three tacks: the ticket slides in from
   // the LEFT, the probe collapses UPWARD (Learn's masthead grammar), and the
@@ -499,7 +513,13 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
     // a local pref (see its own useState above), not read from here.
     window.engram
       .model()
-      .then((m) => setMomentumOn(m.settings.momentum !== 'off'))
+      .then((m) => {
+        setMomentumOn(m.settings.momentum !== 'off')
+        // The return commitment closes the review ceremony too — it used to
+        // be passed as null here, so a review-only learner never saw it.
+        const c = m.settings.commitment
+        setCommitment(c ? `${c.cue} → ${c.action}` : null)
+      })
       .catch(() => setMomentumOn(true))
   }, [])
 
@@ -1734,6 +1754,14 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
     startSession(false, retestRequest)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [retestRequest, phase])
+  // Home's one-click start. Waits out `loading`; starts only from `ready`.
+  useEffect(() => {
+    if (!quickStartRequest || phase === 'loading') return
+    onQuickStartConsumed?.()
+    if (phase !== 'ready') return
+    openWithMorph(() => void startSession(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quickStartRequest, phase])
   // Checkpoint sitting bookkeeping (appended hooks, KeepMounted append rule):
   // how many of this sitting's grades came through the checkpoint path
   // (counted at the rate call's own tool_use/tool_result pair — the rate
@@ -2445,7 +2473,8 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
                 <SessionCeremony
                   results={sessionGrades}
                   streakDays={streakDays}
-                  commitment={null}
+                  momentumOn={momentumOn}
+                  commitment={commitment}
                   heading={
                     sessionQuickCount > 0
                       ? `Queue trimmed — ${sessionQuickCount} checkpoint, ${sessionGrades.length - sessionQuickCount} recall`

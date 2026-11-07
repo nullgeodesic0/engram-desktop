@@ -2615,6 +2615,7 @@ export function LearnSessionView({
                 <SessionCeremony
                   results={sessionGrades}
                   streakDays={streakDays}
+                  momentumOn={momentumOn}
                   commitment={commitment}
                   heading="The walk, recorded"
                   label="graded"

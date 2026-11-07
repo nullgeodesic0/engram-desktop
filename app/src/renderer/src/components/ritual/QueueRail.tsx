@@ -5,7 +5,7 @@ import { humanizeNodeId } from '../../../../shared/humanizeId'
 const GRADE_TONE: Record<GradeResult['grade'], string> = {
   recalled: 'var(--color-ink-warm)',
   partial: 'var(--color-ink-cool)',
-  lapsed: 'var(--color-ink-danger)',
+  lapsed: 'var(--color-text-dim)',
 }
 const GRADE_LABEL: Record<GradeResult['grade'], string> = {
   recalled: 'Recalled',
