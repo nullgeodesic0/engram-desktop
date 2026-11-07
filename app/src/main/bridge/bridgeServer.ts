@@ -4,6 +4,8 @@ import type { BrowserWindow } from 'electron'
 import type { BridgeAskRequest, BridgeAskResponse, BridgeBeatRequest, BridgeUiRequest } from '../../shared/bridgeProtocol'
 import { sanitizeAnnotatePayload, setNodeAnnotation } from '../session/mapAnnotations'
 import { parseCardPack } from '../../shared/cardPack'
+import { validateLectureNotes } from '../../shared/lectureNotes'
+import { saveLectureNotes } from '../session/lectureNotesStore'
 import { createCardPackStore, type CardPackStore } from '../link/cardPackStore'
 import { app } from 'electron'
 import { join } from 'node:path'
@@ -65,6 +67,7 @@ export class BridgeServer {
     const beatMatch = url.match(/^\/bridge\/([^/]+)\/beat$/)
     const uiMatch = url.match(/^\/bridge\/([^/]+)\/ui$/)
     const packMatch = url.match(/^\/bridge\/([^/]+)\/card-pack$/)
+    const notesMatch = url.match(/^\/bridge\/([^/]+)\/lecture-notes$/)
 
     if (askMatch) {
       const sessionId = decodeURIComponent(askMatch[1])
@@ -126,6 +129,35 @@ export class BridgeServer {
       }
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ accepted, reasons }))
+      return
+    }
+
+    if (notesMatch) {
+      // Like the card pack, the model must SEE a refusal so it can fix the
+      // notes on the same turn. The host mints the timestamp; the renderer
+      // hears about accepted notes through the ordinary bridge:ui channel
+      // (without the body — it fetches that from the store on open).
+      const sessionId = decodeURIComponent(notesMatch[1])
+      let reply: { accepted: boolean; reasons: string[]; pages?: number | null }
+      try {
+        const checked = validateLectureNotes(JSON.parse(body))
+        if (!checked.ok) {
+          reply = { accepted: false, reasons: checked.reasons }
+        } else {
+          const record = await saveLectureNotes(checked.notes, sessionId)
+          reply = { accepted: true, reasons: [], pages: record.pages }
+          const { markdown: _markdown, ...summary } = record
+          this.window?.webContents.send('bridge:ui', {
+            sessionId,
+            tool: 'publish_lecture_notes',
+            payload: { ...summary },
+          } as BridgeUiRequest)
+        }
+      } catch (error) {
+        reply = { accepted: false, reasons: [error instanceof Error ? error.message : String(error)] }
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify(reply))
       return
     }
 

@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { LectureNotesRecord, LectureNotesSummary } from '../shared/lectureNotes'
 import type {
   TopicListEntry,
   EngramStats,
@@ -158,6 +159,17 @@ const engramApi = {
   getTranscript: (sessionId: string): Promise<unknown[]> => ipcRenderer.invoke('session:transcript', sessionId),
   exportSitting: (req: ExportSittingRequest): Promise<ExportSittingResult> => ipcRenderer.invoke('session:export', req),
   exportMap: (req: ExportMapRequest): Promise<ExportSittingResult> => ipcRenderer.invoke('map:export', req),
+
+  // Lecture notes (see main/session/lectureNotesStore.ts) — the tutor writes
+  // them through the publish_lecture_notes bridge tool; these only read them
+  // back, open the PDF, or copy it somewhere the learner picks.
+  listLectureNotes: (topicId: string): Promise<LectureNotesSummary[]> => ipcRenderer.invoke('lectureNotes:list', topicId),
+  getLectureNotes: (topicId: string, nodeId: string): Promise<LectureNotesRecord | null> =>
+    ipcRenderer.invoke('lectureNotes:get', topicId, nodeId),
+  openLectureNotesPdf: (topicId: string, nodeId: string): Promise<{ ok: boolean; reason?: string }> =>
+    ipcRenderer.invoke('lectureNotes:openPdf', topicId, nodeId),
+  saveLectureNotesPdf: (topicId: string, nodeId: string): Promise<{ ok: boolean; path?: string; reason?: string }> =>
+    ipcRenderer.invoke('lectureNotes:savePdf', topicId, nodeId),
 
   backupNow: (destDir?: string): Promise<BackupNowResult> => ipcRenderer.invoke('backup:now', destDir),
   describeArchive: (archivePath: string): Promise<DescribeArchiveResult> =>

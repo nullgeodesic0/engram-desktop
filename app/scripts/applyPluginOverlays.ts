@@ -106,6 +106,14 @@ const OVERLAYS: Overlay[] = [
         contentFile: 'engram/learn-skill.mobile-walk-protocol.md',
         beforeLine: '## 4 · Verify via the assessor (separation of powers)',
       },
+      {
+        // The lecture-notes protocol — the THIRD pedagogy overlay, learner-
+        // elected through Settings. Same slot as the mobile walk: it modifies
+        // the §3 beats, so it sits after them and before the assessor.
+        id: 'lecture-notes-protocol',
+        contentFile: 'engram/learn-skill.lecture-notes-protocol.md',
+        beforeLine: '## 4 · Verify via the assessor (separation of powers)',
+      },
     ],
   },
   {
@@ -128,6 +136,12 @@ const OVERLAYS: Overlay[] = [
         // a stable order (checkpoint, then mobile) on every re-run.
         id: 'mobile-walk-exception',
         contentFile: 'engram/dialogue-grammar.mobile-walk-exception.md',
+        beforeLine: '## ⚠ The session does not end on a failed retrieval (v1.5 — retrieval to criterion)',
+      },
+      {
+        // The lecture-notes companion sentence, read third in the same spot.
+        id: 'lecture-notes-exception',
+        contentFile: 'engram/dialogue-grammar.lecture-notes-exception.md',
         beforeLine: '## ⚠ The session does not end on a failed retrieval (v1.5 — retrieval to criterion)',
       },
     ],

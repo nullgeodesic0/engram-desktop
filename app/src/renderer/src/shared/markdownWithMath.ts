@@ -1,14 +1,5 @@
-import { marked } from 'marked'
-import katex from 'katex'
+import { renderMarkdownWithMathCore } from '../../../shared/mathMarkdown'
 import { nodeChipHtml } from './nodeChip'
-
-function renderMath(tex: string, displayMode: boolean): string {
-  try {
-    return katex.renderToString(tex, { throwOnError: false, displayMode })
-  } catch {
-    return displayMode ? `$$${tex}$$` : `$${tex}$`
-  }
-}
 
 /** Chat Instruments Wave B — node-name chips. Runs AFTER `marked.parse()`,
  * a DOM pass over the already-rendered HTML (the task's own suggested
@@ -76,33 +67,11 @@ export function renderMarkdownWithMath(
    * wave: `chipifyNodeCodespans` fast-paths out on an empty/absent set. */
   nodeChips?: { nodeIds: Set<string>; topicId: string },
 ): string {
-  const mathHtml: string[] = []
-  const stash = (html: string): string => {
-    mathHtml.push(html)
-    return `@@MATH${mathHtml.length - 1}@@`
-  }
-
-  const withoutMath = source
-    .replace(/\$\$([\s\S]+?)\$\$/g, (_m, tex: string) => stash(renderMath(tex, true)))
-    .replace(/\\\[([\s\S]+?)\\\]/g, (_m, tex: string) => stash(renderMath(tex, true)))
-    // Pandoc's inline-math delimiter rules, not "any two dollars on a line": the
-    // opening `$` must be followed by a non-space, the closing `$` must be preceded
-    // by a non-space and not followed by a digit. This keeps `$x$`, `$f(x)=x^2$`,
-    // and digit-leading math like `$2n$`/`$5$` working while leaving currency like
-    // "$5 … $2" as prose — an unpaired-currency "pair" always fails the closing-side
-    // guards (the closer is preceded by a space, or followed by a digit as in
-    // "$5-$10"), which is what actually prevents math mode swallowing the spaces.
-    // NOTE: Pandoc forbids a digit only AFTER THE CLOSER — a digit after the opener
-    // is legitimate math, and banning it there was exactly what broke `$2n$`.
-    .replace(/\$(?!\s)((?:[^$\n]|\\\$)*?)(?<!\s)\$(?!\d)/g, (_m, tex: string) => stash(renderMath(tex, false)))
-    .replace(/\\\(([\s\S]+?)\\\)/g, (_m, tex: string) => stash(renderMath(tex, false)))
-
-  // Synchronous parse (no async extensions configured) — `marked.parse` with default
-  // options returns a string, not a Promise, in that case.
-  let bodyHtml = marked.parse(withoutMath, { async: false }) as string
-  if (nodeChips && nodeChips.nodeIds.size > 0) {
-    bodyHtml = chipifyNodeCodespans(bodyHtml, nodeChips.nodeIds, nodeChips.topicId)
-  }
-
-  return bodyHtml.replace(/@@MATH(\d+)@@/g, (_m, i: string) => mathHtml[Number(i)] ?? '')
+  // The extraction/parse/splice core lives in shared/mathMarkdown.ts so the
+  // main process (lecture-notes PDFs) renders math exactly as this does.
+  return renderMarkdownWithMathCore(source, (bodyHtml) =>
+    nodeChips && nodeChips.nodeIds.size > 0
+      ? chipifyNodeCodespans(bodyHtml, nodeChips.nodeIds, nodeChips.topicId)
+      : bodyHtml,
+  )
 }

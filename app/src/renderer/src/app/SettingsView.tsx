@@ -1,3 +1,4 @@
+import { loadLectureNotesOn, saveLectureNotesOn } from '../shared/lectureNotesPref'
 import type { DrainSummary, LinkStatus, LocalModelProbe, OpencodeProbe, OpencodeSetupStatus, PairingOffer } from '../../../shared/types'
 import { useEffect, useRef, useState } from 'react'
 import type {
@@ -652,6 +653,7 @@ export function SettingsView() {
   const [rhythmValueInput, setRhythmValueInput] = useState('')
   const [sounds, setSounds] = useState(soundOn())
   const [checkpointAllNodesOn, setCheckpointAllNodesOn] = useState(loadCheckpointAllNodes())
+  const [lectureNotesOn, setLectureNotesOnState] = useState(loadLectureNotesOn())
   const [exporting, setExporting] = useState(false)
   const [exportResult, setExportResult] = useState<string | null>(null)
   const [notifier, setNotifier] = useState<NotifierSettings | null>(null)
@@ -1014,6 +1016,19 @@ export function SettingsView() {
             { value: 'off', label: 'Off' },
             { value: 'threshold', label: 'Threshold nodes' },
             { value: 'eager', label: 'Eager' },
+          ]}
+        />
+        <PickerRow
+          label="Lecture notes"
+          hint="Before each concept that's new to you, the tutor writes short notes (a PDF) for you to read first. Then the usual loop runs, and the notes close while you answer the final check from memory. Applies from the next new concept."
+          current={lectureNotesOn ? 'on' : 'off'}
+          onPick={(v) => {
+            saveLectureNotesOn(v === 'on')
+            setLectureNotesOnState(v === 'on')
+          }}
+          options={[
+            { value: 'off', label: 'Off' },
+            { value: 'on', label: 'On' },
           ]}
         />
         <PickerRow

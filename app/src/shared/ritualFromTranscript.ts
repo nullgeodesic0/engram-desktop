@@ -438,6 +438,18 @@ function askAnswerFromToolResult(content: unknown): string[] | null | undefined 
   return undefined
 }
 
+/** Reads the app's `{accepted, reasons}` reply to publish_lecture_notes. */
+function lectureNotesAccepted(content: unknown): boolean {
+  const text = contentAsText(content)
+  if (text === null) return false
+  try {
+    const parsed = JSON.parse(text) as { accepted?: unknown }
+    return parsed?.accepted === true
+  } catch {
+    return false
+  }
+}
+
 // `parseAuditNotification` (resolves a pending audit's verdict from a
 // `<task-notification>` string — see the AUDIT doctrine comment above for the
 // exact real shape it reads) now lives in `shared/taskNotification.ts`,
@@ -468,6 +480,9 @@ export type DerivedRitualMark =
   | { id: string; atIndex: number; kind: 'explorable'; title: string; path?: string; node?: string }
   | { id: string; atIndex: number; kind: 'verify-seal' }
   | { id: string; atIndex: number; kind: 'figure'; title: string | null; body: string }
+  // `accepted` is null until the tool_result says; a refused set of notes
+  // (the tutor fixes and re-sends them) renders nothing.
+  | { id: string; atIndex: number; kind: 'lecture-notes'; topic: string; node: string; title: string; accepted: boolean | null }
   | { id: string; atIndex: number; kind: 'comparison'; title: string | null; left: ComparisonSide; right: ComparisonSide }
   | { id: string; atIndex: number; kind: 'steps'; title: string | null; steps: LadderStep[] }
   | { id: string; atIndex: number; kind: 'formula'; latex: string; caption: string | null; where: SymbolGloss[] }
@@ -652,6 +667,8 @@ export function deriveRitualMarks(entries: unknown[]): DerivedRitualMark[] {
   // own `<tool-use-id>` is the real match key, this queue just bounds the
   // search to spawns not yet resolved).
   const pendingAudits: Array<{ toolUseId: string; markIndex: number }> = []
+  // publish_lecture_notes calls awaiting the app's accept/refuse reply.
+  const pendingLectureNotes = new Map<string, number>()
   // ask_user_question spawns awaiting their own tool_result — keyed by
   // toolUseId directly (not a FIFO queue like pendingAudits/
   // pendingExplorableByNode above), since the tool_result event already
@@ -716,6 +733,12 @@ export function deriveRitualMarks(entries: unknown[]): DerivedRitualMark[] {
         if (event.isError) {
           marks.push({ id: `dmark-${seq++}`, atIndex: messageCount, kind: 'tool-failure', failureKind })
         }
+      }
+      const notesMarkIndex = pendingLectureNotes.get(event.toolUseId)
+      if (notesMarkIndex !== undefined) {
+        pendingLectureNotes.delete(event.toolUseId)
+        const existing = marks[notesMarkIndex] as Extract<DerivedRitualMark, { kind: 'lecture-notes' }>
+        marks[notesMarkIndex] = { ...existing, accepted: !event.isError && lectureNotesAccepted(event.content) }
       }
       const askMarkIndex = pendingAsks.get(event.toolUseId)
       if (askMarkIndex !== undefined) {
@@ -884,6 +907,11 @@ export function deriveRitualMarks(entries: unknown[]): DerivedRitualMark[] {
       if (intent) {
         if (intent.kind === 'figure') {
           marks.push({ id: `dmark-${seq++}`, atIndex: messageCount, kind: 'figure', title: intent.title, body: intent.body })
+          continue
+        }
+        if (intent.kind === 'lecture-notes') {
+          marks.push({ id: `dmark-${seq++}`, atIndex: messageCount, kind: 'lecture-notes', topic: intent.topic, node: intent.node, title: intent.title, accepted: null })
+          pendingLectureNotes.set(event.id, marks.length - 1)
           continue
         }
         if (intent.kind === 'comparison') {

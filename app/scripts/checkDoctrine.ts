@@ -324,6 +324,10 @@ const PINNED_WRITERS: Record<string, string> = {
   'main/session/calibrationMirror.ts': 'app userData',
   'main/session/topicSettings.ts': 'app userData',
   'main/session/mapAnnotations.ts': 'app userData',
+  // 2026-11-07 — lecture notes the tutor wrote for a node, and their PDF.
+  // Teaching text the learner reads, never learning state: no rating, stamp,
+  // receipt or schedule reads them, and nothing here touches the home.
+  'main/session/lectureNotesStore.ts': 'app userData — lecture-notes/<topic>/<node>.json and .pdf',
   'main/session/sessionScan.ts': 'app userData — transcript scan cache',
   'main/session/achievementsStore.ts': 'app userData',
   'main/session/sessionIndex.ts': 'app userData',
@@ -534,7 +538,12 @@ const injectedStrings = [...permissionTs.matchAll(/`([^`]{40,})`|'([^']{40,})'/g
 // a second ~4000-word copy that could drift. Diffed the rendered output for
 // CLAUDE_TOOL_PREFIX against the pre-refactor prompt byte for byte before
 // re-pinning: identical.
-const PINNED_PROMPT_HASH = 'e69dc3c6d49e9ecc'
+// 2026-11-07 — one paragraph added for publish_lecture_notes. It discloses the
+// tool and gates it on the learner's own election in this sitting ("Without
+// that election, never call it"); it adds no pedagogy of its own, and points
+// to the tool's description and the learn skill's overlay section, which own
+// the rules. The prompt still ends by deferring to the installed skills.
+const PINNED_PROMPT_HASH = '7f242663449c7d65'
 if (sha(injectedStrings) !== PINNED_PROMPT_HASH) {
   fail(
     'D3.systemPrompt',
@@ -635,6 +644,20 @@ const PINNED_BRIDGE_TOOLS = [
   // that already knows the answer from repairing a sign on the way past and
   // having the assessor certify a grade the learner did not earn.
   'propose_transcription',
+  // 2026-11-07 — publish_lecture_notes, a writer like emit_card_pack, given
+  // the same close look:
+  //   · it reads no engine state — the notes are text the tutor authors;
+  //   · it writes nothing to ~/.claude/learning/; the notes and their PDF live
+  //     in app userData (lectureNotesStore.ts, pinned under D2);
+  //   · it is gated on the learner's own per-sitting election, stated in the
+  //     prompt sentence that discloses it and in its own description;
+  //   · its description forbids the node's probe, transfer_probe and the
+  //     rubric as a list — the notes teach the idea, never the test — and the
+  //     app closes the reader while the cold VERIFY is open;
+  //   · no subagent reaches it; the assessor stays blind.
+  // The pedagogy exception it implements (instruction before the attempt) is
+  // licensed and priced in the D5 overlay pins below, not here.
+  'publish_lecture_notes',
 ]
 const workerMjs = read('main/bridge/mcpBridgeWorker.mjs')
 const registered = [...workerMjs.matchAll(/registerTool\(\s*'([a-z_]+)'/g)].map((m) => m[1])
@@ -1103,6 +1126,16 @@ const PINNED_OVERLAY_HASHES: Record<string, string> = {
   // never infers "this one can be brief" on its own.
   'learn-skill.mobile-walk-protocol.md': '4f85d56bd5c0b370',
   'dialogue-grammar.mobile-walk-exception.md': '9cbbd325856c2c76',
+  // 2026-11-07 — Lecture Notes, a pedagogy overlay: written notes before beat
+  // 1 of a never-encoded node, which the commit-before-content rule forbids
+  // by default. Licensed by the learner's own per-sitting election (a Settings
+  // toggle the app turns into a sentence in their opening message) and priced
+  // by the bargain in the protocol's header: never-encoded nodes only, never
+  // the capstone or /review, never the probe/transfer_probe/rubric-as-list,
+  // PREDICT/STRUGGLE moved to an instance the notes did not work, VERIFY cold
+  // with the reader closed, ratings unchanged.
+  'learn-skill.lecture-notes-protocol.md': '8bcda2668a17d27a',
+  'dialogue-grammar.lecture-notes-exception.md': 'c2b7c548b718ba1a',
 }
 const overlayFiles = readdirSync(OVERLAY_DIR).filter((f) => f.endsWith('.md'))
 for (const f of overlayFiles) {
@@ -1178,6 +1211,24 @@ const LOAD_BEARING: Record<string, string[]> = {
   ],
   'dialogue-grammar.mobile-walk-exception.md': [
     'A second learner-elected exception to the menus rule',
+  ],
+  // The lecture-notes bargain: the election; who never gets notes; what the
+  // notes may never carry; where generation moves; the cold VERIFY; and the
+  // unchanged rating map.
+  'learn-skill.lecture-notes-protocol.md': [
+    'Run this protocol ONLY when this sitting\'s opening message (or a later message from the learner) says they turned on Lecture Notes.',
+    'Never infer it from a learner seeming lost, never offer it',
+    'Never the capstone',
+    'Never in `/review`',
+    'WITHOUT the node\'s `probe` or `transfer_probe`',
+    'without presenting the rubric as a checklist',
+    'PREDICT/ATTEMPT and STRUGGLE move to an instance the notes did not work',
+    'VERIFY is cold, exactly as written in the grammar.',
+    'The notes buy no discount and carry no penalty',
+  ],
+  'dialogue-grammar.lecture-notes-exception.md': [
+    'A third learner-elected exception, this one to the commit-before-content rule',
+    'Everywhere else, and by default everywhere, the rule above stands exactly as written.',
   ],
 }
 for (const [file, needles] of Object.entries(LOAD_BEARING)) {

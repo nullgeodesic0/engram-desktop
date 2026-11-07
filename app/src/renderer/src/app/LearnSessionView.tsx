@@ -110,6 +110,20 @@ import { ExportCommand } from '../components/ui/ExportCommand'
 import { FlowChain } from '../components/ritual/FlowChain'
 import { trailingRecalled } from '../../../shared/gradeResult'
 import { paperSlide, warmTone } from '../shared/soundscape'
+import { LectureNotesPanel } from '../components/LectureNotesPanel'
+import { loadLectureNotesOn } from '../shared/lectureNotesPref'
+import {
+  onLectureNotesRead,
+  onOpenLectureNotes,
+  setLectureNotesLocked,
+  type LectureNotesRef,
+} from '../shared/lectureNotesBus'
+import {
+  LECTURE_NOTES_OFF,
+  LECTURE_NOTES_ON,
+  lectureNotesElectedInTranscript,
+  lectureNotesReadMessage,
+} from '../../../shared/lectureNotesKickoff'
 
 // isNextNodeCommand / pretestRateNode / parseMisconceptionAdds /
 // looksLikeArtifactSetCommand / isArtifactSmithSpawnEvent / isSubagentSpawnTool /
@@ -496,6 +510,15 @@ export function LearnSessionView({
   const [jobs, setJobs] = useState<Job[]>([])
   const [contextUsage, setContextUsage] = useState<{ usedTokens: number; contextWindow: number } | null>(null)
   const [currentBeat, setCurrentBeat] = useState<string | null>(null)
+  // Lecture notes (Settings → Lecture notes). `notesOpen` is the reader
+  // drawer beside the transcript; `latestNotes` is the most recent set of
+  // notes this sitting produced, which the header button reopens.
+  const [notesOpen, setNotesOpen] = useState<LectureNotesRef | null>(null)
+  const [latestNotes, setLatestNotes] = useState<LectureNotesRef | null>(null)
+  // A Settings change the tutor has not heard about yet in a resumed
+  // sitting (resume sends no kickoff). Prefixed to the learner's next turn,
+  // in their own words, then cleared.
+  const pendingNotesElectionRef = useRef<string | null>(null)
   const [currentNodeId, setCurrentNodeId] = useState<string | null>(null)
   const [beatTrail, setBeatTrail] = useState<Map<string, BeatOutcome>>(new Map())
   const [nodePosition, setNodePosition] = useState<string | null>(null)
@@ -709,6 +732,34 @@ export function LearnSessionView({
   // one" — see `bareProbeHeaderExceptionApplies`. Reset wherever the flag is.
   const boundaryRunRef = useRef({ count: 0, interactive: false })
 
+  // Lecture notes: the transcript card's two gestures arrive as window
+  // events (see lectureNotesBus.ts). Read through refs so the listeners are
+  // attached once and always see the live sitting.
+  const sendLearnerTurnRef = useRef<(text: string, files: string[], fromComposer?: boolean) => Promise<void>>(async () => {})
+  const busyRef = useRef(false)
+  busyRef.current = busy
+  useEffect(() => {
+    const offOpen = onOpenLectureNotes((ref) => setNotesOpen(ref))
+    const offRead = onLectureNotesRead((ref) => {
+      if (!sessionIdRef.current || busyRef.current) return
+      setNotesOpen(null)
+      void sendLearnerTurnRef.current(lectureNotesReadMessage(ref.title), [], false)
+    })
+    return () => {
+      offOpen()
+      offRead()
+    }
+  }, [])
+  // Closed for the cold VERIFY probe (the learner chose this): the beat
+  // stepper's own `verify` state, set from the tutor's VERIFY label, is the
+  // signal. It lifts as soon as the walk moves on to any other beat or node.
+  const notesLocked = started && currentBeat === 'verify'
+  useEffect(() => {
+    setLectureNotesLocked(notesLocked)
+    if (notesLocked) setNotesOpen(null)
+  }, [notesLocked])
+  useEffect(() => () => setLectureNotesLocked(false), [])
+
   function pushMark(m: DistributiveOmit<RitualMark, 'id' | 'atIndex'>) {
     setMarks((prev) => [
       ...prev,
@@ -744,6 +795,9 @@ export function LearnSessionView({
   // openTopic's preamble (switching into a topic, whether resumed or fresh). Does NOT
   // include started/activeTopic/viewingHistoryId/refreshTopics — those vary by caller.
   function resetSessionEphemera() {
+    setNotesOpen(null)
+    setLatestNotes(null)
+    pendingNotesElectionRef.current = null
     setMessages([])
     setJobs([])
     setContextUsage(null)
@@ -939,6 +993,17 @@ export function LearnSessionView({
         case 'figure':
           pushMark({ kind: 'figure', title: intent.title, body: intent.body })
           break
+        case 'lecture-notes': {
+          // Only accepted notes reach this channel (main forwards after it
+          // has stored them). Open the reader straight away: the protocol
+          // has the tutor wait until the learner says they have read them.
+          const ref = { topic: intent.topic, node: intent.node, title: intent.title }
+          setMarks((prev) => prev.map((m) => (m.kind === 'lecture-notes' ? { ...m, awaitingRead: false } : m)))
+          pushMark({ kind: 'lecture-notes', ...ref, accepted: true, awaitingRead: true })
+          setLatestNotes(ref)
+          setNotesOpen(ref)
+          break
+        }
         case 'comparison':
           pushMark({ kind: 'comparison', title: intent.title, left: intent.left, right: intent.right })
           break
@@ -1592,6 +1657,17 @@ export function LearnSessionView({
       // live session's own marks (should this ever race a second hydration)
       // are never clobbered.
       setMarks((prev) => (prev.length === 0 ? deriveRitualMarks(lines) : prev))
+      // Lecture notes: reopen-able from the header, and tell a resumed tutor
+      // about a Settings change it has not heard (resume sends no kickoff).
+      const replayedNotes = deriveRitualMarks(lines).filter(
+        (m): m is Extract<typeof m, { kind: 'lecture-notes' }> => m.kind === 'lecture-notes' && m.accepted === true,
+      )
+      const lastNotes = replayedNotes[replayedNotes.length - 1]
+      if (lastNotes) setLatestNotes({ topic: lastNotes.topic, node: lastNotes.node, title: lastNotes.title })
+      const elected = lectureNotesElectedInTranscript(lines) === true
+      const wantNotes = loadLectureNotesOn()
+      if (wantNotes && !elected) pendingNotesElectionRef.current = LECTURE_NOTES_ON
+      else if (!wantNotes && elected) pendingNotesElectionRef.current = LECTURE_NOTES_OFF
     } else {
       setMessages([])
       setContextUsage(null)
@@ -1602,7 +1678,8 @@ export function LearnSessionView({
     // A fresh start still waits on the model's first response as before.
     setBusy(!priorId)
 
-    const message = `Use the /engram:learn skill to continue the "${topic.title}" topic (topic id: "${topic.topic}") specifically — I've already picked it from the app's topic list, no need to ask which topic.`
+    let message = `Use the /engram:learn skill to continue the "${topic.title}" topic (topic id: "${topic.topic}") specifically — I've already picked it from the app's topic list, no need to ask which topic.`
+    if (!priorId && loadLectureNotesOn()) message += `\n\n${LECTURE_NOTES_ON}`
     const { sessionId: sid } = await window.engram.resumeSession(message, 'learn', topic.topic)
     sessionIdRef.current = sid
     setSessionId(sid)
@@ -1627,7 +1704,8 @@ export function LearnSessionView({
       .then((h) => setWalkNumber(h.length + 1))
       .catch(() => setWalkNumber(null))
     fetchCommitment()
-    const message = `Use the /engram:learn skill to start a fresh session on the "${topic.title}" topic (topic id: "${topic.topic}") — I've explicitly chosen to start over rather than continue any prior session on this topic.`
+    let message = `Use the /engram:learn skill to start a fresh session on the "${topic.title}" topic (topic id: "${topic.topic}") — I've explicitly chosen to start over rather than continue any prior session on this topic.`
+    if (loadLectureNotesOn()) message += `\n\n${LECTURE_NOTES_ON}`
     const { sessionId: sid } = await window.engram.startSession(message, 'learn', topic.topic)
     sessionIdRef.current = sid
     setSessionId(sid)
@@ -1660,6 +1738,7 @@ export function LearnSessionView({
     if (contextFiles.length > 0) {
       message += `\n\nContext files to Read and draw on while building the curriculum:\n${contextFiles.map((p) => `- ${p}`).join('\n')}`
     }
+    if (loadLectureNotesOn()) message += `\n\n${LECTURE_NOTES_ON}`
     const { sessionId: sid } = await window.engram.startSession(message, 'learn')
     sessionIdRef.current = sid
     setSessionId(sid)
@@ -1743,22 +1822,42 @@ export function LearnSessionView({
 
   async function submitProduction() {
     if (!sessionId || !production.trim() || busy) return
-    const text = production.trim()
-    const files = attachedFiles
+    await sendLearnerTurn(production.trim(), attachedFiles)
+  }
+
+  /** One learner turn — the composer's submit, and the lecture-notes card's
+   * "I've read them" button (a learner click, so a learner turn). */
+  async function sendLearnerTurn(text: string, files: string[], fromComposer = true) {
+    if (!sessionId) return
     setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'user', text, attachments: files, timestamp: Date.now() }])
     setBusy(true)
-    clearDraft(draftId)
-    setProduction('')
-    setAttachedFiles([])
+    // A button-sent turn leaves whatever the learner has half-typed alone.
+    if (fromComposer) {
+      clearDraft(draftId)
+      setProduction('')
+      setAttachedFiles([])
+    }
     setSuggestedActions([])
     // The model already has the Read tool allowlisted (see permissionConfig.ts) — naming
     // the paths here is enough for it to pull the content in itself, no upload needed.
-    const sentText =
+    let sentText =
       files.length > 0
         ? `${text}\n\n[Attached files — read these for context: ${files.join(', ')}]`
         : text
+    // The learner has spoken, so no older notes card is still waiting on them.
+    setMarks((prev) =>
+      prev.some((m) => m.kind === 'lecture-notes' && m.awaitingRead)
+        ? prev.map((m) => (m.kind === 'lecture-notes' ? { ...m, awaitingRead: false } : m))
+        : prev,
+    )
+    if (pendingNotesElectionRef.current) {
+      sentText = `${pendingNotesElectionRef.current}\n\n${sentText}`
+      pendingNotesElectionRef.current = null
+    }
     await window.engram.sendMessage(sessionId, sentText)
   }
+
+  sendLearnerTurnRef.current = sendLearnerTurn
 
   async function answerAsk(requestId: string, chosen: string[] | null) {
     const mark = marks.find((m): m is Extract<RitualMark, { kind: 'ask' }> => m.kind === 'ask' && m.requestId === requestId)
@@ -2094,6 +2193,21 @@ export function LearnSessionView({
                 }
                 commands={
                   <>
+                    {latestNotes && (
+                      <button
+                        onClick={() => setNotesOpen((open) => (open ? null : latestNotes))}
+                        disabled={notesLocked}
+                        aria-pressed={notesOpen != null}
+                        title={notesLocked ? 'Closed while you answer the final check from memory' : `Lecture notes · ${latestNotes.title}`}
+                        className={`focus-ring label-data text-[11px] uppercase tracking-[0.1em] shrink-0 px-2 py-0.5 border disabled:opacity-40 ${
+                          notesOpen
+                            ? 'border-[var(--color-ink-warm)] text-[var(--color-ink-warm)] bg-[color-mix(in_srgb,var(--color-ink-warm)_18%,transparent)]'
+                            : 'border-[var(--color-ink-warm-dim)] text-[var(--color-ink-warm)] hover:text-[var(--color-text-primary)]'
+                        }`}
+                      >
+                        Lecture notes
+                      </button>
+                    )}
                     {activeTopic && (
                       <button
                         onClick={() => setHistoryDrawerOpen(true)}
@@ -2607,6 +2721,14 @@ export function LearnSessionView({
                 )}
               </div>
             </ChatScrollRegion>
+            {/* Lecture notes reader — beside the transcript, above the
+                composer dock (never covering it), so the learner can read
+                and type in the same view. */}
+            {notesOpen && !notesLocked && (
+              <div className="absolute top-0 right-0 bottom-0 z-20 w-[min(600px,50%)] min-w-[360px]">
+                <LectureNotesPanel topic={notesOpen.topic} node={notesOpen.node} onClose={() => setNotesOpen(null)} />
+              </div>
+            )}
             {/* The walk's closing ceremony — no longer an inline shrink-0
                 block stealing transcript height: the shared bottom-edge
                 overlay (ritual/SummaryOverlay, same grammar as Review's
