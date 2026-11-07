@@ -31,7 +31,7 @@ export const ReviewDocket = memo(function ReviewDocket({ items }: { items: Revie
         {shown.map((it) => (
           <div key={it.id} className="flex items-center gap-2.5">
             <span className="text-sm text-[var(--color-text-dim)] flex-1 min-w-0 truncate">{humanizeNodeId(it.id)}</span>
-            <span className="label-data text-[10px] tracking-[0.1em] text-[var(--color-text-faint)] shrink-0 uppercase">
+            <span className="label-data text-[11px] tracking-[0.1em] text-[var(--color-text-faint)] shrink-0 uppercase">
               {it.topic}
             </span>
             <span className="label-data text-[10px] text-[var(--color-ink-warm)] shrink-0 w-9 text-right">

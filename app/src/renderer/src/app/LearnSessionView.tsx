@@ -87,9 +87,10 @@ import { HealthRing } from '../components/ui/HealthRing'
 import { PinTackIcon } from '../components/ui/PinTackIcon'
 import { TopicCard } from '../components/TopicCard'
 import { SectionBanner } from '../components/ui/SectionBanner'
-import { PlateFigure } from '../components/ui/PlateFigure'
 import { SegmentedControl } from '../components/ui/SegmentedControl'
-import { topicBucket, topicChips } from '../shared/topicShelf'
+import { topicBucket } from '../shared/topicShelf'
+import { pendingQuestion } from '../shared/pendingQuestion'
+import { PinnedQuestion } from '../components/PinnedQuestion'
 import { sortTopics, TOPIC_SORT_OPTIONS, type TopicSortKey } from '../shared/topicSort'
 import { loadTopicSort, saveTopicSort, loadTopicGroup, saveTopicGroup, type TopicGroupKey } from '../shared/topicSortPrefs'
 import { groupTopicsByFolder, TOPIC_GROUP_OPTIONS } from '../shared/topicFolders'
@@ -285,15 +286,31 @@ function LearnTopicGroup({
  */
 function ContinueHero({ topic: t, onOpen, morphing }: { topic: TopicListEntry; onOpen: () => void; morphing: boolean }) {
   const total = t.states.new + t.states.learning + t.states.review
-  const chips = topicChips(t).map((c) => c.label)
+  // What "continue" will actually open: the engine's own next node for this
+  // topic. The card used to repeat the row's chips, which said nothing the
+  // row below did not; the next concept is the one fact only this card has.
+  // Absent until it loads, and simply absent if the engine has no next node.
+  const [nextId, setNextId] = useState<string | null>(null)
+  useEffect(() => {
+    let live = true
+    setNextId(null)
+    window.engram
+      .nextNode(t.topic)
+      .then((r) => {
+        if (live) setNextId(r.id)
+      })
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+  }, [t.topic])
   return (
-    <div className="tilt-card panel-plate dogear px-6 py-5 flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
-      <div className="flex flex-col gap-2 min-w-0 flex-1">
-        <span className="label-data text-[10px] uppercase tracking-[0.28em] text-[var(--color-ink-warm)]">
+    <div className="tilt-card panel-plate dogear px-6 py-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-3">
+      <div className="flex flex-col gap-1.5 min-w-0 flex-1">
+        <span className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-ink-warm)]">
           Pick up where you left off
         </span>
         <div className="flex items-center gap-3 min-w-0">
-          <InkNode id={t.topic} variant="filled" size={18} />
           <HealthRing consolidated={t.states.review} total={total} due={t.due} size={22} />
           <TopicTitle
             title={t.title}
@@ -301,13 +318,15 @@ function ContinueHero({ topic: t, onOpen, morphing }: { topic: TopicListEntry; o
             style={morphing ? { viewTransitionName: 'learn-morph-title' } : undefined}
           />
         </div>
+        {nextId && (
+          <div className="label-data text-xs text-[var(--color-text-dim)]">
+            next concept · <span className="text-[var(--color-text-primary)]">{humanizeNodeId(nextId)}</span>
+          </div>
+        )}
         {/* The goal at readable size and on the text ramp. In the row it is
             `text-faint`, one-line-clamped — the most human thing on the page
             (what this topic is FOR) set as the faintest. */}
         {t.goal && <p className="text-sm text-[var(--color-text-dim)] leading-relaxed line-clamp-2">{t.goal}</p>}
-        {chips.length > 0 && (
-          <div className="label-data text-[10px] text-[var(--color-text-faint)]">{chips.join(' · ')}</div>
-        )}
       </div>
       <Button variant="primary" size="lg" onClick={onOpen} className="shrink-0">
         Continue
@@ -333,7 +352,7 @@ function AddTerritoryCard({ onClick, blocked }: { onClick: () => void; blocked: 
     >
       <span className="text-lg leading-none text-[var(--color-text-faint)]">+</span>
       <div className="flex flex-col gap-0.5">
-        <span className="text-sm text-[var(--color-text-dim)]">Chart a new territory</span>
+        <span className="text-sm text-[var(--color-text-dim)]">Start a new topic</span>
         {blocked && (
           <span className="label-data text-[10px] text-[var(--color-ink-danger)]">blocked — rate limit in effect</span>
         )}
@@ -1933,6 +1952,7 @@ export function LearnSessionView({
   )
   const summaryCtl = makePeek(summaryLeaveTimer, setSummaryPeek)
   const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null)
+  const pendingQ = useMemo(() => pendingQuestion(messages), [messages])
   // The shelf's ordering pick (appended hook, KeepMounted append rule) —
   // applied INSIDE each of the three buckets, never across them: the
   // bucketing answers "what state is this topic in", the sort answers
@@ -2044,7 +2064,7 @@ export function LearnSessionView({
                   currentNodeId || nodePosition || walkNumber != null ? (
                     <div
                       key={currentNodeId ?? 'none'}
-                      className="label-data text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-faint)] flex items-center gap-1.5 min-w-0"
+                      className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-faint)] flex items-center gap-1.5 min-w-0"
                     >
                       {currentNodeId && (
                         <span className="text-[var(--color-ink-warm)] truncate">{humanizeNodeId(currentNodeId)}</span>
@@ -2077,7 +2097,7 @@ export function LearnSessionView({
                     {activeTopic && (
                       <button
                         onClick={() => setHistoryDrawerOpen(true)}
-                        className="focus-ring cmd-item label-data text-[10px] uppercase tracking-[0.16em] shrink-0"
+                        className="focus-ring cmd-item label-data text-[11px] uppercase tracking-[0.1em] shrink-0"
                       >
                         History
                       </button>
@@ -2088,7 +2108,7 @@ export function LearnSessionView({
                     <button
                       onClick={backToTopics}
                       title="Leave this session view (the session keeps running)"
-                      className="focus-ring cmd-item label-data text-[10px] uppercase tracking-[0.16em] shrink-0"
+                      className="focus-ring cmd-item label-data text-[11px] uppercase tracking-[0.1em] shrink-0"
                     >
                       All topics
                     </button>
@@ -2167,29 +2187,23 @@ export function LearnSessionView({
               <header className="shrink-0 -mx-8 px-8 pb-2 border-b border-[var(--color-hairline)]">
                 <div className="page-measure flex flex-col gap-2">
                 <h1 className="font-(family-name:--font-serif) text-[length:var(--text-display)] text-[var(--color-text-primary)]">Learn</h1>
-                {/* The shelf's briefing figure (ui/PlateFigure — the ready-room
-                    grammar): territory count as the headline, the atlas-wide due
-                    total as its note. Same numbers the old faint one-line
-                    subtitle carried, read off the same already-fetched `topics`
-                    list (each entry's own `.due`), not a second fetch. Hidden
-                    until topics have loaded so it never flashes "0 territories"
-                    before the real count lands. */}
+                {/* One plain line, not a display numeral: how many topics
+                    you have is not the thing this page is for, and the big
+                    figure made it the largest object on the screen. Hidden
+                    until topics have loaded so it never flashes "0 topics". */}
                 {topics !== null && topics.length > 0 && (() => {
                   const atlasDue = topics.reduce((sum, t) => sum + t.due, 0)
                   return (
                     <div className="flex items-end justify-between gap-4">
-                      <PlateFigure
-                        value={topics.length}
-                        tone="primary"
-                        title={topics.length === 1 ? 'territory in the atlas' : 'territories in the atlas'}
-                        note={
-                          atlasDue > 0 ? (
-                            <span className="text-[var(--color-ink-warm)]">{atlasDue} due across the atlas</span>
-                          ) : (
-                            'nothing due across the atlas'
-                          )
-                        }
-                      />
+                      <div className="label-data text-sm text-[var(--color-text-dim)] pb-1">
+                        {topics.length} {topics.length === 1 ? 'topic' : 'topics'}
+                        {' · '}
+                        {atlasDue > 0 ? (
+                          <span className="text-[var(--color-ink-warm)]">{atlasDue} due for review</span>
+                        ) : (
+                          'nothing due for review'
+                        )}
+                      </div>
                       {/* Hidden below two topics — a control that cannot
                           change anything is noise. Orders WITHIN each shelf
                           group; the groups themselves never move. */}
@@ -2198,7 +2212,7 @@ export function LearnSessionView({
                           <div className="flex items-center gap-2">
                             <span
                               id="learn-topic-group-label"
-                              className="label-data text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-faint)]"
+                              className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-faint)]"
                             >
                               group
                             </span>
@@ -2215,7 +2229,7 @@ export function LearnSessionView({
                           <div className="flex items-center gap-2">
                             <span
                               id="learn-topic-sort-label"
-                              className="label-data text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-faint)]"
+                              className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-faint)]"
                             >
                               sort
                             </span>
@@ -2366,7 +2380,7 @@ export function LearnSessionView({
             )}
             {topics !== null && topics.length === 0 && envCheck !== null && !envBroken && (
               <Card className="px-5 py-4 flex flex-col gap-3 items-start">
-                <div className="fig-caption">Fig. — no territories mapped yet</div>
+                <div className="fig-caption">Fig. — no topics yet</div>
                 <div className="font-(family-name:--font-serif) text-[length:var(--text-display)] text-[var(--color-text-primary)]">
                   Every topic starts as a first-principles map.
                 </div>
@@ -2675,6 +2689,18 @@ export function LearnSessionView({
               rather than the composer vanishing outright the way it did
               under the old modal. Every other `busy` reason still hides it
               exactly as before. */}
+          {/* The question being answered, pinned above the composer once it
+              has scrolled out of view (research rule: the probe stays
+              pinned). Hidden while the tutor is still writing. */}
+          {!busy && pendingQ && (
+            <PinnedQuestion
+              text={pendingQ.text}
+              msgIndex={pendingQ.index}
+              scrollEl={scrollEl}
+              nodeIds={chipNodeIds}
+              nodeChipTopic={activeTopic?.topic}
+            />
+          )}
           {(!busy || tutorActivity.activity.kind === 'awaiting-ask') && (
             <MessageComposer
               production={production}

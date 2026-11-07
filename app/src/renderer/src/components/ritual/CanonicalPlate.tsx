@@ -21,7 +21,7 @@ import { MathRenderer } from '../MathRenderer'
 export const CanonicalPlate = memo(function CanonicalPlate({ segment }: { segment: CanonicalSegment }) {
   return (
     <div className="tilt-card-soft panel-plate px-5 py-4 flex flex-col gap-2.5">
-      <span className="label-data text-[10px] tracking-[0.22em] uppercase text-[var(--color-ink-warm)]">
+      <span className="label-data text-[11px] tracking-[0.1em] uppercase text-[var(--color-ink-warm)]">
         {segment.marker}
       </span>
       <MathRenderer text={segment.body} className="voice-serif text-[var(--color-text-primary)]" />

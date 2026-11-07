@@ -37,7 +37,7 @@ function Slider({
 }): React.JSX.Element {
   return (
     <label className="flex flex-col gap-1">
-      <span className="flex items-baseline justify-between gap-2 text-[10px] label-data uppercase tracking-[0.12em] text-[var(--color-text-dim)]">
+      <span className="flex items-baseline justify-between gap-2 text-[11px] label-data uppercase tracking-[0.1em] text-[var(--color-text-dim)]">
         <span>{label}</span>
         <span className="tabular-nums text-[var(--color-text-primary)]">{format ? format(value) : value}</span>
       </span>
@@ -90,11 +90,11 @@ export function GraphSettings({
       onWheel={(event) => event.stopPropagation()}
     >
       <header className="flex items-center justify-between gap-2">
-        <span className="label-data text-[10px] uppercase tracking-[0.18em] text-[var(--color-text-primary)]">Graph settings</span>
+        <span className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-primary)]">Graph settings</span>
         <span className="flex items-center gap-2.5">
           <button
             type="button"
-            className="focus-ring label-data bg-transparent p-0 text-[10px] uppercase tracking-[0.12em] text-[var(--color-text-dim)] hover:text-[var(--color-text-primary)]"
+            className="focus-ring label-data bg-transparent p-0 text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-dim)] hover:text-[var(--color-text-primary)]"
             onClick={() => onChange(structuredClone(DEFAULT_GRAPH_SETTINGS))}
           >
             Reset
@@ -102,7 +102,7 @@ export function GraphSettings({
           <button
             type="button"
             aria-label="Close graph settings"
-            className="focus-ring label-data bg-transparent p-0 text-[10px] uppercase tracking-[0.12em] text-[var(--color-text-dim)] hover:text-[var(--color-text-primary)]"
+            className="focus-ring label-data bg-transparent p-0 text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-dim)] hover:text-[var(--color-text-primary)]"
             onClick={onClose}
           >
             Close

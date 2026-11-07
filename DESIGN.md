@@ -164,8 +164,8 @@ The system's own tension is that it is simultaneously very dark, very sharp, and
 - Warm-black ground (`#0d0e12`), warm paper text (`#e6dfd0`) — never a cold gray/white pairing.
 - Zero radius everywhere by decree; `rounded-full` is the single reserved exception for organic marks.
 - Semantic ink: color encodes memory state, not visual hierarchy.
-- Translucent glass panels (62–82% fill, 12px blur) over an ambient field.
-- Near-subliminal card physics — a slow idle drift and a damped pointer-follow tilt.
+- Near-opaque glass panels (90–97% fill, 12px blur) over an ambient field that always paints behind content, at reduced strength.
+- Card physics on demand — dashboard cards tilt toward the pointer while hovered and sit flat and aligned at rest.
 - Two motion durations for the entire app: 120ms and 200ms.
 
 ## Colors
@@ -198,7 +198,7 @@ A narrow-band palette of ink colors on a warmed near-black, where hue carries me
 
 **The Consolidation Axis Rule.** Cool and warm are not "accent 1" and "accent 2." Cool means *not yet consolidated*; warm means *survived*. A warm accent on something that has not consolidated is a defect, not a style choice. Nothing may be recolored along this axis for visual balance.
 
-**The Reserved Danger Rule.** Danger ink marks a learner's struggle or a lapsed memory. It is never the color of a validation error, a failed network call, a destructive-action button, or a generic alert. Those need their own treatment — usually text, not hue.
+**The Reserved Danger Rule.** Danger ink marks a learner's struggle or a lapsed memory. It is never the color of a validation error, a failed network call, a destructive-action button, or a generic alert. Those need their own treatment — usually text, not hue. Nor is it the color of work that is merely due or overdue: a due count, an overdue note, the sitting ruler's overdue underline and the topic ring's due notch are the schedule's state, not the learner's mistake, so they take warm ink and spell the fact out in words.
 
 *One standing exception: the window close control in `TitleBar`.* Its red is not this product's semantics but the platform's — a macOS traffic light that is not red reads as broken chrome, and no learner will mistake the window controls for a grade. The exception is exactly one control, and it does not generalize to destructive actions inside the app, which stay under the rule.
 
@@ -227,7 +227,7 @@ The licensed faces **are the design.** They live on the author's machine and are
   - **Prose h3** (0.8125rem, Neue Haas medium, uppercase, `0.1em` tracking, `--color-text-dim`)
   - **Prose lede** (`1.06em` of prose, first paragraph only, and only when a second paragraph exists)
 - **Caption** (`--text-caption`, 0.75rem, Epoca Pro Medium Italic, `--color-text-dim`): the `.fig-caption` utility — the "Fig. N —" atlas caption, used for stats, empty states, and any line that comments on the interface rather than being it.
-- **Label** (`--text-data`, 0.8125rem, Futura with `font-variant-numeric: tabular-nums`, `letter-spacing: 0.02em`): the `.label-data` utility. All chrome controls, chips, and figures. In control chrome it drops to 10px uppercase with `0.16em` tracking.
+- **Label** (`--text-data`, 0.8125rem, Futura with `font-variant-numeric: tabular-nums`, `letter-spacing: 0.02em`): the `.label-data` utility. All chrome controls, chips, and figures. In control chrome it drops to 11px uppercase with `0.1em` tracking (design review 2 raised it from 10px at 0.16–0.28em, which read as texture rather than words). No uppercase label goes below 11px.
 
 ### Named Rules
 
@@ -254,9 +254,9 @@ Responsiveness is a desktop concern rather than a mobile one — this is a macOS
 Hybrid, and unusually literal about it. Depth comes from four stacked mechanisms, all four of which are signature:
 
 1. **Tonal layering** — three surface tiers (`surface` / `surface-2` / `surface-3`) establish rank before any shadow does.
-2. **Glass** — panels are translucent (`color-mix` at 62% for `.panel`, 68% for `.panel-raised`) over `backdrop-filter: blur(12px)`, so the app's ambient field reads through every card as weather behind text. Inside the transcript (`.chat-glass`) the fill steps up to 76/82% so long-form reading sits on steadier ground. The light theme raises every alpha (78/84/82/90/93%) because a pale field behind the blur gives a card less to differentiate against.
+2. **Glass** — panels are near-opaque (`color-mix` at 90% for `.panel`, 92% for `.panel-raised` and `.panel-plate`) over `backdrop-filter: blur(12px)`, so the ambient field reads in the gutters and only faintly through a card. Inside the transcript (`.chat-glass`) the fill is 97%: prose is read for half an hour and nothing should move behind it. The light theme uses 92/94/94/97/97%. The field itself (`.neural-field-root`) sits at `z-index: -1` and 45% opacity (60% in light), so it can never paint over unpositioned text. Design review 1 (2026-11-07) raised these from 62–82% after lines were seen crossing nav labels, the transcript and Submit.
 3. **Shadow** — a single two-part recipe: a hairline top catch-light plus a soft, high-offset drop. Direction is theme-aware: a near-black bruise on the dark ground, a low-alpha warm-ink lift on the pale one.
-4. **Card physics** — card-scale surfaces sit in shallow 3D through `perspective(1200px)`, with two motions that are both meant to sit just under conscious notice: a slow idle drift (≤0.9°, half-minute periods, per-card phase so the surface breathes rather than marches) and a damped pointer-follow tilt (≤3.2° at the edges) where the corner under the cursor dips *away*, as if pressed.
+4. **Card physics** — dashboard cards (`.tilt-card`) sit in shallow 3D through `perspective(1200px)` and respond to the pointer while hovered: a damped tilt (≤3.2° at the edges) where the corner under the cursor dips *away*, as if pressed. At rest every card is flat. The original idle drift was retired in design review 1 (2026-11-07) because it held bordered cards visibly out of alignment and moved text while it was read; transcript (`.tilt-card-soft`) and rail (`.tilt-card-rail`) surfaces no longer move at all.
 
 ### Shadow Vocabulary
 - **Panel rest** (`inset 0 1px 0 rgba(228,231,237,0.04), 0 8px 20px -12px rgba(0,0,0,0.5)`): every `.panel`. The inset is a catch-light on the top edge, not a border.
@@ -298,12 +298,14 @@ Three named form devices carry state:
 - **Shape:** hard right angle (`0px`), hairline border.
 - **Primary:** `--color-accent-cta` fill (amber in dark, `#3d5266` grayish blue in light) on void text, `px-4 py-3` for the composer's send action. Hover moves to `--color-accent-cta-hover`.
 - **Hover / Focus:** color transitions at `--dur-fast` (120ms) via a global `button { transition }` rule, plus the app-wide press transform (`button:active` → `scale(0.97)`). Focus is always `.focus-ring` — a 2px `--color-ink-warm` outline at `2px` offset, never a bespoke treatment.
-- **Chrome controls (`CTRL`):** the app-wide idiom for page-level controls — `.label-data` at 10px uppercase, `0.16em` tracking, `px-2.5 py-1`, hairline border, rail-tier tilt. Transparent at rest (`CTRL_QUIET`, dim text → primary text on hover). The **filled** variant marks importance — an active toggle, a lens, a primary action — as a 16% wash of the environment accent with a dim-ink border.
+- **Chrome controls (`CTRL`):** the app-wide idiom for page-level controls — `.label-data` at 11px uppercase, `0.1em` tracking, `px-2.5 py-1`, hairline border, rail-tier tilt. Transparent at rest (`CTRL_QUIET`, dim text → primary text on hover). The **filled** variant marks importance — an active toggle, a lens, a primary action — as a 16% wash of the environment accent with a dim-ink border.
 
 ### The Environment Accent
 Shared chrome carries a per-environment identity: **Learn accents warm** (encoding new ground), **Review accents cool** (retrieval under test). It travels as an explicit `EnvAccent` prop on shared components, never a context provider, and `ctrlFilled()` returns one of two *static* template strings so Tailwind's JIT sees both literal class lists. **Semantic inks — grade colors, threshold violet, danger — never route through the environment accent.**
 
-The split also governs the doors: Home's main menu inks Learn warm and Review cool, so the one screen that opens both environments states which is which. Coach and Artifacts take violet there — the definition of violet names those surfaces. Grades, Topic Map and Settings stay neutral, because a section with no true ink must not be given one; the palette's rules only hold their force while nothing wears an ink it has not earned.
+Navigation is one tab strip (`CommandStrip`) on every screen, Home included. Design review 2 (2026-11-07) retired Home's Sections menu, which duplicated the strip and pushed the learner's own study below the fold. Sections with no true ink stay neutral there, because the palette's rules only hold their force while nothing wears an ink it has not earned.
+
+**Plain words over metaphor in controls and counts.** The atlas register belongs to captions, figures and ornament. Counts, buttons and empty states say "topics", not "territories".
 
 ### Chips
 - **Style:** `.label-data` at 10px, `px-1.5 py-0.5`, hairline border, a 68% `surface-3` wash, dim text.
@@ -311,7 +313,7 @@ The split also governs the doors: Home's main menu inks Learn warm and Review co
 
 ### Cards / Containers
 - **Corner style:** `0px`.
-- **Background:** `.panel` (surface, 62%), `.panel-raised` (surface-2, 68%), `.panel-plate` (surface with a warm inset frame). Inside `.chat-glass` the first two step up to 76% / 82%.
+- **Background:** `.panel` (surface, 90%), `.panel-raised` (surface-2, 92%), `.panel-plate` (surface 92% with a warm inset frame). Inside `.chat-glass` both step up to 97%.
 - **Shadow strategy:** see Elevation — catch-light plus soft drop, `backdrop-filter: blur(12px)`.
 - **Border:** `1px solid var(--color-edge)`.
 - **Internal padding:** `px-3 py-2.5` standard; `gap-1` tight, `gap-1.5` default.
@@ -347,7 +349,7 @@ Tutor prose in this transcript is set as a page rather than as chat: its own ser
 - **Do** reach for `.panel`, `.panel-raised`, `.panel-plate`, `.label-data`, `.fig-caption`, `.focus-ring`, and the `CTRL` recipes before writing new chrome. The idioms exist; a new one is a claim that all of them are wrong.
 - **Do** pass `EnvAccent` explicitly on shared components, and keep semantic inks out of it.
 - **Do** give a `.frame-hover` or `.frame-selected` element its own unclipped wrapper when the natural host is `overflow-hidden`.
-- **Do** respect `prefers-reduced-motion` — the app-wide kill-switch covers idle drift, pointer tilt, and entry animations, and any new motion must fall under it.
+- **Do** respect `prefers-reduced-motion` — the app-wide kill-switch covers pointer tilt and entry animations, and any new motion must fall under it.
 - **Do** keep the transcript dense. It is read for thirty minutes at a stretch.
 
 ### Don't:

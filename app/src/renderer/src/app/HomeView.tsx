@@ -8,7 +8,6 @@ import type {
   ActiveExperiment,
   ReceiptsHistory,
   Misconception,
-  AuthSettings,
 } from '../../../shared/types'
 import { SkeletonBar, SkeletonGrid } from '../components/Skeleton'
 import { emitPulse } from '../../../shared/neuralFieldBus'
@@ -27,12 +26,10 @@ import { EnvironmentSteps } from '../components/EnvironmentSteps'
 import { ExperimentBanner } from '../components/ExperimentBanner'
 import { computeDueBuckets } from '../shared/dueBuckets'
 import { recentViews, type RecentView } from '../shared/recentlyViewed'
-import { MainMenuView, type MainMenuNavItem } from './MainMenuView'
-import { computeTopicGrade, computeCrossTopicGPA, letterColorClass, type TopicGradeResult } from '../shared/topicGrade'
+import { computeTopicGrade, letterColorClass, type TopicGradeResult } from '../shared/topicGrade'
 import { allPicks } from '../shared/calibrationStore'
 import { ActivityStrip } from '../components/charts/ActivityStrip'
 import { MathRenderer } from '../components/MathRenderer'
-import { SUBSCRIPTION_MODEL_OPTIONS } from '../../../shared/subscriptionModels'
 import { environmentIsReady } from '../../../shared/environmentStatus'
 
 const LAST_SEEN_STREAK_KEY = 'engram-desktop:last-seen-streak-days'
@@ -342,10 +339,6 @@ interface HomeViewProps {
    * folded into the Track group's Coach card instead). `onGoReview` above
    * stays: it's the due-count plate's own primary CTA, a distinct affordance
    * from the nav grid, not a duplicate of it. */
-  nav: MainMenuNavItem[]
-  dueCount: number | null
-  activity: Record<'learn' | 'review', { active: boolean; busy: boolean }>
-  visited: Record<'learn' | 'review' | 'dashboard', boolean>
   onGoView: (id: string) => void
 }
 
@@ -362,16 +355,11 @@ export function HomeView({
   onNewTopic,
   onGoNode,
   onGoSitting,
-  nav,
-  dueCount,
-  activity,
-  visited,
   onGoView,
 }: HomeViewProps) {
   const [stats, setStats] = useState<EngramStats | null>(null)
   const [receiptsHistory, setReceiptsHistory] = useState<ReceiptsHistory | null>(null)
   const [misconceptions, setMisconceptions] = useState<Misconception[] | null>(null)
-  const [artifactCount, setArtifactCount] = useState<number | null>(null)
   // Snapshot at mount, not a subscription — this view fully remounts on every
   // visit to Home (see App.tsx's `view === 'home'` branch, not KeepMounted),
   // so a fresh localStorage read here already picks up anything recorded
@@ -397,7 +385,6 @@ export function HomeView({
   // own `refreshTopics` uses, just scoped to the active bucket rather than
   // every topic (this is decoration, not the shelf's own resume affordance).
   const [resumableTopics, setResumableTopics] = useState<Set<string>>(new Set())
-  const [authSettings, setAuthSettings] = useState<AuthSettings | null>(null)
   // Work that exists but has not been graded. This was invisible in the app,
   // so a stashed production sat in limbo until a later session happened to
   // pick it up.
@@ -488,12 +475,8 @@ export function HomeView({
     })
     window.engram.topics().then(setTopics)
     window.engram.environmentCheck().then(setEnvCheck)
-    window.engram.getAuthSettings().then(setAuthSettings)
-    // Feeds the Grades teaser, TopicCard badges, and the needs-attention
-    // callout below — same `misconceptions()`/`artifactList()` IPC calls
-    // GradesView/ArtifactGalleryView already make, no new handlers.
+    // Feeds TopicCard badges and the needs-attention callout below.
     window.engram.misconceptions().then(setMisconceptions)
-    window.engram.artifactList().then((list) => setArtifactCount(list.length))
 
     // "On this day" — the most recent day with real activity that's old enough to
     // feel like a callback rather than "yesterday" (a strict exact-N-days-ago
@@ -579,7 +562,6 @@ export function HomeView({
         ]),
       )
     : undefined
-  const gpa = topics && grades ? computeCrossTopicGPA(topics, grades) : null
 
   // "Needs attention" — the lowest-graded topic if it's genuinely struggling
   // (D/F: a grade problem is more actionable, there's a drilldown to explain
@@ -601,48 +583,6 @@ export function HomeView({
     return null
   })()
 
-  // Sections teasers — computed here (not in MainMenuView, which stays
-  // presentational) so each is exactly the fact that surface already knows,
-  // never a fresh guess. Grades' GPA letter is Home's one deliberate
-  // exception to "no letter grades outside Grades" — it's the entry point
-  // to that screen. Coach's line replaces the old standalone "Coach →"
-  // button below (removed — same fact, shown once, not twice).
-  const teasers: Partial<Record<string, string>> = {}
-  if (dueCount != null && dueCount > 0) teasers.review = `${dueCount} due now`
-  if (topics) {
-    const resumableActive = active.find((t) => resumableTopics.has(t.topic))
-    teasers.learn = resumableActive ? resumableActive.title : `${active.length} in progress`
-    teasers.topics = `${topics.length} topics · ${topics.reduce((sum, t) => sum + t.nodes, 0)} nodes mapped`
-  }
-  if (stats) {
-    teasers.dashboard =
-      stats.pending_verify > 0
-        ? `${stats.pending_verify} pending grading`
-        : stats.misconceptions_open > 0
-          ? `${stats.misconceptions_open} filed for re-testing`
-          : 'nothing filed for re-testing'
-  }
-  if (gpa?.available && gpa.letter) teasers.grades = `GPA ${gpa.letter}`
-  if (artifactCount != null) teasers.artifacts = `${artifactCount} artifact${artifactCount === 1 ? '' : 's'}`
-
-  const conversationRuntime = authSettings ? (() => {
-    if (authSettings.authMode === 'codexSubscription') {
-      return { provider: 'Codex', model: authSettings.codexModel || 'Default' }
-    }
-    if (authSettings.authMode === 'opencodeCursor') {
-      return { provider: 'OpenCode', model: authSettings.opencodeModel || 'Default' }
-    }
-    if (authSettings.authMode === 'local') {
-      return { provider: 'Claude', model: authSettings.localModel || 'Local model' }
-    }
-    const explicit = SUBSCRIPTION_MODEL_OPTIONS.find((option) => option.value === authSettings.subscriptionModel)
-    return {
-      provider: 'Claude',
-      model: authSettings.authMode === 'subscription'
-        ? (explicit?.label ?? (authSettings.subscriptionModel || 'Default'))
-        : 'API default',
-    }
-  })() : undefined
 
   return (
     <div className="p-8 flex flex-col gap-8 w-full h-full overflow-y-auto">
@@ -677,23 +617,6 @@ export function HomeView({
             </div>
           )}
         </header>
-
-        {/* Register 0 — the nav grid, Home's replacement for the old sidebar.
-            Placed first, right under the greeting: "the home menu contains
-            everything else accessible within it" is the whole point of this
-            screen now, so where everything else lives comes before the
-            due-count plate, not after it. */}
-        <div className="flex flex-col gap-3">
-          <SectionBanner label="Sections" />
-          <MainMenuView
-            nav={nav}
-            teasers={teasers}
-            activity={activity}
-            visited={visited}
-            conversationRuntime={conversationRuntime}
-            onGoView={onGoView}
-          />
-        </div>
 
         {/* The briefing plate — Home's own ready-room, now in ReadyRoomPlate's
             FULL document grammar rather than three sibling panels: the due-now

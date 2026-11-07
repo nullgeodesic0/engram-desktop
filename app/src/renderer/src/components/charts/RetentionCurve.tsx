@@ -20,7 +20,8 @@ const COMPACT_PAD_B = 4
 
 function toneOf(rate: number): string {
   if (rate >= 0.85) return 'var(--color-ink-warm)'
-  if (rate < 0.6) return 'var(--color-ink-danger)'
+  // Neutral, not danger: a low week is not a mistake (see RetentionTrend).
+  if (rate < 0.6) return 'var(--color-text-faint)'
   return 'var(--color-ink-cool)'
 }
 

@@ -1,6 +1,14 @@
 import { useCallback, useRef } from 'react'
 
 /**
+ * CURRENT BEHAVIOUR (design review 1, 2026-11-07, chosen by the author):
+ * cards are FLAT AT REST. Idle drift is retired — it rotated bordered cards
+ * out of alignment and moved text while it was being read — and pointer tilt
+ * now applies only to full-tier `.tilt-card` (dashboard) surfaces. `.tilt-card-soft`
+ * (transcript) and `.tilt-card-rail` (nav/chrome) keep their classes but
+ * never move. The history below describes the original two-motion design;
+ * the idle constants remain only because `measure()` still computes them.
+ *
  * Card physics — cards sit EMBEDDED in shallow 3D space, not printed on it.
  * Two motions, both nearly subliminal:
  *
@@ -203,16 +211,6 @@ const SMOOTH_TAU_MS = 150
  * card waiting rather than the effect having died. */
 const SCROLL_STILL_MS = 200
 let lastScrollAt = 0
-/** Idle-drift concurrency cap — hover responsiveness is never capped. Bumped
- * 18 → 24 for the coach-panel sweep: a tall Dashboard/Topic-drilldown scroll
- * position can now have noticeably more `.tilt-card` surfaces simultaneously
- * visible (stat grids, chart-host panels, the topic list) than Wave 1's
- * coverage ever put on screen at once. Still bounded and still cheap — an
- * over-cap card simply stays flat until hovered (never drops pointer
- * response) — so this is a "still feels right at the new density" nudge, not
- * a re-tuning; revisit if a future sweep pushes the on-screen count much
- * higher again. */
-const MAX_IDLE_DRIVEN = 24
 /** Below this delta, skip the style write (the change is invisible). */
 const WRITE_EPSILON_DEG = 0.0015
 /** Within this of target, a returning card counts as settled. */
@@ -336,10 +334,8 @@ const io = new IntersectionObserver(
     // Visibility changed → idle slots may have opened up. Re-offer every
     // visible card to the loop; its own settle logic prunes the over-cap
     // ones right back out (they converge to 0 and drop from `driven`).
-    if (!reduceMotion.matches) {
-      for (const el of visibleSet) driven.add(el)
-      ensureLoop()
-    }
+    // Idle drift is retired (design review 1, 2026-11-07): cards sit flat
+    // and aligned at rest, and move only while the pointer is on them.
   },
   // A little pre-warm margin so a card is already mid-drift as it scrolls in.
   { rootMargin: '64px' },
@@ -418,10 +414,8 @@ function tick(now: number): void {
   const dtMs = lastNow === 0 ? 16 : Math.min(now - lastNow, 100)
   lastNow = now
   const k = 1 - Math.exp(-dtMs / SMOOTH_TAU_MS)
-  const tSec = now / 1000
   // Treat everything as unhovered while the view is moving under the pointer.
   const settling = now - lastScrollAt < SCROLL_STILL_MS
-  let idleBudget = MAX_IDLE_DRIVEN
 
   for (const el of driven) {
     const st = states.get(el)
@@ -454,11 +448,6 @@ function tick(now: number): void {
         tx = (0.5 - ny) * 2 * POINTER_MAX_DEG * st.pointerX
         ty = (nx - 0.5) * 2 * POINTER_MAX_DEG * st.pointerY
       }
-      wantsDrive = true
-    } else if (st.visible && idleBudget > 0) {
-      idleBudget--
-      tx = st.ampX * st.idleX * Math.sin(st.omegaX * tSec + st.phaseX)
-      ty = st.ampY * st.idleY * Math.sin(st.omegaY * tSec + st.phaseY)
       wantsDrive = true
     }
 
@@ -500,9 +489,6 @@ reduceMotion.addEventListener('change', () => {
       const st = states.get(el)
       if (st) park(el, st)
     }
-  } else {
-    for (const el of visibleSet) driven.add(el)
-    ensureLoop()
   }
 })
 
@@ -584,7 +570,9 @@ function attach(container: HTMLElement): () => void {
     while (node) {
       const card = (node.closest?.(TILT_SELECTOR) ?? null) as HTMLElement | null
       if (!card) break
-      if (registered.has(card)) out.push(card)
+      // Only full-tier (dashboard) cards tilt; transcript and rail surfaces
+      // stay still so text being read never moves (design review 1).
+      if (registered.has(card) && states.get(card)?.tier === 'full') out.push(card)
       node = card.parentElement
     }
     return out

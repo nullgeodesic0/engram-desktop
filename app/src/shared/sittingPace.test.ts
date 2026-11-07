@@ -82,9 +82,10 @@ describe('planSitting', () => {
     expect(planSitting(10, [], model)).toEqual({ items: 0, predictedSeconds: 0, overruns: false })
   })
 
-  it('reproduces the flat old behaviour when nothing has been measured', () => {
-    // 10 minutes at the historical 60s assumption is 10 items.
-    expect(planSitting(10, Array(20).fill('x'), buildPaceModel([])).items).toBe(10)
+  it('uses the four-minute default when nothing has been measured', () => {
+    // 10 minutes at the 240s default is 2 items, not the 10 the old
+    // one-minute assumption promised.
+    expect(planSitting(10, Array(20).fill('x'), buildPaceModel([])).items).toBe(2)
   })
 })
 
@@ -93,18 +94,27 @@ describe('humanMinutes', () => {
     expect(humanMinutes(30)).toBe('under a minute')
     expect(humanMinutes(300)).toBe('5 min')
     expect(humanMinutes(1524)).toBe('25 min')
+    // Whole minutes below an hour: 12 must not print as 10.
+    expect(humanMinutes(12 * 60)).toBe('12 min')
+    expect(humanMinutes(73 * 60)).toBe('75 min')
   })
 })
 
 describe('sittingOptions — budgets that mean something', () => {
   it('offers a quarter, a half, and the whole queue', () => {
     // 18 items at ~4 min = ~72 min, the case from a real screenshot.
-    expect(sittingOptions(72 * 60)).toEqual([20, 35, 70])
+    expect(sittingOptions(72 * 60)).toEqual([20, 40, 75])
   })
 
   it('always makes the largest option a FULL clear', () => {
     const o = sittingOptions(50 * 60)
     expect(o[o.length - 1]).toBe(50)
+  })
+
+  it('rounds the full clear up, so "all" really covers all', () => {
+    // 12 items at a minute each: rounding to nearest offered "10 min · all".
+    const o = sittingOptions(12 * 60)
+    expect(o[o.length - 1]).toBe(15)
   })
 
   it('collapses duplicates rather than offering the same budget twice', () => {

@@ -112,7 +112,7 @@ function CaseTypeTable({ byCaseType }: { byCaseType: Record<string, GraderCaseTy
     <div className="panel px-4 py-3 overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
-          <tr className="text-left text-[10px] text-[var(--color-text-faint)] uppercase tracking-wide">
+          <tr className="text-left text-[11px] text-[var(--color-text-faint)] uppercase tracking-[0.1em]">
             <th className="font-medium pb-2 pr-3">Case type</th>
             <th className="label-data font-medium pb-2 pr-3 text-right">Items</th>
             <th className="label-data font-medium pb-2 pr-3 text-right">Judgments</th>

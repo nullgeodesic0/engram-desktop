@@ -169,7 +169,7 @@ export function MainMenuView({
               as a label for the warm one. A divider must not take sides
               between the things it divides. */}
           <div className="flex items-center gap-2.5 mb-1">
-            <span className="label-data text-[10px] uppercase tracking-[0.28em] text-[var(--color-text-dim)] shrink-0">
+            <span className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-dim)] shrink-0">
               {GROUP_LABEL[group]}
             </span>
             <span className="h-px flex-1 bg-[var(--color-hairline)]" aria-hidden="true" />

@@ -42,7 +42,7 @@ export function CommandStrip({
       <button
         key={n.id}
         onClick={() => onGoView(n.id)}
-        className={`focus-ring tilt-card-rail label-data text-[10px] uppercase tracking-[0.2em] px-3 py-2 inline-flex items-center gap-1.5 transition-colors duration-[var(--dur-fast)] ${
+        className={`focus-ring tilt-card-rail label-data text-[11px] uppercase tracking-[0.12em] px-3 py-2 inline-flex items-center gap-1.5 transition-colors duration-[var(--dur-fast)] ${
           active
             ? 'text-[var(--color-ink-warm)] bg-[color-mix(in_srgb,var(--color-ink-warm)_10%,transparent)] shadow-[inset_0_-2px_0_var(--color-ink-warm-dim)]'
             : 'text-[var(--color-text-dim)] hover:text-[var(--color-ink-warm)]'
@@ -63,7 +63,7 @@ export function CommandStrip({
   }
 
   return (
-    <div className="shrink-0 flex items-stretch gap-0.5 px-3 border-b border-[var(--color-hairline)] bg-[color-mix(in_srgb,var(--color-surface)_62%,transparent)]">
+    <div className="shrink-0 flex items-stretch gap-0.5 px-3 border-b border-[var(--color-hairline)] bg-[color-mix(in_srgb,var(--color-surface)_92%,transparent)]">
       {home && tab(home)}
       {GROUP_ORDER.map((group) => {
         const items = nav.filter((n) => n.id !== 'home' && (NAV_GROUPS[n.id] ?? 'explore') === group)

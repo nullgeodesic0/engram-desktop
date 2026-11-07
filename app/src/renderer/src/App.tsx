@@ -425,18 +425,17 @@ export default function App() {
   return (
     <div className="flex flex-col h-full" ref={cardPhysicsRef}>
       <TitleBar onGoHome={() => goToView('home')} />
-      {/* The command strip — hidden on Home (the Sections grid IS the nav
-          there); everywhere else it renders here, above <main>, which keeps
-          it visible above the chat mastheads even while one is folded. */}
-      {view !== 'home' && (
-        <CommandStrip
-          nav={NAV}
-          currentView={view}
-          onGoView={(id) => goToView(id as View)}
-          activity={activity}
-          dueCount={dueCount}
-        />
-      )}
+      {/* The command strip — the app's one navigation, on every screen
+          including Home (design review 2, 2026-11-07: Home's Sections menu
+          was retired in its favour). Rendered above <main>, so it stays
+          visible above the chat mastheads even while one is folded. */}
+      <CommandStrip
+        nav={NAV}
+        currentView={view}
+        onGoView={(id) => goToView(id as View)}
+        activity={activity}
+        dueCount={dueCount}
+      />
       <div className="flex flex-1 min-h-0 relative">
       {/* Each view now owns its own scroll region (h-full + overflow-y-auto, or a
           flex column with an internal scrollable pane like LearnSessionView) so a
@@ -462,10 +461,6 @@ export default function App() {
                 onNewTopic={() => setView('learn')}
                 onGoNode={goToNode}
                 onGoSitting={goToSitting}
-                nav={NAV}
-                dueCount={dueCount}
-                activity={activity}
-                visited={visited}
                 onGoView={(id) => goToView(id as View)}
               />
             </div>

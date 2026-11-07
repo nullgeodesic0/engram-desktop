@@ -173,7 +173,7 @@ export function NodeTable({
         {restrictIds && restrictLabel && (
           <button
             onClick={onClearRestrict}
-            className="focus-ring tilt-card-rail label-data text-[10px] uppercase tracking-[0.16em] px-2 py-1 border bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] border-[var(--color-ink-warm)] text-[var(--color-ink-warm)]"
+            className="focus-ring tilt-card-rail label-data text-[11px] uppercase tracking-[0.1em] px-2 py-1 border bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] border-[var(--color-ink-warm)] text-[var(--color-ink-warm)]"
           >
             {`REGION — ${restrictLabel} ${territoryIds.length} ×`}
           </button>
@@ -185,7 +185,7 @@ export function NodeTable({
               key={key}
               onClick={() => toggleFilter(key)}
               aria-pressed={pressed}
-              className={`focus-ring tilt-card-rail label-data text-[10px] uppercase tracking-[0.16em] px-2 py-1 border transition-colors ${
+              className={`focus-ring tilt-card-rail label-data text-[11px] uppercase tracking-[0.1em] px-2 py-1 border transition-colors ${
                 pressed
                   ? 'bg-[color-mix(in_srgb,var(--color-surface-3)_68%,transparent)] border-[var(--color-ink-warm)] text-[var(--color-ink-warm)]'
                   : 'border-[var(--color-edge)] text-[var(--color-text-dim)] hover:text-[var(--color-text-primary)]'
@@ -204,7 +204,7 @@ export function NodeTable({
         {activeFilters.size > 0 && (
           <button
             onClick={() => setActiveFilters(new Set())}
-            className="focus-ring tilt-card-rail label-data text-[10px] uppercase tracking-[0.16em] px-2 py-1 border border-[var(--color-edge)] text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]"
+            className="focus-ring tilt-card-rail label-data text-[11px] uppercase tracking-[0.1em] px-2 py-1 border border-[var(--color-edge)] text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]"
           >
             Clear
           </button>
@@ -216,7 +216,7 @@ export function NodeTable({
 
       <div className="flex-1 min-h-0 overflow-auto px-3 pb-3">
         <table className="w-full text-xs border-collapse">
-          <thead className="sticky top-0 bg-[color-mix(in_srgb,var(--color-surface)_62%,transparent)] backdrop-blur-md z-10">
+          <thead className="sticky top-0 bg-[color-mix(in_srgb,var(--color-surface)_92%,transparent)] backdrop-blur-md z-10">
             <tr className="border-b border-[var(--color-hairline)]">
               {COLUMNS.map((col) => {
                 const active = sortKey === col.key
@@ -229,7 +229,7 @@ export function NodeTable({
                   >
                     <button
                       onClick={() => toggleSort(col.key)}
-                      className={`focus-ring label-data text-[10px] uppercase tracking-[0.16em] flex items-center gap-1 whitespace-nowrap ${
+                      className={`focus-ring label-data text-[11px] uppercase tracking-[0.1em] flex items-center gap-1 whitespace-nowrap ${
                         active ? 'text-[var(--color-ink-warm)]' : 'text-[var(--color-text-faint)] hover:text-[var(--color-text-dim)]'
                       }`}
                     >

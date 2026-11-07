@@ -205,7 +205,7 @@ export const TicketCard = memo(function TicketCard({
         className={`detail-title-band flex items-center justify-between gap-3 ${padX} ${compact ? 'py-1.5' : 'py-2'}`}
         style={{ boxShadow: `inset 0 2px 0 ${a.dim}` }}
       >
-        <span className="label-data text-[10px] tracking-[0.22em] uppercase" style={{ color: a.ink }}>
+        <span className="label-data text-[11px] tracking-[0.1em] uppercase" style={{ color: a.ink }}>
           engram · {ticket.kind}{ticket.mode != null ? ` · ${ticket.mode}` : ''}
         </span>
         {walkNumber != null && (
@@ -226,7 +226,7 @@ export const TicketCard = memo(function TicketCard({
           <div className={`${compact ? 'mt-1.5' : 'mt-2'} divide-y divide-[var(--color-hairline)] border-t border-[var(--color-hairline)]`}>
             {rest.map((f) => (
               <div key={f.key} className={`flex items-baseline justify-between gap-3 ${compact ? 'py-1' : 'py-1.5'}`}>
-                <span className="label-data text-[10px] text-[var(--color-text-faint)] uppercase tracking-wider shrink-0">{f.key}</span>
+                <span className="label-data text-[11px] text-[var(--color-text-faint)] uppercase tracking-[0.1em] shrink-0">{f.key}</span>
                 <FieldValue value={f.value} />
               </div>
             ))}

@@ -43,7 +43,7 @@ import { StatFraction } from '../components/ui/StatFraction'
 import { ErrorPanel } from '../components/ErrorPanel'
 import { recordConfidence, latestPickFor } from '../shared/calibrationStore'
 import { extractTicketFromMessages, type ParsedTicket } from '../shared/ticketParser'
-import { composeReviewKickoff, composeResumeNudge, detectResumeState, capForMins } from '../shared/reviewKickoff'
+import { composeReviewKickoff, composeResumeNudge, detectResumeState } from '../shared/reviewKickoff'
 import { loadCheckpointAllNodes } from '../shared/checkpointAllNodesPref'
 import { loadSittingPrefs, saveSittingMins, type SittingPrefs } from '../shared/sittingPrefs'
 import { useDateRollover } from '../shared/dateRollover'
@@ -51,7 +51,7 @@ import { recallDueNodes, quickShare, type RecallDueEntry } from '../shared/check
 import { TicketCard } from '../components/ritual/TicketCard'
 import { ActionChips, type SuggestedAction } from '../components/ritual/ActionChips'
 import { bridgeUiIntent } from '../../../shared/bridgeUiIntents'
-import { planSitting, secondsForTopic, humanMinutes, type PaceModel } from '../../../shared/sittingPace'
+import { buildPaceModel, planSitting, secondsForTopic, humanMinutes, type PaceModel } from '../../../shared/sittingPace'
 import { saveDraft, loadDraft, clearDraft } from '../shared/composerDrafts'
 import { ReadyRoomPlate } from '../components/ritual/ReadyRoomPlate'
 import { ReviewHorizon } from '../components/ReviewHorizon'
@@ -1165,9 +1165,10 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
       const planTopics = queue
         .filter((q) => !sittingPrefs.focusTopic || q.topic === sittingPrefs.focusTopic)
         .map((q) => q.topic)
-      sessionCapRef.current = pace
-        ? planSitting(sittingPrefs.mins, planTopics, pace).items
-        : capForMins(sittingPrefs.mins)
+      // No pace model yet (still loading, or the read failed): plan at the
+      // same default the ruler draws with, so the plate, the ruler and the
+      // tutor's cap all describe one sitting.
+      sessionCapRef.current = planSitting(sittingPrefs.mins, planTopics, pace ?? buildPaceModel([])).items
     }
     const kickoff = composeReviewKickoff({
       style: sittingPrefs.style,
@@ -1179,13 +1180,11 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
       focusTopic: resume ? null : sittingPrefs.focusTopic,
       allNodeTypes: checkpointAllNodesOn,
       // Measured, not assumed — see shared/sittingPace.ts.
-      plannedItems: pace
-        ? planSitting(
-            sittingPrefs.mins,
-            queueRef.current.filter((d) => !sittingPrefs.focusTopic || d.topic === sittingPrefs.focusTopic).map((d) => d.topic),
-            pace,
-          ).items
-        : undefined,
+      plannedItems: planSitting(
+        sittingPrefs.mins,
+        queueRef.current.filter((d) => !sittingPrefs.focusTopic || d.topic === sittingPrefs.focusTopic).map((d) => d.topic),
+        pace ?? buildPaceModel([]),
+      ).items,
     })
 
     const { sessionId: sid } = resume
@@ -1859,7 +1858,7 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
           {phase !== 'loading' && (
             <button
               onClick={() => setHistoryDrawerOpen(true)}
-              className="focus-ring cmd-item label-data text-[10px] uppercase tracking-[0.16em] shrink-0"
+              className="focus-ring cmd-item label-data text-[11px] uppercase tracking-[0.1em] shrink-0"
             >
               History
             </button>
@@ -1887,7 +1886,7 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
             // out of the count as the sitting narrows).
             const topicCount = new Set(queue.map((q) => q.topic)).size
             return (
-              <span className="label-data text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-faint)]">
+              <span className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-faint)]">
                 {sessionGrades.length} of {sessionTotal}
                 {topicCount > 0 && ` · ${topicCount} ${topicCount === 1 ? 'topic' : 'topics'}`}
               </span>
@@ -1895,7 +1894,7 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
           }
           if (phase === 'ready') return undefined
           return (
-            <span className="label-data text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-faint)]">
+            <span className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-faint)]">
               {queue.length} due
             </span>
           )
@@ -1912,7 +1911,7 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
                 phases.) */}
             <button
               onClick={() => setHistoryDrawerOpen(true)}
-              className="focus-ring cmd-item label-data text-[10px] uppercase tracking-[0.16em] shrink-0"
+              className="focus-ring cmd-item label-data text-[11px] uppercase tracking-[0.1em] shrink-0"
             >
               History
             </button>
@@ -1923,7 +1922,7 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
               <button
                 onClick={backToReviewPage}
                 title="Back to the review page (a live sitting keeps running)"
-                className="focus-ring cmd-item label-data text-[10px] uppercase tracking-[0.16em] shrink-0"
+                className="focus-ring cmd-item label-data text-[11px] uppercase tracking-[0.1em] shrink-0"
               >
                 Back
               </button>
@@ -2238,7 +2237,7 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
                           index.css's dogear doctrine comment. */}
                       <div key={current.id} className={`relative panel ${probePinned ? 'dogear' : ''} flex flex-col mb-2`}>
                         <div className="detail-title-band flex items-center justify-between gap-3 px-5 py-2">
-                          <span className="label-data text-[10px] tracking-[0.22em] uppercase text-[var(--color-ink-warm)] inline-flex items-baseline gap-1.5">
+                          <span className="label-data text-[11px] tracking-[0.1em] uppercase text-[var(--color-ink-warm)] inline-flex items-baseline gap-1.5">
                             review ·{' '}
                             <StatFraction n={sessionGrades.length + 1} d={sessionTotal} className="text-[10px]" />
                           </span>
@@ -2266,7 +2265,7 @@ export function ReviewSessionView({ onActivity, retestRequest, onRetestConsumed 
                           <MathRenderer text={current.probe} className="text-sm text-[var(--color-text-primary)] leading-relaxed" />
                         </div>
                         <div className="detail-footer px-5 py-1.5">
-                          <span className="label-data text-[10px] text-[var(--color-text-faint)] uppercase tracking-wider">
+                          <span className="label-data text-[11px] text-[var(--color-text-faint)] uppercase tracking-[0.1em]">
                             probe
                           </span>
                           <button

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { buildRuler, snapToItem, stepBudget } from './sittingRuler'
-import { buildPaceModel } from '../../../shared/sittingPace'
+import { buildPaceModel, DEFAULT_SECONDS_PER_ITEM } from '../../../shared/sittingPace'
 
 // Three samples per topic is the floor for a topic's own median to be used.
 const pace = buildPaceModel([
@@ -62,8 +62,8 @@ describe('buildRuler', () => {
 
   it('falls back to a flat cost with no pace model at all', () => {
     const r = buildRuler([item('a', 'x'), item('b', 'y')], null, 10)
-    expect(r.segments.every((s) => s.seconds === 60)).toBe(true)
-    expect(r.totalSeconds).toBe(120)
+    expect(r.segments.every((s) => s.seconds === DEFAULT_SECONDS_PER_ITEM)).toBe(true)
+    expect(r.totalSeconds).toBe(2 * DEFAULT_SECONDS_PER_ITEM)
   })
 
   it('returns an empty ruler for an empty queue', () => {

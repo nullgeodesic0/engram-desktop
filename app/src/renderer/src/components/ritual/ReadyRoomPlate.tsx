@@ -8,7 +8,7 @@ import { PlateFigure } from '../ui/PlateFigure'
 import { SegmentedControl } from '../ui/SegmentedControl'
 import { SittingRuler } from './SittingRuler'
 import { buildRuler, snapToItem } from '../../shared/sittingRuler'
-import { secondsForTopic, sittingOptions, type PaceModel } from '../../../../shared/sittingPace'
+import { DEFAULT_SECONDS_PER_ITEM, secondsForTopic, sittingOptions, type PaceModel } from '../../../../shared/sittingPace'
 import { loadSittingOutcome, describeAccuracy } from '../../shared/lastSitting'
 import type { SittingMins, SittingStyle } from '../../shared/reviewKickoff'
 import type { SittingPrefs } from '../../shared/sittingPrefs'
@@ -148,9 +148,11 @@ export const ReadyRoomPlate = memo(function ReadyRoomPlate({
   // answered a question nobody asked: with 18 items at ~4 min each the real
   // quantity is 70-odd minutes, so the "long" option cleared a third of the
   // queue and there was no finish-it option at all.
+  // Without a pace model yet, cost the queue at the same default the ruler
+  // draws with, so the presets and the ruler describe one queue.
   const queueTotalSeconds = pace
     ? queueTopics.reduce((sum, t) => sum + secondsForTopic(pace, t).seconds, 0)
-    : 0
+    : queueTopics.length * DEFAULT_SECONDS_PER_ITEM
   const options = sittingOptions(queueTotalSeconds)
   // NOTE: an earlier version snapped `prefs.mins` to the nearest preset in an
   // effect. That was fine while the presets were the only control and fatal
@@ -181,7 +183,7 @@ export const ReadyRoomPlate = memo(function ReadyRoomPlate({
   // ITEM 10 — how the last estimate actually did. An estimate nobody checks
   // is a guess in a confident font.
   // The overdue spread used to be a caption here. It is now drawn: the ruler
-  // foots every overdue segment in danger ink and its own caption names the
+  // foots every overdue segment in warm ink and its own caption names the
   // mark, so the sentence was a third telling of a fact already on screen
   // twice. The ruler was built to retire these lines; leaving them was an
   // admission it had not.
@@ -260,7 +262,7 @@ export const ReadyRoomPlate = memo(function ReadyRoomPlate({
               has both — and the ALL pill is where "clear the focus" lives,
               which is why the separate focus-chip row below could go. */}
           <div className="flex items-center gap-2.5">
-            <span className="label-data text-[10px] uppercase tracking-[0.28em] text-[var(--color-text-dim)] shrink-0">
+            <span className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-dim)] shrink-0">
               Due by topic
             </span>
             {focusChoices.length > 1 && (
@@ -323,13 +325,12 @@ export const ReadyRoomPlate = memo(function ReadyRoomPlate({
                     />
                   </div>
                   {/* Overdue carried no colour at all: a topic nine days past
-                      and a topic due this morning printed the same dim number,
-                      so the queue's shape had to be read out of the node names
-                      or not at all. Danger ink is right here and is already
-                      the established mark for it — HealthRing's due notch and
-                      the ruler's overdue foot both use it — and the count is
-                      spelled out rather than implied, so the signal is not
-                      hue-only. */}
+                      and a topic due this morning printed the same dim number.
+                      It is marked in warm ink, the workload colour, not danger:
+                      overdue is the schedule's state, not the learner's
+                      mistake, and danger ink is reserved for misconceptions.
+                      The share is spelled out ("all overdue", "2 of 5
+                      overdue"), so the signal is never hue-only. */}
                   <span className="label-data shrink-0 flex items-baseline gap-1.5">
                     {/* Total first, then the overdue share. Reversed, "2
                         overdue 4" read as "2 overdue out of 4" — the eye takes
@@ -337,7 +338,9 @@ export const ReadyRoomPlate = memo(function ReadyRoomPlate({
                         is how many are due. */}
                     <span className="text-[var(--color-text-dim)]">{items.length}</span>
                     {overdueIn(items) > 0 && (
-                      <span className="text-[var(--color-ink-danger)]">· {overdueIn(items)} overdue</span>
+                      <span className="text-[var(--color-ink-warm)]">
+                        · {overdueIn(items) === items.length ? 'all' : `${overdueIn(items)} of ${items.length}`} overdue
+                      </span>
                     )}
                   </span>
                 </div>
@@ -382,31 +385,36 @@ export const ReadyRoomPlate = memo(function ReadyRoomPlate({
                 budgets became queue-derived, so an out-time could select a
                 number the plate never offered. It now lands on a real item
                 edge, the same places the ruler can stop. */}
-            <input
-              // `key` on the budget, so the field REMOUNTS — and therefore
-              // clears — whenever the budget changes by any other means. It is
-              // uncontrolled by nature (a clock time is not derivable from a
-              // duration without re-deriving it every second), and left alone
-              // it went on displaying "21:40" after a ruler drag had moved the
-              // finish somewhere else entirely. An empty field asks a
-              // question; a stale one makes a false claim.
-              key={prefs.mins}
-              type="time"
-              aria-label="Out by — set when you have to stop"
-              title="Set when you have to stop — the budget lands on the last item that fits"
-              className="focus-ring panel px-2 py-1 text-xs text-[var(--color-text-primary)]"
-              onChange={(e) => {
-                const [h, m] = e.target.value.split(':').map(Number)
-                if (!Number.isFinite(h) || !Number.isFinite(m)) return
-                const now = new Date()
-                const end = new Date(now)
-                end.setHours(h, m, 0, 0)
-                if (end.getTime() <= now.getTime()) end.setDate(end.getDate() + 1)
-                const mins = (end.getTime() - now.getTime()) / 60000
-                const fraction = ruler.totalSeconds > 0 ? (mins * 60) / ruler.totalSeconds : 0
-                onPrefsChange({ ...prefs, mins: snapToItem(ruler, fraction) })
-              }}
-            />
+            {/* A visible label: the field alone was an empty "--:--" box
+                whose purpose lived only in its aria-label and tooltip. */}
+            <label className="flex items-center gap-2">
+              <span className="label-data text-xs text-[var(--color-text-dim)]">Leave by</span>
+              <input
+                // `key` on the budget, so the field REMOUNTS — and therefore
+                // clears — whenever the budget changes by any other means. It is
+                // uncontrolled by nature (a clock time is not derivable from a
+                // duration without re-deriving it every second), and left alone
+                // it went on displaying "21:40" after a ruler drag had moved the
+                // finish somewhere else entirely. An empty field asks a
+                // question; a stale one makes a false claim.
+                key={prefs.mins}
+                type="time"
+                aria-label="Leave by — set when you have to stop"
+                title="Set when you have to stop — the budget lands on the last item that fits"
+                className="focus-ring panel px-2 py-1 text-xs text-[var(--color-text-primary)]"
+                onChange={(e) => {
+                  const [h, m] = e.target.value.split(':').map(Number)
+                  if (!Number.isFinite(h) || !Number.isFinite(m)) return
+                  const now = new Date()
+                  const end = new Date(now)
+                  end.setHours(h, m, 0, 0)
+                  if (end.getTime() <= now.getTime()) end.setDate(end.getDate() + 1)
+                  const mins = (end.getTime() - now.getTime()) / 60000
+                  const fraction = ruler.totalSeconds > 0 ? (mins * 60) / ruler.totalSeconds : 0
+                  onPrefsChange({ ...prefs, mins: snapToItem(ruler, fraction) })
+                }}
+              />
+            </label>
             {/* Jump-to presets — a quarter, a half, the lot. Highlighted only
                 on an exact match, because the ruler can sit between them. */}
             {/* Both controls reached a screen reader as bare unlabelled

@@ -274,7 +274,8 @@ export interface LearnerModel {
   goals: string[]
   strategy_weights: { derivation_first: number; example_first: number }
   settings: LearnerModelSettings
-  rhythms: Record<string, unknown>
+  /** Absent on fresh installs of current engine versions — never assume. */
+  rhythms?: Record<string, unknown>
   accessibility: string[]
 }
 

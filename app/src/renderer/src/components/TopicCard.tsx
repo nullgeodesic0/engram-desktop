@@ -92,9 +92,9 @@ export function TopicCard({ variant, topic: t, onOpen, resumable = false, onSett
 
   if (variant === 'tile') {
     // Byte-identical to Home's original TopicTile: same markup, same
-    // classes — the due-danger chip is filtered out because the tile never
-    // rendered it (HealthRing's danger notch already carries that signal).
-    const chips = topicChips(t, { includeFolder: !hideFolderChip }).filter((c) => !c.className.includes('ink-danger'))
+    // classes — the due chip is filtered out because the tile never
+    // rendered it (HealthRing's due notch already carries that signal).
+    const chips = topicChips(t, { includeFolder: !hideFolderChip }).filter((c) => !/ due$/.test(c.label))
     return (
       <button
         onClick={onOpen}
@@ -145,7 +145,9 @@ export function TopicCard({ variant, topic: t, onOpen, resumable = false, onSett
         organizing ? ' cursor-grab active:cursor-grabbing' : ''
       }`}
     >
-      <InkNode id={t.topic} variant={t.states.review > 0 ? 'filled' : 'outlined'} size={16} />
+      {/* No InkNode glyph on the shelf row: beside the HealthRing and the
+          topic's own constellation it was a third mark saying the same
+          thing, and the eye had to skip it to reach the title. */}
       <HealthRing consolidated={t.states.review} total={total} due={t.due} />
       <button onClick={onOpen} className="focus-ring flex-1 min-w-0 text-left flex flex-col gap-1">
         <div className="text-sm text-[var(--color-text-primary)] flex items-center gap-2">

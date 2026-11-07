@@ -64,7 +64,7 @@ export function StreakCalendar({ days, onSelectDay }: { days: DayActivity[]; onS
   const totalReviews = days.reduce((sum, d) => sum + d.count, 0)
 
   return (
-    <div className="relative overflow-x-auto">
+    <div className="relative overflow-x-auto overflow-y-hidden">
       <div className="flex gap-[3px] mb-1" style={{ width: 'max-content' }}>
         {columns.map((_, i) => {
           const label = monthLabels.find((m) => m.colIndex === i)

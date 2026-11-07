@@ -23,7 +23,7 @@ export function ExportCommand({
         disabled={exporting !== null}
         title="Export this sitting"
         aria-haspopup="true"
-        className="focus-ring cmd-item label-data text-[10px] uppercase tracking-[0.16em] disabled:opacity-50"
+        className="focus-ring cmd-item label-data text-[11px] uppercase tracking-[0.1em] disabled:opacity-50"
       >
         {exporting !== null ? 'Exporting…' : 'Export'}
       </button>
@@ -41,7 +41,7 @@ export function ExportCommand({
             onClick={() => onExport('md')}
             disabled={exporting !== null}
             title="Export this sitting as a Markdown file"
-            className="focus-ring cmd-item label-data text-[10px] uppercase tracking-[0.16em] disabled:opacity-50"
+            className="focus-ring cmd-item label-data text-[11px] uppercase tracking-[0.1em] disabled:opacity-50"
           >
             .md
           </button>
@@ -50,7 +50,7 @@ export function ExportCommand({
             onClick={() => onExport('pdf')}
             disabled={exporting !== null}
             title="Export this sitting as a PDF"
-            className="focus-ring cmd-item label-data text-[10px] uppercase tracking-[0.16em] disabled:opacity-50"
+            className="focus-ring cmd-item label-data text-[11px] uppercase tracking-[0.1em] disabled:opacity-50"
           >
             .pdf
           </button>

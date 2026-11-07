@@ -21,6 +21,7 @@ import { loadTopicSort, saveTopicSort, loadTopicGroup, saveTopicGroup, type Topi
 import { groupTopicsByFolder, TOPIC_GROUP_OPTIONS } from '../shared/topicFolders'
 import { Modal } from '../components/ui/Modal'
 import { MathRenderer } from '../components/MathRenderer'
+import { TopicTitle } from '../components/TopicTitle'
 import { SessionHistoryDrawer } from '../components/SessionHistoryDrawer'
 import { ExplorableViewer } from '../components/ExplorableViewer'
 import { friendlyErrorText } from '../shared/friendlyError'
@@ -99,7 +100,7 @@ function ProvenanceBlock({
     <div
       className={`${textSize} text-[var(--color-text-dim)] border-l-2 border-[var(--color-ink-warm-dim)] bg-[color-mix(in_srgb,var(--color-surface-2)_31%,transparent)] rounded-r-md ${compact ? 'pl-2.5 pr-2 py-1.5' : 'pl-3 pr-2.5 py-2'}`}
     >
-      <div className={`label-data uppercase tracking-wide text-[10px] text-[var(--color-ink-warm)] ${compact ? 'mb-1' : 'mb-1.5'}`}>
+      <div className={`label-data uppercase tracking-[0.1em] text-[11px] text-[var(--color-ink-warm)] ${compact ? 'mb-1' : 'mb-1.5'}`}>
         Provenance
       </div>
       <div className="flex flex-col gap-1 items-start">
@@ -163,7 +164,7 @@ function NodeMisconceptions({
     <div
       className={`${textSize} text-[var(--color-text-dim)] border-l-2 border-[var(--color-ink-cool-dim)] bg-[color-mix(in_srgb,var(--color-surface-2)_31%,transparent)] rounded-r-md ${compact ? 'pl-2.5 pr-2 py-1.5' : 'pl-3 pr-2.5 py-2'}`}
     >
-      <div className={`label-data uppercase tracking-wide text-[10px] text-[var(--color-ink-cool)] ${compact ? 'mb-1' : 'mb-1.5'}`}>
+      <div className={`label-data uppercase tracking-[0.1em] text-[11px] text-[var(--color-ink-cool)] ${compact ? 'mb-1' : 'mb-1.5'}`}>
         Filed here
       </div>
       <div className="flex flex-col gap-1.5">
@@ -258,7 +259,7 @@ function NodeStructure({
     <div
       className={`${textSize} text-[var(--color-text-dim)] border-l-2 border-[var(--color-ink-violet-dim)] bg-[color-mix(in_srgb,var(--color-surface-2)_31%,transparent)] rounded-r-md ${compact ? 'pl-2.5 pr-2 py-1.5' : 'pl-3 pr-2.5 py-2'}`}
     >
-      <div className={`label-data uppercase tracking-wide text-[10px] text-[var(--color-ink-violet)] ${compact ? 'mb-1' : 'mb-1.5'}`}>
+      <div className={`label-data uppercase tracking-[0.1em] text-[11px] text-[var(--color-ink-violet)] ${compact ? 'mb-1' : 'mb-1.5'}`}>
         Structure
       </div>
       <div className="flex flex-col gap-2">
@@ -266,7 +267,7 @@ function NodeStructure({
           <div className="flex flex-col gap-1 items-start">
             <div className="text-[10px] label-data text-[var(--color-text-faint)]">Requires</div>
             {hubRequiresCount !== null ? (
-              <p className="pl-2">the territory — {hubRequiresCount} nodes</p>
+              <p className="pl-2">the whole topic ({hubRequiresCount} nodes)</p>
             ) : (
               requires.map((id) => (
                 <button
@@ -730,7 +731,7 @@ export function TopicMapView({
                 <div className="flex items-center gap-2">
                   <span
                     id="map-topic-group-label"
-                    className="label-data text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-faint)]"
+                    className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-faint)]"
                   >
                     group
                   </span>
@@ -747,7 +748,7 @@ export function TopicMapView({
                 <div className="flex items-center gap-2">
                   <span
                     id="map-topic-sort-label"
-                    className="label-data text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-faint)]"
+                    className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-faint)]"
                   >
                     sort
                   </span>
@@ -779,7 +780,7 @@ export function TopicMapView({
             {groupTopicsByFolder(topics, topicSort).map((g) => (
               <div key={g.name} className="flex items-baseline gap-3">
                 <span
-                  className={`label-data text-[10px] uppercase tracking-[0.14em] shrink-0 w-28 truncate ${
+                  className={`label-data text-[11px] uppercase tracking-[0.1em] shrink-0 w-28 truncate ${
                     g.unfiled ? 'text-[var(--color-text-faint)]' : 'text-[var(--color-ink-warm-dim)]'
                   }`}
                   title={g.name}
@@ -795,7 +796,7 @@ export function TopicMapView({
                       aria-pressed={selectedTopic === t.topic}
                       className={`${selectedTopic === t.topic ? CTRL_FILLED : CTRL_QUIET} max-w-64 truncate text-left`}
                     >
-                      {t.topic}
+                      <TopicTitle title={t.title || t.topic} />
                     </button>
                   ))}
                 </div>
@@ -812,7 +813,7 @@ export function TopicMapView({
                 aria-pressed={selectedTopic === t.topic}
                 className={`${selectedTopic === t.topic ? CTRL_FILLED : CTRL_QUIET} max-w-64 truncate text-left`}
               >
-                {t.topic}
+                <TopicTitle title={t.title || t.topic} />
               </button>
             ))}
           </div>
@@ -986,7 +987,7 @@ export function TopicMapView({
             {stats && !replayActive && (
               <div className="absolute top-4 right-4 z-10 w-52 flex flex-col gap-3">
                 <div className="panel p-3 flex flex-col gap-2">
-                  <div className="fig-caption">Fig. — state of the territory</div>
+                  <div className="fig-caption">Fig. — topic progress</div>
                   <div className="grid grid-cols-2 gap-2">
                     <StatBlock compact label="Encoded" value={`${stats.encoded}/${stats.total}`} tone="cool" />
                     <StatBlock
@@ -1234,13 +1235,13 @@ export function TopicMapView({
                 </div>
 
                 <div className="text-xs text-[var(--color-text-dim)]">
-                  <div className="label-data uppercase tracking-wide text-[10px] text-[var(--color-text-faint)] mb-1">Probe</div>
+                  <div className="label-data uppercase tracking-[0.1em] text-[11px] text-[var(--color-text-faint)] mb-1">Probe</div>
                   <MathRenderer text={node.probe} />
                 </div>
 
                 {node.rubric.length > 0 && (
                   <div className="text-xs text-[var(--color-text-dim)]">
-                    <div className="label-data uppercase tracking-wide text-[10px] text-[var(--color-text-faint)] mb-1">Rubric</div>
+                    <div className="label-data uppercase tracking-[0.1em] text-[11px] text-[var(--color-text-faint)] mb-1">Rubric</div>
                     <ul className="list-disc list-inside flex flex-col gap-0.5">
                       {node.rubric.map((r, i) => (
                         <li key={i}>
@@ -1291,7 +1292,7 @@ export function TopicMapView({
       {topicsLoaded && topics.length === 0 && !error && (
         <div className="flex flex-col items-center justify-center h-full gap-3">
           <div className="fig-caption">Fig. — the atlas is unmapped</div>
-          <p className="text-sm text-[var(--color-text-dim)]">No territories yet — the map draws itself as you learn.</p>
+          <p className="text-sm text-[var(--color-text-dim)]">No topics yet. The map draws itself as you learn.</p>
           <Button variant="ghost" onClick={onNewTopic}>Start your first topic</Button>
         </div>
       )}
@@ -1324,7 +1325,7 @@ export function TopicMapView({
         subtitle={
           opened && openNode ? (
             <>
-              <div className="label-data not-italic uppercase tracking-wide text-[10px] text-[var(--color-text-faint)]">
+              <div className="label-data not-italic uppercase tracking-[0.1em] text-[11px] text-[var(--color-text-faint)]">
                 {selectedTopic} · {openNode}
               </div>
               {opened.state && (
@@ -1389,7 +1390,7 @@ export function TopicMapView({
             </div>
 
             <div className="text-sm text-[var(--color-text-dim)]">
-              <div className="label-data uppercase tracking-wide text-[10px] text-[var(--color-text-faint)] mb-1.5">
+              <div className="label-data uppercase tracking-[0.1em] text-[11px] text-[var(--color-text-faint)] mb-1.5">
                 Probe
               </div>
               <MathRenderer text={opened.probe} />
@@ -1397,7 +1398,7 @@ export function TopicMapView({
 
             {opened.rubric.length > 0 && (
               <div className="text-sm text-[var(--color-text-dim)]">
-                <div className="label-data uppercase tracking-wide text-[10px] text-[var(--color-text-faint)] mb-1.5">
+                <div className="label-data uppercase tracking-[0.1em] text-[11px] text-[var(--color-text-faint)] mb-1.5">
                   Rubric
                 </div>
                 <ul className="list-disc list-inside flex flex-col gap-1">
@@ -1412,7 +1413,7 @@ export function TopicMapView({
 
             {opened.why_chain.length > 0 && (
               <div className="text-sm text-[var(--color-text-dim)]">
-                <div className="label-data uppercase tracking-wide text-[10px] text-[var(--color-text-faint)] mb-1.5">
+                <div className="label-data uppercase tracking-[0.1em] text-[11px] text-[var(--color-text-faint)] mb-1.5">
                   Why chain
                 </div>
                 <ol className="list-decimal list-inside flex flex-col gap-1">
@@ -1427,7 +1428,7 @@ export function TopicMapView({
 
             {opened.transfer_probe && (
               <div className="text-sm text-[var(--color-text-dim)]">
-                <div className="label-data uppercase tracking-wide text-[10px] text-[var(--color-text-faint)] mb-1.5">
+                <div className="label-data uppercase tracking-[0.1em] text-[11px] text-[var(--color-text-faint)] mb-1.5">
                   Transfer probe
                 </div>
                 <MathRenderer text={opened.transfer_probe} />
@@ -1442,7 +1443,7 @@ export function TopicMapView({
               (kind) =>
                 (opened.edges[kind] ?? []).length > 0 && (
                   <div key={kind} className="text-sm">
-                    <div className="label-data uppercase tracking-wide text-[10px] text-[var(--color-text-faint)] mb-1.5">
+                    <div className="label-data uppercase tracking-[0.1em] text-[11px] text-[var(--color-text-faint)] mb-1.5">
                       {EDGE_STYLE[kind].label}
                     </div>
                     <div className="flex flex-wrap gap-1.5">

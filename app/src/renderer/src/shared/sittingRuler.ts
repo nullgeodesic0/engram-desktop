@@ -1,4 +1,4 @@
-import { secondsForTopic, type PaceModel } from '../../../shared/sittingPace'
+import { DEFAULT_SECONDS_PER_ITEM, secondsForTopic, type PaceModel } from '../../../shared/sittingPace'
 
 /** Geometry for the sitting ruler — the queue laid out as a time axis.
  *
@@ -70,7 +70,7 @@ export function buildRuler(items: RulerItem[], pace: PaceModel | null, budgetMin
   let cursor = 0
   for (const item of items) {
     const cost = pace ? secondsForTopic(pace, item.topic) : null
-    const seconds = cost?.seconds ?? 60
+    const seconds = cost?.seconds ?? DEFAULT_SECONDS_PER_ITEM
     cursor += seconds
     segments.push({
       id: item.id,

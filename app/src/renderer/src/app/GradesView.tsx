@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { TopicTitle } from '../components/TopicTitle'
+import { PageHeader } from '../components/ui/PageHeader'
 import type {
   DayActivity,
   GraderHealthResult,
@@ -131,20 +132,28 @@ function trendToWeekRetention(trend: TopicGradeTrendPoint[]): WeekRetention[] {
   }))
 }
 
-/** ▲/▼/– point delta between the oldest and newest computed trend points —
- * completed-mode only (see `computeHistoricalTopicGrade`'s own doctrine
- * comment on why total mode's coverage can't be reconstructed historically). */
+/** ▲/▼/– point delta between the oldest and newest computed trend points,
+ * labelled with its unit and span ("▲ 22 pts in 12 wks") — a bare "▲22"
+ * left the learner to guess what was counted and over what. A fall is shown
+ * in neutral ink: a lower score is not a misconception. Completed-mode
+ * only (see `computeHistoricalTopicGrade`'s own doctrine comment on why total mode's coverage can't be reconstructed historically). */
 function TrendArrow({ trend }: { trend: TopicGradeTrendPoint[] }) {
   const available = trend.filter((p) => p.result.overall.available)
   if (available.length < 2) return null
   const oldest = available[0].result.overall.score ?? 0
   const newest = available[available.length - 1].result.overall.score ?? 0
   const delta = Math.round(newest - oldest)
-  if (delta === 0) return <span className="label-data text-[10px] text-[var(--color-text-faint)]">–</span>
+  // Weekly points, so n points span n - 1 weeks.
+  const weeks = available.length - 1
+  const span = `${weeks} wk${weeks === 1 ? '' : 's'}`
+  if (delta === 0) return <span className="label-data text-[10px] text-[var(--color-text-faint)]">no change in {span}</span>
   const up = delta > 0
   return (
-    <span className={`label-data text-[10px] ${up ? 'text-[var(--color-ink-warm)]' : 'text-[var(--color-ink-danger)]'}`}>
-      {up ? '▲' : '▼'} {Math.abs(delta)}
+    <span
+      className={`label-data text-[10px] ${up ? 'text-[var(--color-ink-warm)]' : 'text-[var(--color-text-dim)]'}`}
+      title={`Change in this topic's score between its oldest and newest weekly points`}
+    >
+      {up ? '▲' : '▼'} {Math.abs(delta)} pts in {span}
     </span>
   )
 }
@@ -234,7 +243,7 @@ function AssignmentRowView({
         // (link ink, hover wash, alignment) unchanged.
         className="focus-ring w-full flex items-center justify-between gap-3 py-1.5 px-2 -mx-2 text-left hover:bg-[color-mix(in_srgb,var(--color-surface-2)_68%,transparent)] transition-colors duration-[var(--dur-fast)]"
       >
-        <span className="label-data text-[10px] uppercase tracking-wide text-[var(--color-ink-cool)] shrink-0">
+        <span className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-ink-cool)] shrink-0">
           {KIND_LABEL[row.kind]} ↗
         </span>
         {right}
@@ -243,7 +252,7 @@ function AssignmentRowView({
   }
   return (
     <div className="flex items-center justify-between gap-3 py-1.5">
-      <span className="label-data text-[10px] uppercase tracking-wide text-[var(--color-text-dim)] shrink-0">
+      <span className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-dim)] shrink-0">
         {KIND_LABEL[row.kind]}
       </span>
       {right}
@@ -371,7 +380,7 @@ function ModeToggle({ mode, onChange }: { mode: GradeMode; onChange: (m: GradeMo
         <button
           key={m}
           onClick={() => onChange(m)}
-          className={`label-data text-[10px] uppercase tracking-wide px-2.5 py-1 border ${
+          className={`label-data text-[11px] uppercase tracking-[0.1em] px-2.5 py-1 border ${
             mode === m
               ? 'border-[var(--color-ink-warm)] text-[var(--color-ink-warm)]'
               : 'border-[var(--color-hairline)] text-[var(--color-text-faint)]'
@@ -572,7 +581,7 @@ export function GradesView({ onGoSitting, onOpenLedger }: { onGoSitting?: (sessi
           <SectionBanner label="Assignments" count={assignments.length} className="flex-1" />
           <button
             onClick={() => setLapsedOnly((v) => !v)}
-            className={`label-data text-[10px] uppercase tracking-wide px-2.5 py-1 border shrink-0 ${
+            className={`label-data text-[11px] uppercase tracking-[0.1em] px-2.5 py-1 border shrink-0 ${
               lapsedOnly
                 ? 'border-[var(--color-ink-danger)] text-[var(--color-ink-danger)]'
                 : 'border-[var(--color-hairline)] text-[var(--color-text-faint)]'
@@ -613,6 +622,7 @@ export function GradesView({ onGoSitting, onOpenLedger }: { onGoSitting?: (sessi
 
   return (
     <div className="h-full overflow-y-auto p-8 flex flex-col gap-4 w-full">
+      <PageHeader title="Grades" />
       {/* Same plate anatomy as ReadyRoomPlate's own — a tilt-card panel
           wrapping the PlateFigure, never a bare figure floating with no
           card underneath it. */}

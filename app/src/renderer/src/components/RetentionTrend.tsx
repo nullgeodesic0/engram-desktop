@@ -6,14 +6,16 @@ import { humanizeNodeId } from '../../../shared/humanizeId'
 function barColor(rate: number | null): string {
   if (rate == null) return 'var(--color-surface-3)'
   if (rate >= 0.85) return 'var(--color-ink-warm)'
-  if (rate < 0.6) return 'var(--color-ink-danger)'
+  // A hard week is not a mistake: neutral, never danger ink (DESIGN.md's
+  // Reserved Danger Rule keeps red for misconceptions).
+  if (rate < 0.6) return 'var(--color-text-faint)'
   return 'var(--color-ink-cool)'
 }
 
 function gradeColor(grade: string | null): string {
   if (grade === 'recalled') return 'var(--color-ink-warm)'
   if (grade === 'partial') return 'var(--color-ink-cool)'
-  if (grade === 'lapsed') return 'var(--color-ink-danger)'
+  if (grade === 'lapsed') return 'var(--color-text-dim)'
   return 'var(--color-text-faint)'
 }
 
@@ -38,6 +40,8 @@ interface HoverState {
  * previously only had a single point-in-time snapshot (stats.retention.buckets).
  * Hovering a bar shows the real items behind that week's rate; clicking hands the
  * week up to the parent for a persistent detail view. */
+const MIN_WEEKS_SHOWN = 8
+
 export function RetentionTrend({
   weeks,
   days,
@@ -66,7 +70,13 @@ export function RetentionTrend({
     return m
   }, [days])
 
-  const active = weeks.filter((w) => w.total > 0)
+  // Draw from the first week with any reviews (keeping at least
+  // MIN_WEEKS_SHOWN columns), so a young history doesn't leave most of the
+  // chart as an empty run of leading weeks.
+  const firstActive = weeks.findIndex((w) => w.total > 0)
+  const shown =
+    firstActive <= 0 ? weeks : weeks.slice(Math.max(0, Math.min(firstActive, weeks.length - MIN_WEEKS_SHOWN)))
+  const active = shown.filter((w) => w.total > 0)
   if (active.length === 0) {
     return <div className="text-xs text-[var(--color-text-faint)]">Not enough reviews yet to chart a trend.</div>
   }
@@ -105,7 +115,7 @@ export function RetentionTrend({
           <span className="absolute right-0 -top-3 text-[9px] label-data text-[var(--color-text-faint)]">60%</span>
         </div>
 
-        {weeks.map((w) => {
+        {shown.map((w) => {
           const heightPct = w.rate != null ? Math.max(6, w.rate * 100) : 0
           const items = itemsByWeek.get(w.weekStart) ?? []
           return (
@@ -129,9 +139,9 @@ export function RetentionTrend({
       </div>
 
       <div className="flex gap-1">
-        {weeks.map((w, i) => (
+        {shown.map((w, i) => (
           <div key={w.weekStart} className="flex-1 text-center text-[9px] label-data text-[var(--color-text-faint)] whitespace-nowrap overflow-visible">
-            {(i % 4 === 0 || i === weeks.length - 1) && shortDate(w.weekStart)}
+            {(i % 4 === 0 || i === shown.length - 1) && shortDate(w.weekStart)}
           </div>
         ))}
       </div>
