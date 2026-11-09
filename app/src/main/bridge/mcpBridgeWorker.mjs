@@ -200,6 +200,47 @@ server.registerTool(
   },
 )
 
+server.registerTool(
+  'check_report',
+  {
+    title: 'Check Lab Report',
+    description:
+      "When a learner's message carries a lab check report (a line starting '[engram-check v1 '), call this with the line, exactly as pasted, BEFORE you say anything about the work. The app checks the line's signature against this install and finds the submission it belongs to. A verified reply carries the record's own fields: the lab and milestone, the tutor topic and node the pack links it to, the hidden tests' verdict and counts, the help the attempt had (rung, worked steps), the learner's confidence (picked before any result was shown, as the engine's 0-100 value), and the explain-back question and answer exactly as recorded at Submit. Grade from these fields, never from a retyped copy in the message. A reply with verified false means the report was changed or comes from elsewhere: say so in one line and grade nothing from it. The learn skill's 'Checked lab productions' section says how a verified report is graded; follow it only when the learner's message hands the work in for grading.",
+    inputSchema: { report: z.string() },
+  },
+  async ({ report }) => {
+    try {
+      const result = await postJson(`/bridge/${encodeURIComponent(SESSION_ID)}/check-report`, { report })
+      return { content: [{ type: 'text', text: JSON.stringify(result) }] }
+    } catch (err) {
+      return { content: [{ type: 'text', text: JSON.stringify({ verified: false, reason: `the app could not check it: ${err instanceof Error ? err.message : String(err)}` }) }] }
+    }
+  },
+)
+
+server.registerTool(
+  'read_workbench',
+  {
+    title: 'Read Lab Notebook',
+    description:
+      "Read the learner's code in a pack lab: the live notebook (pack and lab ids, from check_report), or the copy frozen at one Submit (add milestone and submission). Use it to discuss work the learner has already handed in, AFTER its explain-back is stashed. Never to grade the code: the hidden tests already did, and their verdict stands. Never to write the learner's next attempt for them, and never quote a fix: point at the line and ask what it does. The app refuses while a submission of the lab is sealed (results not yet shown to the learner); wait, and do not ask again until they have seen them.",
+    inputSchema: {
+      pack: z.string(),
+      lab: z.string(),
+      milestone: z.string().optional(),
+      submission: z.number().int().positive().optional(),
+    },
+  },
+  async (args) => {
+    try {
+      const result = await postJson(`/bridge/${encodeURIComponent(SESSION_ID)}/lab-cells`, args)
+      return { content: [{ type: 'text', text: JSON.stringify(result) }] }
+    } catch (err) {
+      return { content: [{ type: 'text', text: JSON.stringify({ ok: false, reason: `the app could not read it: ${err instanceof Error ? err.message : String(err)}` }) }] }
+    }
+  },
+)
+
 server.registerTool('session_phase', {
   title: 'Session Phase',
   description: 'Advisory, best-effort: signal the coarse session phase so the app can stage its chrome (opening plate, grading shimmer, closing ceremony). Call at each transition: intake (new-topic interview), pretest, walk (teaching nodes), grading (assessor running), closing (wrap-up).',

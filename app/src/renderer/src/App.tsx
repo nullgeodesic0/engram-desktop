@@ -187,6 +187,8 @@ export default function App() {
   // Bumped after any manual resolve so Coach's KeepMounted fetches re-run.
   const [misconceptionsEpoch, setMisconceptionsEpoch] = useState(0)
   const [deepLinkTopic, setDeepLinkTopic] = useState<string | null>(null)
+  // A lab hand-in for the Learn composer, delivered with deepLinkTopic (see LabsView's onDiscuss).
+  const [learnComposerPrefill, setLearnComposerPrefill] = useState<string | null>(null)
   const [deepLinkNode, setDeepLinkNode] = useState<{ topicId: string; nodeId: string } | null>(null)
   // Learn's "Open in Topic Map": the map opens on this topic, no node selected.
   const [deepLinkMapTopic, setDeepLinkMapTopic] = useState<string | null>(null)
@@ -475,7 +477,13 @@ export default function App() {
           {(visited.labs || view === 'labs') && (
             <KeepMounted active={view === 'labs'}>
               <Suspense fallback={<div className="h-full p-6"><SkeletonBar height={220} /></div>}>
-                <LabsView onOpenSettings={() => goToView('settings')} />
+                <LabsView
+                  onOpenSettings={() => goToView('settings')}
+                  onDiscuss={(topicId, text) => {
+                    setLearnComposerPrefill(text)
+                    goToTopic(topicId)
+                  }}
+                />
               </Suspense>
             </KeepMounted>
           )}
@@ -505,6 +513,8 @@ export default function App() {
               <LearnSessionView
                 deepLinkTopicId={deepLinkTopic}
                 onDeepLinkConsumed={() => setDeepLinkTopic(null)}
+                composerPrefill={learnComposerPrefill}
+                onComposerPrefillConsumed={() => setLearnComposerPrefill(null)}
                 onActivity={(a) => setActivity((prev) => ({ ...prev, learn: a }))}
                 onSpotlight={(s) => setPendingSpotlight(s)}
                 onGoReview={() => setView('review')}

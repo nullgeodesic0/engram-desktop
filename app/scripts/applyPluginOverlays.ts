@@ -123,6 +123,15 @@ const OVERLAYS: Overlay[] = [
         contentFile: 'engram/learn-skill.lecture-notes-protocol.md',
         beforeLine: '## 4 · Verify via the assessor (separation of powers)',
       },
+      {
+        // The checked-production protocol — the FOURTH pedagogy overlay, for a
+        // pack lab the learner hands in. It changes how a VERIFY production
+        // reaches the stash and how its rating is capped, so it sits right
+        // before the assessor section it modifies.
+        id: 'checked-production-protocol',
+        contentFile: 'engram/learn-skill.checked-production-protocol.md',
+        beforeLine: '## 4 · Verify via the assessor (separation of powers)',
+      },
     ],
   },
   {
@@ -151,6 +160,12 @@ const OVERLAYS: Overlay[] = [
         // The lecture-notes companion sentence, read third in the same spot.
         id: 'lecture-notes-exception',
         contentFile: 'engram/dialogue-grammar.lecture-notes-exception.md',
+        beforeLine: '## ⚠ The session does not end on a failed retrieval (v1.5 — retrieval to criterion)',
+      },
+      {
+        // The checked-production companion sentence, read fourth in the same spot.
+        id: 'checked-production-exception',
+        contentFile: 'engram/dialogue-grammar.checked-production-exception.md',
         beforeLine: '## ⚠ The session does not end on a failed retrieval (v1.5 — retrieval to criterion)',
       },
     ],

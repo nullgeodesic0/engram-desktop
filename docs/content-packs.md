@@ -91,6 +91,7 @@ keeps serving cells until then.
   "title": "Fitting a line by least squares",
   "kicker": "Lab 1 · Stage 1",
   "summary": "One line for the Labs list.",
+  "topic": "least-squares",
   "starter": "starter.py",
   "milestones": [
     {
@@ -103,7 +104,14 @@ keeps serving cells until then.
       "timeLimitS": 600,
       "workedFile": "worked_m1.md",
       "completion": "completion_m1.py",
-      "steps": ["Build the design matrix…", "Set the gradient to zero…"]
+      "steps": ["Build the design matrix…", "Set the gradient to zero…"],
+      "node": "normal-equations",
+      "predict": [
+        { "id": "design-matrix", "code": "print(np.column_stack([x, np.ones_like(x)]).shape)", "output": "(3, 2)", "why": "One column per unknown." }
+      ],
+      "variants": [
+        { "id": "through-origin", "title": "A line through the origin", "brief": "Write `fit_through_origin(x, y)`…", "hidden": "checks/hidden_m1_origin.py" }
+      ]
     },
     { "id": "m2", "title": "Further reading", "brief": "Brief only, no tests." }
   ]
@@ -130,6 +138,21 @@ keeps serving cells until then.
   Every Submit records the help it had: `rung=completion` once the partial
   solution was added, and `help=N` for the steps open. The milestone rail says
   "passed first try" only for a first, unaided pass.
+- `topic` (on the lab) and `node` (on a milestone) link the lab to the tutor:
+  the engram topic id, and the node a milestone exercises. Both are optional.
+  With a topic that exists on the machine, the receipt offers **Discuss with
+  the tutor** (see [Handing a lab to the tutor](#handing-a-lab-to-the-tutor)).
+  Without a `node`, the tutor talks the work through but grades nothing.
+- `predict`: up to 6 read-before-write items. Each is a snippet (`code`), the
+  question (`prompt`, default "What does this print?"), what it prints
+  (`output`, pasted from a real run on the pack's layer) and an optional
+  `why`. The learner types a prediction and locks it in; only then does main
+  send the output and the why. One guess per item. A match ignores line
+  endings, trailing spaces and trailing blank lines, and nothing else.
+- `variants`: up to 8 practice instances of a milestone with hidden tests,
+  each with its own `brief` (or `briefFile`), `hidden` tests and, optionally,
+  its own `starter`. See [Practice](#practice). Predict items and variants
+  share the milestone's id space.
 
 ## Learning design
 
@@ -156,9 +179,21 @@ problems generally, finds works:
 - **Hypercorrection.** When a confident prediction meets a failure, the
   receipt asks which assumption broke. Errors held with high confidence are
   corrected best when confronted at once.
-
-Still to come with the tutor handoff: predict-the-output items, variants of a
-milestone for retrieval practice, and interleaving across labs.
+- **Read before you write.** Predict-the-output items ask the learner to
+  trace code before writing any (the "predict" step of PRIMM). Tracing is a
+  separate skill that writing code leans on, and a wrong prediction marks
+  exactly where the learner's model of the code and the language's differ.
+- **Retrieval, spaced.** A passed milestone comes back as a variant a day
+  later, then after roughly three times the last gap on each success, and
+  after a day again on a failure. It is written from memory in a notebook
+  that starts from the starter, never from the learner's old code: recalling
+  the method is what strengthens it, and re-reading a solution is not.
+- **A new instance each time.** Variants rotate, so practice never becomes
+  recalling one answer. The same method on a different problem is what
+  transfers.
+- **Interleaving.** The practice queue mixes milestones and labs: never the
+  same milestone twice in a row, and another lab whenever one is due.
+  Choosing the method is part of the skill, and blocked practice hides it.
 
 ### starter.py
 
@@ -269,11 +304,62 @@ by hand. The report names the code only by its hash: the grader never sees
 the code. **Copy for the tutor** puts the report, the explain-back and any
 reflection on the clipboard as one turn. The receipt reads "tests only ·
 explain-back not yet graded": the tests grade the code, and the explanation
-is the tutor's to grade. Handing that turn to a tutor session, and the overlay
-that teaches the tutor to grade it, come next.
+is the tutor's to grade; see [Handing a lab to the tutor](#handing-a-lab-to-the-tutor).
 
 A milestone passes once a submission's core tests all pass. That receipt is
 app-side, like the workbench itself: no rating, schedule or stamp reads it.
+
+## Handing a lab to the tutor
+
+When the lab has a `topic` that exists on the machine, the receipt's
+**Discuss with the tutor** opens Learn on that topic (resuming its sitting,
+or starting one) with the hand-in in the composer: the sentence "I'm handing
+in a checked lab milestone.", a request to follow the learn skill's "Checked
+lab productions" protocol, the report, the explain-back and any reflection.
+Nothing is sent: the learner reads it and presses Send, or edits or deletes
+it. Without a topic, **Copy for the tutor** puts the same text on the
+clipboard.
+
+In the session, two bridge tools read the lab, both answered by main:
+
+- `check_report(report)` verifies the line's signature against this install,
+  finds the submission it belongs to, and returns the record's own fields:
+  the lab, milestone, topic and node, the verdict and counts, the help the
+  try had, the confidence as the engine's 0 to 100 value, and the
+  explain-back question and answer exactly as stored. The tutor grades from
+  these, never from a retyped copy. A changed line, or one from another
+  install, comes back `verified: false`.
+- `read_workbench(pack, lab, milestone?, submission?)` returns the learner's
+  cells, live or as frozen at one Submit, so the tutor can talk the work
+  through. It is refused while any submission of the lab is sealed.
+
+How the tutor grades a verified hand-in is the
+[checked-production overlay](../plugin-overlays/engram/learn-skill.checked-production-protocol.md),
+a pedagogy overlay pinned by doctrine (D5). The explain-back goes into the
+stash as the VERIFY production for the milestone's node, verbatim, with the
+confidence the learner picked before seeing any result, and the blind
+assessor grades it as any production. When the assessor's rating is applied,
+it is capped by the tests and the help: `hard` at best when a core test
+failed or the run broke, `good` at best after a slip, a second try, the
+partial solution or any worked step, and `easy` only for a first, unaided
+pass. The receipt is stamped `"source": "lab-check"`. The tests stand: the
+tutor never re-grades the code and never writes the next attempt.
+
+## Practice
+
+**Practice**, at the top of the Labs list, is one queue across every pack.
+A milestone with variants joins it a day after it first passes. Each item
+opens in the lab's practice notebook (`<lab>--practice`, on the pack's
+layer), set up from the variant's starter or the lab's: the learner writes
+the method again from memory. The confidence is picked before **Check**, as
+at Submit; the variant's hidden tests run the same two-run way, and the
+feedback is in full, because the milestone has already passed.
+
+A pass (or a slip) roughly triples the wait, up to 120 days; a core failure
+or a broken run brings the item back the next day. Either way the next
+attempt is the next variant in turn, in a fresh notebook. Practice records
+are app-side, like submissions: they schedule practice, not engine reviews,
+and nothing reads them as a rating.
 
 ## Where the learner's work goes
 
@@ -285,6 +371,10 @@ app-side, like the workbench itself: no rating, schedule or stamp reads it.
   records/<pack>/<lab>/submissions.json       every Submit, sealed or not
   records/<pack>/<lab>/submissions/<m>-<n>/   the frozen lab.py, the cells and the raw results
   records/<pack>/<lab>/smoke/                 the last smoke run
+  records/<pack>/<lab>/progress.json          the ladder help opened, and predictions locked in
+  records/<pack>/<lab>/practice.json          practice schedule and attempts, per milestone
+  records/<pack>/<lab>/practice/<m>-<n>/      each practice check's frozen cells and results
+  packs/<pack>/<lab>--practice/               the lab's practice notebook
 ```
 
 Removing a pack in Settings forgets its folder and stops its labs' kernels.
@@ -293,10 +383,6 @@ runtime** clears every layer.
 
 ## Not yet built
 
-- Predict-the-output items, milestone variants and interleaved review.
-
-- Handing the production to a tutor session, the `read_workbench` bridge
-  tool, and the checked-production grading overlay.
 - Helper modules a pack's given cells can import.
 - Long checks as background jobs. A check runs in main within its time limit
   and keeps going if the learner switches screens, but it stops when the app

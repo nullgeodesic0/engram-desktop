@@ -370,11 +370,18 @@ interface LearnSessionViewProps {
   onOpenNode?: (topicId: string, nodeId: string) => void
   /** The library's "Open in Topic Map": the map, on this topic. */
   onOpenMap?: (topicId: string) => void
+  /** Set alongside deepLinkTopicId by a lab's "Discuss with the tutor": text
+   * for the composer once that topic opens. Prefill only, never sent: the
+   * learner reads it and presses Send. Cleared via onComposerPrefillConsumed. */
+  composerPrefill?: string | null
+  onComposerPrefillConsumed?: () => void
 }
 
 export function LearnSessionView({
   deepLinkTopicId,
   onDeepLinkConsumed,
+  composerPrefill,
+  onComposerPrefillConsumed,
   onActivity,
   onSpotlight,
   onGoReview,
@@ -1039,11 +1046,23 @@ export function LearnSessionView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [started, sessionId, busy])
 
+  // A lab hand-in rides the deep link: it lands in the composer once the
+  // topic is open, after anything already typed, and is never sent from here.
+  const prefillRef = useRef(composerPrefill)
+  prefillRef.current = composerPrefill
+  function applyComposerPrefill() {
+    const text = prefillRef.current
+    if (!text) return
+    setProduction((p) => (p.trim() ? `${p.trimEnd()}\n\n${text}` : text))
+    onComposerPrefillConsumed?.()
+  }
+
   useEffect(() => {
     if (!deepLinkTopicId || !topics) return
     if (started) {
       if (activeTopic?.topic === deepLinkTopicId) {
-        // Already looking at this topic's session — nothing to do.
+        // Already looking at this topic's session — nothing to open.
+        applyComposerPrefill()
         onDeepLinkConsumed?.()
         return
       }
@@ -1061,13 +1080,13 @@ export function LearnSessionView({
       setSessionId(null)
       setSittingStartedAt(null)
       resetSessionEphemera()
-      openTopic(match)
+      void openTopic(match).then(applyComposerPrefill)
       onDeepLinkConsumed?.()
       return
     }
     const match = topics.find((t) => t.topic === deepLinkTopicId)
     if (match) {
-      openTopic(match)
+      void openTopic(match).then(applyComposerPrefill)
       onDeepLinkConsumed?.()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

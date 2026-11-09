@@ -3,6 +3,7 @@ import type { PackSummary } from '../../../shared/labs'
 import type { WorkbenchSummary } from '../../../shared/runtime'
 import { parseLabWorkbenchId } from '../../../shared/runtime'
 import { LabPage } from '../components/labs/LabPage'
+import { PracticePage } from '../components/labs/PracticePage'
 import { Button } from '../components/ui/Button'
 import { Workbench } from '../components/workbench/Workbench'
 import { ResizeHandle } from '../components/ui/ResizeHandle'
@@ -15,6 +16,8 @@ import { usePane } from '../shared/paneLayout'
  */
 
 const SCRATCH_ID = 'scratch'
+/** The practice queue's place in the list; not a valid workbench id, so it never names one. */
+const PRACTICE = ':practice'
 const LAST_KEY = 'engram:labs:lastWorkbench'
 
 function readLast(): string {
@@ -31,7 +34,14 @@ function when(iso: string): string {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
-export function LabsView({ onOpenSettings }: { onOpenSettings: () => void }) {
+export function LabsView({
+  onOpenSettings,
+  onDiscuss,
+}: {
+  onOpenSettings: () => void
+  /** Opens the tutor on a topic with a lab hand-in in the composer, never sent. */
+  onDiscuss?: (topicId: string, text: string) => void
+}) {
   const [list, setList] = useState<WorkbenchSummary[]>([])
   const [current, setCurrent] = useState<string>(readLast)
   const [naming, setNaming] = useState(false)
@@ -39,12 +49,17 @@ export function LabsView({ onOpenSettings }: { onOpenSettings: () => void }) {
   const [newTitle, setNewTitle] = useState('')
 
   const [packs, setPacks] = useState<PackSummary[] | null>(null)
+  const [practiceDue, setPracticeDue] = useState(0)
 
   const refresh = useCallback(() => {
     void window.engram.workbenchList().then(setList)
   }, [])
   const refreshPacks = useCallback(() => {
     void window.engram.packsList().then(setPacks)
+    void window.engram
+      .practiceQueue()
+      .then((q) => setPracticeDue(q.due.length))
+      .catch(() => {})
   }, [])
 
   useEffect(refresh, [refresh])
@@ -64,7 +79,8 @@ export function LabsView({ onOpenSettings }: { onOpenSettings: () => void }) {
       ) {
         setCurrent(SCRATCH_ID)
       }
-    } else if (list.length && current !== SCRATCH_ID && !list.some((w) => w.id === current)) setCurrent(SCRATCH_ID)
+    } else if (list.length && current !== SCRATCH_ID && current !== PRACTICE && !list.some((w) => w.id === current))
+      setCurrent(SCRATCH_ID)
   }, [list, packs, current, currentLab])
 
   function open(id: string) {
@@ -133,6 +149,8 @@ export function LabsView({ onOpenSettings }: { onOpenSettings: () => void }) {
             </p>
           </div>
           <div className="flex-1 min-h-0 overflow-y-auto flex flex-col">
+            {packs?.some((p) => p.labs.length > 0) &&
+              row(PRACTICE, 'Practice', practiceDue ? `${practiceDue} due · mixed across labs` : 'nothing due')}
             {packs
               ?.filter((p) => p.labs.length > 0)
               .map((p) => (
@@ -216,13 +234,20 @@ export function LabsView({ onOpenSettings }: { onOpenSettings: () => void }) {
       )}
       {!listPane.collapsed && <ResizeHandle pane={listPane} edge="end" label="Labs list width" />}
       <section className="flex-1 min-w-0 min-h-0">
-        {currentLab ? (
+        {current === PRACTICE ? (
+          <PracticePage
+            layerOf={(packId) => packs?.find((p) => p.id === packId)?.layer ?? 'base'}
+            onOpenSettings={onOpenSettings}
+            onChanged={refreshPacks}
+          />
+        ) : currentLab ? (
           <LabPage
             key={current}
             packId={currentLab.packId}
             labId={currentLab.labId}
             onOpenSettings={onOpenSettings}
             onChanged={refreshPacks}
+            onDiscuss={onDiscuss}
           />
         ) : (
           <Workbench

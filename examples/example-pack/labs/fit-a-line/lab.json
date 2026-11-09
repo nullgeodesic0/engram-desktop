@@ -19,6 +19,43 @@
         "Stack the inputs into a design matrix with one column per unknown: `A = np.column_stack([x, np.ones_like(x)])`. Row $i$ is $[x_i \\;\\; 1]$, so $A\\beta$ is the line evaluated at every $x_i$.",
         "The squared error is $\\lVert A\\beta - y \\rVert^2$. Setting its gradient $2A^\\top(A\\beta - y)$ to zero gives $A^\\top A\\,\\beta = A^\\top y$: a 2×2 system. Solve it with `np.linalg.solve(A.T @ A, A.T @ y)`.",
         "`beta[0]` is the slope and `beta[1]` the intercept, in the order of the columns of `A`. Wrap each in `float(...)` so the function returns plain Python floats."
+      ],
+      "predict": [
+        {
+          "id": "design-matrix",
+          "prompt": "What does this print?",
+          "code": "import numpy as np\nx = np.array([1.0, 2.0, 3.0])\nA = np.column_stack([x, np.ones_like(x)])\nprint(A.shape)\nprint(A[1])",
+          "output": "(3, 2)\n[2. 1.]",
+          "why": "`column_stack` makes one column per array, so three points give a 3×2 matrix, and row 1 is $[x_1 \\;\\; 1]$."
+        },
+        {
+          "id": "at-y",
+          "prompt": "What does this print?",
+          "code": "import numpy as np\nA = np.array([[0.0, 1.0], [1.0, 1.0], [2.0, 1.0]])\ny = np.array([1.0, 3.0, 5.0])\nprint(A.T @ y)",
+          "output": "[13.  9.]",
+          "why": "Each entry of $A^\\top y$ is a column of $A$ dotted with $y$: $0\\cdot1 + 1\\cdot3 + 2\\cdot5 = 13$, and $1+3+5 = 9$."
+        },
+        {
+          "id": "solve-types",
+          "prompt": "What does this print?",
+          "code": "import numpy as np\nbeta = np.linalg.solve(np.array([[2.0, 0.0], [0.0, 4.0]]), np.array([6.0, 2.0]))\nprint(beta)\nprint(type(beta[0]).__name__, type(float(beta[0])).__name__)",
+          "output": "[3.  0.5]\nfloat64 float",
+          "why": "Indexing a NumPy array gives a NumPy scalar (`float64`), not a Python `float`; `float(...)` converts it. That is the slip test in M1."
+        }
+      ],
+      "variants": [
+        {
+          "id": "through-origin",
+          "title": "A line through the origin",
+          "brief": "Write `fit_through_origin(x, y)`: the slope $b$ of the line $y = b x$ (no intercept) with the smallest squared vertical error. Return it as a Python `float`.\n\nSame method as M1, one unknown instead of two.",
+          "hidden": "checks/hidden_m1_origin.py"
+        },
+        {
+          "id": "parabola",
+          "title": "A parabola",
+          "brief": "Write `fit_parabola(x, y)`: the coefficients `(a, b, c)` of $y = a x^2 + b x + c$ with the smallest squared vertical error, as Python floats.\n\nSame method as M1, three unknowns instead of two.",
+          "hidden": "checks/hidden_m1_parabola.py"
+        }
       ]
     },
     {
@@ -29,7 +66,15 @@
       "hidden": "checks/hidden_m2.py",
       "explainBack": "Explain what r² measures, and one way a fit can have a high r² and still be the wrong model.",
       "timeLimitS": 120,
-      "worked": "**A sibling problem: how much of $y$ does a constant explain?** Fit $\\hat y = c$; least squares gives $c = \\bar y$. The residual sum of squares is $\\mathrm{SS_{res}} = \\sum (y_i - \\bar y)^2$, which is exactly the total sum of squares $\\mathrm{SS_{tot}}$, so $1 - \\mathrm{SS_{res}}/\\mathrm{SS_{tot}} = 0$: a constant explains none of the variance.\n\n```python\ny = np.asarray(y, float)\nss_tot = np.sum((y - y.mean()) ** 2)\nss_res = np.sum((y - y.mean()) ** 2)   # the constant's residuals\nprint(1 - ss_res / ss_tot)             # 0.0\n```\n\nFor a line, only the residuals change."
+      "worked": "**A sibling problem: how much of $y$ does a constant explain?** Fit $\\hat y = c$; least squares gives $c = \\bar y$. The residual sum of squares is $\\mathrm{SS_{res}} = \\sum (y_i - \\bar y)^2$, which is exactly the total sum of squares $\\mathrm{SS_{tot}}$, so $1 - \\mathrm{SS_{res}}/\\mathrm{SS_{tot}} = 0$: a constant explains none of the variance.\n\n```python\ny = np.asarray(y, float)\nss_tot = np.sum((y - y.mean()) ** 2)\nss_res = np.sum((y - y.mean()) ** 2)   # the constant's residuals\nprint(1 - ss_res / ss_tot)             # 0.0\n```\n\nFor a line, only the residuals change.",
+      "variants": [
+        {
+          "id": "given-fit",
+          "title": "r² of a given prediction",
+          "brief": "Write `r_squared_of(y, y_hat)`: the fraction of the variance in `y` explained by the predictions `y_hat`, whatever model made them. Return a Python `float`.",
+          "hidden": "checks/hidden_m2_given.py"
+        }
+      ]
     },
     {
       "id": "m3",
