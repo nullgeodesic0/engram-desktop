@@ -31,6 +31,14 @@ my-pack/
       checks/
         smoke_m1.py              visible checks
         hidden_m1.py             hidden tests
+  problems/
+    a-proof/
+      problem.json
+      key.json                   the answer key, read only by main
+    an-audit/
+      problem.json
+      text.md                    the flawed text to audit
+      key.json
 ```
 
 Every path a manifest names is relative to the file that names it, uses
@@ -60,7 +68,8 @@ as written, links go only to the web or mail, and images are not loaded.
     "packages": ["mylib", "numpy"]
   },
   "labs": ["labs/lab-one"],
-  "course": "course.json"
+  "course": "course.json",
+  "problems": ["problems/a-proof", "problems/an-audit"]
 }
 ```
 
@@ -70,6 +79,7 @@ as written, links go only to the web or mail, and images are not loaded.
 - `runtime` is optional. Without it the pack's labs run on the base layer
   (NumPy, SciPy, Matplotlib, pytest).
 - `course` is optional: the path of the pack's course file.
+- `problems` is optional: up to 200 problem folders (see Problems).
 
 ### The runtime layer
 
@@ -468,6 +478,131 @@ A checkpoint passes when every part has its record. Part ids are unique
 across the course. A stage's checkpoint does not lock the next stage; it
 says what leaving the stage should look like.
 
+## Problems
+
+A problem is written work with no code: a **proof**, an **audit** of a flawed
+text, or a **figure** reading. It shows under Labs, in its pack's Problems
+group. Like a lab it has a sealed Submit and a signed report the learner hands
+to the tutor, but its answer key is data, not tests.
+
+### problem.json
+
+```json
+{
+  "id": "flawed-fit-writeup",
+  "type": "audit",
+  "title": "Audit: a machine-written fit",
+  "summary": "One line for the list.",
+  "topic": "least-squares",
+  "node": "normal-equations",
+  "prompt": "Markdown: the task.",
+  "hints": ["Opened one at a time; each one opened is recorded as help."],
+  "explainBack": "The judgement asked with the answer.",
+  "text": "text.md",
+  "key": "key.json"
+}
+```
+
+Common fields:
+
+- `type` is `proof`, `audit` or `figure`.
+- `prompt` is Markdown with math; `promptFile` names a Markdown file instead.
+- `topic` and `node` link the problem to the tutor, as a lab's do. `node` is
+  optional: without it the tutor picks the topic's node whose claim the
+  problem exercises, and says which.
+- `unaided: true` marks a problem done from a blank page: no hints are allowed.
+- `hints`, up to 8.
+- `explainBack` is required for an audit or a figure: the learner writes the
+  judgement before Submit. A proof has none; the proof is the production.
+
+By type:
+
+- **proof**: `steps`, optional, the rough length of the reference proof,
+  shown as a guide. The learner writes numbered steps, each a statement and
+  why it holds, and can reorder them.
+- **audit**: `text`, a Markdown file with math. The learner selects a passage
+  (in the typeset text or, with Show source, in the TeX), picks a class for
+  the error, and writes one line on what is right instead. The classes are
+  hallucinated citation, dropped assumption, wrong prefactor, wrong noise
+  model, overfit, known result passed off as new, sycophantic agreement, a
+  check that cannot fail, and a gap in the logic.
+- **figure**: `image` (PNG or JPEG), `questions` (1 to 8, each `id`, `prompt`
+  and optional `unit`), and optional `axes`: for `x` and `y`, two pixel
+  positions on the image's own grid (`px`), the data values there (`value`),
+  and `scale` (`linear` or `log`). With axes the crosshair reads data values,
+  and a click pins a reading the learner can copy into an answer.
+
+### key.json
+
+Main reads the key only after an attempt is on disk; the renderer sees it
+only once the attempt is unsealed. A key that does not fit its problem shows
+as an error in the list, so check a new problem there first.
+
+```json
+{ "steps": [{ "claim": "…", "justification": "…", "central": true }] }
+```
+
+A proof's key is the reference proof. Mark at least one step `central`. The
+app does not grade a proof: the verdict is `open`, the learner sees the
+reference after the confidence pick, and the tutor's blind assessor grades it
+against the key's steps.
+
+```json
+{
+  "errors": [{ "id": "gradient-sign", "quote": "its gradient is $-2A^\\top(A\\beta - y)$",
+               "class": "wrong-prefactor", "central": false, "why": "…" }],
+  "judgement": ["What a good overall judgement says."]
+}
+```
+
+An audit's key lists the planted errors, 1 to 10. Each `quote` must appear in
+the text. A flag finds an error when its passage shares most of the quote, so
+selecting a little more or less still counts; passages are compared as
+letters and digits only, with TeX commands and their typeset symbols folded
+together, so a selection in the typeset math matches the source. Quote some
+prose with a formula, not a lone symbol. The verdict is `core` if a `central`
+error is missed, `slip` if any error is missed, any class is wrong, or any
+flag marks a passage with no error, and `passed` otherwise. The score is
+errors found over errors planted.
+
+```json
+{
+  "answers": { "slope": { "value": 1.49, "tolerance": 0.1, "relative": true, "tier": "core" } },
+  "judgement": ["…"]
+}
+```
+
+A figure's key has an answer for every question: `tolerance` is a fraction of
+the value when `relative` (the default) and an absolute amount otherwise.
+`tier` is `core` (the default) or `slip`. The verdict is `core` if a core
+reading is out of tolerance, `slip` if a slip reading is, and `passed`
+otherwise.
+
+### Submit and the report
+
+The order is the lab's: the answer and the judgement go in together, then the
+confidence pick, then the result. Until the pick the result stays sealed in
+main. The report is signed with the same install key:
+
+```
+[engram-check v1 prob=example-pack/flawed-fit-writeup type=audit sub=1 verdict=slip score=3/4 false=1 t=612s at=2026-11-09T14:52:03Z conf=pretty-sure ans=5d1c0e9a77b2 help=0 sig=…]
+```
+
+`score` is `-` for a proof. `false` counts flags on passages with no planted
+error. `ans` hashes the answer as recorded, `t` is the time from opening the
+problem to Submit, and `help` the hints opened.
+
+**Hand in to the tutor** opens Learn on the problem's topic with the sentence
+"I'm handing in a checked problem.", the report, and the answer as recorded,
+for the learner to send. `check_report` recognises a problem report by its
+`prob=` and returns the problem's prompt, the answer, the verdict, score and
+help, the confidence, and the key as `criteria`. How the tutor grades it is the
+[checked-problem overlay](../plugin-overlays/engram/learn-skill.checked-problem-protocol.md):
+the answer is stashed verbatim as the VERIFY production with the key as its
+rubric, and the blind assessor's rating is capped as a lab's is: `hard` at
+best on a `core` verdict, `good` at best after a slip, a second try or a hint.
+The receipt is stamped `"source": "problem-check"`.
+
 ## Where the learner's work goes
 
 ```
@@ -482,6 +617,14 @@ says what leaving the stage should look like.
   records/<pack>/<lab>/practice.json          practice schedule and attempts, per milestone
   records/<pack>/<lab>/practice/<m>-<n>/      each practice check's frozen cells and results
   packs/<pack>/<lab>--practice/               the lab's practice notebook
+```
+
+Problems keep theirs beside them:
+
+```
+<userData>/labs/problems/<pack>/<problem>/
+  draft.json                                  the unsent answer, the hints opened, and when it was opened
+  attempts.json                               every Submit: the answer, the sealed or shown result, the report
 ```
 
 Course records live beside them:
@@ -504,3 +647,5 @@ runtime** clears every layer.
   and keeps going if the learner switches screens, but it stops when the app
   quits; a hidden run cut short that way unseals as broken, to be submitted
   again.
+- Oral exams: a timed, spoken problem the tutor runs, transcribed on the
+  device.

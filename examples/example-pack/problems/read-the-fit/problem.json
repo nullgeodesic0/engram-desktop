@@ -1,0 +1,22 @@
+{
+  "id": "read-the-fit",
+  "type": "figure",
+  "title": "Reading a fitted line",
+  "summary": "Read numbers off a least-squares fit, then judge the model.",
+  "topic": "least-squares",
+  "node": "solve-the-system",
+  "prompt": "The plot shows nine points and the least-squares line through them. Read the numbers below off the figure; the crosshair reads the axes, and a click pins a reading.",
+  "hints": ["The slope is rise over run: pin the line at two x values far apart, such as 0 and 8."],
+  "explainBack": "Is a straight line the right model for this data? Say what the residuals tell you.",
+  "image": "fit.png",
+  "axes": {
+    "x": { "px": [107.56, 548.44], "value": [0, 8], "scale": "linear" },
+    "y": { "px": [333.38, 90.82], "value": [0, 12], "scale": "linear" }
+  },
+  "questions": [
+    { "id": "line-at-5", "prompt": "The line's value at x = 5", "unit": "" },
+    { "id": "slope", "prompt": "The line's slope", "unit": "" },
+    { "id": "residual-at-0", "prompt": "The residual at x = 0 (data minus line)", "unit": "" }
+  ],
+  "key": "key.json"
+}

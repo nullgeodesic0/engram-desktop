@@ -133,6 +133,14 @@ const OVERLAYS: Overlay[] = [
         beforeLine: '## 4 · Verify via the assessor (separation of powers)',
       },
       {
+        // The checked-problem protocol — the SIXTH pedagogy overlay, a sibling
+        // of the checked lab section for a pack problem (proof, audit, figure)
+        // the learner hands in. Same slot, read right after it.
+        id: 'checked-problem-protocol',
+        contentFile: 'engram/learn-skill.checked-problem-protocol.md',
+        beforeLine: '## 4 · Verify via the assessor (separation of powers)',
+      },
+      {
         // The course-seeded topic protocol — the FIFTH pedagogy overlay, for a
         // topic the learner starts from a course in a content pack. It changes
         // where a new topic's map comes from (§1), so it sits right before
@@ -175,6 +183,12 @@ const OVERLAYS: Overlay[] = [
         // The checked-production companion sentence, read fourth in the same spot.
         id: 'checked-production-exception',
         contentFile: 'engram/dialogue-grammar.checked-production-exception.md',
+        beforeLine: '## ⚠ The session does not end on a failed retrieval (v1.5 — retrieval to criterion)',
+      },
+      {
+        // The checked-problem companion sentence, read fifth in the same spot.
+        id: 'checked-problem-exception',
+        contentFile: 'engram/dialogue-grammar.checked-problem-exception.md',
         beforeLine: '## ⚠ The session does not end on a failed retrieval (v1.5 — retrieval to criterion)',
       },
     ],

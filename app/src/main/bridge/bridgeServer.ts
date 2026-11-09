@@ -9,6 +9,7 @@ import { saveLectureNotes } from '../session/lectureNotesStore'
 import { createCardPackStore, type CardPackStore } from '../link/cardPackStore'
 import { app } from 'electron'
 import { join } from 'node:path'
+import { isProblemReport } from '../labs/checkReport'
 
 /**
  * Hosts the loopback HTTP relay the MCP bridge worker (see mcpBridgeWorker.ts,
@@ -81,7 +82,11 @@ export class BridgeServer {
         const labs = await import('../labs/labStore')
         const req = JSON.parse(body) as Record<string, unknown>
         if (reportMatch) {
-          reply = await labs.lookupReport(String(req.report ?? ''))
+          const line = String(req.report ?? '')
+          // A problem's report shares the lab report's prefix and key, and is looked up in its own records.
+          reply = isProblemReport(line)
+            ? await (await import('../labs/problemStore')).lookupProblemReport(line)
+            : await labs.lookupReport(line)
         } else {
           const at =
             typeof req.milestone === 'string' && typeof req.submission === 'number'

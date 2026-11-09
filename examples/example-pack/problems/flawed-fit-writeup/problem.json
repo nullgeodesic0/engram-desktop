@@ -1,0 +1,12 @@
+{
+  "id": "flawed-fit-writeup",
+  "type": "audit",
+  "title": "Audit: a machine-written fit",
+  "summary": "Find the planted errors in a short derivation of least squares.",
+  "topic": "least-squares",
+  "node": "normal-equations",
+  "prompt": "A language model wrote the derivation below. It has planted errors. Select each wrong passage, say what kind of error it is, and write one line on what is right instead.",
+  "explainBack": "Would you sign this derivation? Which error matters most, and why?",
+  "text": "text.md",
+  "key": "key.json"
+}

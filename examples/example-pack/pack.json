@@ -3,7 +3,12 @@
   "id": "example-pack",
   "title": "Example pack",
   "version": "1.0.0",
-  "description": "A small pack that shows the format: one lab on the base layer (smoke checks, hidden core and slip tests, a brief-only milestone) and a two-topic course.",
+  "description": "A small pack that shows the format: one lab on the base layer (smoke checks, hidden core and slip tests, a brief-only milestone), a two-topic course, and one problem of each kind.",
   "labs": ["labs/fit-a-line"],
-  "course": "course.json"
+  "course": "course.json",
+  "problems": [
+    "problems/normal-equations-proof",
+    "problems/flawed-fit-writeup",
+    "problems/read-the-fit"
+  ]
 }

@@ -48,6 +48,8 @@ export interface PackManifest {
   labs: string[]
   /** A course.json inside the pack: stages, tracks and topics. Optional; see shared/course.ts. */
   course: string | null
+  /** Folders inside the pack, each holding a problem.json. See shared/problems.ts. */
+  problems: string[]
 }
 
 export interface MilestoneManifest {
@@ -241,6 +243,14 @@ export function parsePackManifest(raw: unknown): Parsed<PackManifest> {
       if (!isSafeRelPath(l)) throw new ManifestError(`pack.json: labs[${i}] must be a relative folder inside the pack`)
       return l
     })
+    const problemsRaw = o.problems === undefined ? [] : o.problems
+    if (!Array.isArray(problemsRaw) || problemsRaw.length > 200)
+      throw new ManifestError('pack.json: "problems" must be a list of up to 200 folders')
+    const problems = problemsRaw.map((l, i) => {
+      if (!isSafeRelPath(l))
+        throw new ManifestError(`pack.json: problems[${i}] must be a relative folder inside the pack`)
+      return l as string
+    })
     return {
       format: PACK_FORMAT,
       id: slug(o, 'id', 'pack.json'),
@@ -253,6 +263,7 @@ export function parsePackManifest(raw: unknown): Parsed<PackManifest> {
       runtime,
       labs,
       course: path(o, 'course', 'pack.json', true),
+      problems,
     }
   })
 }

@@ -367,6 +367,13 @@ const PINNED_WRITERS: Record<string, string> = {
   'main/labs/courseStore.ts':
     'app userData — courses/<pack>/records.json (attested milestones, topics started early) and courses/<pack>/topics/<topic>.graph.json or .outline.md (staged copies of the pack’s files)',
   'main/labs/courseStore.test.ts': 'os tmpdir — a stand-in pack and userData, removed in afterAll',
+  // 2026-11-12 — problems. The learner's drafts and attempts at a pack's
+  // proof, audit and figure problems, under app userData. Not learning state:
+  // a grade reaches the engine only when the learner hands a problem in and
+  // the tutor stashes it, inside a sitting.
+  'main/labs/problemStore.ts':
+    'app userData — labs/problems/<pack>/<problem>/draft.json and attempts.json (answers, sealed results, signed reports)',
+  'main/labs/problemStore.test.ts': 'os tmpdir — a copy of examples/example-pack and a stand-in userData, removed in afterAll',
   'main/labs/labStore.ts':
     'app userData — labs/packs/<pack>/<lab>/submissions.json, submissions/<m>-<n>/ (the frozen lab.py, cells.json, out.json), .checks/smoke/, and labs/.check-key',
   'main/session/sessionScan.ts': 'app userData — transcript scan cache',
@@ -724,6 +731,13 @@ const PINNED_BRIDGE_TOOLS = [
   //   · no subagent reaches either; the assessor still gets only the stash.
   // How a verified report is graded (caps, stamp, election) is priced in the
   // D5 overlay pin below, not here.
+  // 2026-11-12 — check_report also verifies a PROBLEM report (prob=), and that
+  // reply does carry an expected answer: the problem's own key, as criteria.
+  // It is not an engine node's claim or rubric, and the learner saw it when
+  // the confidence pick unsealed the attempt, so it reaches the tutor after
+  // the reveal, never before. The reply is read from problemStore.ts (a
+  // pinned D2 writer, a pinned D4 reader through problemKey.ts); its grading
+  // is priced in the checked-problem overlay pin below.
   'check_report',
   'read_workbench',
 ]
@@ -1085,6 +1099,12 @@ const PINNED_ANSWER_READERS: Record<string, string> = {
   'renderer/src/components/GraphView.tsx': 'learner-initiated: in-map text filter',
   'shared/types.ts': 'type declarations only',
   'shared/ritualFromTranscript.ts': 'a comment quoting the plugin’s own stash shape — no field is read',
+  // 2026-11-12 — a pack problem's answer key. `claim` here is a key step's
+  // claim in the pack's own key.json, never an engine node's field: the key
+  // is read only to grade an attempt already on disk, and its text reaches
+  // the renderer only after the confidence pick unseals the attempt.
+  'main/labs/problemKey.ts':
+    'a pack problem’s own answer key (key.json), read only to grade a submitted attempt; shown only after the sealed confidence pick',
   'main/session/mobileLearnPreview.test.ts':
     'test fixture data carrying claim/rubric/transfer_probe on purpose, asserted ABSENT from the returned preview in the same test (JSON.stringify(preview) must not contain "secret") — proving exclusion, not reading the fields',
 }
@@ -1257,6 +1277,18 @@ const PINNED_OVERLAY_HASHES: Record<string, string> = {
   // stays blind: it gets the stash entry and never the verdict.
   'learn-skill.checked-production-protocol.md': 'b8e19893cc094bba',
   'dialogue-grammar.checked-production-exception.md': 'e1868a7f69e9787b',
+  // 2026-11-12 — checked problems, the checked lab section's sibling for a
+  // pack problem (a proof, an audit of a flawed text, a figure reading) the
+  // learner hands in. Same licence (the learner's own hand-in message, each
+  // time) and the same bargain: a report check_report verifies, the problem's
+  // topic is this sitting's, the recorded answer verbatim, the key never
+  // re-graded, the caps (`hard` at best when the key's verdict is core,
+  // `good` at best after a slip, help or a second try), a permanent
+  // `"source": "problem-check"` stamp, one grade per submission. One thing it
+  // adds: the rubric is the problem's own key, which the learner has already
+  // seen after the pick, and the assessor stays blind to the verdict.
+  'learn-skill.checked-problem-protocol.md': '584c4273bb960758',
+  'dialogue-grammar.checked-problem-exception.md': 'cc9b6a9378f17023',
   // 2026-11-11 — course-seeded topics, a pedagogy overlay: a topic the learner
   // starts from a course in a content pack takes its map from the pack (the
   // engine's add-topic JSON) instead of the curriculum architect, so the
@@ -1382,6 +1414,28 @@ const LOAD_BEARING: Record<string, string[]> = {
     'A cap never raises a rating',
     '`"source": "lab-check"`',
   ],
+  // The checked-problem bargain, the same clauses as the lab's, plus the one
+  // node per problem and the proof's assessor-only grading.
+  'learn-skill.checked-problem-protocol.md': [
+    'Run this protocol ONLY when a message from the learner hands in a checked problem',
+    'Never ask for one, never offer to grade a problem',
+    'If it returns `verified: false`, say in one line that the report does not verify and grade nothing from it.',
+    'If its `topic` is not this sitting\'s topic, grade nothing',
+    'Never grade more than one node from one problem.',
+    'is the returned `production`, verbatim: do not edit it, complete it, or add to it from the dialogue.',
+    'grade each tag once',
+    'so do not run the picker again, and never estimate one',
+    'Never tell the assessor the verdict or the score.',
+    'never re-grade it',
+    'verdict `core` (a central planted error was missed, or a core reading was out of tolerance): `hard` at best',
+    '`good` at best, never `easy`',
+    'A cap never raises a rating',
+    '`"source": "problem-check"`',
+  ],
+  'dialogue-grammar.checked-problem-exception.md': [
+    'A fifth learner-elected exception, to how confidence is collected',
+    'Everywhere else, and by default everywhere, the rule above stands exactly as written.',
+  ],
   // The course-seeded bargain: the per-sitting request; add-topic unchanged;
   // no architect for a prepared map; a refusal goes to the learner; the
   // intake that decides the pretest; only the topic id changes in an
@@ -1453,6 +1507,10 @@ try {
       ['skills/learn/SKILL.md', 'engram-desktop-overlay:mobile-walk-protocol:start'],
       ['skills/_shared/dialogue-grammar.md', 'engram-desktop-overlay:mobile-walk-exception:start'],
       ['skills/learn/SKILL.md', 'engram-desktop-overlay:course-seeded-topic:start'],
+      ['skills/learn/SKILL.md', 'engram-desktop-overlay:checked-production-protocol:start'],
+      ['skills/_shared/dialogue-grammar.md', 'engram-desktop-overlay:checked-production-exception:start'],
+      ['skills/learn/SKILL.md', 'engram-desktop-overlay:checked-problem-protocol:start'],
+      ['skills/_shared/dialogue-grammar.md', 'engram-desktop-overlay:checked-problem-exception:start'],
     ]
     for (const [rel, mark] of EXPECTED_MARKERS) {
       const installed = readFileSync(join(installPath, rel), 'utf-8')

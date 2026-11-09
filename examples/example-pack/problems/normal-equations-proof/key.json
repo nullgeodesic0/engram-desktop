@@ -1,0 +1,29 @@
+{
+  "steps": [
+    {
+      "claim": "Write $f(\\beta) = \\lVert A\\beta - y \\rVert^2 = \\beta^\\top A^\\top A \\beta - 2 y^\\top A \\beta + y^\\top y$.",
+      "justification": "Expanding the squared norm as an inner product.",
+      "central": false
+    },
+    {
+      "claim": "$\\nabla f(\\beta) = 2A^\\top A\\beta - 2A^\\top y$.",
+      "justification": "The gradient of $\\beta^\\top M \\beta$ is $2M\\beta$ for symmetric $M$, and of $c^\\top\\beta$ is $c$.",
+      "central": false
+    },
+    {
+      "claim": "A minimiser has $\\nabla f = 0$, so $A^\\top A\\beta = A^\\top y$.",
+      "justification": "$f$ is differentiable on all of $\\mathbb{R}^k$, so an interior minimum is a stationary point.",
+      "central": true
+    },
+    {
+      "claim": "If the columns of $A$ are independent, $A^\\top A$ is invertible.",
+      "justification": "$A^\\top A v = 0$ gives $v^\\top A^\\top A v = \\lVert Av \\rVert^2 = 0$, so $Av = 0$, so $v = 0$.",
+      "central": true
+    },
+    {
+      "claim": "Then $\\beta = (A^\\top A)^{-1} A^\\top y$ is the only stationary point, and it is the minimum.",
+      "justification": "$f$ is convex (its Hessian $2A^\\top A$ is positive semidefinite) and tends to infinity, so it has a minimum, which must be this point.",
+      "central": false
+    }
+  ]
+}
