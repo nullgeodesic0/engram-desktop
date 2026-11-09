@@ -1,0 +1,22 @@
+{
+  "id": "least-squares-oral",
+  "type": "oral",
+  "title": "Oral: why least squares works",
+  "summary": "Two spoken questions on the normal equations and what a fit's residuals mean.",
+  "topic": "least-squares",
+  "node": "normal-equations",
+  "prompt": "Two questions, answered aloud with no notes. Say what you would write on the board, and why each step holds.",
+  "questions": [
+    {
+      "id": "normal-equations",
+      "prompt": "Explain why the least-squares coefficients satisfy $A^\\top A\\,\\beta = A^\\top y$. Where does the equation come from, and what does it say geometrically?",
+      "seconds": 180
+    },
+    {
+      "id": "uniqueness",
+      "prompt": "When is the least-squares solution unique, and what goes wrong when it is not?",
+      "seconds": 120
+    }
+  ],
+  "key": "key.json"
+}

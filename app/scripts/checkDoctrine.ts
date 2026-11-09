@@ -281,6 +281,15 @@ const PINNED_SUBPROCESS_FILES: Record<string, string> = {
   // model than a cell can.
   'main/labs/checkRunner.ts':
     'the managed env interpreter running resources/runtime/engram_check.py on a frozen lab and a pack’s test file (a collect-only listing, then the run), and taskkill on Windows to stop that interpreter’s process tree. Never engram.py',
+  // 2026-11-13 — oral exams. One door: the optional speech layer's managed
+  // interpreter runs the transcriber shipped in the app's resources on one
+  // recorded answer under app userData. Same scrubbed environment as a
+  // kernel; the only network use is faster-whisper's one-time model
+  // download into the runtime's models folder. The audio never leaves the
+  // machine, and nothing it returns reaches a model until the learner has
+  // read and confirmed it.
+  'main/labs/speech.ts':
+    'the speech layer’s managed interpreter running resources/runtime/engram_transcribe.py on one recorded oral-exam answer, and taskkill on Windows to stop it. Never engram.py',
 }
 const SPAWN_CALL =
   /\b(execFile|execFileSync|execSync|exec|spawn|spawnSync|fork|execCli|spawnCli|spawnCliReadOnly|runEngram)\s*(?:Async)?\s*\(/g
@@ -371,6 +380,16 @@ const PINNED_WRITERS: Record<string, string> = {
   // proof, audit and figure problems, under app userData. Not learning state:
   // a grade reaches the engine only when the learner hands a problem in and
   // the tutor stashes it, inside a sitting.
+  // 2026-11-13 — oral exams: each exam's record (the questions as asked, the
+  // raw transcript, the learner's confirmed answer, the share of words they
+  // changed, the confidences) and its recorded audio, in app userData.
+  // Never the learning home: the tutor grades from what oral_exam returns,
+  // through the stash, like any other production.
+  'main/labs/oralExam.ts':
+    'app userData — labs/oral/<pack>/<problem>/exams.json and the recorded answers under <seq>/',
+  'main/labs/oralExam.test.ts': 'os tmpdir — a copy of examples/example-pack and a stand-in userData, removed in afterAll',
+  'main/labs/speech.ts':
+    'the runtime’s models folder in app userData (the one-time Whisper download), and its own nonce-named result file beside the recorded answer, removed after reading',
   'main/labs/problemStore.ts':
     'app userData — labs/problems/<pack>/<problem>/draft.json and attempts.json (answers, sealed results, signed reports)',
   'main/labs/problemStore.test.ts': 'os tmpdir — a copy of examples/example-pack and a stand-in userData, removed in afterAll',
@@ -597,7 +616,12 @@ const injectedStrings = [...permissionTs.matchAll(/`([^`]{40,})`|'([^']{40,})'/g
 // never re-grade code the hidden tests graded, never write the next attempt.
 // How a verified report is graded lives in the D5-pinned checked-production
 // overlay, not here. The prompt still ends by deferring to the installed skills.
-const PINNED_PROMPT_HASH = 'affc96f546b13846'
+// 2026-11-13 — one sentence added for oral_exam, gated on the learner's own
+// message starting an exam ("only when the learner's own message starts
+// one"). It too removes latitude: only the pack's questions and follow-ups,
+// verbatim, and no feedback, hints or praise until the exam is over. How the
+// answers are graded lives in the D5-pinned oral-exam overlay, not here.
+const PINNED_PROMPT_HASH = '6fa929bc6801f3fb'
 if (sha(injectedStrings) !== PINNED_PROMPT_HASH) {
   fail(
     'D3.systemPrompt',
@@ -740,6 +764,23 @@ const PINNED_BRIDGE_TOOLS = [
   // is priced in the checked-problem overlay pin below.
   'check_report',
   'read_workbench',
+  // 2026-11-13 — oral_exam, the second tool that carries information BACK
+  // from the learner (after ask_user_question), so it got the closest look:
+  //   · it reads no engine state and writes nothing to ~/.claude/learning/;
+  //     exam records and audio live in app userData (oralExam.ts, pinned D2);
+  //   · it opens only after the learner's own Start in Labs (a pending start
+  //     the app records, good for two hours), never on the model's say-so;
+  //   · start returns the pack's per-question criteria and follow-ups to the
+  //     TUTOR, as examiner, so it can choose a follow-up from a gap. They are
+  //     the pack's key, not an engine node's claim or rubric, and the tutor
+  //     holds a node's rubric in every ordinary sitting anyway; the learner's
+  //     card never shows them, and the description forbids reading them out;
+  //   · what comes back from the learner is their own confirmed answer, and
+  //     the app enforces the order, the pack-only follow-ups, the limit of
+  //     two, and the blind confidence round before any grading;
+  //   · no subagent reaches it; the assessor still gets only the stash.
+  // Its grading (caps, stamp, election) is priced in the D5 oral-exam pin.
+  'oral_exam',
 ]
 const workerMjs = read('main/bridge/mcpBridgeWorker.mjs')
 const registered = [...workerMjs.matchAll(/registerTool\(\s*'([a-z_]+)'/g)].map((m) => m[1])
@@ -1289,6 +1330,16 @@ const PINNED_OVERLAY_HASHES: Record<string, string> = {
   // seen after the pick, and the assessor stays blind to the verdict.
   'learn-skill.checked-problem-protocol.md': '584c4273bb960758',
   'dialogue-grammar.checked-problem-exception.md': 'cc9b6a9378f17023',
+  // 2026-11-13 — checked oral exams, the checked problem section's sibling
+  // for a pack's oral exam sat in the dialogue with the tutor as examiner.
+  // Licensed by the learner's own start (in Labs, then their own message);
+  // priced by the bargain in its header: only an exam oral_exam opens, the
+  // problem's topic is this sitting's, the confirmed answers verbatim, no
+  // feedback until finish, the caps (`good` at best after any follow-up, a
+  // rewritten or typed transcript, or a second exam), a permanent
+  // `"source": "oral-check"` stamp, one grade per question per exam.
+  'learn-skill.oral-exam-protocol.md': 'ec3df0d6b6e60eac',
+  'dialogue-grammar.oral-exam-exception.md': '1320891f9cfc9e0d',
   // 2026-11-11 — course-seeded topics, a pedagogy overlay: a topic the learner
   // starts from a course in a content pack takes its map from the pack (the
   // engine's add-topic JSON) instead of the curriculum architect, so the
@@ -1436,6 +1487,28 @@ const LOAD_BEARING: Record<string, string[]> = {
     'A fifth learner-elected exception, to how confidence is collected',
     'Everywhere else, and by default everywhere, the rule above stands exactly as written.',
   ],
+  // The oral-exam bargain: the learner's own start, the pack's questions and
+  // follow-ups only, silence until finish, the record verbatim, the caps.
+  'learn-skill.oral-exam-protocol.md': [
+    'Run this protocol ONLY when a message from the learner starts a checked oral exam',
+    'Never offer an oral exam, never suggest one, and never start one the learner did not.',
+    'If its `topic` is not this sitting\'s topic, call nothing more',
+    'never read them out, hint at them, or paraphrase them',
+    'only ones from the pack\'s list: never write your own',
+    'no feedback, no correction, no hint, no praise',
+    'grade nothing from it',
+    'is the returned `production`, verbatim: do not edit it, complete it, or add to it from the dialogue.',
+    'grade each tag once',
+    'so do not run the picker again, and never estimate one',
+    'Never tell the assessor how the exam went.',
+    '`good` at best, never `easy`',
+    'A cap never raises a rating',
+    '`"source": "oral-check"`',
+  ],
+  'dialogue-grammar.oral-exam-exception.md': [
+    'A sixth learner-elected exception, to how confidence is collected and when feedback comes',
+    'Everywhere else, and by default everywhere, the rule above stands exactly as written.',
+  ],
   // The course-seeded bargain: the per-sitting request; add-topic unchanged;
   // no architect for a prepared map; a refusal goes to the learner; the
   // intake that decides the pretest; only the topic id changes in an
@@ -1511,6 +1584,8 @@ try {
       ['skills/_shared/dialogue-grammar.md', 'engram-desktop-overlay:checked-production-exception:start'],
       ['skills/learn/SKILL.md', 'engram-desktop-overlay:checked-problem-protocol:start'],
       ['skills/_shared/dialogue-grammar.md', 'engram-desktop-overlay:checked-problem-exception:start'],
+      ['skills/learn/SKILL.md', 'engram-desktop-overlay:oral-exam-protocol:start'],
+      ['skills/_shared/dialogue-grammar.md', 'engram-desktop-overlay:oral-exam-exception:start'],
     ]
     for (const [rel, mark] of EXPECTED_MARKERS) {
       const installed = readFileSync(join(installPath, rel), 'utf-8')

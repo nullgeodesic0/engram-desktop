@@ -33,7 +33,7 @@ import { cleanError } from './LabPage'
  * before that.
  */
 
-const TYPE_LABEL = { proof: 'Proof', audit: 'Audit', figure: 'Figure reading' } as const
+const TYPE_LABEL = { proof: 'Proof', audit: 'Audit', figure: 'Figure reading', oral: 'Oral exam' } as const
 
 const VERDICT_LINE: Record<ProblemVerdict, string> = {
   passed: 'Everything the key checks is right.',
@@ -49,6 +49,7 @@ function emptyAnswer(view: ProblemView): ProblemAnswer {
   const p = view.problem
   if (p.type === 'proof') return { type: 'proof', steps: [{ statement: '', because: '' }] }
   if (p.type === 'audit') return { type: 'audit', flags: [] }
+  if (p.type === 'oral') return { type: 'figure', values: {} }
   return { type: 'figure', values: Object.fromEntries(p.questions.map((q) => [q.id, null])) }
 }
 

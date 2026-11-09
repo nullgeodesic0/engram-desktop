@@ -1,5 +1,5 @@
 /**
- * Pack problems: proofs, audits and figure readings. See docs/content-packs.md.
+ * Pack problems: proofs, audits, figure readings and oral exams. See docs/content-packs.md.
  *
  * A problem is a folder in a content pack with a problem.json (what the
  * learner sees) and a key file (what main grades against, never sent to the
@@ -15,7 +15,7 @@
 import type { Confidence } from './labs'
 import { ManifestError, type Parsed, obj, path, run, slug, str } from './contentPack'
 
-export const PROBLEM_TYPES = ['proof', 'audit', 'figure'] as const
+export const PROBLEM_TYPES = ['proof', 'audit', 'figure', 'oral'] as const
 export type ProblemType = (typeof PROBLEM_TYPES)[number]
 
 /** The audit taxonomy: the curriculum map's own list of how machine-written work goes wrong. */
@@ -43,6 +43,12 @@ export const STEP_TEXT_MAX = 1200
 export const FLAG_NOTE_MAX = 300
 export const QUOTE_MAX = 600
 export const JUDGEMENT_MAX = 2000
+export const MAX_ORAL_QUESTIONS = 6
+export const ORAL_SECONDS_MIN = 30
+export const ORAL_SECONDS_MAX = 900
+export const ORAL_SECONDS_DEFAULT = 180
+/** Follow-ups the examiner may ask on one question. */
+export const MAX_FOLLOW_UPS = 2
 
 export interface FigureAxis {
   /** Two pixel positions on the image's own pixel grid... */
@@ -99,7 +105,25 @@ export interface FigureProblem extends ProblemCommon {
   questions: FigureQuestion[]
 }
 
-export type ProblemManifest = ProofProblem | AuditProblem | FigureProblem
+export interface OralQuestion {
+  id: string
+  /** Markdown with math, shown as the examiner asks it. */
+  prompt: string
+  /** The longest a spoken answer may run; recording stops there. */
+  seconds: number
+}
+
+/**
+ * An oral exam: questions the tutor asks in a sitting, answered aloud with
+ * no notes, transcribed on the device. The key holds each question's
+ * criteria and its follow-ups. It runs in a Learn sitting, not on this page.
+ */
+export interface OralProblem extends ProblemCommon {
+  type: 'oral'
+  questions: OralQuestion[]
+}
+
+export type ProblemManifest = ProofProblem | AuditProblem | FigureProblem | OralProblem
 
 function axis(raw: unknown, where: string): FigureAxis {
   const o = obj(raw, where)
@@ -158,6 +182,31 @@ export function parseProblemManifest(raw: unknown, readText: (p: string) => stri
       if (steps !== null && !(Number.isInteger(steps) && (steps as number) > 0 && (steps as number) <= MAX_PROOF_STEPS))
         throw new ManifestError(`${w}: "steps" must be a whole number from 1 to ${MAX_PROOF_STEPS}`)
       return { ...common, type: 'proof' as const, explainBack: '', steps: steps as number | null }
+    }
+    if (type === 'oral') {
+      if (hintsRaw.length) throw new ManifestError(`${w}: an oral exam has no hints`)
+      const qs = o.questions
+      if (!Array.isArray(qs) || qs.length === 0 || qs.length > MAX_ORAL_QUESTIONS)
+        throw new ManifestError(`${w}: "questions" must list 1 to ${MAX_ORAL_QUESTIONS} questions`)
+      const ids = new Set<string>()
+      const questions = qs.map((q, i) => {
+        const qw = `${w} questions[${i}]`
+        const qo = obj(q, qw)
+        const id = slug(qo, 'id', qw)
+        if (ids.has(id)) throw new ManifestError(`${qw}: the id ${id} is used twice`)
+        ids.add(id)
+        const seconds = qo.seconds === undefined ? ORAL_SECONDS_DEFAULT : qo.seconds
+        if (
+          !Number.isInteger(seconds) ||
+          (seconds as number) < ORAL_SECONDS_MIN ||
+          (seconds as number) > ORAL_SECONDS_MAX
+        )
+          throw new ManifestError(
+            `${qw}: "seconds" must be a whole number from ${ORAL_SECONDS_MIN} to ${ORAL_SECONDS_MAX}`,
+          )
+        return { id, prompt: str(qo, 'prompt', qw, { max: 1200 }), seconds: seconds as number }
+      })
+      return { ...common, type: 'oral' as const, unaided: true, explainBack: '', questions }
     }
     const explainBack = str(o, 'explainBack', w, { max: 400 })
     if (type === 'audit') {
@@ -233,6 +282,7 @@ export type ProblemAnswer =
 
 /** Checks and trims an answer from the renderer; throws a plain sentence when it is not one. */
 export function cleanAnswer(p: ProblemManifest, raw: unknown): ProblemAnswer {
+  if (p.type === 'oral') throw new Error('An oral exam is answered aloud, in a sitting with the tutor.')
   const a = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
   if (p.type === 'proof') {
     const steps = Array.isArray(a.steps) ? a.steps : []
@@ -387,5 +437,6 @@ export interface ProblemView {
 export function confidenceQuestion(t: ProblemType): string {
   if (t === 'proof') return 'How sure are you that the proof is complete and every step is justified?'
   if (t === 'audit') return 'How sure are you that you found every planted error?'
+  if (t === 'oral') return 'How sure are you that your answer covered what the question asked?'
   return 'How sure are you that your readings are within tolerance?'
 }

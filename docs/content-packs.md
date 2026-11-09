@@ -481,7 +481,8 @@ says what leaving the stage should look like.
 ## Problems
 
 A problem is written work with no code: a **proof**, an **audit** of a flawed
-text, or a **figure** reading. It shows under Labs, in its pack's Problems
+text, or a **figure** reading. An **oral** exam is a problem too, but it runs
+in a sitting rather than on its own page; see [Oral exams](#oral-exams). It shows under Labs, in its pack's Problems
 group. Like a lab it has a sealed Submit and a signed report the learner hands
 to the tutor, but its answer key is data, not tests.
 
@@ -505,7 +506,7 @@ to the tutor, but its answer key is data, not tests.
 
 Common fields:
 
-- `type` is `proof`, `audit` or `figure`.
+- `type` is `proof`, `audit`, `figure` or `oral`.
 - `prompt` is Markdown with math; `promptFile` names a Markdown file instead.
 - `topic` and `node` link the problem to the tutor, as a lab's do. `node` is
   optional: without it the tutor picks the topic's node whose claim the
@@ -603,6 +604,100 @@ rubric, and the blind assessor's rating is capped as a lab's is: `hard` at
 best on a `core` verdict, `good` at best after a slip, a second try or a hint.
 The receipt is stamped `"source": "problem-check"`.
 
+## Oral exams
+
+An oral exam is a problem of type `oral`: a few questions the tutor asks in a
+Learn sitting, as examiner, that the learner answers aloud with no notes. It
+is the qualifying-exam format: say the argument, then defend it under
+follow-up questions.
+
+```json
+{
+  "id": "least-squares-oral",
+  "type": "oral",
+  "title": "Oral: why least squares works",
+  "summary": "One line for the list.",
+  "topic": "least-squares",
+  "node": "normal-equations",
+  "prompt": "Markdown: what the exam is, shown in Labs before the start.",
+  "questions": [
+    { "id": "normal-equations", "prompt": "Explain why …", "seconds": 180 },
+    { "id": "uniqueness", "prompt": "When is …", "seconds": 120 }
+  ],
+  "key": "key.json"
+}
+```
+
+- `questions`, 1 to 6, asked in this order. `seconds` is the answering time,
+  30 to 900, 180 by default; the recording stops at the limit.
+- `topic` is required: the exam runs in a sitting on that topic. `node` is
+  optional, as for any problem.
+- An oral exam is always unaided: no `hints`, no `explainBack`.
+
+The key holds each question's criteria and the follow-ups the examiner may
+ask:
+
+```json
+{
+  "questions": {
+    "normal-equations": {
+      "criteria": ["Sets the gradient to zero …", "Says the residual is orthogonal …"],
+      "followUps": [
+        { "id": "geometry", "prompt": "What is the residual orthogonal to?", "probes": 1 }
+      ]
+    }
+  }
+}
+```
+
+`criteria` (1 to 12) are what a full answer says; they are the rubric the
+blind assessor grades the answer against. `followUps` (up to 8 per question)
+are the only follow-ups the examiner may ask; `probes` is the index of the
+criterion a follow-up checks, so the examiner can pick one for a gap in the
+answer it heard.
+
+### How an exam runs
+
+1. The learner presses **Start the exam with the tutor** on the exam's page
+   in Labs. It needs the speech layer (below) and the exam's topic on the
+   machine. Learn opens on the topic with the sentence "I'm starting a checked
+   oral exam." for the learner to send. The start is good for two hours.
+2. The tutor opens the exam with the `oral_exam` tool. The app refuses any
+   start the learner did not make. From here until the end, the lecture notes
+   and the composer are locked.
+3. Each question appears on an exam card with its clock. The learner records
+   an answer (one recording per turn), the speech layer transcribes it on the
+   machine, and the learner corrects the transcript and confirms it. The app
+   keeps both the transcript and the confirmed answer, and the share of words
+   the learner changed. Above a quarter, the answer counts as rewritten.
+4. After an answer, the tutor may ask up to two of that question's follow-ups,
+   each once, before the next question. The app enforces the order, the
+   pack's own follow-ups and the limit. The tutor gives no feedback until the
+   end.
+5. After the last question, the learner picks a confidence for each one,
+   still with no feedback. Only then do the answers go back to the tutor.
+6. The tutor grades each question as its own VERIFY production, with the
+   question's criteria as the rubric, by the
+   [oral-exam overlay](../plugin-overlays/engram/learn-skill.oral-exam-protocol.md).
+   The blind assessor's rating is capped at `good` after any follow-up, a
+   rewritten or typed transcript, or a second exam of the same problem. The
+   receipt is stamped `"source": "oral-check"`.
+
+**End the exam** on the card stops it at any point; nothing from an ended
+exam is graded. The exam's page in Labs lists every sitting of it with the
+answers as confirmed.
+
+### The speech layer
+
+Transcription runs on the learner's machine with
+[faster-whisper](https://github.com/SYSTRAN/faster-whisper) and the
+`small.en` model, in an optional runtime layer installed from Settings → Code
+runtime. The first transcription downloads the model (about 500 MB) into the
+runtime's models folder; after that, no audio or text leaves the machine for
+transcription. The question's text primes the model's vocabulary, so the
+exam's own terms come back spelled as the exam spells them. On macOS the app
+asks for microphone access the first time.
+
 ## Where the learner's work goes
 
 ```
@@ -627,6 +722,14 @@ Problems keep theirs beside them:
   attempts.json                               every Submit: the answer, the sealed or shown result, the report
 ```
 
+Oral exams keep theirs beside them:
+
+```
+<userData>/labs/oral/<pack>/<problem>/
+  exams.json                                  every exam: the questions as asked, transcripts, confirmed answers, picks
+  <seq>/<n>.webm                              the recorded answers
+```
+
 Course records live beside them:
 
 ```
@@ -647,5 +750,3 @@ runtime** clears every layer.
   and keeps going if the learner switches screens, but it stops when the app
   quits; a hidden run cut short that way unseals as broken, to be submitted
   again.
-- Oral exams: a timed, spoken problem the tutor runs, transcribed on the
-  device.

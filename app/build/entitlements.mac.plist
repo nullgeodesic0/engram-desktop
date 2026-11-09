@@ -2,7 +2,7 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!-- Hardened-runtime entitlements for signed/notarized distribution builds
      (Phase 0 sell-readiness). The minimal Electron set: JIT + unsigned
-     executable memory are what V8 needs; nothing else is granted — the app
+     executable memory are what V8 needs; plus microphone input for oral exams; nothing else is granted — the app
      is NOT App-Store-sandboxed (deliberately: it spawns the user's own
      `claude` binary, which MAS sandboxing forbids; see the strategy plan's
      "skip Mac App Store permanently"). Unused while package.json's
@@ -12,6 +12,10 @@
     <key>com.apple.security.cs.allow-jit</key>
     <true/>
     <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    <!-- Oral exams record the learner's spoken answer for on-device
+         transcription (src/main/labs/speech.ts). The audio stays local. -->
+    <key>com.apple.security.device.audio-input</key>
     <true/>
   </dict>
 </plist>

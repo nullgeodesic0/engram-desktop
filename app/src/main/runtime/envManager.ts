@@ -8,6 +8,7 @@ import { CELL_LIMIT_CHOICES, DEFAULT_CELL_LIMIT_S } from '../../shared/runtime'
 import {
   BASE_LAYER,
   PYTHON_VERSION,
+  SPEECH_LAYER,
   UV_VERSION,
   envDirFor,
   envInterpreter,
@@ -59,6 +60,20 @@ function baseLayer(): LayerDef {
   }
 }
 
+function speechLayer(): LayerDef {
+  return {
+    id: SPEECH_LAYER,
+    label: 'Speech',
+    description:
+      'On-device transcription for oral exams (faster-whisper). The speech model, about 480 MB, downloads the first time an answer is transcribed.',
+    source: 'app',
+    sourceTitle: 'Engram',
+    lockPath: join(resourceDir(), 'speech.lock'),
+    imports: ['faster_whisper', 'ctranslate2', 'av'],
+    packages: ['faster-whisper', 'ctranslate2', 'av'],
+  }
+}
+
 /** Where pack layers come from. Set once at startup (see ipc/runtimeHandlers.ts),
  * so this file never imports the pack loader. */
 let packLayers: () => Promise<LayerDef[]> = async () => []
@@ -69,7 +84,7 @@ export function setPackLayerSource(fn: () => Promise<LayerDef[]>): void {
 
 export async function listLayers(): Promise<LayerDef[]> {
   const extra = await packLayers().catch(() => [])
-  return [baseLayer(), ...extra.filter((l) => l.id !== BASE_LAYER)]
+  return [baseLayer(), speechLayer(), ...extra.filter((l) => l.id !== BASE_LAYER && l.id !== SPEECH_LAYER)]
 }
 
 async function findLayer(id: string): Promise<LayerDef> {
@@ -104,6 +119,16 @@ export function mplConfigDir(): string {
 
 export function kernelFilePath(): string {
   return join(resourceDir(), 'engram_kernel.py')
+}
+
+/** The transcriber the speech layer runs on one recorded answer. */
+export function transcribeScriptPath(): string {
+  return join(resourceDir(), 'engram_transcribe.py')
+}
+
+/** Where the speech layer keeps its model, under the runtime so Remove runtime clears it. */
+export function speechModelsDir(): string {
+  return join(layout().root, 'models')
 }
 
 /** The check runner that loads a frozen lab.py and runs a pack's pytest file against it. */

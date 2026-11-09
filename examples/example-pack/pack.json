@@ -9,6 +9,7 @@
   "problems": [
     "problems/normal-equations-proof",
     "problems/flawed-fit-writeup",
-    "problems/read-the-fit"
+    "problems/read-the-fit",
+    "problems/least-squares-oral"
   ]
 }

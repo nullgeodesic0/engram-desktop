@@ -22,6 +22,8 @@ export const UV_VERSION = '0.11.32'
 export const PYTHON_VERSION = '3.12'
 /** The layer every workbench runs on; content packs add their own beside it. */
 export const BASE_LAYER = 'base'
+/** The app's optional speech layer: on-device transcription for oral exams. */
+export const SPEECH_LAYER = 'speech'
 
 interface UvAsset {
   file: string

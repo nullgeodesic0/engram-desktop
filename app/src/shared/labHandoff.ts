@@ -32,3 +32,13 @@ export function problemHandoffMessage(production: string): string {
     production.trim()
   )
 }
+
+/** The learner's opening when they start a pack's oral exam in a sitting. */
+export const ORAL_HANDOFF_OPENING = "I'm starting a checked oral exam."
+
+export function oralHandoffMessage(packId: string, problemId: string, title: string): string {
+  return (
+    `${ORAL_HANDOFF_OPENING} Please follow the learn skill's "Checked oral exams" protocol and examine me on ` +
+    `"${title}" (pack ${packId}, problem ${problemId}) with the oral_exam tool.`
+  )
+}

@@ -241,6 +241,31 @@ server.registerTool(
   },
 )
 
+server.registerTool(
+  'oral_exam',
+  {
+    title: 'Oral Exam',
+    description:
+      "Run a pack's oral exam, as its examiner, ONLY after the learner's own message says they are starting a checked oral exam (the app refuses any other start). action 'start' with pack and problem opens it and returns the exam id, the questions in order, and for each its criteria and the pack's follow-ups: these are for you as examiner, never to be read out, hinted at or paraphrased. action 'ask' with exam and question puts the next question on the learner's exam card and waits until they have answered aloud and confirmed the transcript; it returns their answer verbatim. Questions go in order, each once. To probe a gap in the answer just given, call 'ask' with the same question and a followUp id from that question's list, at most two per question, each once, before the next question. Say nothing between turns beyond one short line such as 'Thank you. Next question.': no feedback, no hints, no corrections, no praise. action 'finish' with exam, after every question has been asked, asks the learner for a confidence on each question, blind, and returns each question's production (verbatim, tagged), criteria and confidence for grading. The learn skill's 'Checked oral exams' section says how they are graded.",
+    inputSchema: {
+      action: z.enum(['start', 'ask', 'finish']),
+      pack: z.string().optional(),
+      problem: z.string().optional(),
+      exam: z.string().optional(),
+      question: z.string().optional(),
+      followUp: z.string().optional(),
+    },
+  },
+  async (args) => {
+    try {
+      const result = await postJson(`/bridge/${encodeURIComponent(SESSION_ID)}/oral-exam`, args)
+      return { content: [{ type: 'text', text: JSON.stringify(result) }] }
+    } catch (err) {
+      return { content: [{ type: 'text', text: JSON.stringify({ ok: false, reason: `the app could not run it: ${err instanceof Error ? err.message : String(err)}` }) }] }
+    }
+  },
+)
+
 server.registerTool('session_phase', {
   title: 'Session Phase',
   description: 'Advisory, best-effort: signal the coarse session phase so the app can stage its chrome (opening plate, grading shimmer, closing ceremony). Call at each transition: intake (new-topic interview), pretest, walk (teaching nodes), grading (assessor running), closing (wrap-up).',

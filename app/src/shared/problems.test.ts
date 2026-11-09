@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { editShare, formatSeconds } from './oral'
 import { answerText, axisValue, cleanAnswer, parseProblemManifest, type ProblemManifest } from './problems'
 
 const noFiles = (p: string): string => {
@@ -72,6 +73,69 @@ describe('parseProblemManifest', () => {
     expect(parseProblemManifest({ ...figure, image: 'fig.svg' }, noFiles).ok).toBe(false)
     const axes = { x: { px: [0, 100], value: [0, 1] }, y: { px: [100, 0], value: [0, 1], scale: 'log' } }
     expect(parseProblemManifest({ ...figure, axes }, noFiles).ok).toBe(false)
+  })
+})
+
+describe('oral exams', () => {
+  const oralExam = {
+    id: 'o',
+    type: 'oral',
+    title: 'An oral',
+    prompt: 'Answer aloud.',
+    topic: 't',
+    key: 'key.json',
+    questions: [
+      { id: 'q1', prompt: 'Why?' },
+      { id: 'q2', prompt: 'How?', seconds: 60 },
+    ],
+  }
+
+  it('reads an oral exam: unaided, no explain-back, three minutes a question by default', () => {
+    const p = parsed(oralExam)
+    if (p.type !== 'oral') throw new Error('not oral')
+    expect(p.unaided).toBe(true)
+    expect(p.explainBack).toBe('')
+    expect(p.questions.map((q) => q.seconds)).toEqual([180, 60])
+  })
+
+  it('refuses hints, repeated ids, no questions, and a time outside 30 s to 15 min', () => {
+    expect(parseProblemManifest({ ...oralExam, hints: ['Think.'] }, noFiles).ok).toBe(false)
+    expect(parseProblemManifest({ ...oralExam, questions: [] }, noFiles).ok).toBe(false)
+    expect(
+      parseProblemManifest(
+        {
+          ...oralExam,
+          questions: [
+            { id: 'q', prompt: 'a' },
+            { id: 'q', prompt: 'b' },
+          ],
+        },
+        noFiles,
+      ).ok,
+    ).toBe(false)
+    expect(parseProblemManifest({ ...oralExam, questions: [{ id: 'q', prompt: 'a', seconds: 10 }] }, noFiles).ok).toBe(
+      false,
+    )
+    expect(parseProblemManifest({ ...oralExam, questions: [{ id: 'q', prompt: 'a', seconds: 901 }] }, noFiles).ok).toBe(
+      false,
+    )
+  })
+})
+
+describe('editShare and formatSeconds', () => {
+  it('counts changed words over the longer text', () => {
+    expect(editShare('the cat sat', 'the cat sat')).toBe(0)
+    expect(editShare('The cat  sat', 'the cat sat')).toBe(0)
+    expect(editShare('the cat sat', 'the bat sat')).toBeCloseTo(1 / 3)
+    expect(editShare('the cat sat', 'the cat sat down')).toBe(0.25)
+    expect(editShare('', 'typed answer')).toBe(1)
+    expect(editShare('', '')).toBe(0)
+  })
+
+  it('formats seconds', () => {
+    expect(formatSeconds(45)).toBe('45 s')
+    expect(formatSeconds(180)).toBe('3 min')
+    expect(formatSeconds(75.4)).toBe('1 min 15 s')
   })
 })
 

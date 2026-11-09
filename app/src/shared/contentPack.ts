@@ -224,8 +224,8 @@ export function parsePackManifest(raw: unknown): Parsed<PackManifest> {
     if (o.runtime !== undefined && o.runtime !== null) {
       const r = obj(o.runtime, 'pack.json runtime')
       const layer = slug(r, 'layer', 'pack.json runtime')
-      if (layer === 'base')
-        throw new ManifestError('pack.json runtime: "layer" cannot be "base", which is the app’s own')
+      if (layer === 'base' || layer === 'speech')
+        throw new ManifestError(`pack.json runtime: "layer" cannot be "${layer}", which is the app’s own`)
       runtime = {
         layer,
         label: str(r, 'label', 'pack.json runtime', { max: 60 }),
