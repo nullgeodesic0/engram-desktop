@@ -107,6 +107,7 @@ import { LibraryRail, LibraryToolbar, TopicLibraryList, BulkBar, type LibraryVie
 import { NameDialog } from '../components/NameDialog'
 import { ArchiveTopicDialog } from '../components/ArchiveTopicDialog'
 import { partitionArchived } from '../shared/archive'
+import { fileTopics as fileTopicsIn, renameTopicDisplay, restoreTopic as restoreTopicIn } from '../shared/topicActions'
 import { EnvironmentSteps } from '../components/EnvironmentSteps'
 import { extractTicketFromMessages, type ParsedTicket } from '../shared/ticketParser'
 import { TicketCard } from '../components/ritual/TicketCard'
@@ -2048,10 +2049,7 @@ export function LearnSessionView({
    * settings record is read-modify-written rather than reconstructed, so
    * filing can never clobber a topic's instructions or context files. */
   async function fileTopics(topicIds: string[], folder: string | null) {
-    for (const id of topicIds) {
-      const current = await window.engram.getTopicSettings(id)
-      await window.engram.setTopicSettings(id, { ...current, folder })
-    }
+    await fileTopicsIn(topicIds, folder)
     refreshTopics()
   }
 
@@ -2097,15 +2095,12 @@ export function LearnSessionView({
    * only; the engine's own title and the topic id never change. An empty or
    * engine-identical name clears the override. */
   async function renameTopic(t: TopicListEntry, raw: string) {
-    const name = raw.trim()
-    const engineTitle = t.engineTitle ?? t.title
-    const current = await window.engram.getTopicSettings(t.topic)
-    await window.engram.setTopicSettings(t.topic, { ...current, displayTitle: name && name !== engineTitle ? name : null })
+    await renameTopicDisplay(t, raw)
     refreshTopics()
   }
 
   async function restoreTopic(t: TopicListEntry) {
-    await window.engram.retireTopic(t.topic, true)
+    await restoreTopicIn(t)
     refreshTopics()
   }
 

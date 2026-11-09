@@ -79,8 +79,10 @@ export function LibraryToolbar({
   onGroup: (g: TopicGroupKey) => void
   sort: TopicSortKey
   onSort: (s: TopicSortKey) => void
-  organizing: boolean
-  onOrganize: () => void
+  /** Learn's Organize mode. Left out where a surface only reads the
+   * library (the Topic Map's rail), and the button goes with it. */
+  organizing?: boolean
+  onOrganize?: () => void
 }) {
   const dd =
     'flex items-center gap-1.5 px-2.5 py-1.5 text-[13px] border border-[var(--color-edge)] bg-[color-mix(in_srgb,var(--color-surface)_80%,transparent)] text-[var(--color-text-primary)] hover:border-[var(--color-text-faint)]'
@@ -141,9 +143,11 @@ export function LibraryToolbar({
           })),
         ]}
       />
-      <Button variant={organizing ? 'primary' : 'ghost'} onClick={onOrganize}>
-        {organizing ? 'Done' : 'Organize'}
-      </Button>
+      {onOrganize && (
+        <Button variant={organizing ? 'primary' : 'ghost'} onClick={onOrganize}>
+          {organizing ? 'Done' : 'Organize'}
+        </Button>
+      )}
     </div>
   )
 }
@@ -365,10 +369,10 @@ function moveToItems(folders: string[], current: string | null | undefined, ids:
   ]
 }
 
-const MORE_TRIGGER =
+export const MORE_TRIGGER =
   'w-8 h-8 shrink-0 flex items-center justify-center rounded-lg text-[var(--color-text-dim)] hover:text-[var(--color-text-primary)] border border-transparent [&.is-open]:border-[var(--color-edge)] [&.is-open]:bg-[color-mix(in_srgb,var(--color-surface-2)_80%,transparent)]'
 
-function MoreDots() {
+export function MoreDots() {
   return (
     <svg width={16} height={16} viewBox="0 0 16 16" aria-hidden="true">
       <circle cx={3.5} cy={8} r={1.25} fill="currentColor" />

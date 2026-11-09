@@ -1,7 +1,7 @@
 import { LectureNotesPanel } from '../components/LectureNotesPanel'
 import type { LectureNotesSummary } from '../../../shared/lectureNotes'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { TopicListEntry, TopicGraph, MapAnnotations, NodeProvenance, ProvenanceEvent, Misconception, RawReceipt } from '../../../shared/types'
+import type { TopicListEntry, TopicGraph, MapAnnotations, NodeProvenance, ProvenanceEvent, Misconception, RawReceipt, DayActivity } from '../../../shared/types'
 import { RetentionCurve } from '../components/RetentionCurve'
 import { EDGE_STYLE } from '../components/GraphView'
 import { AtlasCanvas } from '../components/atlas/AtlasCanvas'
@@ -16,16 +16,29 @@ import { humanizeNodeId } from '../../../shared/humanizeId'
 import { SkeletonBar } from '../components/Skeleton'
 import { StatBlock } from '../components/ui/StatBlock'
 import { Button } from '../components/ui/Button'
-import { PageHeader } from '../components/ui/PageHeader'
-import { SegmentedControl } from '../components/ui/SegmentedControl'
-import { sortTopics, TOPIC_SORT_OPTIONS, type TopicSortKey } from '../shared/topicSort'
-import { isArchivedTopic, partitionArchived } from '../shared/archive'
-import { loadFolderOrder } from '../shared/folderRegistry'
+import { type TopicSortKey } from '../shared/topicSort'
+import { formatArchivedDate, isArchivedTopic, partitionArchived } from '../shared/archive'
+import {
+  addFolderToRegistry,
+  allFolderNames,
+  loadFolderOrder,
+  loadFolderRegistry,
+  orderFolders,
+  saveFolderRegistry,
+} from '../shared/folderRegistry'
 import { loadTopicSort, saveTopicSort, loadTopicGroup, saveTopicGroup, type TopicGroupKey } from '../shared/topicSortPrefs'
-import { groupTopicsByFolder, TOPIC_GROUP_OPTIONS } from '../shared/topicFolders'
+import { normalizeFolderName } from '../shared/topicFolders'
+import { buildMapIndex, firstDrawnTopic } from '../shared/mapTopicIndex'
+import { fileTopics, renameTopicDisplay, restoreTopic } from '../shared/topicActions'
+import { computeShownTopicGrade } from '../shared/topicGrade'
+import { allPicks } from '../shared/calibrationStore'
+import { punctualityCounts } from '../shared/gradePrefs'
+import { LibraryToolbar } from '../components/TopicLibrary'
+import { MapTopicRail } from '../components/MapTopicRail'
+import { NameDialog } from '../components/NameDialog'
+import { ArchiveTopicDialog } from '../components/ArchiveTopicDialog'
 import { Modal } from '../components/ui/Modal'
 import { MathRenderer } from '../components/MathRenderer'
-import { TopicTitle } from '../components/TopicTitle'
 import { SessionHistoryDrawer } from '../components/SessionHistoryDrawer'
 import { ExplorableViewer } from '../components/ExplorableViewer'
 import { friendlyErrorText } from '../shared/friendlyError'
@@ -345,6 +358,18 @@ export function TopicMapView({
   // same library reads the same way on both surfaces.
   const [topicSort, setTopicSort] = useState<TopicSortKey>(loadTopicSort)
   const [topicGroup, setTopicGroup] = useState<TopicGroupKey>(loadTopicGroup)
+  // The topic rail (MapTopicRail / mapTopicIndex.ts): its find-a-topic
+  // filter, whether the Archived section is open, and the two dialogs its ⋯
+  // menus open. Folder order and the empty-folder registry are Learn's own
+  // stores (folderRegistry.ts), read here so both rails list folders alike.
+  const [topicQuery, setTopicQuery] = useState('')
+  const [archivedOpen, setArchivedOpen] = useState(false)
+  const [folderRegistry, setFolderRegistry] = useState<string[]>(loadFolderRegistry)
+  const [folderOrder] = useState<string[]>(loadFolderOrder)
+  const [nameDialog, setNameDialog] = useState<
+    { kind: 'newFolder'; topic: TopicListEntry } | { kind: 'renameTopic'; topic: TopicListEntry } | null
+  >(null)
+  const [archiveFor, setArchiveFor] = useState<TopicListEntry | null>(null)
   const [graph, setGraph] = useState<TopicGraph | null>(null)
   const [retrievability, setRetrievability] = useState<Map<string, number> | null>(null)
   // F10: `retrievability === null` is ALREADY a legitimate resolved state
@@ -441,6 +466,9 @@ export function TopicMapView({
   // of how long ago it was.
   const [targetDate, setTargetDate] = useState<string | null>(null)
   const [receipts, setReceipts] = useState<RawReceipt[]>([])
+  // The activity days beside them — only the archived ribbon's final grade
+  // reads these (computeShownTopicGrade wants both).
+  const [historyDays, setHistoryDays] = useState<DayActivity[]>([])
   // Map-as-plate export (P5 Task 3) — same exporting/status shape
   // SessionHistoryDrawer's sitting export already uses, so this reads
   // identically rather than inventing a second export-feedback convention.
@@ -498,7 +526,11 @@ export function TopicMapView({
       if (deepLinkTopic && ts.some((t) => t.topic === deepLinkTopic)) {
         setSelectedTopic(deepLinkTopic)
         onDeepLinkTopicConsumed?.()
-      } else if (ts.length > 0 && !deepLinkNode && !spotlightNode) setSelectedTopic(sortTopics(ts, topicSort)[0].topic)
+      } else if (ts.length > 0 && !deepLinkNode && !spotlightNode) {
+        // The first topic as the rail draws it, and never an archived one
+        // while a live one exists (mapTopicIndex.ts).
+        setSelectedTopic(firstDrawnTopic(ts, { group: topicGroup, sort: topicSort, folderOrder }))
+      }
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -513,7 +545,10 @@ export function TopicMapView({
   useEffect(() => {
     window.engram
       .receiptsHistory()
-      .then((h) => setReceipts(h.receipts))
+      .then((h) => {
+        setReceipts(h.receipts)
+        setHistoryDays(h.days)
+      })
       .catch(() => setReceipts([]))
   }, [])
 
@@ -682,9 +717,48 @@ export function TopicMapView({
 
   const node = graph && selectedNode ? graph.nodes[selectedNode] : null
   const opened = graph && openNode ? graph.nodes[openNode] : null
-  // Memoized so the tab strip isn't re-sorted on every graph/hover/selection
+  // Memoized so the rail isn't regrouped on every graph/hover/selection
   // re-render this view does constantly (rerender-memo).
-  const sortedTopics = useMemo(() => sortTopics(topics, topicSort), [topics, topicSort])
+  const mapIndex = useMemo(
+    () => buildMapIndex(topics, { group: topicGroup, sort: topicSort, folderOrder, query: topicQuery }),
+    [topics, topicGroup, topicSort, folderOrder, topicQuery],
+  )
+  const railFolders = useMemo(() => orderFolders(allFolderNames(topics, folderRegistry), folderOrder), [topics, folderRegistry, folderOrder])
+  const selectedEntry = useMemo(() => topics.find((t) => t.topic === selectedTopic) ?? null, [topics, selectedTopic])
+  const selectedArchived = selectedEntry !== null && isArchivedTopic(selectedEntry)
+  // The Archived section opens for an archived map and for a search that
+  // matches an archived topic; otherwise it stays as the learner left it
+  // (collapsed on every visit — finished work is not the day's work).
+  const archivedShown = archivedOpen || selectedArchived || (topicQuery.trim() !== '' && mapIndex.archived.length > 0)
+  // An archived topic never comes due (archive.ts rule 1), so the due lens
+  // has nothing honest to show on its map.
+  const lensDue = dueLens && !replayActive && !selectedArchived
+  // The frozen final grade for the archived ribbon (archive.ts rule 3).
+  const archivedSummary = useMemo(() => {
+    if (!selectedEntry || !selectedArchived) return null
+    const setAside = (misconceptions ?? []).filter((m) => m.topic === selectedEntry.topic && m.status === 'open').length
+    let letter: string | null = null
+    if (receipts.length > 0 && misconceptions) {
+      const g = computeShownTopicGrade({
+        receipts,
+        topicEntry: selectedEntry,
+        misconceptions,
+        days: historyDays,
+        picks: allPicks(),
+        mode: 'completed',
+        countPunctuality: punctualityCounts(),
+      })
+      letter = g.overall.available ? g.overall.letter : null
+    }
+    return { letter, setAside }
+  }, [selectedEntry, selectedArchived, receipts, misconceptions, historyDays])
+
+  function refreshTopics() {
+    window.engram
+      .topics()
+      .then(setTopics)
+      .catch(() => {})
+  }
   const stats = useMemo(() => (graph ? plateStats(graph, retrievability) : null), [graph, retrievability])
   // Computed once here (pure function of `graph`) and threaded to both
   // GraphView (sectors/labels/settle) and NodeTable (chip restriction) — a
@@ -753,123 +827,65 @@ export function TopicMapView({
 
   return (
     <div className="p-8 flex flex-col gap-4 h-full min-h-0">
-      <div className="shrink-0 flex flex-col gap-3">
-        <PageHeader
-          title="Topic Map"
-          right={
-            // Same shared ordering the Learn shelf uses (shared/topicSort) —
-            // one mental model for the same list on both surfaces. Hidden
-            // below two topics: nothing to order.
-            topics.length > 1 ? (
-              <div className="flex items-center gap-4 flex-wrap justify-end">
-                <div className="flex items-center gap-2">
-                  <span
-                    id="map-topic-group-label"
-                    className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-faint)]"
-                  >
-                    group
-                  </span>
-                  <SegmentedControl<TopicGroupKey>
-                    ariaLabelledBy="map-topic-group-label"
-                    options={TOPIC_GROUP_OPTIONS}
-                    value={topicGroup}
-                    onChange={(v) => {
-                      setTopicGroup(v)
-                      saveTopicGroup(v)
-                    }}
-                  />
-                </div>
-                <div className="flex items-center gap-2">
-                  <span
-                    id="map-topic-sort-label"
-                    className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-faint)]"
-                  >
-                    sort
-                  </span>
-                  <SegmentedControl<TopicSortKey>
-                    ariaLabelledBy="map-topic-sort-label"
-                    options={TOPIC_SORT_OPTIONS}
-                    value={topicSort}
-                    onChange={(v) => {
-                      setTopicSort(v)
-                      saveTopicSort(v)
-                    }}
-                  />
-                </div>
-              </div>
-            ) : undefined
-          }
-        />
-        {/* Topic selector — the masthead command-bar idiom (tracked
-            uppercase .cmd-items, hairline separators between items) instead
-            of the old filled pill chips. The selected topic is warm and
-            holds the cmd-item's underline open ([&::after]:scale-x-100 —
-            the same 1px rule the idiom slides in on hover). */}
-        {/* Grouped by the learner's own filing when that's the shared
-            group-by pick (topicSortPrefs) — each folder its own labelled
-            row, so the strip reads the same way Learn's shelf does. Flat
-            otherwise, exactly as before. */}
-        {(() => {
-          // Archived topics gather in their own quiet row at the end of the
-          // strip (archive.ts) — still one click away, never between two
-          // live topics or inside a folder row of work.
+      {/* The library header, in Learn's grammar (LearnSessionView's): one
+          plain count line, then the same find / Group / Sort toolbar.
+          Organizing stays Learn's job; the rail's ⋯ menus cover the
+          one-topic moves. */}
+      <header className="shrink-0 -mx-8 px-8 pb-3 border-b border-[var(--color-hairline)] flex flex-col gap-2">
+        <h1 className="font-(family-name:--font-serif) text-[length:var(--text-display)] text-[var(--color-text-primary)]">Topic Map</h1>
+        {topics.length > 0 && (() => {
           const { live, archived } = partitionArchived(topics)
-          const tab = (t: TopicListEntry, dim = false) => (
-            <button
-              key={t.topic}
-              onClick={() => setSelectedTopic(t.topic)}
-              title={dim ? `${t.title} (archived)` : t.title}
-              aria-pressed={selectedTopic === t.topic}
-              className={`${selectedTopic === t.topic ? CTRL_FILLED : CTRL_QUIET} max-w-64 truncate text-left${
-                dim && selectedTopic !== t.topic ? ' opacity-60' : ''
-              }`}
-            >
-              <TopicTitle title={t.title || t.topic} />
-            </button>
-          )
-          const archivedRow = archived.length > 0 && (
-            <div className="flex items-baseline gap-3">
-              <span className="label-data text-[11px] uppercase tracking-[0.1em] shrink-0 w-28 truncate text-[var(--color-text-faint)]">
-                Archived
-              </span>
-              <div role="group" aria-label="Archived topics" className="flex items-center gap-x-3 gap-y-2 flex-wrap">
-                {sortTopics(archived, topicSort).map((t) => tab(t, true))}
+          const due = live.reduce((sum, t) => sum + t.due, 0)
+          return (
+            <div className="flex items-end justify-between gap-4 flex-wrap">
+              <div className="label-data text-sm text-[var(--color-text-dim)] pb-1">
+                {live.length} {live.length === 1 ? 'topic' : 'topics'}
+                {' · '}
+                {due > 0 ? <span className="text-[var(--color-ink-warm)]">{due} due for review</span> : 'nothing due for review'}
+                {archived.length > 0 && <span className="text-[var(--color-text-faint)]">{` · ${archived.length} archived`}</span>}
               </div>
+              {topics.length > 1 && (
+                <LibraryToolbar
+                  query={topicQuery}
+                  onQuery={setTopicQuery}
+                  group={topicGroup}
+                  onGroup={(v) => {
+                    setTopicGroup(v)
+                    saveTopicGroup(v)
+                  }}
+                  sort={topicSort}
+                  onSort={(v) => {
+                    setTopicSort(v)
+                    saveTopicSort(v)
+                  }}
+                />
+              )}
             </div>
           )
-          return topicGroup === 'folder' ? (
-          <div className="flex flex-col gap-2">
-            {groupTopicsByFolder(live, topicSort, { order: loadFolderOrder() }).map((g) => (
-              <div key={g.name} className="flex items-baseline gap-3">
-                <span
-                  className={`label-data text-[11px] uppercase tracking-[0.1em] shrink-0 w-28 truncate ${
-                    g.unfiled ? 'text-[var(--color-text-faint)]' : 'text-[var(--color-ink-warm-dim)]'
-                  }`}
-                  title={g.name}
-                >
-                  {g.name}
-                </span>
-                <div role="group" aria-label={g.name} className="flex items-center gap-x-3 gap-y-2 flex-wrap">
-                  {g.topics.map((t) => tab(t))}
-                </div>
-              </div>
-            ))}
-            {archivedRow}
-          </div>
-        ) : archived.length > 0 ? (
-          <div className="flex flex-col gap-2">
-            <div role="group" aria-label="Topics" className="flex items-center gap-x-3 gap-y-2 flex-wrap">
-              {sortedTopics.filter((t) => !isArchivedTopic(t)).map((t) => tab(t))}
-            </div>
-            {archivedRow}
-          </div>
-        ) : (
-          <div role="group" aria-label="Topics" className="flex items-center gap-x-3 gap-y-2 flex-wrap">
-            {sortedTopics.map((t) => tab(t))}
-          </div>
-        )
         })()}
-      </div>
+      </header>
+
+      <div className="flex-1 min-h-0 flex gap-5">
+      {topics.length > 0 && (
+        <MapTopicRail
+          index={mapIndex}
+          selected={selectedTopic}
+          onSelect={setSelectedTopic}
+          query={topicQuery}
+          archivedOpen={archivedShown}
+          onToggleArchived={() => setArchivedOpen(!archivedShown)}
+          folders={railFolders}
+          actions={{
+            onOpenInLearn: (t) => onGoTopic?.(t.topic),
+            onFile: (t, folder) => void fileTopics([t.topic], folder).then(refreshTopics),
+            onNewFolderFor: (t) => setNameDialog({ kind: 'newFolder', topic: t }),
+            onRename: (t) => setNameDialog({ kind: 'renameTopic', topic: t }),
+            onArchive: (t) => setArchiveFor(t),
+            onRestore: (t) => void restoreTopic(t).then(refreshTopics),
+          }}
+        />
+      )}
+      <div className="flex-1 min-w-0 min-h-0 flex flex-col gap-4">
 
       {error && (() => {
         const fe = friendlyErrorText(error)
@@ -892,6 +908,41 @@ export function TopicMapView({
               backdrop blur: blur re-samples the page behind it on every
               frame the map draws) keeps the specimen the thing in focus. */}
           <div className="relative flex-1 min-w-0 flex flex-col rounded-xl overflow-hidden bg-[var(--color-void)]">
+            {/* An archived topic's map says so before anything else: the
+                plate below is history (archive.ts rule 5), its grade is the
+                frozen final one (rule 3), and nothing on it comes due
+                (rule 1), so the due lens is off for it. */}
+            {selectedArchived && selectedEntry && (
+              <div
+                role="note"
+                aria-label="Archived topic"
+                className="shrink-0 flex items-center gap-4 px-4 py-2 border-b border-[var(--color-hairline)] bg-[color-mix(in_srgb,var(--color-surface-2)_55%,transparent)]"
+              >
+                <span className="shrink-0 label-data text-[10.5px] uppercase tracking-[0.12em] text-[var(--color-text-faint)]">
+                  ▤ Archived {formatArchivedDate(selectedEntry.archivedAt)}
+                </span>
+                <span className="min-w-0 truncate label-data text-[12px] text-[var(--color-text-dim)]">
+                  {archivedSummary?.letter && (
+                    <>
+                      final grade <span className="text-[var(--color-text-primary)]">{archivedSummary.letter}</span>
+                      {'  ·  '}
+                    </>
+                  )}
+                  {selectedEntry.states.review} of {selectedEntry.nodes} consolidated
+                  {archivedSummary && archivedSummary.setAside > 0 &&
+                    `  ·  ${archivedSummary.setAside} misconception${archivedSummary.setAside === 1 ? '' : 's'} set aside`}
+                  <span className="text-[var(--color-text-faint)]">{'  ·  '}kept as history, nothing here comes due</span>
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="ml-auto shrink-0"
+                  onClick={() => void restoreTopic(selectedEntry).then(refreshTopics)}
+                >
+                  Restore
+                </Button>
+              </div>
+            )}
             {/* Plate header — the command bar. One cluster now owns every
                 view control: Export on the left; the lenses (replay, due
                 lens — previously buttons living inside the legend's Key
@@ -944,10 +995,16 @@ export function TopicMapView({
                       </button>
                       <button
                         onClick={() => setDueLens((v) => !v)}
-                        aria-pressed={dueLens && !replayActive}
-                        disabled={replayActive}
-                        title={replayActive ? 'One lens at a time — close the replay first' : undefined}
-                        className={`${dueLens && !replayActive ? CTRL_FILLED : CTRL_QUIET} disabled:opacity-40 disabled:cursor-not-allowed`}
+                        aria-pressed={lensDue}
+                        disabled={replayActive || selectedArchived}
+                        title={
+                          selectedArchived
+                            ? 'An archived topic never comes due'
+                            : replayActive
+                              ? 'One lens at a time — close the replay first'
+                              : undefined
+                        }
+                        className={`${lensDue ? CTRL_FILLED : CTRL_QUIET} disabled:opacity-40 disabled:cursor-not-allowed`}
                       >
                         Due lens
                       </button>
@@ -993,7 +1050,7 @@ export function TopicMapView({
               query={query}
               retrievability={retrievability}
               annotations={annotations}
-              dueLens={dueLens && !replayActive}
+              dueLens={lensDue}
               visibleNodes={replayVisibleNodes}
               regions={regions}
               focusedRegion={focusedRegion}
@@ -1081,7 +1138,7 @@ export function TopicMapView({
                   the legend must never explain a lens the plate isn't wearing
                   (replay forces the due lens off; see dueLens && !replayActive
                   at the GraphView call). */}
-              {dueLens && !replayActive ? (
+              {lensDue ? (
                 <div className="flex flex-col divide-y divide-[var(--color-hairline)] [&>div]:py-1 first:[&>div]:pt-0 last:[&>div]:pb-0">
                   <div className="flex items-center gap-2">
                     <svg width={18} height={18} viewBox="-9 -9 18 18" aria-hidden="true">
@@ -1368,7 +1425,7 @@ export function TopicMapView({
                 )}
               </div>
 
-              {onGoTopic && (
+              {onGoTopic && !selectedArchived && (
                 <div className="detail-footer px-4 py-3 shrink-0">
                   <Button variant="ghost" onClick={() => onGoTopic(selectedTopic!)}>
                     Continue in Learn
@@ -1379,6 +1436,9 @@ export function TopicMapView({
           )}
         </div>
       )}
+
+      </div>
+      </div>
 
       {topicsLoaded && topics.length === 0 && !error && (
         <div className="flex flex-col items-center justify-center h-full gap-3">
@@ -1430,7 +1490,7 @@ export function TopicMapView({
         footer={
           opened && openNode ? (
             <>
-              {onGoTopic ? (
+              {onGoTopic && !selectedArchived ? (
                 <Button variant="ghost" onClick={() => onGoTopic(selectedTopic!)}>
                   Continue in Learn
                 </Button>
@@ -1614,6 +1674,44 @@ export function TopicMapView({
         anchorIndex={historyDrawer?.anchorIndex}
       />
 
+      {nameDialog?.kind === 'newFolder' && (
+        <NameDialog
+          title="New folder"
+          subtitle={`${nameDialog.topic.title} will be filed here`}
+          label="Folder name"
+          placeholder="e.g. Physics Quals"
+          confirmLabel="Create and move"
+          validate={(v) => (railFolders.some((f) => f.toLowerCase() === v.toLowerCase()) ? 'A folder with that name already exists.' : null)}
+          onConfirm={async (v) => {
+            const name = normalizeFolderName(v)
+            if (!name) return
+            const next = addFolderToRegistry(folderRegistry, name)
+            setFolderRegistry(next)
+            saveFolderRegistry(next)
+            await fileTopics([nameDialog.topic.topic], name)
+            refreshTopics()
+          }}
+          onClose={() => setNameDialog(null)}
+        />
+      )}
+      {nameDialog?.kind === 'renameTopic' && (
+        <NameDialog
+          title="Rename topic"
+          subtitle={nameDialog.topic.engineTitle ? `engine title: ${nameDialog.topic.engineTitle}` : undefined}
+          label="Display name"
+          initial={nameDialog.topic.title}
+          confirmLabel="Rename"
+          hint="Only how it’s shown in this app. Your progress and history are untouched."
+          onConfirm={async (v) => {
+            await renameTopicDisplay(nameDialog.topic, v)
+            refreshTopics()
+          }}
+          onClose={() => setNameDialog(null)}
+        />
+      )}
+      {archiveFor && (
+        <ArchiveTopicDialog topics={[archiveFor]} onArchived={refreshTopics} onClose={() => setArchiveFor(null)} />
+      )}
       {notesReader && selectedTopic && (
         <div className="fixed right-0 bottom-0 top-[70px] z-40 w-[min(640px,55vw)] min-w-[380px]">
           <LectureNotesPanel topic={selectedTopic} node={notesReader} onClose={() => setNotesReader(null)} />
