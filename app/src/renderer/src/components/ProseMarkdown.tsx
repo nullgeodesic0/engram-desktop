@@ -23,6 +23,7 @@ export const ProseMarkdown = memo(function ProseMarkdown({
   nodeIds,
   nodeChipTopic,
   develop = false,
+  untrusted = false,
 }: {
   text: string
   className?: string
@@ -45,10 +46,17 @@ export const ProseMarkdown = memo(function ProseMarkdown({
    * they already hold (`trailingCaret` in the beat components); the class then
    * arrives exactly once, with the final complete render. */
   develop?: boolean
+  /** Text from a content pack rather than the app or the user's own session. */
+  untrusted?: boolean
 }) {
   const html = useMemo(
-    () => renderMarkdownWithMath(text, nodeIds && nodeChipTopic ? { nodeIds, topicId: nodeChipTopic } : undefined),
-    [text, nodeIds, nodeChipTopic],
+    () =>
+      renderMarkdownWithMath(
+        text,
+        nodeIds && nodeChipTopic ? { nodeIds, topicId: nodeChipTopic } : undefined,
+        untrusted,
+      ),
+    [text, nodeIds, nodeChipTopic, untrusted],
   )
   return (
     <div

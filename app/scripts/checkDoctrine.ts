@@ -269,11 +269,18 @@ const PINNED_SUBPROCESS_FILES: Record<string, string> = {
   // runs only that same env's interpreter on the kernel file shipped in the
   // app's resources, with the workbench folder as its working directory.
   'main/runtime/envManager.ts':
-    'the pinned uv (python install / venv / pip sync --require-hashes against a shipped lockfile), tar to unpack uv, and the env interpreter for an import check. Never engram.py, never a system Python',
+    'the pinned uv (python install / venv / pip sync --require-hashes against the app’s or a content pack’s lockfile), tar to unpack uv, and the env interpreter for an import check. Never engram.py, never a system Python',
   'main/runtime/kernel.ts':
     'the managed env interpreter running resources/runtime/engram_kernel.py, one per open workbench. Never engram.py',
   'main/runtime/kernel.test.ts':
     'the test runner’s own Node binary on a stand-in kernel script in os tmpdir, through a mocked spawnCli. Never engram.py',
+  // 2026-11-10 — content packs (docs/content-packs.md). One door: a check
+  // runs the same managed env interpreter a kernel does, on the check runner
+  // shipped in the app's resources, against a pack's pytest file. Its
+  // environment is the kernel's scrubbed one, so a check can no more reach a
+  // model than a cell can.
+  'main/labs/checkRunner.ts':
+    'the managed env interpreter running resources/runtime/engram_check.py on a frozen lab and a pack’s test file (a collect-only listing, then the run), and taskkill on Windows to stop that interpreter’s process tree. Never engram.py',
 }
 const SPAWN_CALL =
   /\b(execFile|execFileSync|execSync|exec|spawn|spawnSync|fork|execCli|spawnCli|spawnCliReadOnly|runEngram)\s*(?:Async)?\s*\(/g
@@ -342,9 +349,18 @@ const PINNED_WRITERS: Record<string, string> = {
   'main/session/lectureNotesStore.ts': 'app userData — lecture-notes/<topic>/<node>.json and .pdf',
   // 2026-11-09 — the code runtime and the learner's workbenches. Neither is
   // learning state: no rating, receipt or schedule reads either.
-  'main/runtime/envManager.ts': 'app userData — runtime/ (the uv binary, uv-managed Python, the wheel cache, envs/<layer>-<lockhash>/, state.json)',
+  'main/runtime/envManager.ts': 'app userData — runtime/ (the uv binary, uv-managed Python, the wheel cache, locks/<layer>-<lockhash>.lock copied from the app or a pack, envs/<layer>-<lockhash>/, state.json)',
   'main/runtime/kernel.test.ts': 'os tmpdir — a stand-in kernel script, removed in afterAll',
-  'main/runtime/workbenchStore.ts': 'app userData — labs/workbenches/<id>/lab.py, meta.json and results.json',
+  'main/runtime/workbenchStore.ts':
+    'app userData — labs/workbenches/<id>/ and labs/packs/<pack>/<lab>/: lab.py, meta.json and results.json',
+  // 2026-11-10 — content packs. A pack is read where it sits and never
+  // written; these two write only under app userData/labs. Neither is
+  // learning state: a milestone receipt is app-side, and grades stay the
+  // engine's.
+  'main/labs/packStore.ts': 'app userData — labs/packs.json, the list of pack folders the learner added',
+  'main/labs/labStore.test.ts': 'os tmpdir — a copy of examples/example-pack and a stand-in userData, removed in afterAll',
+  'main/labs/labStore.ts':
+    'app userData — labs/packs/<pack>/<lab>/submissions.json, submissions/<m>-<n>/ (the frozen lab.py, cells.json, out.json), .checks/smoke/, and labs/.check-key',
   'main/session/sessionScan.ts': 'app userData — transcript scan cache',
   'main/session/achievementsStore.ts': 'app userData',
   'main/session/sessionIndex.ts': 'app userData',

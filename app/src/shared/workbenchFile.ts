@@ -5,13 +5,13 @@ import type { CellKind, WorkbenchCell } from './runtime'
  * that Jupytext, VS Code and Spyder all read:
  *
  *     # %% [given] id=c1
- *     import stim
+ *     import numpy as np
  *
  *     # %% id=c2
- *     circuit = stim.Circuit.generated(...)
+ *     x = np.linspace(0, 1, 50)
  *
  *     # %% [markdown] id=c3
- *     # The crossing sits near 0.7%.
+ *     # The slope comes out near 2.5.
  *
  * So `python lab.py` runs the learner's work outside the app, and the file
  * diffs cleanly in git. Markdown cells are stored as `# `-prefixed comment

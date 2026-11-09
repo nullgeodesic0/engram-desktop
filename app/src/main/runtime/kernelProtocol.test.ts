@@ -4,24 +4,39 @@ import { appendOutput, MAX_OUTPUT_CHARS } from '../../shared/cellOutputs'
 
 describe('kernel protocol', () => {
   it('parses every message the kernel sends', () => {
-    expect(parseKernelLine('{"type":"ready","python":"3.12.13","packages":{"stim":"1.15.0"}}')).toEqual({
+    expect(parseKernelLine('{"type":"ready","python":"3.12.13","packages":{"numpy":"2.3.0"}}')).toEqual({
       type: 'ready',
       python: '3.12.13',
-      packages: { stim: '1.15.0' },
+      packages: { numpy: '2.3.0' },
     })
     expect(parseKernelLine('{"id":3,"type":"stream","name":"stderr","text":"w\\n"}')).toEqual({
       type: 'output',
       id: 3,
       output: { type: 'stream', name: 'stderr', text: 'w\n' },
     })
-    expect(parseKernelLine('{"id":3,"type":"value","text":"42"}')).toMatchObject({ output: { type: 'value', text: '42' } })
+    expect(parseKernelLine('{"id":3,"type":"value","text":"42"}')).toMatchObject({
+      output: { type: 'value', text: '42' },
+    })
     expect(parseKernelLine('{"id":3,"type":"figure","svg":"<svg/>","png":"AA=="}')).toMatchObject({
       output: { type: 'figure', svg: '<svg/>', png: 'AA==' },
     })
     expect(
       parseKernelLine('{"id":3,"type":"error","ename":"ValueError","evalue":"bad","traceback":["a","b"],"line":7}'),
-    ).toMatchObject({ output: { type: 'error', ename: 'ValueError', evalue: 'bad', traceback: ['a', 'b'], line: 7 } })
-    expect(parseKernelLine('{"id":3,"type":"done","ok":true,"ms":41}')).toEqual({ type: 'done', id: 3, ok: true, ms: 41 })
+    ).toMatchObject({
+      output: {
+        type: 'error',
+        ename: 'ValueError',
+        evalue: 'bad',
+        traceback: ['a', 'b'],
+        line: 7,
+      },
+    })
+    expect(parseKernelLine('{"id":3,"type":"done","ok":true,"ms":41}')).toEqual({
+      type: 'done',
+      id: 3,
+      ok: true,
+      ms: 41,
+    })
     expect(parseKernelLine('{"id":4,"type":"vars","vars":[{"name":"x","type":"int","repr":"1"}]}')).toMatchObject({
       vars: [{ name: 'x' }],
     })
@@ -47,7 +62,11 @@ describe('kernel protocol', () => {
       { type: 'stream', name: 'stdout', text: 'ab' },
       { type: 'stream', name: 'stderr', text: 'c' },
     ])
-    let big = appendOutput([], { type: 'stream', name: 'stdout', text: 'x'.repeat(MAX_OUTPUT_CHARS - 1) })
+    let big = appendOutput([], {
+      type: 'stream',
+      name: 'stdout',
+      text: 'x'.repeat(MAX_OUTPUT_CHARS - 1),
+    })
     big = appendOutput(big, { type: 'stream', name: 'stdout', text: 'yyyy' })
     big = appendOutput(big, { type: 'stream', name: 'stdout', text: 'zzzz' })
     expect(big).toHaveLength(1)

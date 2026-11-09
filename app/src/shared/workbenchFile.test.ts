@@ -9,7 +9,7 @@ function ids() {
 
 describe('workbench percent-format file', () => {
   const cells: WorkbenchCell[] = [
-    { id: 'c1', kind: 'given', source: 'import stim\nimport numpy as np' },
+    { id: 'c1', kind: 'given', source: 'import numpy as np\nimport scipy' },
     { id: 'c2', kind: 'code', source: 'def f(d):\n\n    return d + 1\n\nf(3)' },
     { id: 'c3', kind: 'note', source: 'The crossing sits near **0.7%**.\n\nSecond paragraph, $p_{th}$.' },
   ]

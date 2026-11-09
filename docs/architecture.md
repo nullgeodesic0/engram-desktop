@@ -277,14 +277,20 @@ conveniences only:
   per key (a topic id for `learn`, or the literal kind for `review`/`coach`), used
   to resume the last session for a key and to browse past session history.
 - `runtime/` — the code runtime (`app/src/main/runtime/envManager.ts`): a pinned
-  uv binary, uv-managed CPython, uv's wheel cache, one venv per lockfile under
-  `runtime/envs/<layer>-<lockhash>/`, and `state.json`. About 650 MB once
-  installed; Settings → Code runtime removes it. See
-  [code-runtime.md](code-runtime.md).
+  uv binary, uv-managed CPython, uv's wheel cache, one venv per layer and
+  lockfile under `runtime/envs/<layer>-<lockhash>/` (the app's base layer, and
+  any a content pack brings), copies of those lockfiles under `runtime/locks/`,
+  and `state.json`. About 450 MB with the base layer alone; Settings → Code
+  runtime removes it. See [code-runtime.md](code-runtime.md).
 - `labs/workbenches/<id>/` — the learner's workbenches
   (`app/src/main/runtime/workbenchStore.ts`): `lab.py` in the percent cell format,
-  `meta.json`, and `results.json` with each cell's last outputs. Course labs will
-  live beside them as `labs/<course>/<lab>/`.
+  `meta.json`, and `results.json` with each cell's last outputs.
+- `labs/packs.json`, `labs/.check-key`, `labs/packs/<pack>/<lab>/` and
+  `labs/records/<pack>/<lab>/` — the content packs the learner added
+  (`app/src/main/labs/packStore.ts`), the key that signs check reports, each
+  pack lab's workbench, and its submissions and check runs, kept outside the
+  workbench folder (`app/src/main/labs/labStore.ts`). The packs themselves are read where they
+  sit and never written. See [content-packs.md](content-packs.md).
 - `achievements.json`, `notifier-state.json`, and Electron's own window-state file
   — further UI-only conveniences (unlocked-achievement tracking, review-notifier
   state, remembered window bounds/position).

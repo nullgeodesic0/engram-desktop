@@ -1,0 +1,8 @@
+# The base layer: what every workbench runs on. Content packs add their own
+# layers, each from its own lockfile (see docs/content-packs.md).
+# Regenerate the lock with:
+#   uv pip compile resources/runtime/base.in --universal --python-version 3.12 --generate-hashes -o resources/runtime/base.lock
+numpy>=2.0
+scipy>=1.13
+matplotlib>=3.9
+pytest>=8.0

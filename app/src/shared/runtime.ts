@@ -7,37 +7,58 @@
  * See docs/code-runtime.md.
  */
 
-/** One installable set of packages, pinned by a lockfile that ships with the app. */
+/**
+ * One installable set of packages, pinned by a lockfile. The base layer ships
+ * with the app; a content pack can bring its own (see docs/content-packs.md).
+ * Each layer is its own venv, built beside the others under one uv.
+ */
 export interface RuntimeLayerInfo {
   id: string
   label: string
   description: string
-  /** First 12 hex of the lockfile's SHA-256; also names the env directory. */
+  /** 'app' for the base layer, otherwise the content pack's id. */
+  source: string
+  /** A human name for the source: "Engram" or the pack's title. */
+  sourceTitle: string
+  /** First 12 hex of the current lockfile's SHA-256; also names the env directory. */
   lockHash: string
-  installed: boolean
+  state: RuntimeState
+  /** The packages worth showing, with the versions installed (empty until ready). */
+  packages: Record<string, string>
+  /** Distribution names to list in Settings, in order. */
+  watch: string[]
+  pythonVersion: string | null
+  envDir: string | null
+  /** The lockfile changed since the env was built. The old env keeps serving
+   * cells until the learner installs the update. */
+  updateAvailable: boolean
+  /** Plain-language reason, when state is 'failed'. */
+  error: string | null
 }
 
 export type RuntimeState = 'missing' | 'installing' | 'ready' | 'failed'
 
+/** The whole runtime. The top-level fields describe the base layer, which
+ * every workbench without a pack runs on. */
 export interface RuntimeStatus {
   state: RuntimeState
   /** Path of the uv binary in use, if one was found or installed. */
   uvPath: string | null
   uvVersion: string | null
-  /** The environment's interpreter, once built. */
+  /** The base environment's interpreter, once built. */
   pythonPath: string | null
   pythonVersion: string | null
   envDir: string | null
   layers: RuntimeLayerInfo[]
-  /** Versions of the packages the kernel reports, keyed by distribution name. */
+  /** Versions of the base layer's packages, keyed by distribution name. */
   packages: Record<string, string>
   /** Plain-language reason, when state is 'failed'. */
   error: string | null
-  /** The shipped lockfile changed since the env was built. The old env keeps
-   * serving cells until the learner installs the update. */
   updateAvailable: boolean
-  /** False on a machine the QEC stack has no wheels for. */
+  /** False on a machine the runtime has no builds for. */
   supported: boolean
+  /** The layer being built right now, if any. One install runs at a time. */
+  installing: string | null
 }
 
 export interface RuntimeProgress {
@@ -65,7 +86,13 @@ export type CellOutput =
   | { type: 'stream'; name: 'stdout' | 'stderr'; text: string }
   | { type: 'value'; text: string }
   | { type: 'figure'; svg: string; png: string }
-  | { type: 'error'; ename: string; evalue: string; traceback: string[]; line: number | null }
+  | {
+      type: 'error'
+      ename: string
+      evalue: string
+      traceback: string[]
+      line: number | null
+    }
 
 export type CellRunState = 'idle' | 'queued' | 'running' | 'ok' | 'error'
 
@@ -99,7 +126,14 @@ export type KernelState = 'starting' | 'idle' | 'busy' | 'dead'
 export type KernelEvent =
   | { kind: 'state'; workbenchId: string; state: KernelState; detail?: string }
   | { kind: 'output'; workbenchId: string; cellId: string; output: CellOutput }
-  | { kind: 'done'; workbenchId: string; cellId: string; ok: boolean; ms: number; count: number }
+  | {
+      kind: 'done'
+      workbenchId: string
+      cellId: string
+      ok: boolean
+      ms: number
+      count: number
+    }
 
 export interface KernelVar {
   name: string
@@ -111,7 +145,30 @@ export interface KernelVar {
 export const CELL_LIMIT_CHOICES = [60, 120, 600, 0] as const
 export const DEFAULT_CELL_LIMIT_S = 120
 
-/** Ids are re-validated wherever they become a path. */
+const SLUG = '[a-z0-9][a-z0-9-]{0,63}'
+const PLAIN_ID = new RegExp(`^${SLUG}$`)
+const LAB_ID = new RegExp(`^(${SLUG})/(${SLUG})$`)
+
+/** A slug for a pack, a lab, a milestone or a free-standing workbench. */
+export function isValidSlug(id: string): boolean {
+  return PLAIN_ID.test(id)
+}
+
+/**
+ * Workbench ids come in two forms. A plain slug is a free-standing workbench
+ * (labs/workbenches/<id>); "<pack>/<lab>" is the learner's copy of a pack's
+ * lab (labs/packs/<pack>/<lab>). Ids are re-validated wherever they become a path.
+ */
 export function isValidWorkbenchId(id: string): boolean {
-  return /^[a-z0-9][a-z0-9-]{0,63}$/.test(id)
+  return PLAIN_ID.test(id) || LAB_ID.test(id)
+}
+
+export function labWorkbenchId(packId: string, labId: string): string {
+  return `${packId}/${labId}`
+}
+
+/** The pack and lab of a lab workbench id, or null for a free-standing one. */
+export function parseLabWorkbenchId(id: string): { packId: string; labId: string } | null {
+  const m = LAB_ID.exec(id)
+  return m ? { packId: m[1], labId: m[2] } : null
 }
