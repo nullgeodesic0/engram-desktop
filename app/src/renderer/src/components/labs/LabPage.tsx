@@ -5,6 +5,8 @@ import { EXPLAIN_BACK_MAX } from '../../../../shared/contentPack'
 import { Button } from '../ui/Button'
 import { ProseMarkdown } from '../ProseMarkdown'
 import { Workbench, type WorkbenchSnapshot } from '../workbench/Workbench'
+import { ResizeHandle } from '../ui/ResizeHandle'
+import { usePane } from '../../shared/paneLayout'
 
 /**
  * One pack lab: the milestone rail, the lab's workbench, and the milestone's
@@ -279,6 +281,9 @@ export function LabPage({ packId, labId, onOpenSettings, onChanged }: Props) {
   const [unsealing, setUnsealing] = useState(false)
   const [copied, setCopied] = useState(false)
   const [wbKey, setWbKey] = useState(0)
+  // The milestone rail and the brief column: widths the learner drags, hidden on a click.
+  const rail = usePane('lab.rail', 224, 160, 420)
+  const side = usePane('lab.side', 320, 240, 720)
   const [reloading, setReloading] = useState(false)
   const snapshot = useRef<WorkbenchSnapshot | null>(null)
   const draftKey = (subId: string) => `engram.lab.explainBack.${packId}/${labId}/${subId}`
@@ -469,6 +474,8 @@ export function LabPage({ packId, labId, onOpenSettings, onChanged }: Props) {
   if (error && !view) return <div className="p-8 text-sm text-[var(--color-text-dim)]">{error}</div>
   if (!view) return <div className="p-8 text-sm text-[var(--color-text-faint)]">Opening…</div>
 
+  // A sealed submission's explain-back lives in this column, so it cannot be hidden then.
+  const sideOpen = !side.collapsed || !!sealed
   const smokeHere = milestone ? smoke[milestone.id] : undefined
   const canSubmit = !!milestone?.hasHidden && milestone.status !== 'locked' && !sealed && !submitting
 
@@ -528,82 +535,101 @@ export function LabPage({ packId, labId, onOpenSettings, onChanged }: Props) {
             </div>
           )}
         </div>
+        <div className="flex gap-2 pb-0.5">
+          <Button size="sm" onClick={rail.toggle} aria-pressed={!rail.collapsed} title="Show or hide the milestones">
+            Milestones
+          </Button>
+          <Button
+            size="sm"
+            onClick={side.toggle}
+            aria-pressed={!side.collapsed}
+            title="Show or hide the brief and results"
+          >
+            Brief
+          </Button>
+        </div>
       </header>
       <div className="flex-1 flex min-h-0">
-        <aside className="w-56 shrink-0 border-r border-[var(--color-hairline)] flex flex-col min-h-0">
-          <div className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-faint)] px-4 pt-4 pb-2">
-            Milestones
-          </div>
-          <nav className="flex flex-col overflow-y-auto" aria-label="Milestones">
-            {view.milestones.map((m, i) => {
-              const subs = view.submissions.filter((s) => s.milestoneId === m.id && !s.sealed && s.run)
-              const last = subs[subs.length - 1]
-              const sub =
-                m.status === 'passed' && m.passedOn
-                  ? m.passedOn.seq === 1 && m.passedOn.unaided
-                    ? 'passed first try'
-                    : `passed on try ${m.passedOn.seq}${m.passedOn.unaided ? '' : ' · with help'}`
-                  : m.status === 'passed' && last?.run
-                    ? `passed · core ${count(last.run, 'core')}`
-                    : m.status === 'submitted'
-                      ? 'sealed'
-                      : m.status === 'locked'
-                        ? `opens after ${
-                            view.milestones
-                              .slice(0, i)
-                              .reverse()
-                              .find((x) => x.hasHidden)
-                              ?.id.toUpperCase() ?? 'the last'
-                          }`
-                        : m.status === 'brief'
-                          ? 'brief only'
-                          : smoke[m.id]
-                            ? `open · smoke ${count(smoke[m.id].run, 'smoke')}`
-                            : 'open'
-              return (
-                <button
-                  key={m.id}
-                  onClick={() => setSelected(m.id)}
-                  aria-current={m.id === selected ? 'true' : undefined}
-                  className={`focus-ring text-left px-4 py-2 border-l-2 flex gap-2.5 ${
-                    m.id === selected
-                      ? 'border-[var(--color-ink-warm)] bg-[var(--color-hairline)]/30'
-                      : 'border-transparent'
-                  }`}
-                >
-                  <span
-                    aria-hidden
-                    className="mt-1.5 h-2 w-2 rounded-full shrink-0"
-                    style={{
-                      background:
-                        m.status === 'passed' || m.status === 'submitted' ? STATUS_INK[m.status] : 'transparent',
-                      border: `1px ${m.status === 'locked' || m.status === 'brief' ? 'dashed' : 'solid'} ${STATUS_INK[m.status]}`,
-                    }}
-                  />
-                  <span className="min-w-0">
-                    <span
-                      className={`block text-sm truncate ${m.status === 'locked' ? 'text-[var(--color-text-dim)]' : 'text-[var(--color-text-primary)]'}`}
-                    >
-                      {m.id.toUpperCase()} · {m.title}
-                    </span>
-                    <span className="block label-data text-[11px] text-[var(--color-text-faint)]">{sub}</span>
-                  </span>
-                </button>
-              )
-            })}
-          </nav>
-          <div className="mt-auto px-4 py-3 border-t border-[var(--color-hairline)]">
-            <div className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-faint)]">
-              Environment
+        {!rail.collapsed && (
+          <aside
+            style={{ width: rail.size }}
+            className="shrink-0 border-r border-[var(--color-hairline)] flex flex-col min-h-0"
+          >
+            <div className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-faint)] px-4 pt-4 pb-2">
+              Milestones
             </div>
-            <button
-              onClick={onOpenSettings}
-              className="focus-ring label-data text-xs text-[var(--color-text-dim)] hover:text-[var(--color-text-primary)] mt-1"
-            >
-              {view.layer}
-            </button>
-          </div>
-        </aside>
+            <nav className="flex flex-col overflow-y-auto" aria-label="Milestones">
+              {view.milestones.map((m, i) => {
+                const subs = view.submissions.filter((s) => s.milestoneId === m.id && !s.sealed && s.run)
+                const last = subs[subs.length - 1]
+                const sub =
+                  m.status === 'passed' && m.passedOn
+                    ? m.passedOn.seq === 1 && m.passedOn.unaided
+                      ? 'passed first try'
+                      : `passed on try ${m.passedOn.seq}${m.passedOn.unaided ? '' : ' · with help'}`
+                    : m.status === 'passed' && last?.run
+                      ? `passed · core ${count(last.run, 'core')}`
+                      : m.status === 'submitted'
+                        ? 'sealed'
+                        : m.status === 'locked'
+                          ? `opens after ${
+                              view.milestones
+                                .slice(0, i)
+                                .reverse()
+                                .find((x) => x.hasHidden)
+                                ?.id.toUpperCase() ?? 'the last'
+                            }`
+                          : m.status === 'brief'
+                            ? 'brief only'
+                            : smoke[m.id]
+                              ? `open · smoke ${count(smoke[m.id].run, 'smoke')}`
+                              : 'open'
+                return (
+                  <button
+                    key={m.id}
+                    onClick={() => setSelected(m.id)}
+                    aria-current={m.id === selected ? 'true' : undefined}
+                    className={`focus-ring text-left px-4 py-2 border-l-2 flex gap-2.5 ${
+                      m.id === selected
+                        ? 'border-[var(--color-ink-warm)] bg-[var(--color-hairline)]/30'
+                        : 'border-transparent'
+                    }`}
+                  >
+                    <span
+                      aria-hidden
+                      className="mt-1.5 h-2 w-2 rounded-full shrink-0"
+                      style={{
+                        background:
+                          m.status === 'passed' || m.status === 'submitted' ? STATUS_INK[m.status] : 'transparent',
+                        border: `1px ${m.status === 'locked' || m.status === 'brief' ? 'dashed' : 'solid'} ${STATUS_INK[m.status]}`,
+                      }}
+                    />
+                    <span className="min-w-0">
+                      <span
+                        className={`block text-sm truncate ${m.status === 'locked' ? 'text-[var(--color-text-dim)]' : 'text-[var(--color-text-primary)]'}`}
+                      >
+                        {m.id.toUpperCase()} · {m.title}
+                      </span>
+                      <span className="block label-data text-[11px] text-[var(--color-text-faint)]">{sub}</span>
+                    </span>
+                  </button>
+                )
+              })}
+            </nav>
+            <div className="mt-auto px-4 py-3 border-t border-[var(--color-hairline)]">
+              <div className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-faint)]">
+                Environment
+              </div>
+              <button
+                onClick={onOpenSettings}
+                className="focus-ring label-data text-xs text-[var(--color-text-dim)] hover:text-[var(--color-text-primary)] mt-1"
+              >
+                {view.layer}
+              </button>
+            </div>
+          </aside>
+        )}
+        {!rail.collapsed && <ResizeHandle pane={rail} edge="end" label="Milestones width" />}
 
         <section className="flex-1 min-w-0 min-h-0">
           {reloading ? (
@@ -622,145 +648,152 @@ export function LabPage({ packId, labId, onOpenSettings, onChanged }: Props) {
           )}
         </section>
 
-        <aside className="w-80 shrink-0 border-l border-[var(--color-hairline)] overflow-y-auto px-4 py-4 flex flex-col gap-4">
-          {error && <div className="text-xs text-[var(--color-ink-danger)] break-words">{error}</div>}
+        {sideOpen && <ResizeHandle pane={side} edge="start" label="Brief width" />}
+        {sideOpen && (
+          <aside
+            style={{ width: side.size }}
+            className="shrink-0 border-l border-[var(--color-hairline)] overflow-y-auto px-4 py-4 flex flex-col gap-4"
+          >
+            {error && <div className="text-xs text-[var(--color-ink-danger)] break-words">{error}</div>}
 
-          {sealed && (
-            <div className="panel px-3 py-3 flex flex-col gap-3 border-[var(--color-ink-warm)]">
-              <div className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-ink-warm)]">
-                {sealed.milestoneId.toUpperCase()} submitted · cells frozen at{' '}
-                {new Date(sealed.submittedAt).toLocaleTimeString(undefined, {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}
-              </div>
-              <div className="text-xs text-[var(--color-text-dim)]">
-                Results stay sealed until you have explained your work and said how sure you are.
-              </div>
-              {sealed.explainBack === null ? (
-                <>
-                  <div className="font-(family-name:--font-serif) text-lg text-[var(--color-text-primary)] leading-snug">
-                    {sealed.explainBackPrompt || view.milestones.find((m) => m.id === sealed.milestoneId)?.explainBack}
-                  </div>
-                  <textarea
-                    value={draft}
-                    onChange={(e) => editDraft(e.target.value.slice(0, EXPLAIN_BACK_MAX))}
-                    rows={9}
-                    aria-label="Explain-back"
-                    placeholder="In your own words, without looking anything up."
-                    className="focus-ring w-full bg-transparent border border-[var(--color-hairline)] px-3 py-2 text-sm text-[var(--color-text-primary)] resize-y"
-                  />
-                  <div className="flex items-center gap-2">
-                    <span className="label-data text-[11px] text-[var(--color-text-faint)]">
-                      {draft.length.toLocaleString()} / {EXPLAIN_BACK_MAX.toLocaleString()}
-                    </span>
-                    <Button
-                      size="sm"
-                      variant="primary"
-                      className="ml-auto"
-                      disabled={!draft.trim()}
-                      onClick={() => void sendExplainBack()}
-                    >
-                      Send explain-back
-                    </Button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="font-(family-name:--font-serif) text-lg text-[var(--color-text-primary)] leading-snug">
-                    {CONFIDENCE_QUESTION}
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    {CONFIDENCE_LEVELS.map((c, i) => (
-                      <button
-                        key={c}
-                        disabled={unsealing}
-                        onClick={() => void pick(c)}
-                        className="focus-ring flex items-center px-3 py-2 border border-[var(--color-hairline)] text-sm text-[var(--color-text-primary)] hover:border-[var(--color-ink-warm)] disabled:opacity-60"
-                      >
-                        {c}
-                        <span className="ml-auto label-data text-[11px] text-[var(--color-text-faint)]">{i + 1}</span>
-                      </button>
-                    ))}
-                  </div>
-                  {unsealing && (
-                    <div className="text-xs text-[var(--color-text-dim)]" aria-live="polite">
-                      Unsealing…
+            {sealed && (
+              <div className="panel px-3 py-3 flex flex-col gap-3 border-[var(--color-ink-warm)]">
+                <div className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-ink-warm)]">
+                  {sealed.milestoneId.toUpperCase()} submitted · cells frozen at{' '}
+                  {new Date(sealed.submittedAt).toLocaleTimeString(undefined, {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </div>
+                <div className="text-xs text-[var(--color-text-dim)]">
+                  Results stay sealed until you have explained your work and said how sure you are.
+                </div>
+                {sealed.explainBack === null ? (
+                  <>
+                    <div className="font-(family-name:--font-serif) text-lg text-[var(--color-text-primary)] leading-snug">
+                      {sealed.explainBackPrompt ||
+                        view.milestones.find((m) => m.id === sealed.milestoneId)?.explainBack}
                     </div>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-
-          {milestone && (
-            <div className="flex flex-col gap-2">
-              <div className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-faint)]">
-                {milestone.id.toUpperCase()} · brief
+                    <textarea
+                      value={draft}
+                      onChange={(e) => editDraft(e.target.value.slice(0, EXPLAIN_BACK_MAX))}
+                      rows={9}
+                      aria-label="Explain-back"
+                      placeholder="In your own words, without looking anything up."
+                      className="focus-ring w-full bg-transparent border border-[var(--color-hairline)] px-3 py-2 text-sm text-[var(--color-text-primary)] resize-y"
+                    />
+                    <div className="flex items-center gap-2">
+                      <span className="label-data text-[11px] text-[var(--color-text-faint)]">
+                        {draft.length.toLocaleString()} / {EXPLAIN_BACK_MAX.toLocaleString()}
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        className="ml-auto"
+                        disabled={!draft.trim()}
+                        onClick={() => void sendExplainBack()}
+                      >
+                        Send explain-back
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="font-(family-name:--font-serif) text-lg text-[var(--color-text-primary)] leading-snug">
+                      {CONFIDENCE_QUESTION}
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      {CONFIDENCE_LEVELS.map((c, i) => (
+                        <button
+                          key={c}
+                          disabled={unsealing}
+                          onClick={() => void pick(c)}
+                          className="focus-ring flex items-center px-3 py-2 border border-[var(--color-hairline)] text-sm text-[var(--color-text-primary)] hover:border-[var(--color-ink-warm)] disabled:opacity-60"
+                        >
+                          {c}
+                          <span className="ml-auto label-data text-[11px] text-[var(--color-text-faint)]">{i + 1}</span>
+                        </button>
+                      ))}
+                    </div>
+                    {unsealing && (
+                      <div className="text-xs text-[var(--color-text-dim)]" aria-live="polite">
+                        Unsealing…
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
-              {milestone.brief ? (
-                <div className="text-sm">
-                  <ProseMarkdown text={milestone.brief} untrusted />
+            )}
+
+            {milestone && (
+              <div className="flex flex-col gap-2">
+                <div className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-faint)]">
+                  {milestone.id.toUpperCase()} · brief
                 </div>
-              ) : (
-                <div className="text-xs text-[var(--color-text-faint)]">This milestone has no brief.</div>
-              )}
-              {milestone.status === 'locked' && (
-                <div className="text-xs text-[var(--color-text-dim)]">
-                  Opens once {lockedBy ?? 'the milestone before it'} passes. You can read ahead and work in the cells
-                  meanwhile.
+                {milestone.brief ? (
+                  <div className="text-sm">
+                    <ProseMarkdown text={milestone.brief} untrusted />
+                  </div>
+                ) : (
+                  <div className="text-xs text-[var(--color-text-faint)]">This milestone has no brief.</div>
+                )}
+                {milestone.status === 'locked' && (
+                  <div className="text-xs text-[var(--color-text-dim)]">
+                    Opens once {lockedBy ?? 'the milestone before it'} passes. You can read ahead and work in the cells
+                    meanwhile.
+                  </div>
+                )}
+                {milestone.status === 'brief' && (
+                  <div className="text-xs text-[var(--color-text-dim)]">
+                    This milestone has no tests yet, so there is nothing to submit.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {milestone && (
+              <Ladder milestone={milestone} sealed={!!sealed} onStep={openStep} onCompletion={addCompletion} />
+            )}
+
+            {smokeHere && (
+              <div className="flex flex-col gap-2">
+                <div className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-faint)]">
+                  Smoke checks · {count(smokeHere.run, 'smoke')}
                 </div>
-              )}
-              {milestone.status === 'brief' && (
-                <div className="text-xs text-[var(--color-text-dim)]">
-                  This milestone has no tests yet, so there is nothing to submit.
+                <div className="text-xs text-[var(--color-text-faint)]">
+                  They catch shape and type mistakes and never say whether the method is right.
                 </div>
-              )}
-            </div>
-          )}
-
-          {milestone && (
-            <Ladder milestone={milestone} sealed={!!sealed} onStep={openStep} onCompletion={addCompletion} />
-          )}
-
-          {smokeHere && (
-            <div className="flex flex-col gap-2">
-              <div className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-faint)]">
-                Smoke checks · {count(smokeHere.run, 'smoke')}
+                {smokeHere.run.error && (
+                  <div className="text-xs text-[var(--color-text-dim)] break-words">{smokeHere.run.error}</div>
+                )}
+                <TestList tests={smokeHere.run.tests} />
               </div>
-              <div className="text-xs text-[var(--color-text-faint)]">
-                They catch shape and type mistakes and never say whether the method is right.
-              </div>
-              {smokeHere.run.error && (
-                <div className="text-xs text-[var(--color-text-dim)] break-words">{smokeHere.run.error}</div>
-              )}
-              <TestList tests={smokeHere.run.tests} />
-            </div>
-          )}
+            )}
 
-          {latest && (
-            <Receipt
-              key={latest.id}
-              sub={latest}
-              onCopy={() => void copyProduction(latest)}
-              onReflect={(t) => reflect(latest, t)}
-            />
-          )}
-          {copied && (
-            <div className="text-xs text-[var(--color-text-dim)]">Copied the signed report and your answers.</div>
-          )}
-          {latest?.explainBack && (
-            <div className="flex flex-col gap-1">
-              <div className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-faint)]">
-                Your explain-back
+            {latest && (
+              <Receipt
+                key={latest.id}
+                sub={latest}
+                onCopy={() => void copyProduction(latest)}
+                onReflect={(t) => reflect(latest, t)}
+              />
+            )}
+            {copied && (
+              <div className="text-xs text-[var(--color-text-dim)]">Copied the signed report and your answers.</div>
+            )}
+            {latest?.explainBack && (
+              <div className="flex flex-col gap-1">
+                <div className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-faint)]">
+                  Your explain-back
+                </div>
+                {latest.explainBackPrompt && (
+                  <div className="text-xs text-[var(--color-text-faint)] italic">{latest.explainBackPrompt}</div>
+                )}
+                <div className="text-xs text-[var(--color-text-dim)] whitespace-pre-wrap">{latest.explainBack}</div>
               </div>
-              {latest.explainBackPrompt && (
-                <div className="text-xs text-[var(--color-text-faint)] italic">{latest.explainBackPrompt}</div>
-              )}
-              <div className="text-xs text-[var(--color-text-dim)] whitespace-pre-wrap">{latest.explainBack}</div>
-            </div>
-          )}
-        </aside>
+            )}
+          </aside>
+        )}
       </div>
     </div>
   )

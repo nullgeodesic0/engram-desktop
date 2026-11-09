@@ -134,6 +134,31 @@ gets end-of-file at once, since the kernel's stdin is the protocol channel.
 Output a background thread prints after its cell has finished is shown under
 whichever cell runs next.
 
+### Editing and layout
+
+Cells edit in CodeMirror 6 with what a notebook IDE is expected to have: find
+and replace (Mod+F), multiple cursors (Mod+D, Alt+drag for a column), folding,
+bracket matching and closing, comment toggling (Mod+/), and completions drawn
+from Python, the kernel's live variables and the names the notebook's cells
+define. **View** in the toolbar sets the font size, Standard, Vim or Emacs keys,
+2 or 4 space indents, line numbers, wrapping, fold markers, completions,
+bracket closing, selection highlights and how tall a long output may grow
+before it scrolls. These are per machine (`localStorage`) and reach every
+open cell at once.
+
+As in Jupyter there are two modes. Escape (Shift+Escape under Vim) leaves the
+editor for command mode on the selected cell, where single keys insert (A, B),
+delete (D D, with Z to undo), copy, cut and paste (C, X, V, Shift+V), convert
+(M, Y), move (Alt+↑, Alt+↓), collapse the output or the code (O, Shift+O),
+toggle line numbers (L), interrupt (I I) and restart (0 0). **Keys** lists them.
+Each cell's **More** menu adds run above, run this and below, duplicate and
+clear output. **Outline** and **Variables** open an inspector beside the cells.
+
+Every side panel can be dragged to a new width (or nudged with the arrow keys,
+reset with a double-click) and hidden: the Labs list, a lab's milestone rail
+and brief column, and the inspector. Widths, hidden panels and each
+workbench's collapsed cells are remembered.
+
 ## Doctrine
 
 None of this is learning state. No rating, receipt, schedule or stamp reads a
