@@ -3,6 +3,7 @@
   "id": "example-pack",
   "title": "Example pack",
   "version": "1.0.0",
-  "description": "A small pack that shows the format: one lab on the base layer, with smoke checks, hidden core and slip tests, and a brief-only milestone.",
-  "labs": ["labs/fit-a-line"]
+  "description": "A small pack that shows the format: one lab on the base layer (smoke checks, hidden core and slip tests, a brief-only milestone) and a two-topic course.",
+  "labs": ["labs/fit-a-line"],
+  "course": "course.json"
 }

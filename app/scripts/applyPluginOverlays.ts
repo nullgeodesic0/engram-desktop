@@ -132,6 +132,15 @@ const OVERLAYS: Overlay[] = [
         contentFile: 'engram/learn-skill.checked-production-protocol.md',
         beforeLine: '## 4 · Verify via the assessor (separation of powers)',
       },
+      {
+        // The course-seeded topic protocol — the FIFTH pedagogy overlay, for a
+        // topic the learner starts from a course in a content pack. It changes
+        // where a new topic's map comes from (§1), so it sits right before
+        // the pretest that follows the map.
+        id: 'course-seeded-topic',
+        contentFile: 'engram/learn-skill.course-seeded-topic.md',
+        beforeLine: '## 2 · Pretest the frontier (new topics only)',
+      },
     ],
   },
   {

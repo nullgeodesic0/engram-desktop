@@ -5,7 +5,8 @@ matter. A content pack brings the subject: a folder of labs, each a sequence
 of milestones with visible smoke checks, hidden tests and an explain-back
 question, and, when the labs need more than NumPy and SciPy, a pinned Python
 layer of its own. The learner adds the folder in **Settings → Content packs**,
-and its labs appear in **Labs**. A pack can live anywhere: a private git
+and its labs appear in **Labs**. A pack can also carry a course: an ordered
+map of topics in stages, with checkpoints and milestones, shown in **Course**. A pack can live anywhere: a private git
 checkout, a synced folder, a download. The app reads it where it sits and
 never changes it.
 
@@ -18,6 +19,10 @@ the format below, small enough to read in a few minutes.
 my-pack/
   pack.json
   runtime/my-layer.lock          optional: a pinned layer for this pack's labs
+  course.json                    optional: a course (see Courses)
+  course/
+    topic-one.graph.json         a prepared concept map
+    topic-two.outline.md         an outline for the curriculum architect
   labs/
     lab-one/
       lab.json
@@ -54,7 +59,8 @@ as written, links go only to the web or mail, and images are not loaded.
     "imports": ["numpy", "mylib"],
     "packages": ["mylib", "numpy"]
   },
-  "labs": ["labs/lab-one"]
+  "labs": ["labs/lab-one"],
+  "course": "course.json"
 }
 ```
 
@@ -63,6 +69,7 @@ as written, links go only to the web or mail, and images are not loaded.
   a layer name, and no pack can name its layer `base`.
 - `runtime` is optional. Without it the pack's labs run on the base layer
   (NumPy, SciPy, Matplotlib, pytest).
+- `course` is optional: the path of the pack's course file.
 
 ### The runtime layer
 
@@ -361,6 +368,106 @@ attempt is the next variant in turn, in a fresh notebook. Practice records
 are app-side, like submissions: they schedule practice, not engine reviews,
 and nothing reads them as a rating.
 
+## Courses
+
+A course turns a pack's topics into a curriculum: stages, each with tracks of
+topics, soft prerequisites between topics, a checkpoint to leave the stage,
+and a checklist of milestones. The **Course** screen shows it as a map. Each
+topic plate shows the topic's grade and how much of it is consolidated, read
+from the engine's own node states; the app never stores progress of its own
+for a topic.
+
+```json
+{
+  "id": "linear-models",
+  "title": "Linear models",
+  "summary": "Shown under the title.",
+  "threshold": 0.6,
+  "stages": [
+    {
+      "id": "foundations",
+      "title": "Foundations",
+      "goal": "What the stage is for.",
+      "tracks": [{ "id": "fitting", "title": "Fitting", "topics": ["least-squares", "residuals"] }],
+      "checkpoint": {
+        "title": "Fit and judge a line",
+        "parts": [
+          { "id": "fit-passes", "label": "…", "evidence": { "kind": "lab", "lab": "fit-a-line", "milestone": "m1" } },
+          { "id": "ls-held", "label": "…", "evidence": { "kind": "topic", "topic": "least-squares", "consolidated": 0.8 } }
+        ]
+      },
+      "milestones": [
+        { "id": "real-data", "label": "…", "evidence": { "kind": "attested" } },
+        { "id": "share", "label": "…", "evidence": { "kind": "link" } }
+      ]
+    }
+  ],
+  "topics": {
+    "least-squares": {
+      "title": "Least squares",
+      "summary": "One line for the topic panel.",
+      "requires": [],
+      "graph": "course/least-squares.graph.json",
+      "labs": ["fit-a-line"],
+      "readings": [{ "title": "…", "url": "https://…", "note": "…" }]
+    },
+    "residuals": {
+      "title": "Reading residuals",
+      "requires": ["least-squares"],
+      "outline": "course/residuals.outline.md"
+    }
+  }
+}
+```
+
+- A topic id is the engine's topic slug: lowercase letters, digits and
+  dashes, up to 64. It is the id the topic has in the learning home, so a
+  course can find a topic the learner already has.
+- Every topic sits in exactly one track of one stage. `requires` names other
+  topics of the course; the loader refuses a loop.
+- `threshold` (default 0.6) is the fraction of a prerequisite's live nodes
+  that must be consolidated (in review) for its dependents to open quietly.
+
+**Gates are soft.** A topic whose prerequisites are under the threshold shows
+**Prerequisites first**, with the path of unmet topics in the order to take
+them. **Start anyway** starts it regardless; the app records that it did, and
+when, in the learner's course records.
+
+**Starting a topic.** When the learner starts a topic the engine does not
+have yet, the app copies its prepared map or outline into its own folder,
+checks a map's topic id, title and size (at most 20 nodes), and opens a Learn
+sitting that asks for the learn skill's course-seeded topic protocol (the
+`learn-skill.course-seeded-topic.md` overlay):
+
+- With a **prepared map** (`graph`), the tutor runs the intake questions that
+  decide the pretest, then registers the file with the engine's own
+  `add-topic`, unedited. Every engine check applies. If the engine refuses
+  it, the tutor says why and offers to build the map with the curriculum
+  architect instead. A map is the engine's `add-topic` JSON: `topic`,
+  `title`, `goal`, `order`, `nodes`. Write probes that ask for every rubric
+  criterion, and give procedure nodes a `practice.problem_frame`, or the
+  engine warns. Node ids are what a lab's `nodes` and a checkpoint can name.
+- With an **outline** (`outline`), or neither, the tutor runs the new-topic
+  intake and the architect as for any topic, with the outline as context,
+  under the course's topic id.
+
+Either way the topic starts with no state: being in a course earns no
+receipt, no pretest credit and no mastery. A topic the engine already has
+just opens.
+
+**Checkpoints and milestones.** A part's `evidence` says what ticks it:
+
+| kind | ticks when |
+| --- | --- |
+| `lab` | the lab milestone (one with hidden tests) has passed a Submit |
+| `topic` | the topic has at least `consolidated` (default 0.8) of its live nodes in review |
+| `attested` | the learner ticks it with a one-line note |
+| `link` | the learner ticks it with a note and an http or https link |
+
+A checkpoint passes when every part has its record. Part ids are unique
+across the course. A stage's checkpoint does not lock the next stage; it
+says what leaving the stage should look like.
+
 ## Where the learner's work goes
 
 ```
@@ -375,6 +482,15 @@ and nothing reads them as a rating.
   records/<pack>/<lab>/practice.json          practice schedule and attempts, per milestone
   records/<pack>/<lab>/practice/<m>-<n>/      each practice check's frozen cells and results
   packs/<pack>/<lab>--practice/               the lab's practice notebook
+```
+
+Course records live beside them:
+
+```
+<userData>/courses/<pack>/
+  records.json                                attested parts, and topics started before their prerequisites
+  topics/<topic>.graph.json                   the checked copy of a prepared map the tutor registered
+  topics/<topic>.outline.md                   the copy of an outline the architect was given
 ```
 
 Removing a pack in Settings forgets its folder and stops its labs' kernels.
