@@ -8,7 +8,7 @@ import type {
   WorkbenchCell,
   WorkbenchDoc,
 } from '../../../../shared/runtime'
-import { appendOutput } from '../../../../shared/cellOutputs'
+import { dropResult, isRunning, kernelStatus, liveResults, runCellCode, subscribe } from '../../shared/kernelSession'
 import { Button } from '../ui/Button'
 import { ProseMarkdown } from '../ProseMarkdown'
 import { CodeCellEditor } from './CodeCellEditor'
@@ -62,8 +62,8 @@ export function Workbench({ workbenchId, onOpenSettings, onTitleChange }: Workbe
 
   const loaded = useRef(false)
   const skipSave = useRef(false)
-  const pendingDone = useRef(new Map<string, (ok: boolean) => void>())
   const stopAll = useRef(false)
+  const focusedKey = useRef(0)
   // What an unmount or a switch to another workbench must not lose.
   const unsaved = useRef<{ id: string; title: string; cells: WorkbenchCell[]; results: Record<string, CellResult> } | null>(null)
 
@@ -76,50 +76,57 @@ export function Workbench({ workbenchId, onOpenSettings, onTitleChange }: Workbe
     window.engram
       .workbenchOpen(workbenchId)
       .then((d) => {
+        // Anything that finished while this workbench was off screen wins over the file.
+        const fresh = liveResults(workbenchId)
+        const ids = new Set(d.cells.map((c) => c.id))
+        const merged = { ...d.results }
+        let changed = false
+        for (const [id, r] of Object.entries(fresh)) {
+          if (!ids.has(id)) continue
+          merged[id] = r
+          changed = true
+        }
         setDoc(d)
         setCells(d.cells)
-        setResults(d.results)
+        setResults(merged)
         setTitle(d.title)
         setEditingNotes(new Set(d.cells.filter((c) => c.kind === 'note' && !c.source.trim()).map((c) => c.id)))
         setSaved('saved')
-        skipSave.current = true
+        skipSave.current = !changed
         loaded.current = true
       })
       .catch((e: Error) => setError(e.message))
-    void window.engram.kernelState(workbenchId).then(setKernel)
+    const known = kernelStatus(workbenchId)
+    if (known) {
+      setKernel(known.state)
+      setKernelDetail(known.detail)
+    } else void window.engram.kernelState(workbenchId).then(setKernel)
     void window.engram.runtimeStatus().then(setRuntime)
+    const offRuntime = window.engram.onRuntimeChanged(setRuntime)
     return () => {
+      offRuntime()
       const pending = unsaved.current
       unsaved.current = null
       if (pending) void window.engram.workbenchSave(pending.id, pending)
     }
   }, [workbenchId])
 
-  // Kernel events for this workbench.
+  // Kernel events for this workbench, through the app-wide store.
   useEffect(() => {
-    return window.engram.onKernelEvent((ev) => {
-      if (ev.workbenchId !== workbenchId) return
-      if (ev.kind === 'state') {
-        setKernel(ev.state)
-        setKernelDetail(ev.detail ?? null)
-        return
+    return subscribe(workbenchId, () => {
+      const k = kernelStatus(workbenchId)
+      if (k) {
+        setKernel(k.state)
+        setKernelDetail(k.detail)
       }
-      if (ev.kind === 'output') {
-        setResults((r) => {
-          const cur = r[ev.cellId] ?? { ...EMPTY_RESULT, state: 'running' }
-          return { ...r, [ev.cellId]: { ...cur, state: 'running', outputs: appendOutput(cur.outputs, ev.output) } }
-        })
-        return
-      }
+      const fresh = liveResults(workbenchId)
       setResults((r) => {
-        const cur = r[ev.cellId] ?? EMPTY_RESULT
-        return {
-          ...r,
-          [ev.cellId]: { ...cur, state: ev.ok ? 'ok' : 'error', count: ev.count || cur.count, ms: ev.ms },
+        let next = r
+        for (const [id, res] of Object.entries(fresh)) {
+          if (r[id] !== res) next = next === r ? { ...r, [id]: res } : Object.assign(next, { [id]: res })
         }
+        return next
       })
-      pendingDone.current.get(ev.cellId)?.(ev.ok)
-      pendingDone.current.delete(ev.cellId)
     })
   }, [workbenchId])
 
@@ -163,21 +170,10 @@ export function Workbench({ workbenchId, onOpenSettings, onTitleChange }: Workbe
         })
         return Promise.resolve(true)
       }
-      setResults((r) => ({ ...r, [cell.id]: { state: 'running', outputs: [], count: r[cell.id]?.count ?? null, ms: null } }))
+      // One run per cell at a time: a second would interleave its outputs with the first.
+      if (isRunning(workbenchId, cell.id)) return Promise.resolve(false)
       setVars(null)
-      const done = new Promise<boolean>((resolve) => {
-        pendingDone.current.get(cell.id)?.(false)
-        pendingDone.current.set(cell.id, resolve)
-      })
-      window.engram.kernelRun(workbenchId, cell.id, cell.source).catch((e: Error) => {
-        setResults((r) => ({
-          ...r,
-          [cell.id]: { state: 'error', outputs: [{ type: 'error', ename: 'Error', evalue: e.message, traceback: [], line: null }], count: null, ms: null },
-        }))
-        pendingDone.current.get(cell.id)?.(false)
-        pendingDone.current.delete(cell.id)
-      })
-      return done
+      return runCellCode(workbenchId, cell.id, cell.source)
     },
     [workbenchId],
   )
@@ -241,6 +237,7 @@ export function Workbench({ workbenchId, onOpenSettings, onTitleChange }: Workbe
   }
 
   function deleteCell(id: string) {
+    dropResult(workbenchId, id)
     setCells((cs) => (cs.length <= 1 ? [{ id: newCellId(), kind: 'code', source: '' }] : cs.filter((c) => c.id !== id)))
     setResults((r) => {
       const { [id]: _gone, ...rest } = r
@@ -289,6 +286,16 @@ export function Workbench({ workbenchId, onOpenSettings, onTitleChange }: Workbe
           />
           Kernel: {kernelLabel(kernel)}
         </span>
+        {runtimeReady && runtime && (
+          <button
+            onClick={onOpenSettings}
+            title={runtime.updateAvailable ? 'A newer package set is ready to install in Settings' : `Python ${runtime.pythonVersion ?? ''}`}
+            className="focus-ring label-data text-[11px] px-2 py-0.5 border border-[var(--color-hairline)] text-[var(--color-text-dim)] hover:text-[var(--color-text-primary)]"
+          >
+            {runtime.layers[0]?.id ?? 'qec-core'} · stim {runtime.packages.stim ?? '?'}
+            {runtime.updateAvailable && <span className="text-[var(--color-ink-warm)]"> · update</span>}
+          </button>
+        )}
         <Button size="sm" variant="primary" onClick={runAll} disabled={!runtimeReady || runningAll || codeCount === 0}>
           Run all
         </Button>
@@ -309,15 +316,18 @@ export function Workbench({ workbenchId, onOpenSettings, onTitleChange }: Workbe
       {!runtimeReady && runtime && (
         <div className="mx-6 mt-4 panel px-4 py-3 flex items-center gap-3">
           <div className="flex-1 text-sm text-[var(--color-text-dim)]">
-            Code cells need the code runtime, a private Python with Stim, PyMatching and the rest. Install it once in
-            Settings.
+            {runtime.state === 'installing'
+              ? 'The code runtime is installing. Cells can run as soon as it finishes.'
+              : runtime.supported
+                ? 'Code cells need the code runtime, a private Python with Stim, PyMatching and the rest. Install it once in Settings.'
+                : 'The code runtime cannot install on this machine yet: Stim and PyMatching publish no builds for it.'}
           </div>
           <Button size="sm" variant="primary" onClick={onOpenSettings}>
             Open Settings
           </Button>
         </div>
       )}
-      {kernel === 'dead' && kernelDetail && runtimeReady && kernelDetail !== 'Shut down.' && (
+      {kernel === 'dead' && kernelDetail && runtimeReady && kernelDetail !== 'Shut down.' && kernelDetail !== 'Restarted.' && (
         <div className="mx-6 mt-3 text-xs text-[var(--color-text-dim)]">{kernelDetail}</div>
       )}
       {error && <div className="mx-6 mt-3 text-xs text-[var(--color-text-dim)]">{error}</div>}
@@ -348,12 +358,27 @@ export function Workbench({ workbenchId, onOpenSettings, onTitleChange }: Workbe
           const errorOut = r.outputs.find((o) => o.type === 'error')
           const gutter =
             cell.kind === 'note' ? '' : r.state === 'running' ? '[*]' : r.count != null ? `[${r.count}]` : '[ ]'
+          // Night Atlas states: cool ink for not yet run, warm for ran clean, danger for raised.
+          const gutterInk =
+            r.state === 'error'
+              ? 'var(--color-ink-danger)'
+              : r.state === 'ok'
+                ? 'var(--color-ink-warm)'
+                : r.state === 'running'
+                  ? 'var(--color-text-primary)'
+                  : 'var(--color-ink-cool)'
           const editing = cell.kind === 'note' && editingNotes.has(cell.id)
           return (
             <div key={cell.id} className="group flex gap-3 min-w-0">
-              <div className="w-12 shrink-0 pt-2.5 text-right label-data text-xs text-[var(--color-text-faint)]">
+              <div
+                className={`w-12 shrink-0 pt-2.5 pr-1 text-right label-data text-xs ${cell.kind === 'given' ? 'cell-gutter-given' : ''}`}
+                style={{ color: cell.kind === 'note' ? undefined : gutterInk }}
+                title={cell.kind === 'given' ? 'Given: scaffolding you run but do not edit' : undefined}
+              >
                 {gutter}
-                {cell.kind === 'given' && <div className="text-[10px] uppercase tracking-[0.1em] mt-1">given</div>}
+                {cell.kind === 'given' && (
+                  <div className="text-[10px] uppercase tracking-[0.1em] mt-1 text-[var(--color-text-faint)]">given</div>
+                )}
               </div>
               <div
                 className={`flex-1 min-w-0 ${
@@ -378,12 +403,21 @@ export function Workbench({ workbenchId, onOpenSettings, onTitleChange }: Workbe
                     />
                   ) : (
                     <div
+                      ref={(el) => {
+                        if (el && focus?.id === cell.id && focusedKey.current !== focus.key) {
+                          focusedKey.current = focus.key
+                          el.focus()
+                        }
+                      }}
                       role="button"
                       tabIndex={0}
                       title="Double-click to edit"
                       onDoubleClick={() => setEditingNotes((s) => new Set(s).add(cell.id))}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter') setEditingNotes((s) => new Set(s).add(cell.id))
+                        if (e.key === 'Enter' && e.shiftKey) {
+                          e.preventDefault()
+                          runAndAdvance(index, true)
+                        } else if (e.key === 'Enter') setEditingNotes((s) => new Set(s).add(cell.id))
                       }}
                       className="focus-ring px-3 py-1"
                     >

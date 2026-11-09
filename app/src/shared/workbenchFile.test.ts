@@ -43,4 +43,15 @@ describe('workbench percent-format file', () => {
   it('handles CRLF line endings', () => {
     expect(parseCells('# %% id=a\r\nx = 1\r\n', ids())).toEqual([{ id: 'a', kind: 'code', source: 'x = 1' }])
   })
+
+  it('escapes body lines that look like cell markers, so they round-trip', () => {
+    const tricky: WorkbenchCell[] = [
+      { id: 'a', kind: 'code', source: 'x = 1\n# %%\n# %% [markdown] id=zz\n# # %% already escaped-looking\ny = 2' },
+      { id: 'b', kind: 'note', source: '%%\n%% id=c9\n# %% heading-ish\nplain' },
+      { id: 'c', kind: 'code', source: 's = \"\"\"\n# %% [markdown]\n\"\"\"' },
+    ]
+    const text = serializeCells(tricky)
+    expect(text.split('\n').filter((l) => /^# %%/.test(l))).toHaveLength(3)
+    expect(parseCells(text, ids())).toEqual(tricky)
+  })
 })

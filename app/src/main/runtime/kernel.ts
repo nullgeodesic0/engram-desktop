@@ -1,7 +1,8 @@
 import type { ChildProcessWithoutNullStreams } from 'node:child_process'
 import { isWindows, spawnCli } from '../platform'
 import type { CellOutput, KernelEvent, KernelState, KernelVar } from '../../shared/runtime'
-import { getCellLimitS, kernelFilePath, readyInterpreter } from './envManager'
+import { getCellLimitS, kernelFilePath, mplConfigDir, readyInterpreter } from './envManager'
+import { scrubbedEnv } from './runtimePaths'
 import { LineSplitter, parseKernelLine } from './kernelProtocol'
 
 /**
@@ -23,6 +24,7 @@ import { LineSplitter, parseKernelLine } from './kernelProtocol'
 
 const READY_TIMEOUT_MS = 60_000
 const INTERRUPT_GRACE_MS = 5_000
+const MAX_LIVE_KERNELS = 3
 
 interface Job {
   reqId: number
@@ -44,6 +46,10 @@ class Kernel {
   private stderrTail = ''
   private pendingVars = new Map<number, (v: KernelVar[]) => void>()
   state: KernelState = 'dead'
+  private generation = 0
+  private abortStart: (() => void) | null = null
+  /** When this kernel last ran something; the manager stops the least recent. */
+  lastUsed = Date.now()
 
   constructor(
     readonly workbenchId: string,
@@ -62,18 +68,26 @@ class Kernel {
 
   private start(): Promise<void> {
     if (this.ready) return this.ready
+    // Each start has a generation. kill() bumps it, so a start that was
+    // superseded (a restart while starting up) can never touch the kernel
+    // that replaced it, and its child is killed rather than orphaned.
+    const gen = ++this.generation
+    const stale = () => gen !== this.generation
     this.ready = (async () => {
       this.setState('starting')
       const interpreter = await readyInterpreter()
+      if (stale()) throw new Error('superseded')
       if (!interpreter) {
-        this.ready = null
         this.setState('dead', 'The code runtime is not installed. Install it in Settings → Code runtime.')
         throw new Error('runtime not installed')
       }
-      const env: NodeJS.ProcessEnv = { ...process.env, MPLBACKEND: 'Agg', PYTHONIOENCODING: 'utf-8', PYTHONNOUSERSITE: '1' }
-      delete env.PYTHONPATH
-      delete env.PYTHONHOME
-      delete env.PYTHONSTARTUP
+      const env: NodeJS.ProcessEnv = {
+        ...scrubbedEnv(process.env),
+        MPLBACKEND: 'Agg',
+        MPLCONFIGDIR: mplConfigDir(),
+        PYTHONIOENCODING: 'utf-8',
+        PYTHONNOUSERSITE: '1',
+      }
       // -E: ignore PYTHON* variables; -s: no user site-packages; -u: unbuffered.
       const child = spawnCli(interpreter, ['-E', '-s', '-u', '-X', 'utf8', kernelFilePath()], {
         cwd: this.cwd,
@@ -86,6 +100,10 @@ class Kernel {
       const lines = new LineSplitter()
       await new Promise<void>((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error('The kernel did not start within a minute.')), READY_TIMEOUT_MS)
+        this.abortStart = () => {
+          clearTimeout(timer)
+          reject(new Error('superseded'))
+        }
         child.stdout.setEncoding('utf-8')
         child.stdout.on('data', (chunk: string) => {
           for (const line of lines.push(chunk)) {
@@ -110,10 +128,21 @@ class Kernel {
           if (this.child === child) this.onExit(code, signal)
           reject(new Error(`The kernel exited during startup. ${this.stderrTail.trim().split('\n').slice(-2).join(' ')}`))
         })
+      }).finally(() => {
+        this.abortStart = null
       })
+      if (stale()) throw new Error('superseded')
       this.setState('idle')
     })().catch((err) => {
+      if (stale()) throw err
       this.ready = null
+      // A start that fails after spawning must not leave its child behind.
+      if (this.child) {
+        const c = this.child
+        this.child = null
+        c.removeAllListeners('exit')
+        c.kill('SIGKILL')
+      }
       if (this.state !== 'dead') this.setState('dead', err instanceof Error ? err.message : String(err))
       throw err
     })
@@ -168,10 +197,13 @@ class Kernel {
   }
 
   run(cellId: string, code: string): void {
+    this.lastUsed = Date.now()
     this.queue.push({ reqId: this.nextReqId++, cellId, code })
     this.start()
       .then(() => this.pump())
-      .catch(() => this.failCurrentAndQueue('The kernel could not start.'))
+      .catch((err: Error) => {
+        if (err.message !== 'superseded') this.failCurrentAndQueue(`The kernel could not start. ${err.message}`)
+      })
   }
 
   private pump(): void {
@@ -230,13 +262,18 @@ class Kernel {
   /** Kills the process, fails anything in flight, and starts a fresh one. */
   restart(): void {
     this.kill('Restarted.')
-    void this.start().catch(() => {})
+    void this.start()
+      .then(() => this.pump())
+      .catch(() => {})
   }
 
   kill(reason: string): void {
     const child = this.child
     this.child = null
     this.ready = null
+    this.generation++
+    this.abortStart?.()
+    this.abortStart = null
     this.clearTimers()
     const jobs = [...(this.current ? [this.current] : []), ...this.queue]
     this.current = null
@@ -283,6 +320,16 @@ export class KernelManager {
 
   run(workbenchId: string, cellId: string, code: string): void {
     this.get(workbenchId).run(cellId, code)
+    this.evictIdle(workbenchId)
+  }
+
+  /** Keeps at most MAX_LIVE_KERNELS processes: the least recently used idle
+   * ones are shut down. Each holds NumPy, Stim and Matplotlib in memory. */
+  private evictIdle(keep: string): void {
+    const live = [...this.kernels.values()].filter((k) => k.state !== 'dead')
+    if (live.length <= MAX_LIVE_KERNELS) return
+    const idle = live.filter((k) => k.workbenchId !== keep && k.state === 'idle').sort((a, b) => a.lastUsed - b.lastUsed)
+    for (const k of idle.slice(0, live.length - MAX_LIVE_KERNELS)) k.kill('Shut down to save memory. Running a cell starts it again.')
   }
 
   interrupt(workbenchId: string): void {

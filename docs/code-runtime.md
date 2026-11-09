@@ -35,11 +35,22 @@ app builds everything under its own data folder:
   `uv pip sync --require-hashes`. The core layer is Stim, sinter, PyMatching,
   ldpc, NumPy, SciPy, Matplotlib, QuTiP and pytest. Regenerate the lock with
   the command at the top of `qec-core.in`.
-- The env directory is named by the first 12 hex of the lockfile's hash. A
-  new lock builds a new env beside the old one; the old one is removed only
-  after the new one passes its check. An env is complete only once
+- The env directory is named by the first 12 hex of the lockfile's hash. When
+  an app update ships a new lock, the old env keeps serving cells and Settings
+  offers **Update**, which builds the new env beside it. The old env is removed
+  at the next install after that, never while a kernel may still be using it.
+  An env is complete only once
   `verify_env.py` has imported the core packages and the `.engram-complete`
   marker is written, so an interrupted install is rebuilt rather than trusted.
+
+Platforms: macOS (Apple silicon and Intel), Linux x64 and Windows x64. Stim
+and PyMatching publish no Linux ARM or Windows ARM wheels. On Windows ARM the
+app installs the x64 uv and an x64 Python, which run under Windows' emulation
+and use the win_amd64 wheels; this path is untested on hardware. Linux ARM is
+refused up front with a plain message instead of failing a C++ source build.
+
+An install can be cancelled from Settings; the download of uv times out after
+five minutes.
 
 On disk the whole runtime is about 650 MB, most of it the wheel cache (the
 venv hard-links into it). **Remove runtime** in Settings deletes the root and
@@ -64,7 +75,13 @@ matter:
   after each cell, and errors carry the line in the cell they point at.
 
 `main/runtime/kernel.ts` owns the processes. It starts the env's interpreter
-with `-E -s -u -X utf8` and the workbench folder as the working directory,
+with `-E -s -u -X utf8`, the workbench folder as the working directory, and a
+scrubbed environment: no `ANTHROPIC_*`, `OPENAI_*`, `CLAUDE_*` or other AI
+provider variables and no `*_API_KEY`, so a learner's cell cannot call a model
+behind a mastery gate (see `scrubbedEnv` in `runtimePaths.ts`). Matplotlib's
+cache goes to `runtime/mplconfig`, not the learner's home folder. At most
+three kernels stay alive; the least recently used idle one is shut down, and
+running a cell there starts it again. The kernel
 serializes cells, and enforces the cell time limit from Settings (60 s, 2 min,
 10 min or none; 2 min by default). Interrupt sends SIGINT on macOS and Linux,
 which surfaces as `KeyboardInterrupt` in the cell and leaves variables intact;
@@ -74,13 +91,16 @@ restarts the kernel and says so in the cell's output.
 
 ## Workbenches
 
-A workbench is a folder in `<userData>/workbench/<id>/`:
+A workbench is a folder in `<userData>/labs/workbenches/<id>/` (course labs
+will sit beside them as `labs/<course>/<lab>/`):
 
 - `lab.py`, the cells in the percent format that Jupytext, VS Code and Spyder
   read (`# %%` markers, Markdown cells as `# `-prefixed comments). `python
   lab.py` runs the learner's work outside the app, and it diffs cleanly. The
   `id=` tag on each marker is Engram's own and keeps outputs attached to cells
-  across saves. See `shared/workbenchFile.ts`.
+  across saves. A body line that would read as a marker is escaped with one
+  more `# ` in front (`# %%` is written `# # %%`), so every cell round-trips.
+  See `shared/workbenchFile.ts`.
 - `meta.json`, the title and last-saved time.
 - `results.json`, each cell's last outputs, so a reopened workbench shows what
   it last showed. Past 8 MB, figures keep only their PNG.
@@ -89,6 +109,16 @@ Cells are `code` (the learner's), `note` (Markdown with math) or `given`
 (read-only scaffolding that lab packs will supply). Shift+Enter runs a cell
 and moves on; Ctrl/Cmd+Enter runs it in place. Edits save themselves 0.7 s
 after they stop. A scratch workbench always exists.
+
+Kernel events are recorded by one app-wide listener in the renderer
+(`renderer/src/shared/kernelSession.ts`), so a cell that finishes while its
+workbench is off screen keeps its outputs, and **Run all** keeps going.
+
+Not yet built: a `figures/` folder of saved SVG and PNG files, and Export as
+`.ipynb`. Both arrive with lab packs and the portfolio. A cell's `input()`
+gets end-of-file at once, since the kernel's stdin is the protocol channel.
+Output a background thread prints after its cell has finished is shown under
+whichever cell runs next.
 
 ## Doctrine
 

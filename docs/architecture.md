@@ -276,6 +276,15 @@ conveniences only:
   (`app/src/main/session/sessionIndex.ts`), an append-only history of session ids
   per key (a topic id for `learn`, or the literal kind for `review`/`coach`), used
   to resume the last session for a key and to browse past session history.
+- `runtime/` — the code runtime (`app/src/main/runtime/envManager.ts`): a pinned
+  uv binary, uv-managed CPython, uv's wheel cache, one venv per lockfile under
+  `runtime/envs/<layer>-<lockhash>/`, and `state.json`. About 650 MB once
+  installed; Settings → Code runtime removes it. See
+  [code-runtime.md](code-runtime.md).
+- `labs/workbenches/<id>/` — the learner's workbenches
+  (`app/src/main/runtime/workbenchStore.ts`): `lab.py` in the percent cell format,
+  `meta.json`, and `results.json` with each cell's last outputs. Course labs will
+  live beside them as `labs/<course>/<lab>/`.
 - `achievements.json`, `notifier-state.json`, and Electron's own window-state file
   — further UI-only conveniences (unlocked-achievement tracking, review-notifier
   state, remembered window bounds/position).

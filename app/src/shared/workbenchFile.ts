@@ -21,19 +21,32 @@ import type { CellKind, WorkbenchCell } from './runtime'
 
 const HEADER = /^# %%(?:\s+\[(given|markdown)\])?(?:\s+id=([A-Za-z0-9_-]+))?\s*$/
 
+/**
+ * A body line that would read back as a cell marker is escaped with one more
+ * `# ` in front: `# %%` is written `# # %%`, `# # %%` is written `# # # %%`,
+ * and so on. Reading strips exactly one. The map is one-to-one on the lines
+ * it touches, so every cell round-trips, including a note whose line is `%%`
+ * and code that prints a percent-format file of its own.
+ */
+const MARKER_LIKE = /^(# )+%%/
+const ESCAPED = /^# (# )+%%/
+
+function escapeLine(line: string): string {
+  return MARKER_LIKE.test(line) ? `# ${line}` : line
+}
+
+function unescapeLine(line: string): string {
+  return ESCAPED.test(line) ? line.slice(2) : line
+}
+
 const KIND_TAG: Record<CellKind, string> = { given: ' [given]', code: '', note: ' [markdown]' }
 
 export function serializeCells(cells: WorkbenchCell[]): string {
   const parts = cells.map((c) => {
     const header = `# %%${KIND_TAG[c.kind]} id=${c.id}`
-    const body =
-      c.kind === 'note'
-        ? c.source
-            .split('\n')
-            .map((l) => (l.length ? `# ${l}` : '#'))
-            .join('\n')
-        : c.source
-    return `${header}\n${body.replace(/\s+$/, '')}\n`
+    const lines = c.source.replace(/\s+$/, '').split('\n')
+    const body = (c.kind === 'note' ? lines.map((l) => (l.length ? `# ${l}` : '#')) : lines).map(escapeLine).join('\n')
+    return `${header}\n${body}\n`
   })
   return parts.join('\n')
 }
@@ -46,7 +59,7 @@ export function parseCells(text: string, newId: () => string): WorkbenchCell[] {
 
   const flush = () => {
     if (!current) return
-    let body = current.lines
+    let body = current.lines.map(unescapeLine)
     while (body.length && body[body.length - 1].trim() === '') body = body.slice(0, -1)
     const source =
       current.kind === 'note' ? body.map((l) => (l.startsWith('# ') ? l.slice(2) : l === '#' ? '' : l)).join('\n') : body.join('\n')

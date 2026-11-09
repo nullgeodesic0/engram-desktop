@@ -2393,3 +2393,11 @@
   background: #fff;
   padding: 4px;
 }
+/* Given cells: a faint hatched gutter, so scaffolding reads as not yours. */
+.cell-gutter-given {
+  background-image: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--color-text-faint) 22%, transparent) 0 1px,
+    transparent 1px 6px
+  );
+}

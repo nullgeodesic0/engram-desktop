@@ -1,6 +1,6 @@
 import { BrowserWindow, ipcMain, shell } from 'electron'
 import type { CellResult, KernelEvent, RuntimeProgress, WorkbenchCell } from '../../shared/runtime'
-import { getCellLimitS, getRuntimeStatus, installRuntime, removeRuntime, setCellLimitS } from '../runtime/envManager'
+import { cancelRuntimeInstall, getCellLimitS, getRuntimeStatus, installRuntime, removeRuntime, setCellLimitS } from '../runtime/envManager'
 import { KernelManager } from '../runtime/kernel'
 import { createWorkbench, listWorkbenches, openWorkbench, saveWorkbench, workbenchDir } from '../runtime/workbenchStore'
 
@@ -24,13 +24,22 @@ export function shutdownAllKernels(): void {
 
 export function registerRuntimeHandlers(): void {
   ipcMain.handle('runtime:status', () => getRuntimeStatus())
+  // Every change of install state is announced, so an open Workbench
+  // enables or disables itself without being remounted.
+  const announce = async () => broadcast('runtime:changed', await getRuntimeStatus())
   ipcMain.handle('runtime:install', async () => {
-    await installRuntime((p: RuntimeProgress) => broadcast('runtime:progress', p))
+    try {
+      await installRuntime((p: RuntimeProgress) => broadcast('runtime:progress', p))
+    } finally {
+      await announce()
+    }
     return getRuntimeStatus()
   })
+  ipcMain.handle('runtime:cancel', () => cancelRuntimeInstall())
   ipcMain.handle('runtime:remove', async () => {
     kernels.shutdownAll()
     await removeRuntime()
+    await announce()
     return getRuntimeStatus()
   })
   ipcMain.handle('runtime:getCellLimit', () => getCellLimitS())

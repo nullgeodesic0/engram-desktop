@@ -33,6 +33,11 @@ export interface RuntimeStatus {
   packages: Record<string, string>
   /** Plain-language reason, when state is 'failed'. */
   error: string | null
+  /** The shipped lockfile changed since the env was built. The old env keeps
+   * serving cells until the learner installs the update. */
+  updateAvailable: boolean
+  /** False on a machine the QEC stack has no wheels for. */
+  supported: boolean
 }
 
 export interface RuntimeProgress {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { envDirFor, envInterpreter, lockHash, progressLine, runtimeLayout, uvAssetFor, UV_VERSION } from './runtimePaths'
+import { envDirFor, runtimeTarget, scrubbedEnv, envInterpreter, lockHash, progressLine, runtimeLayout, uvAssetFor, UV_VERSION } from './runtimePaths'
 
 describe('runtime paths', () => {
   it('pins a checksummed uv asset for every desktop target the app ships', () => {
@@ -7,7 +7,6 @@ describe('runtime paths', () => {
       ['darwin', 'arm64'],
       ['darwin', 'x64'],
       ['linux', 'x64'],
-      ['linux', 'arm64'],
       ['win32', 'x64'],
       ['win32', 'arm64'],
     ] as const) {
@@ -17,6 +16,11 @@ describe('runtime paths', () => {
       expect(a!.url).toContain(`/download/${UV_VERSION}/`)
     }
     expect(uvAssetFor('linux', 'ia32')).toBeNull()
+    // No Stim or PyMatching wheels for Linux on ARM: refused up front.
+    expect(uvAssetFor('linux', 'arm64')).toBeNull()
+    // Windows on ARM runs the x64 build under emulation, for the win_amd64 wheels.
+    expect(uvAssetFor('win32', 'arm64')!.file).toBe(uvAssetFor('win32', 'x64')!.file)
+    expect(runtimeTarget('win32', 'arm64')!.python).toMatch(/windows-x86_64/)
   })
 
   it('names an env by the first 12 hex of its lockfile hash, line endings ignored', () => {
@@ -40,5 +44,22 @@ describe('runtime paths', () => {
     expect(progressLine('\u001b[32mInstalled\u001b[0m 31 packages in 2.1s')).toBe('Installed 31 packages in 2.1s')
     expect(progressLine(' + stim==1.15.0')).toBeNull()
     expect(progressLine('')).toBeNull()
+  })
+
+  it('scrubs AI credentials and foreign Python settings from a kernel environment', () => {
+    const env = scrubbedEnv({
+      PATH: '/bin',
+      HOME: '/h',
+      ANTHROPIC_API_KEY: 'k',
+      anthropic_base_url: 'u',
+      OPENAI_API_KEY: 'k',
+      CLAUDE_CODE_OAUTH_TOKEN: 't',
+      CLAUDECODE: '1',
+      SOME_SERVICE_API_KEY: 'k',
+      PYTHONPATH: '/x',
+      VIRTUAL_ENV: '/v',
+      LANG: 'en_US.UTF-8',
+    })
+    expect(Object.keys(env).sort()).toEqual(['HOME', 'LANG', 'PATH'])
   })
 })

@@ -9,9 +9,12 @@ import { parseCells, serializeCells } from '../../shared/workbenchFile'
 /**
  * Workbenches on disk, in app userData:
  *
- *     workbench/<id>/lab.py         the cells, in the percent format (see shared/workbenchFile.ts)
- *     workbench/<id>/meta.json      title and updatedAt
- *     workbench/<id>/results.json   each cell's last outputs, so a reopened workbench shows them
+ *     labs/workbenches/<id>/lab.py        the cells, in the percent format (see shared/workbenchFile.ts)
+ *     labs/workbenches/<id>/meta.json     title and updatedAt
+ *     labs/workbenches/<id>/results.json  each cell's last outputs, so a reopened workbench shows them
+ *
+ * Course labs will sit beside them as labs/<course>/<lab>/, so `workbenches`
+ * is never a course id.
  *
  * The folder is also the kernel's working directory, so a file the learner's
  * code saves lands beside lab.py. This is the learner's own work, not
@@ -23,7 +26,7 @@ export const SCRATCH_ID = 'scratch'
 const MAX_RESULTS_BYTES = 8 * 1024 * 1024
 
 export function workbenchRoot(): string {
-  return join(app.getPath('userData'), 'workbench')
+  return join(app.getPath('userData'), 'labs', 'workbenches')
 }
 
 export function workbenchDir(id: string): string {
@@ -36,7 +39,8 @@ export function newCellId(): string {
 }
 
 async function writeAtomic(path: string, text: string): Promise<void> {
-  const tmp = `${path}.tmp`
+  // A unique temp name: two saves in flight must not rename each other's file.
+  const tmp = `${path}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`
   await writeFile(tmp, text, 'utf-8')
   await rename(tmp, path)
 }
@@ -161,15 +165,34 @@ function capResults(results: Record<string, CellResult>): Record<string, CellRes
   return out
 }
 
+const CELL_ID = /^[A-Za-z0-9_-]{1,64}$/
+const KINDS = new Set(['given', 'code', 'note'])
+
+/** The renderer is trusted, but what reaches lab.py is checked anyway: a
+ * malformed id or kind would corrupt the file's cell markers. */
+function validCells(cells: unknown): WorkbenchCell[] {
+  if (!Array.isArray(cells)) throw new Error('cells must be a list')
+  return cells.map((c) => {
+    const cell = c as Partial<WorkbenchCell>
+    if (typeof cell.id !== 'string' || !CELL_ID.test(cell.id)) throw new Error('invalid cell id')
+    if (typeof cell.kind !== 'string' || !KINDS.has(cell.kind)) throw new Error('invalid cell kind')
+    if (typeof cell.source !== 'string') throw new Error('invalid cell source')
+    return { id: cell.id, kind: cell.kind, source: cell.source }
+  })
+}
+
 export async function saveWorkbench(
   id: string,
   doc: { title: string; cells: WorkbenchCell[]; results: Record<string, CellResult> },
 ): Promise<string> {
   const dir = workbenchDir(id)
+  const cells = validCells(doc.cells)
+  const results = doc.results && typeof doc.results === 'object' ? doc.results : {}
   await mkdir(dir, { recursive: true })
   const updatedAt = new Date().toISOString()
-  await writeAtomic(join(dir, 'lab.py'), serializeCells(doc.cells))
-  await writeAtomic(join(dir, 'results.json'), JSON.stringify(capResults(doc.results)))
-  await writeAtomic(join(dir, 'meta.json'), JSON.stringify({ title: doc.title.trim().slice(0, 120) || id, updatedAt }, null, 2))
+  await writeAtomic(join(dir, 'lab.py'), serializeCells(cells))
+  await writeAtomic(join(dir, 'results.json'), JSON.stringify(capResults(results)))
+  const title = typeof doc.title === 'string' ? doc.title.trim().slice(0, 120) : ''
+  await writeAtomic(join(dir, 'meta.json'), JSON.stringify({ title: title || id, updatedAt }, null, 2))
   return updatedAt
 }

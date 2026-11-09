@@ -272,6 +272,8 @@ const PINNED_SUBPROCESS_FILES: Record<string, string> = {
     'the pinned uv (python install / venv / pip sync --require-hashes against a shipped lockfile), tar to unpack uv, and the env interpreter for an import check. Never engram.py, never a system Python',
   'main/runtime/kernel.ts':
     'the managed env interpreter running resources/runtime/engram_kernel.py, one per open workbench. Never engram.py',
+  'main/runtime/kernel.test.ts':
+    'the test runner’s own Node binary on a stand-in kernel script in os tmpdir, through a mocked spawnCli. Never engram.py',
 }
 const SPAWN_CALL =
   /\b(execFile|execFileSync|execSync|exec|spawn|spawnSync|fork|execCli|spawnCli|spawnCliReadOnly|runEngram)\s*(?:Async)?\s*\(/g
@@ -341,7 +343,8 @@ const PINNED_WRITERS: Record<string, string> = {
   // 2026-11-09 — the code runtime and the learner's workbenches. Neither is
   // learning state: no rating, receipt or schedule reads either.
   'main/runtime/envManager.ts': 'app userData — runtime/ (the uv binary, uv-managed Python, the wheel cache, envs/<layer>-<lockhash>/, state.json)',
-  'main/runtime/workbenchStore.ts': 'app userData — workbench/<id>/lab.py, meta.json and results.json',
+  'main/runtime/kernel.test.ts': 'os tmpdir — a stand-in kernel script, removed in afterAll',
+  'main/runtime/workbenchStore.ts': 'app userData — labs/workbenches/<id>/lab.py, meta.json and results.json',
   'main/session/sessionScan.ts': 'app userData — transcript scan cache',
   'main/session/achievementsStore.ts': 'app userData',
   'main/session/sessionIndex.ts': 'app userData',

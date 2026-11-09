@@ -263,6 +263,12 @@ const engramApi = {
   runtimeStatus: (): Promise<RuntimeStatus> => ipcRenderer.invoke('runtime:status'),
   runtimeInstall: (): Promise<RuntimeStatus> => ipcRenderer.invoke('runtime:install'),
   runtimeRemove: (): Promise<RuntimeStatus> => ipcRenderer.invoke('runtime:remove'),
+  runtimeCancel: (): Promise<void> => ipcRenderer.invoke('runtime:cancel'),
+  onRuntimeChanged: (cb: (s: RuntimeStatus) => void): (() => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, s: RuntimeStatus) => cb(s)
+    ipcRenderer.on('runtime:changed', handler)
+    return () => ipcRenderer.removeListener('runtime:changed', handler)
+  },
   runtimeGetCellLimit: (): Promise<number> => ipcRenderer.invoke('runtime:getCellLimit'),
   runtimeSetCellLimit: (seconds: number): Promise<number> => ipcRenderer.invoke('runtime:setCellLimit', seconds),
   onRuntimeProgress: (cb: (p: RuntimeProgress) => void): (() => void) => {

@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import ast
 import base64
+import codecs
 import builtins
 import io
 import json
@@ -80,12 +81,15 @@ def _forward(fd: int, std_fd: int, name: str) -> None:
     has been sent. Bytes are buffered just enough to never split a mark.
     """
     pending = b""
+    # Incremental, so a multi-byte character split across two reads survives.
+    decoder = codecs.getincrementaldecoder("utf-8")("replace")
     with os.fdopen(fd, "rb", buffering=0) as src:
         while True:
             chunk = src.read(MAX_STREAM_CHUNK)
             if not chunk:
-                if pending:
-                    send({"id": _current_id, "type": "stream", "name": name, "text": pending.decode("utf-8", "replace")})
+                text = decoder.decode(pending, final=True)
+                if text:
+                    send({"id": _current_id, "type": "stream", "name": name, "text": text})
                 return
             pending += chunk
             while True:
@@ -93,7 +97,9 @@ def _forward(fd: int, std_fd: int, name: str) -> None:
                 if i < 0:
                     break
                 if i:
-                    send({"id": _current_id, "type": "stream", "name": name, "text": pending[:i].decode("utf-8", "replace")})
+                    text = decoder.decode(pending[:i])
+                    if text:
+                        send({"id": _current_id, "type": "stream", "name": name, "text": text})
                 pending = pending[i + len(SYNC_MARK):]
                 _sync_events[std_fd].set()
             # Keep a tail that could be the start of a mark; send the rest.
@@ -104,7 +110,9 @@ def _forward(fd: int, std_fd: int, name: str) -> None:
                     break
             out, pending = (pending[:-keep], pending[-keep:]) if keep else (pending, b"")
             if out:
-                send({"id": _current_id, "type": "stream", "name": name, "text": out.decode("utf-8", "replace")})
+                text = decoder.decode(out)
+                if text:
+                    send({"id": _current_id, "type": "stream", "name": name, "text": text})
 
 
 def _sync(timeout: float = 2.0) -> None:
@@ -262,6 +270,9 @@ def main() -> None:
         sys.path.insert(0, os.getcwd())
     ns = _new_main_module().__dict__
     stdin = io.TextIOWrapper(sys.stdin.buffer, encoding="utf-8")
+    # The protocol owns the real stdin. A cell that calls input() gets EOF at
+    # once instead of hanging on a channel nothing will ever write to.
+    sys.stdin = io.StringIO("")
     send({
         "type": "ready",
         "protocol": PROTOCOL_VERSION,

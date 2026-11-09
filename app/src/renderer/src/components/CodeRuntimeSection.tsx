@@ -24,10 +24,12 @@ export function CodeRuntimeSection() {
   useEffect(() => {
     void window.engram.runtimeStatus().then(setStatus)
     void window.engram.runtimeGetCellLimit().then(setLimit)
-    return window.engram.onRuntimeProgress((p) => {
-      setProgress(p)
-      if (p.phase === 'done' || p.phase === 'failed') void window.engram.runtimeStatus().then(setStatus)
-    })
+    const offProgress = window.engram.onRuntimeProgress(setProgress)
+    const offChanged = window.engram.onRuntimeChanged(setStatus)
+    return () => {
+      offProgress()
+      offChanged()
+    }
   }, [])
 
   async function install() {
@@ -85,7 +87,18 @@ export function CodeRuntimeSection() {
             {status.state === 'installing' && 'Installing…'}
             {status.state === 'failed' && 'The last install did not finish'}
           </div>
-          {status.state === 'missing' && (
+          {!status.supported && (
+            <div className="text-xs text-[var(--color-text-dim)] mt-1">
+              Stim and PyMatching publish no builds for this kind of machine yet, so the runtime cannot install here.
+            </div>
+          )}
+          {status.updateAvailable && (
+            <div className="text-xs text-[var(--color-text-dim)] mt-1">
+              This version of the app pins newer packages. Cells keep running on the current set until you update; the
+              update builds beside it.
+            </div>
+          )}
+          {status.state === 'missing' && status.supported && (
             <div className="text-xs text-[var(--color-text-dim)] mt-1">
               About 650 MB on disk once installed. The download comes from the Python Package Index and the uv project on
               GitHub, and every file is checked against the lockfile’s hashes.
@@ -103,10 +116,17 @@ export function CodeRuntimeSection() {
             <div className="label-data text-xs text-[var(--color-text-faint)] mt-1 break-all">{status.envDir}</div>
           )}
         </div>
-        {status.state !== 'ready' && (
-          <Button variant="primary" onClick={install} disabled={installing} className="shrink-0">
-            {installing ? 'Installing…' : status.state === 'failed' ? 'Try again' : 'Install'}
+        {installing ? (
+          <Button onClick={() => void window.engram.runtimeCancel()} className="shrink-0">
+            Cancel
           </Button>
+        ) : (
+          (status.state !== 'ready' || status.updateAvailable) &&
+          status.supported && (
+            <Button variant="primary" onClick={install} className="shrink-0">
+              {status.updateAvailable ? 'Update' : status.state === 'failed' ? 'Try again' : 'Install'}
+            </Button>
+          )
         )}
       </div>
 
