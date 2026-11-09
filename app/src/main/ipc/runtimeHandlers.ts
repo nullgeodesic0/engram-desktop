@@ -17,19 +17,25 @@ import { createWorkbench, listWorkbenches, openWorkbench, saveWorkbench, workben
 import {
   addCompletion,
   cancelAllChecks,
+  checkPractice,
   cancelPackChecks,
   cancelSmoke,
   labIsSealed,
   labView,
   listPacks,
   openLab,
+  parsePracticeWorkbenchId,
   pickConfidence,
+  practiceQueue,
+  practiceWorkbenchId,
+  predictOutput,
   revealStep,
   runSmoke,
   submissionDir,
   submissionProduction,
   submitExplainBack,
   submitMilestone,
+  startPractice,
   submitReflection,
 } from '../labs/labStore'
 import { addPackFolder, layerForWorkbench, packLayerDefs, removePackFolder } from '../labs/packStore'
@@ -89,8 +95,9 @@ export function registerRuntimeHandlers(): void {
   ipcMain.handle('workbench:list', () => listWorkbenches())
   // A pack lab opens through labStore, which seeds it and refreshes its given cells.
   ipcMain.handle('workbench:open', (_e, id: string) => {
+    // A practice notebook is set up by practice:start, then opens like any other.
     const lab = parseLabWorkbenchId(String(id))
-    return lab ? openLab(lab.packId, lab.labId) : openWorkbench(id)
+    return lab && !parsePracticeWorkbenchId(String(id)) ? openLab(lab.packId, lab.labId) : openWorkbench(id)
   })
   ipcMain.handle('workbench:create', (_e, title: string) => createWorkbench(String(title ?? '')))
   ipcMain.handle('workbench:save', (_e, id: string, doc: DocIn) => saveWorkbench(id, doc))
@@ -183,6 +190,25 @@ export function registerRuntimeHandlers(): void {
   )
   ipcMain.handle('lab:reflect', (_e, packId: string, labId: string, submissionId: string, text: string) =>
     submitReflection(String(packId), String(labId), String(submissionId), String(text ?? '')),
+  )
+  ipcMain.handle(
+    'lab:predict',
+    (_e, packId: string, labId: string, milestoneId: string, itemId: string, guess: string) =>
+      predictOutput(String(packId), String(labId), String(milestoneId), String(itemId), String(guess ?? '')),
+  )
+  ipcMain.handle('practice:queue', () => practiceQueue())
+  ipcMain.handle('practice:start', async (_e, packId: string, labId: string, milestoneId: string) => {
+    const r = await startPractice(String(packId), String(labId), String(milestoneId))
+    // A notebook set up afresh must not keep the last item's variables.
+    if (r.fresh) kernels.shutdown(r.workbenchId)
+    return r
+  })
+  ipcMain.handle(
+    'practice:check',
+    async (_e, packId: string, labId: string, milestoneId: string, confidence: Confidence, doc: DocIn | null) => {
+      if (doc) await saveWorkbench(practiceWorkbenchId(String(packId), String(labId)), doc)
+      return checkPractice(String(packId), String(labId), String(milestoneId), confidence)
+    },
   )
   ipcMain.handle('lab:revealSubmission', async (_e, packId: string, labId: string, submissionId: string) =>
     shell.openPath(await submissionDir(String(packId), String(labId), String(submissionId))),

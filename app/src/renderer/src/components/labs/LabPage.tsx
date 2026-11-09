@@ -1,7 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { CheckOutcome, CheckRun, LabView, MilestoneView, SmokeResult, Submission } from '../../../../shared/labs'
+import type {
+  CheckOutcome,
+  CheckRun,
+  LabView,
+  MilestoneView,
+  PredictView,
+  SmokeResult,
+  Submission,
+} from '../../../../shared/labs'
 import { CONFIDENCE_LEVELS, CONFIDENCE_QUESTION, tally, type Confidence } from '../../../../shared/labs'
-import { EXPLAIN_BACK_MAX } from '../../../../shared/contentPack'
+import { EXPLAIN_BACK_MAX, MAX_PREDICT_CHARS } from '../../../../shared/contentPack'
+import { labHandoffMessage } from '../../../../shared/labHandoff'
 import { Button } from '../ui/Button'
 import { ProseMarkdown } from '../ProseMarkdown'
 import { Workbench, type WorkbenchSnapshot } from '../workbench/Workbench'
@@ -16,7 +25,7 @@ import { usePane } from '../../shared/paneLayout'
  * picked, and only then do the results and the signed report arrive.
  */
 
-function cleanError(e: unknown): string {
+export function cleanError(e: unknown): string {
   return e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e)
 }
 
@@ -33,7 +42,7 @@ function count(run: CheckRun, tier: 'smoke' | 'core' | 'slip'): string {
   return `${t.passed}/${t.total}`
 }
 
-function TestList({ tests }: { tests: CheckOutcome[] }) {
+export function TestList({ tests }: { tests: CheckOutcome[] }) {
   return (
     <ul className="flex flex-col gap-1">
       {tests.map((t, i) => (
@@ -69,7 +78,7 @@ function TestList({ tests }: { tests: CheckOutcome[] }) {
   )
 }
 
-const VERDICT_LINE: Record<string, string> = {
+export const VERDICT_LINE: Record<string, string> = {
   passed: 'Every core and slip test passed.',
   slip: 'The core tests passed; a slip test caught an execution detail.',
   core: 'A core test failed: the method needs another look.',
@@ -80,10 +89,16 @@ function Receipt({
   sub,
   onCopy,
   onReflect,
+  onDiscuss,
+  discussNote,
 }: {
   sub: Submission
   onCopy: () => void
   onReflect: (text: string) => Promise<void>
+  /** Opens the lab's tutor topic with the hand-in in the composer; absent when there is no topic to open. */
+  onDiscuss?: () => void
+  /** Why there is no Discuss button, when there is a reason worth saying. */
+  discussNote?: string | null
 }) {
   const [reflection, setReflection] = useState('')
   const run = sub.run
@@ -151,7 +166,17 @@ function Receipt({
           )}
         </div>
       )}
-      <div className="flex gap-2 pt-1">
+      <div className="flex flex-wrap gap-2 pt-1">
+        {onDiscuss && (
+          <Button
+            size="sm"
+            variant="primary"
+            onClick={onDiscuss}
+            title="Opens the tutor on this lab's topic with your hand-in ready to send. Nothing is sent until you press Send."
+          >
+            Discuss with the tutor
+          </Button>
+        )}
         <Button
           size="sm"
           onClick={onCopy}
@@ -160,6 +185,103 @@ function Receipt({
           Copy for the tutor
         </Button>
       </div>
+      {discussNote && <div className="text-xs text-[var(--color-text-faint)]">{discussNote}</div>}
+    </div>
+  )
+}
+
+/**
+ * Read before you write: snippets whose output the learner predicts, then
+ * sees. The answer comes from main only once the guess is locked in, so
+ * there is nothing to peek at. A wrong prediction is the useful kind: it
+ * marks the line where the learner's model of the code and Python differ.
+ */
+function PredictItems({
+  items,
+  onPredict,
+}: {
+  items: PredictView[]
+  onPredict: (itemId: string, guess: string) => Promise<void>
+}) {
+  const [guesses, setGuesses] = useState<Record<string, string>>({})
+  const [busy, setBusy] = useState<string | null>(null)
+  if (!items.length) return null
+  const done = items.filter((x) => x.guess !== null)
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-faint)]">
+        Predict first · {done.length}/{items.length}
+      </div>
+      <div className="text-xs text-[var(--color-text-faint)]">
+        Read each snippet and write what it prints before you run anything. The answer shows once your guess is in.
+      </div>
+      {items.map((it) => (
+        <div key={it.id} className="panel px-3 py-2 flex flex-col gap-2">
+          <div className="text-sm text-[var(--color-text-primary)]">{it.prompt}</div>
+          <pre className="cell-output-pre text-[12px] text-[var(--color-text-primary)] whitespace-pre-wrap border border-[var(--color-hairline)] px-2 py-1.5">
+            {it.code}
+          </pre>
+          {it.guess === null ? (
+            <>
+              <textarea
+                value={guesses[it.id] ?? ''}
+                onChange={(e) => setGuesses((g) => ({ ...g, [it.id]: e.target.value.slice(0, MAX_PREDICT_CHARS) }))}
+                rows={3}
+                aria-label={`Your prediction for ${it.id}`}
+                placeholder="What it prints, line by line"
+                className="focus-ring w-full bg-transparent border border-[var(--color-hairline)] px-2 py-1.5 text-xs font-mono text-[var(--color-text-primary)] resize-y"
+              />
+              <Button
+                size="sm"
+                className="self-end"
+                disabled={busy !== null || !(guesses[it.id] ?? '').trim()}
+                onClick={async () => {
+                  setBusy(it.id)
+                  try {
+                    await onPredict(it.id, guesses[it.id] ?? '')
+                  } finally {
+                    setBusy(null)
+                  }
+                }}
+              >
+                Lock in and show the output
+              </Button>
+            </>
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              <div
+                className="label-data text-[11px]"
+                style={{ color: it.correct ? 'var(--color-ink-cool)' : 'var(--color-ink-danger)' }}
+              >
+                {it.correct ? '✓ You predicted it' : '✗ Not quite: compare line by line'}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <div className="label-data text-[10px] uppercase tracking-[0.1em] text-[var(--color-text-faint)]">
+                    You said
+                  </div>
+                  <pre className="cell-output-pre text-[11px] text-[var(--color-text-dim)] whitespace-pre-wrap">
+                    {it.guess}
+                  </pre>
+                </div>
+                <div>
+                  <div className="label-data text-[10px] uppercase tracking-[0.1em] text-[var(--color-text-faint)]">
+                    It prints
+                  </div>
+                  <pre className="cell-output-pre text-[11px] text-[var(--color-text-primary)] whitespace-pre-wrap">
+                    {it.output}
+                  </pre>
+                </div>
+              </div>
+              {it.why && (
+                <div className="text-xs text-[var(--color-text-dim)]">
+                  <ProseMarkdown text={it.why} untrusted />
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   )
 }
@@ -268,9 +390,11 @@ interface Props {
   labId: string
   onOpenSettings: () => void
   onChanged: () => void
+  /** Opens the tutor on a topic with text in the composer, never sent. */
+  onDiscuss?: (topicId: string, text: string) => void
 }
 
-export function LabPage({ packId, labId, onOpenSettings, onChanged }: Props) {
+export function LabPage({ packId, labId, onOpenSettings, onChanged, onDiscuss }: Props) {
   const [view, setView] = useState<LabView | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -286,6 +410,8 @@ export function LabPage({ packId, labId, onOpenSettings, onChanged }: Props) {
   const side = usePane('lab.side', 320, 240, 720)
   const [reloading, setReloading] = useState(false)
   const snapshot = useRef<WorkbenchSnapshot | null>(null)
+  // Whether the lab's tutor topic exists on this machine: Discuss needs one to open.
+  const [topicKnown, setTopicKnown] = useState<boolean | null>(null)
   const draftKey = (subId: string) => `engram.lab.explainBack.${packId}/${labId}/${subId}`
 
   const refresh = useCallback(async () => {
@@ -463,6 +589,37 @@ export function LabPage({ packId, labId, onOpenSettings, onChanged }: Props) {
     return () => window.removeEventListener('keydown', onKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sealed?.id, sealed?.explainBack, unsealing])
+
+  useEffect(() => {
+    const topic = view?.topic
+    if (!topic) return
+    let live = true
+    window.engram
+      .topics()
+      .then((list) => live && setTopicKnown(list.some((t) => t.topic === topic)))
+      .catch(() => live && setTopicKnown(false))
+    return () => {
+      live = false
+    }
+  }, [view?.topic])
+
+  async function discuss(sub: Submission) {
+    if (!view?.topic || !onDiscuss) return
+    try {
+      onDiscuss(view.topic, labHandoffMessage(await window.engram.labProduction(packId, labId, sub.id)))
+    } catch (e) {
+      setError(cleanError(e))
+    }
+  }
+
+  async function predict(milestoneId: string, itemId: string, guess: string) {
+    try {
+      setView(await window.engram.labPredict(packId, labId, milestoneId, itemId, guess))
+      setError(null)
+    } catch (e) {
+      setError(cleanError(e))
+    }
+  }
 
   async function copyProduction(sub: Submission) {
     const text = await window.engram.labProduction(packId, labId, sub.id)
@@ -751,6 +908,14 @@ export function LabPage({ packId, labId, onOpenSettings, onChanged }: Props) {
               </div>
             )}
 
+            {milestone && milestone.predict.length > 0 && (
+              <PredictItems
+                key={milestone.id}
+                items={milestone.predict}
+                onPredict={(itemId, guess) => predict(milestone.id, itemId, guess)}
+              />
+            )}
+
             {milestone && (
               <Ladder milestone={milestone} sealed={!!sealed} onStep={openStep} onCompletion={addCompletion} />
             )}
@@ -776,6 +941,14 @@ export function LabPage({ packId, labId, onOpenSettings, onChanged }: Props) {
                 sub={latest}
                 onCopy={() => void copyProduction(latest)}
                 onReflect={(t) => reflect(latest, t)}
+                onDiscuss={view.topic && topicKnown && onDiscuss ? () => void discuss(latest) : undefined}
+                discussNote={
+                  !view.topic
+                    ? null
+                    : topicKnown === false
+                      ? `This lab belongs to the tutor topic "${view.topic}", which is not on this machine yet. Copy the hand-in and paste it into the topic once it is.`
+                      : null
+                }
               />
             )}
             {copied && (

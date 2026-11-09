@@ -576,7 +576,13 @@ const injectedStrings = [...permissionTs.matchAll(/`([^`]{40,})`|'([^']{40,})'/g
 // that election, never call it"); it adds no pedagogy of its own, and points
 // to the tool's description and the learn skill's overlay section, which own
 // the rules. The prompt still ends by deferring to the installed skills.
-const PINNED_PROMPT_HASH = '7f242663449c7d65'
+// 2026-11-09 — one sentence added for check_report and read_workbench, gated
+// on the learner handing a lab in ("only when they do"). It REMOVES latitude
+// as much as it adds: grade from verified fields and from nothing unverified,
+// never re-grade code the hidden tests graded, never write the next attempt.
+// How a verified report is graded lives in the D5-pinned checked-production
+// overlay, not here. The prompt still ends by deferring to the installed skills.
+const PINNED_PROMPT_HASH = 'affc96f546b13846'
 if (sha(injectedStrings) !== PINNED_PROMPT_HASH) {
   fail(
     'D3.systemPrompt',
@@ -691,6 +697,27 @@ const PINNED_BRIDGE_TOOLS = [
   // The pedagogy exception it implements (instruction before the attempt) is
   // licensed and priced in the D5 overlay pins below, not here.
   'publish_lecture_notes',
+  // 2026-11-09 — check_report and read_workbench, the first two tools that
+  // READ app state back to the model, so each got the close look:
+  //   · neither reads engine state. Both read lab records in app userData
+  //     (labStore.ts, a pinned D2 writer); nothing under ~/.claude/learning/;
+  //   · check_report carries no claim, rubric or expected answer: it returns
+  //     the learner's OWN explain-back and pick as recorded, the hidden tests'
+  //     counts, and the help the attempt had. It is how a production made
+  //     outside the sitting reaches the stash without being retyped, and the
+  //     signature (an install key the model never sees) is what makes "the
+  //     tests passed" a fact rather than a claim in the learner's message;
+  //   · read_workbench returns the learner's own code, refused while any
+  //     submission of the lab is sealed — the window between Submit and the
+  //     learner's own explain-back and pick, which is the window the loop
+  //     withholds results in;
+  //   · neither returns hidden test source or failure text: core failure text
+  //     is not in either reply at all;
+  //   · no subagent reaches either; the assessor still gets only the stash.
+  // How a verified report is graded (caps, stamp, election) is priced in the
+  // D5 overlay pin below, not here.
+  'check_report',
+  'read_workbench',
 ]
 const workerMjs = read('main/bridge/mcpBridgeWorker.mjs')
 const registered = [...workerMjs.matchAll(/registerTool\(\s*'([a-z_]+)'/g)].map((m) => m[1])
@@ -1199,6 +1226,19 @@ const PINNED_OVERLAY_HASHES: Record<string, string> = {
   // with the reader closed, ratings unchanged.
   'learn-skill.lecture-notes-protocol.md': '8bcda2668a17d27a',
   'dialogue-grammar.lecture-notes-exception.md': 'c2b7c548b718ba1a',
+  // 2026-11-09 — checked lab productions, a pedagogy overlay: a pack lab the
+  // learner hands in from the app reaches the stash as a VERIFY production
+  // made outside the dialogue, with the confidence the app collected, and
+  // its rating capped by the lab's hidden tests and the help the attempt
+  // had. Licensed by the learner's own hand-in message, each time; priced by
+  // the bargain in its header: a report check_report verifies, a node the
+  // report links to this sitting's topic, the recorded explain-back verbatim,
+  // the tests never re-graded, the caps (`hard` at best on a core failure,
+  // `good` at best after any help or a second try), a permanent
+  // `"source": "lab-check"` stamp, one grade per submission. The assessor
+  // stays blind: it gets the stash entry and never the verdict.
+  'learn-skill.checked-production-protocol.md': 'b8e19893cc094bba',
+  'dialogue-grammar.checked-production-exception.md': 'e1868a7f69e9787b',
 }
 const overlayFiles = readdirSync(OVERLAY_DIR).filter((f) => f.endsWith('.md'))
 for (const f of overlayFiles) {
@@ -1291,6 +1331,29 @@ const LOAD_BEARING: Record<string, string[]> = {
   ],
   'dialogue-grammar.lecture-notes-exception.md': [
     'A third learner-elected exception, this one to the commit-before-content rule',
+    'Everywhere else, and by default everywhere, the rule above stands exactly as written.',
+  ],
+  // The checked-production bargain: the hand-in election; verification and
+  // the topic/node match; the record as the production; the tests standing;
+  // the confidence not re-collected; both caps; the stamp; one grade per
+  // submission; the blind assessor.
+  'learn-skill.checked-production-protocol.md': [
+    'Run this protocol ONLY when a message from the learner hands in a checked lab milestone',
+    'Never ask for one, never offer to grade a lab',
+    'If it returns `verified: false`, say in one line that the report does not verify and grade nothing from it.',
+    'or its `topic` is not this sitting\'s topic, grade nothing',
+    'is the returned `explainBack`, verbatim. Do not edit it, complete it, or add to it from the dialogue.',
+    'grade each tag once',
+    'so do not run the picker again, and never estimate one',
+    'Never tell the assessor the verdict.',
+    'Never re-grade the code',
+    'verdict `core` or `broken` (a core test failed, or the run broke): `hard` at best',
+    '`good` at best, never `easy`',
+    'A cap never raises a rating',
+    '`"source": "lab-check"`',
+  ],
+  'dialogue-grammar.checked-production-exception.md': [
+    'A fourth learner-elected exception, this one to how confidence is collected',
     'Everywhere else, and by default everywhere, the rule above stands exactly as written.',
   ],
   'review-skill.step-sized-protocol.md': [

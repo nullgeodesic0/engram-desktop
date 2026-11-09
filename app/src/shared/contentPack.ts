@@ -18,6 +18,11 @@ export const MAX_CHECK_LIMIT_S = 3600
 /** "I'm stuck" steps a milestone may hold, and the length of each. */
 export const MAX_STEPS = 12
 export const MAX_STEP_CHARS = 4000
+/** Predict-the-output items a milestone may hold, and the size of each snippet and output. */
+export const MAX_PREDICT = 6
+export const MAX_PREDICT_CHARS = 4000
+/** Variants a milestone may hold for spaced practice. */
+export const MAX_VARIANTS = 8
 
 export interface PackRuntimeLayer {
   /** Names the env directory; unique across the loaded packs, never "base". */
@@ -68,6 +73,39 @@ export interface MilestoneManifest {
   worked: string
   completion: string | null
   steps: string[]
+  /** The tutor topic's node this milestone exercises, for the tutor handoff. Optional. */
+  node: string | null
+  /** Read-before-write items: a snippet whose output the learner predicts before seeing it. */
+  predict: PredictManifest[]
+  /** Same skill, new instance: practised from memory after the milestone passes. */
+  variants: VariantManifest[]
+}
+
+/**
+ * Predict the output. `output` is what running `code` prints, exactly, pasted
+ * from a real run on the pack's own layer. Compared with samePrintout.
+ */
+export interface PredictManifest {
+  id: string
+  /** The question, e.g. "What does this print?". */
+  prompt: string
+  code: string
+  output: string
+  /** One or two sentences on why, shown with the answer. Optional. */
+  why: string
+}
+
+/**
+ * A variant of a milestone: the same method on a new instance, with its own
+ * brief and hidden tests. Practised in a separate notebook that starts from
+ * `starter` (or the lab's starter), so the learner writes it again from memory.
+ */
+export interface VariantManifest {
+  id: string
+  title: string
+  brief: string
+  hidden: string
+  starter: string | null
 }
 
 export interface LabManifest {
@@ -76,6 +114,8 @@ export interface LabManifest {
   /** A short line above the title, e.g. "Lab 1 · Stage 1". */
   kicker: string
   summary: string
+  /** The tutor topic this lab belongs to (its engram topic id), for the tutor handoff. Optional. */
+  topic: string | null
   /** A percent-format file of given and starter cells, inside the lab folder. */
   starter: string | null
   milestones: MilestoneManifest[]
@@ -134,6 +174,26 @@ function names(o: Record<string, unknown>, key: string, where: string): string[]
     throw new ManifestError(`${where}: "${key}" must be a list of package or module names`)
   }
   return v as string[]
+}
+
+/** An engram topic or node id: letters, digits and ._- only, so it can sit in a sentence and a command. */
+const ENGINE_ID = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$/
+
+function engineId(o: Record<string, unknown>, key: string, where: string): string | null {
+  const v = o[key]
+  if (v === undefined || v === null) return null
+  if (typeof v !== 'string' || !ENGINE_ID.test(v))
+    throw new ManifestError(
+      `${where}: "${key}" must be a topic or node id (letters, digits, dots, dashes, underscores)`,
+    )
+  return v
+}
+
+function list(o: Record<string, unknown>, key: string, where: string, max: number): unknown[] {
+  const v = o[key]
+  if (v === undefined) return []
+  if (!Array.isArray(v) || v.length > max) throw new ManifestError(`${where}: "${key}" must be a list of up to ${max}`)
+  return v
 }
 
 function obj(v: unknown, where: string): Record<string, unknown> {
@@ -198,6 +258,8 @@ export function parseLabManifest(raw: unknown, readBriefFile?: (p: string) => st
   return run(() => {
     const o = obj(raw, 'lab.json')
     const id = slug(o, 'id', 'lab.json')
+    // The lab's practice notebook is "<lab>--practice" (see labStore).
+    if (id.endsWith('--practice')) throw new ManifestError(`lab.json (${id}): "id" cannot end in "--practice"`)
     if (!Array.isArray(o.milestones) || o.milestones.length === 0) {
       throw new ManifestError(`lab.json (${id}): "milestones" must be a non-empty list`)
     }
@@ -243,6 +305,44 @@ export function parseLabManifest(raw: unknown, readBriefFile?: (p: string) => st
       })
       if (hidden && !explainBack.trim())
         throw new ManifestError(`${where}: a milestone with hidden tests needs an "explainBack" question`)
+      const ids = new Set<string>()
+      const unique = (v: string, w: string) => {
+        if (ids.has(v)) throw new ManifestError(`${w}: id "${v}" is used twice`)
+        ids.add(v)
+        return v
+      }
+      const predict = list(mo, 'predict', where, MAX_PREDICT).map((x, j): PredictManifest => {
+        const w = `${where} predict[${j}]`
+        const po = obj(x, w)
+        const code = str(po, 'code', w, { max: MAX_PREDICT_CHARS })
+        if (!code.trim()) throw new ManifestError(`${w}: "code" is empty`)
+        return {
+          id: unique(slug(po, 'id', w), w),
+          prompt: str(po, 'prompt', w, { optional: true, max: 300 }) || 'What does this print?',
+          code,
+          output: str(po, 'output', w, { max: MAX_PREDICT_CHARS }),
+          why: str(po, 'why', w, { optional: true, max: 1000 }),
+        }
+      })
+      const variants = list(mo, 'variants', where, MAX_VARIANTS).map((x, j): VariantManifest => {
+        const w = `${where} variants[${j}]`
+        if (!hidden) throw new ManifestError(`${w}: only a milestone with hidden tests can have variants`)
+        const vo = obj(x, w)
+        let vbrief = str(vo, 'brief', w, { optional: true, max: 20_000 })
+        const vbriefFile = path(vo, 'briefFile', w, true)
+        if (vbriefFile) {
+          if (!readBriefFile) throw new ManifestError(`${w}: "briefFile" cannot be read here`)
+          vbrief = readBriefFile(vbriefFile)
+        }
+        if (!vbrief.trim()) throw new ManifestError(`${w}: a variant needs a "brief" or "briefFile"`)
+        return {
+          id: unique(slug(vo, 'id', w), w),
+          title: str(vo, 'title', w, { optional: true, max: 120 }),
+          brief: vbrief,
+          hidden: path(vo, 'hidden', w)!,
+          starter: path(vo, 'starter', w, true),
+        }
+      })
       return {
         id: mid,
         title: str(mo, 'title', where, { max: 120 }),
@@ -254,6 +354,9 @@ export function parseLabManifest(raw: unknown, readBriefFile?: (p: string) => st
         worked,
         completion: path(mo, 'completion', where, true),
         steps: rawSteps as string[],
+        node: engineId(mo, 'node', where),
+        predict,
+        variants,
       }
     })
     return {
@@ -261,6 +364,7 @@ export function parseLabManifest(raw: unknown, readBriefFile?: (p: string) => st
       title: str(o, 'title', 'lab.json', { max: 120 }),
       kicker: str(o, 'kicker', 'lab.json', { optional: true, max: 120 }),
       summary: str(o, 'summary', 'lab.json', { optional: true, max: 600 }),
+      topic: engineId(o, 'topic', 'lab.json'),
       starter: path(o, 'starter', 'lab.json', true),
       milestones,
     }

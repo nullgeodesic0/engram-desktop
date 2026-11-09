@@ -109,3 +109,16 @@ mobile-walk and step-sized protocols followed under the same terms.
   constitutional-exception header before touching it.
 - **`engram/dialogue-grammar.lecture-notes-exception.md`** — the one-sentence
   companion for the lecture-notes protocol, a sibling of the other two.
+- **`engram/learn-skill.checked-production-protocol.md`** — how the tutor
+  grades a pack lab the learner hands in from the app: verify the report with
+  the `check_report` bridge tool, stash the recorded explain-back verbatim as
+  the VERIFY production for the node the lab links, with the confidence the
+  app collected before any result, and cap the blind assessor's rating by the
+  hidden tests and the help the try had (`hard` at best on a core failure,
+  `good` at best after any help or a second try), stamped
+  `"source": "lab-check"`. Inserted into `skills/learn/SKILL.md` ahead of the
+  assessor. The fourth pedagogy overlay, elected by the learner's own hand-in
+  message each time; read its constitutional-exception header first.
+- **`engram/dialogue-grammar.checked-production-exception.md`** — the
+  one-sentence companion for the checked-production protocol, on how the
+  confidence is collected.

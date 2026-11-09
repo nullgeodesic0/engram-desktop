@@ -55,7 +55,16 @@ import type {
   WorkbenchDoc,
   WorkbenchSummary,
 } from '../shared/runtime'
-import type { Confidence, LabView, PackSummary, SmokeResult, Submission } from '../shared/labs'
+import type {
+  Confidence,
+  LabView,
+  PackSummary,
+  PracticeAttempt,
+  PracticeItem,
+  PracticeQueue,
+  SmokeResult,
+  Submission,
+} from '../shared/labs'
 import type { BridgeAskRequest, BridgeAskResponse, BridgeBeatRequest, BridgeUiRequest } from '../shared/bridgeProtocol'
 
 type WorkbenchSaveDoc = { title: string; cells: WorkbenchCell[]; results: Record<string, CellResult> }
@@ -333,6 +342,23 @@ const engramApi = {
     ipcRenderer.invoke('lab:reflect', packId, labId, submissionId, text),
   labRevealSubmission: (packId: string, labId: string, submissionId: string): Promise<string> =>
     ipcRenderer.invoke('lab:revealSubmission', packId, labId, submissionId),
+  /** Locks in a predict-the-output guess; the answer comes back with it. */
+  labPredict: (packId: string, labId: string, milestoneId: string, itemId: string, guess: string): Promise<LabView> =>
+    ipcRenderer.invoke('lab:predict', packId, labId, milestoneId, itemId, guess),
+  practiceQueue: (): Promise<PracticeQueue> => ipcRenderer.invoke('practice:queue'),
+  practiceStart: (
+    packId: string,
+    labId: string,
+    milestoneId: string,
+  ): Promise<{ workbenchId: string; item: PracticeItem; fresh: boolean }> =>
+    ipcRenderer.invoke('practice:start', packId, labId, milestoneId),
+  practiceCheck: (
+    packId: string,
+    labId: string,
+    milestoneId: string,
+    confidence: Confidence,
+    doc: WorkbenchSaveDoc | null,
+  ): Promise<PracticeAttempt> => ipcRenderer.invoke('practice:check', packId, labId, milestoneId, confidence, doc),
 
   /**
    * Which OS this is, for the handful of renderer decisions that genuinely

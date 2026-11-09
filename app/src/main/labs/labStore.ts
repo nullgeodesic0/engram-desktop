@@ -2,7 +2,7 @@ import { app } from 'electron'
 import { createHash, randomBytes } from 'node:crypto'
 import { chmod, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { join, sep } from 'node:path'
-import { EXPLAIN_BACK_MAX } from '../../shared/contentPack'
+import { EXPLAIN_BACK_MAX, MAX_PREDICT_CHARS } from '../../shared/contentPack'
 import type {
   CheckOutcome,
   CheckRun,
@@ -12,16 +12,30 @@ import type {
   MilestoneStatus,
   MilestoneView,
   PackSummary,
+  PracticeAttempt,
+  PracticeItem,
+  PracticeQueue,
+  PredictView,
   SmokeResult,
   Submission,
 } from '../../shared/labs'
-import { REFLECT_QUESTION, RESUBMIT_QUESTION, isConfidence, verdictOf, wantsReflection } from '../../shared/labs'
+import {
+  PRACTICE_FIRST_DAYS,
+  REFLECT_QUESTION,
+  RESUBMIT_QUESTION,
+  interleave,
+  isConfidence,
+  nextPracticeInterval,
+  samePrintout,
+  verdictOf,
+  wantsReflection,
+} from '../../shared/labs'
 import { labWorkbenchId, parseLabWorkbenchId, type WorkbenchCell, type WorkbenchDoc } from '../../shared/runtime'
 import { parseCells } from '../../shared/workbenchFile'
 import { getRuntimeStatus } from '../runtime/envManager'
 import { newCellId, openWorkbench, saveWorkbench, seedWorkbench, workbenchDir } from '../runtime/workbenchStore'
 import { startCheck, type RunningCheck } from './checkRunner'
-import { reportFields, signReport } from './checkReport'
+import { reportFields, signReport, verifyReport } from './checkReport'
 import {
   findLab,
   loadedPacks,
@@ -204,6 +218,8 @@ interface MilestoneProgress {
   steps: string[]
   /** When the partial solution was added, or null. */
   completion: string | null
+  /** Predict-the-output guesses, locked in, by item id. */
+  predictions: Record<string, { guess: string; at: string }>
 }
 
 type Progress = Record<string, MilestoneProgress>
@@ -217,9 +233,14 @@ async function readProgress(dir: string): Promise<Progress> {
     const raw = JSON.parse(await readFile(progressPath(dir), 'utf-8')) as { milestones?: Progress }
     const out: Progress = {}
     for (const [k, v] of Object.entries(raw.milestones ?? {})) {
+      const predictions: MilestoneProgress['predictions'] = {}
+      for (const [id, g] of Object.entries(v?.predictions ?? {})) {
+        if (typeof g?.guess === 'string' && typeof g?.at === 'string') predictions[id] = { guess: g.guess, at: g.at }
+      }
       out[k] = {
         steps: Array.isArray(v?.steps) ? v.steps.filter((x) => typeof x === 'string') : [],
         completion: typeof v?.completion === 'string' ? v.completion : null,
+        predictions,
       }
     }
     return out
@@ -229,7 +250,7 @@ async function readProgress(dir: string): Promise<Progress> {
 }
 
 function progressOf(p: Progress, id: string): MilestoneProgress {
-  return p[id] ?? { steps: [], completion: null }
+  return p[id] ?? { steps: [], completion: null, predictions: {} }
 }
 
 async function updateProgress(dir: string, fn: (p: Progress) => void): Promise<Progress> {
@@ -273,6 +294,23 @@ function milestoneViews(lab: LoadedLab, subs: StoredSubmission[], progress: Prog
       stepsTotal: m.steps.length,
       steps: m.steps.slice(0, pr.steps.length),
       passedOn: firstPass ? { seq: firstPass.seq, unaided: firstPass.rung === 'full' && firstPass.help === 0 } : null,
+      node: m.node,
+      predict: m.predict.map((item): PredictView => {
+        const g = pr.predictions[item.id]
+        // The answer leaves main only with a guess already locked in.
+        return g
+          ? {
+              id: item.id,
+              prompt: item.prompt,
+              code: item.code,
+              guess: g.guess,
+              output: item.output,
+              why: item.why || null,
+              correct: samePrintout(g.guess, item.output),
+            }
+          : { id: item.id, prompt: item.prompt, code: item.code, guess: null, output: null, why: null, correct: null }
+      }),
+      variants: m.variants.length,
     }
   })
 }
@@ -335,6 +373,7 @@ export async function labView(packId: string, labId: string): Promise<LabView> {
     kicker: lab.manifest.kicker,
     summary: lab.manifest.summary,
     layer: packLayerId(pack),
+    topic: lab.manifest.topic,
     milestones: milestoneViews(lab, subs, await readProgress(recordsDir(packId, labId))),
     submissions: subs.map((x) => redact(x, subs)),
   }
@@ -516,6 +555,29 @@ export async function addCompletion(packId: string, labId: string, milestoneId: 
     p[milestoneId] = { ...pr, completion: pr.completion ?? new Date().toISOString() }
   })
   return openLab(packId, labId)
+}
+
+/**
+ * Locks in a predict-the-output guess. Once only: the answer comes back with
+ * it, so a second guess would be a copy.
+ */
+export async function predictOutput(
+  packId: string,
+  labId: string,
+  milestoneId: string,
+  itemId: string,
+  guess: string,
+): Promise<LabView> {
+  const { lab } = await findLab(packId, labId)
+  const m = lab.manifest.milestones.find((x) => x.id === milestoneId)
+  if (!m?.predict.some((x) => x.id === itemId)) throw new Error('No such item.')
+  if (typeof guess !== 'string' || guess.length > MAX_PREDICT_CHARS) throw new Error('That guess is too long.')
+  await updateProgress(recordsDir(packId, labId), (p) => {
+    const pr = progressOf(p, milestoneId)
+    if (pr.predictions[itemId]) throw new Error('That prediction is already locked in.')
+    p[milestoneId] = { ...pr, predictions: { ...pr.predictions, [itemId]: { guess, at: new Date().toISOString() } } }
+  })
+  return labView(packId, labId)
 }
 
 // ---------------------------------------------------------------------------
@@ -772,4 +834,410 @@ export function cancelPackChecks(packId: string): void {
   const root = join(app.getPath('userData'), 'labs', 'records', packId) + sep
   for (const [k, r] of smokeRuns) if ((k + sep).startsWith(root)) r?.cancel()
   for (const [k, r] of hiddenRuns) if (k.startsWith(root)) r.cancel()
+}
+
+// ---------------------------------------------------------------------------
+// Spaced, interleaved practice
+// ---------------------------------------------------------------------------
+
+/** A lab's practice notebook: its own folder beside the lab's, on the pack's layer. */
+export const PRACTICE_SUFFIX = '--practice'
+
+export function practiceWorkbenchId(packId: string, labId: string): string {
+  return labWorkbenchId(packId, `${labId}${PRACTICE_SUFFIX}`)
+}
+
+/** The pack and lab of a practice notebook id, or null. */
+export function parsePracticeWorkbenchId(id: string): { packId: string; labId: string } | null {
+  const lab = parseLabWorkbenchId(id)
+  if (!lab || !lab.labId.endsWith(PRACTICE_SUFFIX)) return null
+  return { packId: lab.packId, labId: lab.labId.slice(0, -PRACTICE_SUFFIX.length) }
+}
+
+interface PracticeEntry {
+  /** Days the last wait was: the first is a day after the pass, then whatever the last result scheduled. */
+  interval: number
+  due: string
+  /** Attempts so far; also picks the next variant, so each comes round in turn. */
+  k: number
+  attempts: PracticeAttempt[]
+}
+
+interface PracticeFile {
+  milestones: Record<string, PracticeEntry>
+  /** The item the practice notebook was last set up for. */
+  current: { milestoneId: string; variantId: string } | null
+}
+
+const DAY_MS = 86_400_000
+const MAX_ATTEMPTS_KEPT = 30
+
+function practicePath(dir: string): string {
+  return join(dir, 'practice.json')
+}
+
+async function readPractice(dir: string): Promise<PracticeFile> {
+  try {
+    const raw = JSON.parse(await readFile(practicePath(dir), 'utf-8')) as Partial<PracticeFile>
+    const milestones: Record<string, PracticeEntry> = {}
+    for (const [k, v] of Object.entries(raw.milestones ?? {})) {
+      if (!v || typeof v.due !== 'string') continue
+      milestones[k] = {
+        interval: typeof v.interval === 'number' ? v.interval : PRACTICE_FIRST_DAYS,
+        due: v.due,
+        k: typeof v.k === 'number' ? v.k : 0,
+        attempts: Array.isArray(v.attempts) ? v.attempts : [],
+      }
+    }
+    const c = raw.current
+    return {
+      milestones,
+      current:
+        c && typeof c.milestoneId === 'string' && typeof c.variantId === 'string'
+          ? { milestoneId: c.milestoneId, variantId: c.variantId }
+          : null,
+    }
+  } catch {
+    return { milestones: {}, current: null }
+  }
+}
+
+async function updatePractice<T>(dir: string, fn: (p: PracticeFile) => T | Promise<T>): Promise<T> {
+  // Its own lock key: practice never waits on, or blocks, a Submit.
+  return withLock(practicePath(dir), async () => {
+    const p = await readPractice(dir)
+    const out = await fn(p)
+    await mkdir(dir, { recursive: true })
+    await writeAtomic(practicePath(dir), JSON.stringify(p, null, 2))
+    return out
+  })
+}
+
+/** When the milestone first passed, or null. */
+function passedAt(subs: StoredSubmission[], milestoneId: string): string | null {
+  const first = subs
+    .filter((s) => s.milestoneId === milestoneId && !s.sealed && s.run && ['passed', 'slip'].includes(verdictOf(s.run)))
+    .sort((a, b) => a.seq - b.seq)[0]
+  return first?.submittedAt ?? null
+}
+
+/** The schedule entry, or the first one: a day after the milestone passed. */
+function entryOf(p: PracticeFile, milestoneId: string, passed: string): PracticeEntry {
+  return (
+    p.milestones[milestoneId] ?? {
+      interval: PRACTICE_FIRST_DAYS,
+      due: new Date(Date.parse(passed) + PRACTICE_FIRST_DAYS * DAY_MS).toISOString(),
+      k: 0,
+      attempts: [],
+    }
+  )
+}
+
+function itemOf(
+  packId: string,
+  lab: LoadedLab,
+  m: LoadedLab['manifest']['milestones'][number],
+  e: PracticeEntry,
+): PracticeItem {
+  const v = m.variants[e.k % m.variants.length]
+  return {
+    packId,
+    labId: lab.manifest.id,
+    labTitle: lab.manifest.title,
+    milestoneId: m.id,
+    milestoneTitle: m.title,
+    variantId: v.id,
+    variantTitle: v.title || m.title,
+    brief: v.brief,
+    due: e.due,
+    interval: e.interval,
+    attempts: e.attempts.length,
+    last: e.attempts[e.attempts.length - 1] ?? null,
+  }
+}
+
+/** Every practice item of every pack, due ones interleaved. */
+export async function practiceQueue(now = new Date()): Promise<PracticeQueue> {
+  const items: PracticeItem[] = []
+  for (const pack of await loadedPacks()) {
+    if (!pack.manifest) continue
+    const packId = pack.manifest.id
+    for (const lab of pack.labs) {
+      const dir = recordsDir(packId, lab.manifest.id)
+      const subs = await readSubs(dir)
+      const p = await readPractice(dir)
+      for (const m of lab.manifest.milestones) {
+        if (!m.variants.length) continue
+        const passed = passedAt(subs, m.id)
+        if (!passed) continue
+        items.push(itemOf(packId, lab, m, entryOf(p, m.id, passed)))
+      }
+    }
+  }
+  const t = now.toISOString()
+  return {
+    due: interleave(items.filter((x) => x.due <= t)),
+    later: items.filter((x) => x.due > t).sort((a, b) => a.due.localeCompare(b.due)),
+  }
+}
+
+async function practiceTarget(packId: string, labId: string, milestoneId: string) {
+  const { pack, lab } = await findLab(packId, labId)
+  const m = lab.manifest.milestones.find((x) => x.id === milestoneId)
+  if (!m?.variants.length) throw new Error('This milestone has no practice variants.')
+  const dir = recordsDir(packId, labId)
+  const passed = passedAt(await readSubs(dir), milestoneId)
+  if (!passed) throw new Error('Practice opens once the milestone has passed.')
+  return { pack, lab, m, dir, passed }
+}
+
+/**
+ * Sets the practice notebook up for a milestone's next variant: the lab's
+ * starter (or the variant's own) and nothing the learner wrote before, so the
+ * method comes from memory. Picking the item already set up keeps the work in
+ * progress. Returns the notebook id and whether it was set up afresh (the
+ * caller restarts its kernel then).
+ */
+export async function startPractice(
+  packId: string,
+  labId: string,
+  milestoneId: string,
+): Promise<{ workbenchId: string; item: PracticeItem; fresh: boolean }> {
+  const { pack, lab, m, dir, passed } = await practiceTarget(packId, labId, milestoneId)
+  const id = practiceWorkbenchId(packId, labId)
+  return updatePractice(dir, async (p) => {
+    const item = itemOf(packId, lab, m, entryOf(p, milestoneId, passed))
+    const v = m.variants.find((x) => x.id === item.variantId)!
+    const same = p.current?.milestoneId === milestoneId && p.current.variantId === v.id
+    let fresh = false
+    let exists = true
+    try {
+      await readFile(join(workbenchDir(id), 'meta.json'))
+    } catch {
+      exists = false
+    }
+    if (!same || !exists) {
+      let cells: WorkbenchCell[]
+      if (v.starter) {
+        const path = await resolveInside(pack.root!, lab.dir, v.starter)
+        let missing = 0
+        cells = parseCells(await readFile(path, 'utf-8'), () => `__missing${missing++}`)
+      } else {
+        cells = await starterCells(pack, lab)
+      }
+      if (!cells.length) cells = [{ id: newCellId(), kind: 'code', source: '' }]
+      await seedWorkbench(id, `Practice · ${lab.manifest.title}`, cells)
+      // Outputs of the last item would otherwise sit under cells that share an id.
+      await rm(join(workbenchDir(id), 'results.json'), { force: true })
+      p.current = { milestoneId, variantId: v.id }
+      fresh = true
+    }
+    return { workbenchId: id, item, fresh }
+  })
+}
+
+const practiceRuns = new Map<string, RunningCheck>()
+
+/**
+ * Runs the current variant's hidden tests on the practice notebook. The
+ * confidence comes first, as on a Submit. Feedback is in full: the milestone
+ * has passed, so there is no answer left to protect. The result schedules the
+ * next time, and the next variant.
+ */
+export async function checkPractice(
+  packId: string,
+  labId: string,
+  milestoneId: string,
+  confidence: Confidence,
+): Promise<PracticeAttempt> {
+  if (!isConfidence(confidence)) throw new Error('Pick how sure you are first.')
+  const { pack, lab, m, dir, passed } = await practiceTarget(packId, labId, milestoneId)
+  const p0 = await readPractice(dir)
+  if (p0.current?.milestoneId !== milestoneId) throw new Error('Open this item first.')
+  const v = m.variants.find((x) => x.id === p0.current!.variantId)
+  if (!v) throw new Error('This variant is no longer in the pack.')
+  const layer = packLayerId(pack)
+  if (!(await layerReady(layer))) throw new Error(`Install the ${layer} runtime layer in Settings first.`)
+  if (practiceRuns.has(dir)) throw new Error('A practice check is already going for this lab.')
+  const wb = workbenchDir(practiceWorkbenchId(packId, labId))
+  const e0 = entryOf(p0, milestoneId, passed)
+  const work = join(dir, 'practice', `${milestoneId}-${e0.k + 1}`)
+  await rm(work, { recursive: true, force: true })
+  await mkdir(work, { recursive: true })
+  const labPy = await readFile(join(wb, 'lab.py'), 'utf-8')
+  await writeFile(join(work, 'lab.py'), labPy, 'utf-8')
+  await writeFile(join(work, 'cells.json'), JSON.stringify(runnableCells(labPy)), 'utf-8')
+  const running = startCheck({
+    layer,
+    workDir: work,
+    cwd: wb,
+    testsPath: await resolveInside(pack.root!, lab.dir, v.hidden),
+    mode: 'hidden',
+    timeLimitS: m.timeLimitS,
+  })
+  practiceRuns.set(dir, running)
+  let run: CheckRun
+  try {
+    run = await running.done.catch((err: unknown) =>
+      brokenRun(`The check could not run: ${err instanceof Error ? err.message : String(err)}`),
+    )
+  } finally {
+    practiceRuns.delete(dir)
+  }
+  const verdict = verdictOf(run)
+  return updatePractice(dir, (p) => {
+    const e = entryOf(p, milestoneId, passed)
+    const interval = nextPracticeInterval(e.interval, verdict)
+    const now = new Date()
+    const attempt: PracticeAttempt = {
+      variantId: v.id,
+      at: now.toISOString(),
+      confidence,
+      verdict,
+      run,
+      nextDue: new Date(now.getTime() + interval * DAY_MS).toISOString(),
+    }
+    p.milestones[milestoneId] = {
+      interval,
+      due: attempt.nextDue,
+      k: e.k + 1,
+      attempts: [...e.attempts, attempt].slice(-MAX_ATTEMPTS_KEPT),
+    }
+    // The next start sets the notebook up afresh for the next variant.
+    p.current = null
+    return attempt
+  })
+}
+
+// ---------------------------------------------------------------------------
+// What the tutor may read, through the session bridge
+// ---------------------------------------------------------------------------
+
+/** The engine's confidence values for the picker's four bands (dialogue-grammar.md). */
+const CONFIDENCE_VALUE: Record<string, number> = { certain: 90, 'pretty-sure': 70, 'half-unsure': 50, guessing: 25 }
+
+export type ReportLookup =
+  | { verified: false; reason: string }
+  | {
+      verified: true
+      pack: string
+      lab: string
+      labTitle: string
+      milestone: string
+      milestoneTitle: string
+      /** The lab's tutor topic and the milestone's node, or null where the pack names none. */
+      topic: string | null
+      node: string | null
+      submission: number
+      verdict: string
+      core: string
+      slip: string
+      rung: string
+      help: number
+      /** The pick, as the engine's 0–100 value. */
+      confidence: number | null
+      /** The question asked and the answer, exactly as recorded at Submit. */
+      explainBackPrompt: string
+      explainBack: string
+      reflectionPrompt: string | null
+      reflection: string | null
+      submittedAt: string
+    }
+
+/**
+ * Checks a report line pasted into a tutor session: its signature against
+ * this install's key, and that it is the report on record for an unsealed
+ * submission. Returns the record's own fields, so the tutor grades the
+ * explain-back as stored, not as retyped.
+ */
+export async function lookupReport(line: string): Promise<ReportLookup> {
+  if (typeof line !== 'string' || line.length > 1000) return { verified: false, reason: 'That is not a check report.' }
+  const fields = verifyReport(line, await checkKey())
+  if (!fields)
+    return {
+      verified: false,
+      reason: 'The report does not verify: it was changed, or it was signed by another install.',
+    }
+  // The report names its lab as "<pack>/<lab>".
+  const ids = parseLabWorkbenchId(fields.lab)
+  const found = ids ? await findLab(ids.packId, ids.labId).catch(() => null) : null
+  if (found) {
+    const { pack, lab } = found
+    const subs = await readSubs(recordsDir(pack.manifest!.id, lab.manifest.id))
+    const s = subs.find((x) => x.report === line.trim())
+    const m = s && lab.manifest.milestones.find((x) => x.id === s.milestoneId)
+    if (s && !s.sealed && s.explainBack !== null)
+      return {
+        verified: true,
+        pack: pack.manifest!.id,
+        lab: lab.manifest.id,
+        labTitle: lab.manifest.title,
+        milestone: s.milestoneId,
+        milestoneTitle: m?.title ?? s.milestoneId,
+        topic: lab.manifest.topic,
+        node: m?.node ?? null,
+        submission: s.seq,
+        verdict: fields.verdict,
+        core: fields.core,
+        slip: fields.slip,
+        rung: fields.rung,
+        help: fields.help,
+        confidence: CONFIDENCE_VALUE[fields.conf] ?? null,
+        explainBackPrompt: s.explainBackPrompt,
+        explainBack: s.explainBack,
+        reflectionPrompt: s.reflectionPrompt,
+        reflection: s.reflection,
+        submittedAt: s.submittedAt,
+      }
+  }
+  return {
+    verified: false,
+    reason: 'The signature is good, but no submission on record carries this report (its pack may have been removed).',
+  }
+}
+
+const READ_MAX = 60_000
+
+/**
+ * A lab's cells for the tutor: the live notebook, or the copy frozen at a
+ * given try. Refused while any submission of the lab is sealed, so nothing
+ * reads the work between Submit and the learner's own explain-back and pick.
+ */
+export async function readLabCells(
+  packId: string,
+  labId: string,
+  at?: { milestone: string; submission: number },
+): Promise<{
+  title: string
+  source: 'live' | 'submitted'
+  cells: { kind: string; source: string }[]
+  truncated: boolean
+}> {
+  const { lab } = await findLab(packId, labId)
+  const dir = recordsDir(packId, labId)
+  const subs = await readSubs(dir)
+  if (subs.some((s) => s.sealed))
+    throw new Error('A submission of this lab is sealed: ask again once its results are in.')
+  let text: string
+  if (at) {
+    const s = subs.find((x) => x.milestoneId === at.milestone && x.seq === at.submission)
+    if (!s) throw new Error('No such submission.')
+    text = await readFile(join(locate(packId, labId, s.id).work, 'lab.py'), 'utf-8')
+  } else {
+    text = await readFile(join(workbenchDir(labWorkbenchId(packId, labId)), 'lab.py'), 'utf-8')
+  }
+  let budget = READ_MAX
+  let truncated = false
+  const cells: { kind: string; source: string }[] = []
+  for (const c of parseCells(text, newCellId)) {
+    if (budget <= 0) {
+      truncated = true
+      break
+    }
+    const source = c.source.slice(0, budget)
+    if (source.length < c.source.length) truncated = true
+    budget -= source.length
+    cells.push({ kind: c.kind, source })
+  }
+  return { title: lab.manifest.title, source: at ? 'submitted' : 'live', cells, truncated }
 }

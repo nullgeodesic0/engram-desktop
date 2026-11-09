@@ -68,6 +68,34 @@ export class BridgeServer {
     const uiMatch = url.match(/^\/bridge\/([^/]+)\/ui$/)
     const packMatch = url.match(/^\/bridge\/([^/]+)\/card-pack$/)
     const notesMatch = url.match(/^\/bridge\/([^/]+)\/lecture-notes$/)
+    const reportMatch = url.match(/^\/bridge\/([^/]+)\/check-report$/)
+    const labMatch = url.match(/^\/bridge\/([^/]+)\/lab-cells$/)
+
+    if (reportMatch || labMatch) {
+      // The two lab reads. Both answer the model directly, refusals included:
+      // a report that does not verify is the tutor's cue not to grade from it,
+      // and a sealed lab's refusal tells it to wait. Imported on first use so
+      // the relay itself loads without the lab machinery (the tests build it bare).
+      let reply: unknown
+      try {
+        const labs = await import('../labs/labStore')
+        const req = JSON.parse(body) as Record<string, unknown>
+        if (reportMatch) {
+          reply = await labs.lookupReport(String(req.report ?? ''))
+        } else {
+          const at =
+            typeof req.milestone === 'string' && typeof req.submission === 'number'
+              ? { milestone: req.milestone, submission: req.submission }
+              : undefined
+          reply = { ok: true, ...(await labs.readLabCells(String(req.pack ?? ''), String(req.lab ?? ''), at)) }
+        }
+      } catch (error) {
+        reply = { ok: false, verified: false, reason: error instanceof Error ? error.message : String(error) }
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify(reply))
+      return
+    }
 
     if (askMatch) {
       const sessionId = decodeURIComponent(askMatch[1])

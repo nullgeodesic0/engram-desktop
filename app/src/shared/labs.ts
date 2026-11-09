@@ -154,6 +154,40 @@ export interface MilestoneView {
   steps: string[]
   /** The try that first passed its core tests, and whether it had help; null until then. */
   passedOn: { seq: number; unaided: boolean } | null
+  /** The tutor topic's node this milestone exercises, or null. */
+  node: string | null
+  predict: PredictView[]
+  /** How many practice variants the milestone has. */
+  variants: number
+}
+
+/**
+ * A predict-the-output item. Main sends `output` and `why` only once a guess
+ * is locked in, so the answer is never on screen before the prediction.
+ */
+export interface PredictView {
+  id: string
+  prompt: string
+  code: string
+  guess: string | null
+  output: string | null
+  why: string | null
+  correct: boolean | null
+}
+
+/**
+ * Whether a predicted printout matches the real one: line endings, trailing
+ * spaces on each line and trailing blank lines do not count, anything else does.
+ */
+export function samePrintout(guess: string, output: string): boolean {
+  const norm = (t: string) =>
+    t
+      .replace(/\r\n?/g, '\n')
+      .split('\n')
+      .map((l) => l.replace(/\s+$/, ''))
+      .join('\n')
+      .replace(/\n+$/, '')
+  return norm(guess) === norm(output)
 }
 
 export interface LabSummary {
@@ -192,6 +226,8 @@ export interface LabView {
   kicker: string
   summary: string
   layer: string
+  /** The tutor topic this lab belongs to, or null: "Discuss with the tutor" needs one. */
+  topic: string | null
   milestones: MilestoneView[]
   submissions: Submission[]
 }
@@ -201,4 +237,82 @@ export interface SmokeResult {
   milestoneId: string
   run: CheckRun
   at: string
+}
+
+// ---------------------------------------------------------------------------
+// Spaced, interleaved practice
+// ---------------------------------------------------------------------------
+
+/**
+ * One milestone's practice: once it passes, its variants come back on a
+ * growing interval, each time a different instance, written again from
+ * memory in a separate notebook. App-side like the rest of a lab: these are
+ * not engine reviews, and nothing here touches a rating or a schedule there.
+ */
+export interface PracticeItem {
+  packId: string
+  labId: string
+  labTitle: string
+  milestoneId: string
+  milestoneTitle: string
+  variantId: string
+  variantTitle: string
+  brief: string
+  /** When it is due, ISO. */
+  due: string
+  /** Days the last result scheduled. */
+  interval: number
+  attempts: number
+  last: PracticeAttempt | null
+}
+
+export interface PracticeAttempt {
+  variantId: string
+  at: string
+  confidence: Confidence
+  verdict: CheckVerdict
+  run: CheckRun
+  /** When the item comes back. */
+  nextDue: string
+}
+
+export interface PracticeQueue {
+  /** Due now, interleaved: consecutive items come from different milestones, and different labs where possible. */
+  due: PracticeItem[]
+  /** Not due yet, soonest first. */
+  later: PracticeItem[]
+}
+
+export const PRACTICE_FIRST_DAYS = 1
+export const PRACTICE_MAX_DAYS = 120
+
+/** The next interval in days: a pass roughly triples it, anything else starts over at a day. */
+export function nextPracticeInterval(previous: number, verdict: CheckVerdict): number {
+  if (verdict !== 'passed' && verdict !== 'slip') return 1
+  return Math.min(PRACTICE_MAX_DAYS, Math.max(PRACTICE_FIRST_DAYS, Math.round(previous * 3)))
+}
+
+/**
+ * Orders due items so the same milestone never comes twice in a row, and the
+ * same lab not either while another lab has items left. Most overdue first
+ * otherwise. Interleaving makes each item a question of which method fits,
+ * not only how to run the one just practised.
+ */
+export function interleave<T extends { labId: string; packId: string; milestoneId: string; due: string }>(
+  items: T[],
+): T[] {
+  const left = [...items].sort((a, b) => a.due.localeCompare(b.due))
+  const out: T[] = []
+  while (left.length) {
+    const prev = out[out.length - 1]
+    let i = 0
+    if (prev) {
+      const lab = (x: T) => `${x.packId}/${x.labId}`
+      i = left.findIndex((x) => lab(x) !== lab(prev))
+      if (i < 0) i = left.findIndex((x) => x.milestoneId !== prev.milestoneId)
+      if (i < 0) i = 0
+    }
+    out.push(left.splice(i, 1)[0])
+  }
+  return out
 }

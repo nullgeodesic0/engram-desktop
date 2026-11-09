@@ -300,6 +300,121 @@ describe('content packs and lab submissions', () => {
     if (p) await removePackFolder(evil)
   })
 
+  it('shows a predicted output only once the guess is locked in, and only one guess', async () => {
+    let m1 = (await labs.labView('example-pack', 'fit-a-line')).milestones[0]
+    expect(m1.predict.map((x) => x.id)).toEqual(['design-matrix', 'at-y', 'solve-types'])
+    expect(m1.predict.every((x) => x.output === null && x.why === null && x.correct === null)).toBe(true)
+    m1 = (await labs.predictOutput('example-pack', 'fit-a-line', 'm1', 'design-matrix', '(2, 3)\n[2. 1.]'))
+      .milestones[0]
+    expect(m1.predict[0]).toMatchObject({ guess: '(2, 3)\n[2. 1.]', output: '(3, 2)\n[2. 1.]', correct: false })
+    expect(m1.predict[0].why).toContain('column_stack')
+    expect(m1.predict[1].output).toBeNull()
+    await expect(labs.predictOutput('example-pack', 'fit-a-line', 'm1', 'design-matrix', '(3, 2)')).rejects.toThrow(
+      /already locked/,
+    )
+    m1 = (await labs.predictOutput('example-pack', 'fit-a-line', 'm1', 'at-y', '[13.  9.]  \n')).milestones[0]
+    expect(m1.predict[1].correct).toBe(true)
+    await expect(labs.predictOutput('example-pack', 'fit-a-line', 'm1', 'nope', 'x')).rejects.toThrow(/No such/)
+  })
+
+  it('verifies a pasted report against the record, and hands back the record’s own answers', async () => {
+    const v = await labs.labView('example-pack', 'fit-a-line')
+    const first = v.submissions.find((x) => x.id === 'm1-1')!
+    const r = await labs.lookupReport(`  ${first.report}\n`)
+    expect(r).toMatchObject({
+      verified: true,
+      pack: 'example-pack',
+      lab: 'fit-a-line',
+      milestone: 'm1',
+      milestoneTitle: 'The fit',
+      topic: null,
+      node: null,
+      submission: 1,
+      verdict: 'core',
+      confidence: 90,
+      explainBack: 'Setting the gradient of the squared error to zero.',
+      reflection: 'I assumed polyfit returns intercept first.',
+    })
+    expect(r.verified && r.explainBackPrompt).toMatch(/normal equations/)
+    // One changed character, and it no longer verifies.
+    const forged = first.report!.replace('verdict=core', 'verdict=pass')
+    expect(await labs.lookupReport(forged)).toMatchObject({ verified: false })
+    expect(await labs.lookupReport('hello')).toMatchObject({ verified: false })
+  })
+
+  it('reads the lab’s cells for the tutor, but not while a submission is sealed', async () => {
+    const live = await labs.readLabCells('example-pack', 'fit-a-line')
+    expect(live.source).toBe('live')
+    expect(live.cells.some((c) => c.source.includes('def fit_line'))).toBe(true)
+    const frozen = await labs.readLabCells('example-pack', 'fit-a-line', { milestone: 'm1', submission: 1 })
+    expect(frozen.source).toBe('submitted')
+    await expect(labs.readLabCells('example-pack', 'fit-a-line', { milestone: 'm1', submission: 99 })).rejects.toThrow(
+      /No such/,
+    )
+    const sub = await labs.submitMilestone('example-pack', 'fit-a-line', 'm2')
+    await expect(labs.readLabCells('example-pack', 'fit-a-line')).rejects.toThrow(/sealed/)
+    release(passing)
+    await settle()
+    await labs.submitExplainBack('example-pack', 'fit-a-line', sub.id, 'It is the explained share of the variance.')
+    await labs.pickConfidence('example-pack', 'fit-a-line', sub.id, 'Half unsure')
+    expect((await labs.readLabCells('example-pack', 'fit-a-line')).cells.length).toBeGreaterThan(0)
+  })
+
+  it('brings a passed milestone back a day later as a variant, in its own notebook', async () => {
+    const now = new Date()
+    let q = await labs.practiceQueue(now)
+    expect(q.due).toEqual([])
+    expect(q.later.map((x) => `${x.milestoneId}:${x.variantId}`)).toEqual(['m1:through-origin', 'm2:given-fit'])
+    q = await labs.practiceQueue(new Date(now.getTime() + 2 * 86_400_000))
+    expect(q.due.map((x) => x.milestoneId)).toEqual(['m1', 'm2'])
+
+    await expect(labs.checkPractice('example-pack', 'fit-a-line', 'm1', 'Certain')).rejects.toThrow(/Open this item/)
+    const s1 = await labs.startPractice('example-pack', 'fit-a-line', 'm1')
+    expect(s1).toMatchObject({ workbenchId: 'example-pack/fit-a-line--practice', fresh: true })
+    expect(s1.item).toMatchObject({ variantId: 'through-origin', brief: expect.stringContaining('fit_through_origin') })
+    expect(labs.parsePracticeWorkbenchId(s1.workbenchId)).toEqual({ packId: 'example-pack', labId: 'fit-a-line' })
+    expect(await layerForWorkbench(s1.workbenchId)).toBe('base')
+    expect(await labs.labIsSealed(s1.workbenchId)).toBe(false)
+    const dir = join(userData, 'labs', 'packs', 'example-pack', 'fit-a-line--practice')
+    // From the starter, not the learner's lab: no partial solution, no edits.
+    expect(readFileSync(join(dir, 'lab.py'), 'utf-8')).not.toContain('m1-partial')
+    writeFileSync(join(dir, 'lab.py'), readFileSync(join(dir, 'lab.py'), 'utf-8') + '\n# %% id=mine\nx = 1\n')
+    // Picking the same item again keeps the work in progress.
+    expect(await labs.startPractice('example-pack', 'fit-a-line', 'm1')).toMatchObject({ fresh: false })
+    expect(readFileSync(join(dir, 'lab.py'), 'utf-8')).toContain('id=mine')
+
+    await expect(labs.checkPractice('example-pack', 'fit-a-line', 'm1', 'Sure' as never)).rejects.toThrow(/how sure/)
+    const pending = labs.checkPractice('example-pack', 'fit-a-line', 'm1', 'Pretty sure')
+    await settle()
+    expect(jobs.at(-1)).toMatchObject({ mode: 'hidden', cwd: dir })
+    expect(jobs.at(-1)!.testsPath).toMatch(/hidden_m1_origin\.py$/)
+    expect(readFileSync(join(jobs.at(-1)!.workDir, 'lab.py'), 'utf-8')).toContain('id=mine')
+    release({ ...passing, tests: passing.tests.map((t) => ({ ...t, outcome: 'passed', message: '' })) })
+    const a = await pending
+    expect(a).toMatchObject({ variantId: 'through-origin', verdict: 'passed', confidence: 'Pretty sure' })
+    const days = (Date.parse(a.nextDue) - Date.parse(a.at)) / 86_400_000
+    expect(days).toBe(3)
+
+    q = await labs.practiceQueue(new Date(now.getTime() + 2 * 86_400_000))
+    expect(q.due.map((x) => x.milestoneId)).toEqual(['m2'])
+    const back = q.later.find((x) => x.milestoneId === 'm1')!
+    expect(back).toMatchObject({ variantId: 'parabola', attempts: 1, interval: 3 })
+    // The next variant gets a fresh notebook.
+    const s2 = await labs.startPractice('example-pack', 'fit-a-line', 'm1')
+    expect(s2).toMatchObject({ fresh: true, item: { variantId: 'parabola' } })
+    expect(readFileSync(join(dir, 'lab.py'), 'utf-8')).not.toContain('id=mine')
+
+    // A failure brings it back tomorrow.
+    const p2 = labs.checkPractice('example-pack', 'fit-a-line', 'm1', 'Certain')
+    await settle()
+    release(failing)
+    const b = await p2
+    expect(b.verdict).toBe('core')
+    expect((Date.parse(b.nextDue) - Date.parse(b.at)) / 86_400_000).toBe(1)
+    // Practice shows the full failure text: the milestone has passed.
+    expect(b.run.tests[0].message).toBe('expected slope 2, got 3')
+  })
+
   it('hides core failure text until the milestone passes', () => {
     const t = failing.tests
     expect(labs.tierFeedback(t, false).map((x) => x.message)).toEqual(['', 'return Python floats'])
