@@ -23,11 +23,66 @@ describe('splitAroundProbeHeader', () => {
   it('returns null for text with no header marker', () => {
     expect(splitAroundProbeHeader('just an ordinary sentence.')).toBeNull()
   })
+  // The reported bug: a question written on the marker's own line was taken
+  // for trailing decoration and erased, leaving a title-only card.
+  describe('a question on the same line as the marker', () => {
+    it('keeps an em-dash question as the body', () => {
+      const h = splitAroundProbeHeader('**node 1/3 · kraus-form** — Why must $\\sum_a E_a^\\dagger E_a = I$?')!.header
+      expect(h.node).toBe('kraus-form')
+      expect(h.body).toBe('Why must $\\sum_a E_a^\\dagger E_a = I$?')
+    })
+
+    it('keeps it after a topic, ahead of any following paragraphs', () => {
+      const h = splitAroundProbeHeader(
+        'node 1/3 · kraus-form *(quantum channels)* Why must the operators be complete?\n\nTake your time.',
+      )!.header
+      expect(h.topic).toBe('quantum channels')
+      expect(h.body).toBe('Why must the operators be complete?\n\nTake your time.')
+    })
+
+    it('keeps it after a colon', () => {
+      expect(splitAroundProbeHeader('**[2/5] · kraus-form:** State the completeness relation.')!.header.body).toBe(
+        'State the completeness relation.',
+      )
+    })
+
+    it('drops the unmatched closing bold of a whole-line bold header', () => {
+      expect(splitAroundProbeHeader('**node 1/3 · kraus-form — Why is it the identity?**')!.header.body).toBe(
+        'Why is it the identity?',
+      )
+    })
+
+    it('reads the overdue clause from the marker, not the question', () => {
+      const h = splitAroundProbeHeader('**[1/3] · kraus-form** — Which map is 2 days overdue for a check?')!.header
+      expect(h.daysOverdue).toBeNull()
+      expect(h.body).toBe('Which map is 2 days overdue for a check?')
+    })
+  })
+
+  describe('same-line metadata the card already carries', () => {
+    it.each([
+      ['an em-dash topic slug and overdue clause', '**[3/12] · `economism-tendency`** — lenin-what-is-to-be-done · 1 day overdue'],
+      ['closing decoration only', '**[1/3] · `kraus-form`** `**'],
+      ['the node restated as a title', '**node 1/3 · kraus-form** — Kraus form'],
+    ])('drops %s', (_name, line) => {
+      expect(splitAroundProbeHeader(`${line}\n\nThe question.`)!.header.body).toBe('The question.')
+    })
+
+    it('still reads the overdue clause from that metadata', () => {
+      const h = splitAroundProbeHeader('**[3/12] · `economism-tendency`** — lenin-what-is-to-be-done · 1 day overdue')!.header
+      expect(h.daysOverdue).toBe(1)
+      expect(h.body).toBe('')
+    })
+  })
 })
 
 describe('endsWithBareProbeHeader', () => {
   it('is true when the header is the only content', () => {
     expect(endsWithBareProbeHeader('**[1/1] · commutator-uncertainty-principle †**')).toBe(true)
+  })
+
+  it('is false when the question shares the marker line', () => {
+    expect(endsWithBareProbeHeader('**[1/3] · kraus-form** — Why is it the identity?')).toBe(false)
   })
 
   it('is false once real body text follows the header', () => {
