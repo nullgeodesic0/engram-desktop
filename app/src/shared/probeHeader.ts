@@ -71,7 +71,7 @@ const SP = '[^\\S\\n]*'
 const GAP = `${SP}[*\`]{0,4}${SP}`
 const HEADER_RE = new RegExp(
   `^${GAP}(?:\\[(\\d+)${SP}/${SP}(\\d+)\\]|node[^\\S\\n]+(\\d+)${SP}/${SP}(\\d+))` +
-    `${GAP}[·•∙⋅]${GAP}([a-z0-9][a-z0-9-]*)${GAP}(†)?${GAP}(?:\\*?\\(([^)]+)\\)\\*?)?[^\\n]*\\n?`,
+    `${GAP}[·•∙⋅]${GAP}([a-z0-9][a-z0-9-]*)${GAP}(†)?${GAP}(?:\\*?\\(([^)]+)\\)\\*?)?([^\\n]*)\\n?`,
   'im',
 )
 
@@ -83,7 +83,21 @@ export function splitAroundProbeHeader(text: string): { before: string; header: 
   const index = Number(m[1] ?? m[3])
   const total = Number(m[2] ?? m[4])
   if (!Number.isFinite(index) || !Number.isFinite(total) || total <= 0) return null
-  const overdueMatch = OVERDUE_RE.exec(m[0])
+  // What trails the marker on its own line. Usually decoration or metadata
+  // (closing `**`, an em-dash topic slug, an overdue clause), which the card
+  // already states or deliberately drops. But a tutor sometimes writes the
+  // question on the SAME line as the marker — `**node 1/3 · kraus-form** —
+  // Why must the Kraus operators sum to the identity?` — and dropping that
+  // erased the question outright, leaving a title-only card above the
+  // learner's answer (reported live, 2026-11). Anything that isn't plainly
+  // metadata is kept as the start of the body: losing the question is far
+  // worse than repeating a title.
+  const tail = m[8] ?? ''
+  const tailBody = sameLineBody(tail, m[5])
+  // The overdue clause is read off the marker part only, never the question.
+  const markerLine = tailBody ? m[0].slice(0, m[0].length - (m[0].endsWith('\n') ? 1 : 0) - tail.length) : m[0]
+  const overdueMatch = OVERDUE_RE.exec(markerLine)
+  const rest = text.slice(m.index + m[0].length).trim()
   return {
     before: text.slice(0, m.index).trim(),
     header: {
@@ -93,9 +107,42 @@ export function splitAroundProbeHeader(text: string): { before: string; header: 
       threshold: Boolean(m[6]),
       topic: m[7]?.trim() || null,
       daysOverdue: overdueMatch ? Number(overdueMatch[1]) : null,
-      body: text.slice(m.index + m[0].length).trim(),
+      body: tailBody ? (rest ? `${tailBody}\n\n${rest}` : tailBody) : rest,
     },
   }
+}
+
+/** Separators a tutor puts between the marker and whatever follows it,
+ * with any emphasis marks closing the marker (`**node 1/3 · x:** Why …`). */
+const TAIL_SEPARATOR_RE = /^(?:[^\S\n]|[*`]|[—–:|·•])*(?:-[^\S\n]+)?/
+/** A kebab-case id, alone — the em-dash topic slug real headers carry. */
+const SLUG_RE = /^[a-z0-9][a-z0-9-]*$/
+
+/** The same-line remainder of a marker, as body text — or '' when it is only
+ * decoration/metadata the card already shows (or never showed). Metadata is
+ * recognised narrowly, so that anything resembling prose survives:
+ *   - nothing but emphasis/code marks and separators;
+ *   - a kebab-case topic slug and/or an overdue clause (`— lenin-what-is-to-
+ *     be-done · 1 day overdue`, a captured real line);
+ *   - the node's own name restated as a title (`— Kraus form`). */
+export function sameLineBody(tail: string, node: string): string {
+  const bare = tail
+    .replace(/[*_`]/g, ' ')
+    .replace(new RegExp(OVERDUE_RE.source, 'gi'), ' ')
+    .replace(/[·•∙⋅—–|:]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (bare === '') return ''
+  if (SLUG_RE.test(bare)) return ''
+  const normalize = (s: string) => s.toLowerCase().replace(/[-\s]+/g, ' ').trim()
+  if (normalize(bare) === normalize(node)) return ''
+  let body = tail.replace(TAIL_SEPARATOR_RE, '').trim()
+  // A header bolded as a whole line (`**node 1/3 · x — Why …?**`) leaves an
+  // unmatched closing run once the opening run went to the marker.
+  for (const mark of ['**', '*', '`']) {
+    if (body.endsWith(mark) && body.split(mark).length - 1 === 1) body = body.slice(0, -mark.length).trimEnd()
+  }
+  return body
 }
 
 export function parseProbeHeader(text: string): ProbeHeader | null {

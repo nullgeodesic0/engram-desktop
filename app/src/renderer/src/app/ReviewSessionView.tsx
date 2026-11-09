@@ -2312,7 +2312,9 @@ export function ReviewSessionView({
                               ProbeCard — probe text is routinely LaTeX-laden
                               ($\vec L$, $m_i$, …) and a plain <p> shows raw
                               dollar-sign source. */}
-                          <MathRenderer text={current.probe} className="text-sm text-[var(--color-text-primary)] leading-relaxed" />
+                          {current.probe.trim() && (
+                            <MathRenderer text={current.probe} className="text-sm text-[var(--color-text-primary)] leading-relaxed" />
+                          )}
                         </div>
                         <div className="detail-footer px-5 py-1.5">
                           <span className="label-data text-[11px] text-[var(--color-text-faint)] uppercase tracking-[0.1em]">
