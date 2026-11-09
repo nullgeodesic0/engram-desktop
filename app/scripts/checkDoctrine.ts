@@ -359,6 +359,14 @@ const PINNED_WRITERS: Record<string, string> = {
   // engine's.
   'main/labs/packStore.ts': 'app userData — labs/packs.json, the list of pack folders the learner added',
   'main/labs/labStore.test.ts': 'os tmpdir — a copy of examples/example-pack and a stand-in userData, removed in afterAll',
+  // 2026-11-11 — courses. The learner's own course records and staged
+  // copies of a pack's prepared maps and outlines, under app userData. Not
+  // learning state: no rating, receipt or schedule reads them, and the app
+  // never registers a topic — the tutor does, inside a sitting, with the
+  // engine's own add-topic.
+  'main/labs/courseStore.ts':
+    'app userData — courses/<pack>/records.json (attested milestones, topics started early) and courses/<pack>/topics/<topic>.graph.json or .outline.md (staged copies of the pack’s files)',
+  'main/labs/courseStore.test.ts': 'os tmpdir — a stand-in pack and userData, removed in afterAll',
   'main/labs/labStore.ts':
     'app userData — labs/packs/<pack>/<lab>/submissions.json, submissions/<m>-<n>/ (the frozen lab.py, cells.json, out.json), .checks/smoke/, and labs/.check-key',
   'main/session/sessionScan.ts': 'app userData — transcript scan cache',
@@ -973,7 +981,17 @@ for (const f of FILES) {
 // to stay inside the 400-char collector net. Nothing says how to teach or
 // judge. Written as complete literals, never an appended variable, so every
 // byte reaches this set. Verified captured un-truncated in the current set.
-const PINNED_MESSAGE_HASH = 'ff5773f7b19e68ba'
+// Re-pinned 2026-11-09 (d67b3e55356a22e8): LearnSessionView gains three
+// course-topic kickoffs (prepared map, outline, no file). Each names only the
+// topic's title and id, the course's title, the app-staged file the course
+// ships (a checked copy under userData/courses), and the course-seeded topic
+// protocol the learn skill itself defines via the D5-pinned
+// learn-skill.course-seeded-topic.md overlay, which runs ONLY on this
+// learner-started request. The same licence the checkpoint and step-sized
+// kickoffs have. Nothing says how to teach or judge, and nothing grants
+// state: the overlay says a course topic starts with none. Written as
+// complete literals, verified captured un-truncated in the current set.
+const PINNED_MESSAGE_HASH = 'd67b3e55356a22e8'
 if (sha(injectedMessages.sort().join('\n')) !== PINNED_MESSAGE_HASH) {
   fail(
     'D3.kickoff',
@@ -1239,6 +1257,18 @@ const PINNED_OVERLAY_HASHES: Record<string, string> = {
   // stays blind: it gets the stash entry and never the verdict.
   'learn-skill.checked-production-protocol.md': 'b8e19893cc094bba',
   'dialogue-grammar.checked-production-exception.md': 'e1868a7f69e9787b',
+  // 2026-11-11 — course-seeded topics, a pedagogy overlay: a topic the learner
+  // starts from a course in a content pack takes its map from the pack (the
+  // engine's add-topic JSON) instead of the curriculum architect, so the
+  // pack's labs and checkpoints can name its node ids. Licensed by the
+  // learner's own Start, which the app turns into a sentence asking for the
+  // protocol; priced by the bargain in its header: add-topic byte for byte
+  // (every engine check still applies), a refused map never silently
+  // replaced, the exposure and interests intake still run, and no state
+  // carried — every node earns its own receipts. An outline topic goes
+  // through the architect unchanged except that the payload keeps the
+  // course's topic id.
+  'learn-skill.course-seeded-topic.md': '4e14bfaa4343a555',
 }
 const overlayFiles = readdirSync(OVERLAY_DIR).filter((f) => f.endsWith('.md'))
 for (const f of overlayFiles) {
@@ -1352,6 +1382,18 @@ const LOAD_BEARING: Record<string, string[]> = {
     'A cap never raises a rating',
     '`"source": "lab-check"`',
   ],
+  // The course-seeded bargain: the per-sitting request; add-topic unchanged;
+  // no architect for a prepared map; a refusal goes to the learner; the
+  // intake that decides the pretest; only the topic id changes in an
+  // architect payload; no state carried.
+  'learn-skill.course-seeded-topic.md': [
+    'Run this ONLY when the learner\'s message asks for the course-seeded topic protocol',
+    'with the path exactly as named. Never edit, trim, extend or re-author the file first',
+    'If add-topic refuses it, say so in one line with the engine\'s reason, then offer to build the map with the architect instead and wait for the learner\'s answer.',
+    'Run the intake\'s prior-exposure question and the interests check from §1',
+    'Nothing else in the payload changes.',
+    'every node earns its own',
+  ],
   'dialogue-grammar.checked-production-exception.md': [
     'A fourth learner-elected exception, this one to how confidence is collected',
     'Everywhere else, and by default everywhere, the rule above stands exactly as written.',
@@ -1410,6 +1452,7 @@ try {
       ['skills/_shared/dialogue-grammar.md', 'engram-desktop-overlay:checkpoint-exception:start'],
       ['skills/learn/SKILL.md', 'engram-desktop-overlay:mobile-walk-protocol:start'],
       ['skills/_shared/dialogue-grammar.md', 'engram-desktop-overlay:mobile-walk-exception:start'],
+      ['skills/learn/SKILL.md', 'engram-desktop-overlay:course-seeded-topic:start'],
     ]
     for (const [rel, mark] of EXPECTED_MARKERS) {
       const installed = readFileSync(join(installPath, rel), 'utf-8')

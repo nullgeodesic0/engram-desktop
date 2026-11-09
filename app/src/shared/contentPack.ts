@@ -46,6 +46,8 @@ export interface PackManifest {
   runtime: PackRuntimeLayer | null
   /** Folders inside the pack, each holding a lab.json. */
   labs: string[]
+  /** A course.json inside the pack: stages, tracks and topics. Optional; see shared/course.ts. */
+  course: string | null
 }
 
 export interface MilestoneManifest {
@@ -128,9 +130,9 @@ export function isSafeRelPath(p: unknown): p is string {
   return p.split('/').every((seg) => seg !== '' && seg !== '.' && seg !== '..')
 }
 
-class ManifestError extends Error {}
+export class ManifestError extends Error {}
 
-function str(
+export function str(
   o: Record<string, unknown>,
   key: string,
   where: string,
@@ -147,7 +149,7 @@ function str(
   return v
 }
 
-function slug(o: Record<string, unknown>, key: string, where: string): string {
+export function slug(o: Record<string, unknown>, key: string, where: string): string {
   const v = str(o, key, where)
   // 32 rather than the 64 a workbench id allows, so a signed report naming a
   // pack, a lab, a milestone and a layer stays inside its budget.
@@ -157,7 +159,7 @@ function slug(o: Record<string, unknown>, key: string, where: string): string {
   return v
 }
 
-function path(o: Record<string, unknown>, key: string, where: string, optional = false): string | null {
+export function path(o: Record<string, unknown>, key: string, where: string, optional = false): string | null {
   const v = o[key]
   if (v === undefined || v === null) {
     if (optional) return null
@@ -177,9 +179,9 @@ function names(o: Record<string, unknown>, key: string, where: string): string[]
 }
 
 /** An engram topic or node id: letters, digits and ._- only, so it can sit in a sentence and a command. */
-const ENGINE_ID = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$/
+export const ENGINE_ID = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$/
 
-function engineId(o: Record<string, unknown>, key: string, where: string): string | null {
+export function engineId(o: Record<string, unknown>, key: string, where: string): string | null {
   const v = o[key]
   if (v === undefined || v === null) return null
   if (typeof v !== 'string' || !ENGINE_ID.test(v))
@@ -189,21 +191,21 @@ function engineId(o: Record<string, unknown>, key: string, where: string): strin
   return v
 }
 
-function list(o: Record<string, unknown>, key: string, where: string, max: number): unknown[] {
+export function list(o: Record<string, unknown>, key: string, where: string, max: number): unknown[] {
   const v = o[key]
   if (v === undefined) return []
   if (!Array.isArray(v) || v.length > max) throw new ManifestError(`${where}: "${key}" must be a list of up to ${max}`)
   return v
 }
 
-function obj(v: unknown, where: string): Record<string, unknown> {
+export function obj(v: unknown, where: string): Record<string, unknown> {
   if (!v || typeof v !== 'object' || Array.isArray(v)) throw new ManifestError(`${where} must be a JSON object`)
   return v as Record<string, unknown>
 }
 
 export type Parsed<T> = { ok: true; value: T } | { ok: false; error: string }
 
-function run<T>(fn: () => T): Parsed<T> {
+export function run<T>(fn: () => T): Parsed<T> {
   try {
     return { ok: true, value: fn() }
   } catch (e) {
@@ -250,6 +252,7 @@ export function parsePackManifest(raw: unknown): Parsed<PackManifest> {
       }),
       runtime,
       labs,
+      course: path(o, 'course', 'pack.json', true),
     }
   })
 }

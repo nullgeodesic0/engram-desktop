@@ -913,6 +913,11 @@ async function updatePractice<T>(dir: string, fn: (p: PracticeFile) => T | Promi
   })
 }
 
+/** When a lab milestone's core tests first passed, or null. Read only; for the course's evidence. */
+export async function milestonePassedAt(packId: string, labId: string, milestoneId: string): Promise<string | null> {
+  return passedAt(await readSubs(recordsDir(packId, labId)), milestoneId)
+}
+
 /** When the milestone first passed, or null. */
 function passedAt(subs: StoredSubmission[], milestoneId: string): string | null {
   const first = subs

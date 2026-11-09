@@ -39,6 +39,7 @@ import {
   submitReflection,
 } from '../labs/labStore'
 import { addPackFolder, layerForWorkbench, packLayerDefs, removePackFolder } from '../labs/packStore'
+import { attestPart, clearAttestation, listCourses, prepareCourseTopic, recordStartAnyway } from '../labs/courseStore'
 
 /**
  * IPC for the code runtime and the Workbench (see docs/code-runtime.md).
@@ -127,6 +128,20 @@ export function registerRuntimeHandlers(): void {
     await announce()
   }
   ipcMain.handle('packs:list', (_e, refresh?: boolean) => listPacks(refresh === true))
+  // Courses (shared/course.ts). The records are the learner's own; no grade or node state is written.
+  ipcMain.handle('course:list', () => listCourses())
+  ipcMain.handle('course:prepareTopic', (_e, packId: string, topicId: string) =>
+    prepareCourseTopic(String(packId), String(topicId)),
+  )
+  ipcMain.handle('course:attest', (_e, packId: string, partId: string, note: string, url: string | null) =>
+    attestPart(String(packId), String(partId), String(note ?? ''), url ? String(url) : null),
+  )
+  ipcMain.handle('course:clearAttestation', (_e, packId: string, partId: string) =>
+    clearAttestation(String(packId), String(partId)),
+  )
+  ipcMain.handle('course:startAnyway', (_e, packId: string, topicId: string, unmet: string[]) =>
+    recordStartAnyway(String(packId), String(topicId), Array.isArray(unmet) ? unmet.map(String) : []),
+  )
   ipcMain.handle('packs:add', async (e) => {
     const win = BrowserWindow.fromWebContents(e.sender)
     const opts = {

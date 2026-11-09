@@ -122,3 +122,13 @@ mobile-walk and step-sized protocols followed under the same terms.
 - **`engram/dialogue-grammar.checked-production-exception.md`** — the
   one-sentence companion for the checked-production protocol, on how the
   confidence is collected.
+- **`engram/learn-skill.course-seeded-topic.md`** — how the tutor starts a
+  topic the learner chose in a pack's course: with a prepared concept map,
+  register it with the engine's own `add-topic`, byte for byte, in place of
+  the curriculum architect (the intake questions that decide the pretest
+  still run, and a map the engine refuses goes back to the learner); with an
+  outline, run the architect as usual, given the outline, under the course's
+  topic id. Inserted into `skills/learn/SKILL.md` before the pretest. The
+  fifth pedagogy overlay: it narrows §1's "the map comes from the architect"
+  for one learner-started kind of topic, so read its constitutional-exception
+  header first. It grants no state: a course topic earns every receipt.

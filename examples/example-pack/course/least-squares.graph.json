@@ -1,0 +1,56 @@
+{
+  "topic": "least-squares",
+  "title": "Least squares",
+  "goal": "Explain why the normal equations give the line with the smallest squared error, and solve them.",
+  "order": ["squared-error", "normal-equations", "solve-the-system"],
+  "nodes": {
+    "squared-error": {
+      "claim": "Least squares picks the line that makes the sum of squared vertical errors as small as possible; squaring makes every error count positively and weighs large errors more.",
+      "probe": "Why does least squares square the errors before adding them, instead of adding them as they are? Give two reasons.",
+      "rubric": [
+        "Says that plain errors of opposite sign cancel, so their sum can be zero for a bad line",
+        "Says that squaring weighs large errors more than small ones (or that it makes the error smooth to minimise)"
+      ],
+      "transfer_probe": "A colleague proposes minimising the sum of absolute errors instead. Name one way the fitted line could differ.",
+      "why_chain": ["Errors of opposite sign cancel in a plain sum.", "A square is never negative and grows fast."],
+      "edges": { "requires": [], "derives_from": [], "contrasts_with": [], "analogous_to": [] },
+      "arbitrary": false,
+      "threshold": false,
+      "kind": "concept"
+    },
+    "normal-equations": {
+      "claim": "Setting the gradient of the squared error to zero gives the normal equations, A^T A beta = A^T y: the residual is orthogonal to every column of A.",
+      "probe": "Starting from the squared error ||A beta - y||^2, derive the normal equations, and say what they mean about the residual.",
+      "rubric": [
+        "Takes the gradient, 2 A^T (A beta - y), and sets it to zero",
+        "Arrives at A^T A beta = A^T y",
+        "Says the residual A beta - y is orthogonal to the columns of A"
+      ],
+      "transfer_probe": "For a fit through the origin (one column, x), write the normal equation and solve it for the slope.",
+      "why_chain": ["A smooth function is smallest where its gradient is zero.", "A^T r = 0 says r has no component along any column."],
+      "edges": { "requires": ["squared-error"], "derives_from": ["squared-error"], "contrasts_with": [], "analogous_to": [] },
+      "arbitrary": false,
+      "threshold": true,
+      "kind": "concept"
+    },
+    "solve-the-system": {
+      "claim": "To fit y = a x + b, stack the design matrix A = [x 1] and solve the 2x2 system A^T A beta = A^T y; beta[0] is the slope and beta[1] the intercept.",
+      "probe": "Fit y = a x + b to the points (0, 1), (1, 3), (2, 5). Show the design matrix, the system you solve, and the slope and intercept.",
+      "rubric": [
+        "Writes the design matrix with rows [x_i 1]",
+        "Forms A^T A = [[5, 3], [3, 3]] and A^T y = [13, 9]",
+        "Gets slope 2 and intercept 1"
+      ],
+      "transfer_probe": "Fit y = a x^2 + b x + c by the same method: what is the design matrix, and how big is the system?",
+      "why_chain": ["One column per unknown.", "The normal equations are square, so they can be solved directly."],
+      "edges": { "requires": ["normal-equations"], "derives_from": ["normal-equations"], "contrasts_with": [], "analogous_to": [] },
+      "arbitrary": false,
+      "threshold": false,
+      "kind": "procedure",
+      "practice": {
+        "problem_frame": "Fit a line to three or four given points by forming and solving the normal equations by hand.",
+        "verify": "Check that the residuals sum to zero and are orthogonal to the x column."
+      }
+    }
+  }
+}

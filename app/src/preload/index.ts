@@ -44,6 +44,7 @@ import type {
   DrainSummary,
 } from '../shared/types'
 import type { SessionEvent } from '../shared/sessionEvents'
+import type { CourseList, CourseRecords, PreparedCourseTopic } from '../shared/course'
 import type {
   CellResult,
   KernelEvent,
@@ -313,6 +314,16 @@ const engramApi = {
   // Content packs and their labs (main/labs, docs/content-packs.md). A check's
   // results come back only once the explain-back and a confidence are in.
   packsList: (refresh?: boolean): Promise<PackSummary[]> => ipcRenderer.invoke('packs:list', refresh),
+  // Courses in the added packs (shared/course.ts).
+  courseList: (): Promise<CourseList> => ipcRenderer.invoke('course:list'),
+  coursePrepareTopic: (packId: string, topicId: string): Promise<PreparedCourseTopic> =>
+    ipcRenderer.invoke('course:prepareTopic', packId, topicId),
+  courseAttest: (packId: string, partId: string, note: string, url: string | null): Promise<CourseRecords> =>
+    ipcRenderer.invoke('course:attest', packId, partId, note, url),
+  courseClearAttestation: (packId: string, partId: string): Promise<CourseRecords> =>
+    ipcRenderer.invoke('course:clearAttestation', packId, partId),
+  courseStartAnyway: (packId: string, topicId: string, unmet: string[]): Promise<CourseRecords> =>
+    ipcRenderer.invoke('course:startAnyway', packId, topicId, unmet),
   /** Asks for a folder and adds the pack in it; null when the dialog is cancelled. */
   packsAdd: (): Promise<PackSummary[] | null> => ipcRenderer.invoke('packs:add'),
   packsRemove: (folder: string): Promise<PackSummary[]> => ipcRenderer.invoke('packs:remove', folder),

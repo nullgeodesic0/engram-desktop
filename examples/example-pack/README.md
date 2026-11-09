@@ -13,3 +13,10 @@ the origin, a parabola) and M2 (r² of any prediction), which come back in
 its receipt offers **Copy for the tutor** rather than **Discuss with the
 tutor**; add `"topic"` to `lab.json`, and `"node"` to a milestone, to link
 it to one of yours.
+
+The pack also carries a two-topic course (`course.json`), shown in
+**Course**: *Least squares*, with a prepared concept map
+(`course/least-squares.graph.json`) the tutor registers as it is, and
+*Reading residuals*, which requires it and is seeded from an outline. Its one
+stage has a checkpoint (the lab's M1 passing, and least squares holding in
+review) and two milestones the learner ticks.

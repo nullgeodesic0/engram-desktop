@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import { flushSync } from 'react-dom'
 import { TopicTitle } from '../components/TopicTitle'
 import type { SessionEvent } from '../../../shared/sessionEvents'
+import type { PreparedCourseTopic } from '../../../shared/course'
 import type {
   TopicListEntry,
   ArtifactEntry,
@@ -375,6 +376,11 @@ interface LearnSessionViewProps {
    * learner reads it and presses Send. Cleared via onComposerPrefillConsumed. */
   composerPrefill?: string | null
   onComposerPrefillConsumed?: () => void
+  /** Set by the Course view's Start on a course topic the engine does not have
+   * yet: what main staged for it (a prepared map or an outline). Starts a
+   * sitting that asks the tutor to register it; cleared via onCourseTopicConsumed. */
+  courseTopicRequest?: PreparedCourseTopic | null
+  onCourseTopicConsumed?: () => void
 }
 
 export function LearnSessionView({
@@ -390,6 +396,8 @@ export function LearnSessionView({
   onNewTopicPrefillConsumed,
   onOpenNode,
   onOpenMap,
+  courseTopicRequest,
+  onCourseTopicConsumed,
 }: LearnSessionViewProps = {}) {
   // Topic-list state
   const [topics, setTopics] = useState<TopicListEntry[] | null>(null)
@@ -1092,6 +1100,24 @@ export function LearnSessionView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deepLinkTopicId, topics])
 
+  // The Course view's Start on a topic the engine does not have yet. If the
+  // topic exists by now (a sitting elsewhere registered it), it simply opens.
+  useEffect(() => {
+    if (!courseTopicRequest || !topics) return
+    const req = courseTopicRequest
+    onCourseTopicConsumed?.()
+    const match = topics.find((t) => t.topic === req.topicId)
+    if (started) {
+      sessionIdRef.current = null
+      setSessionId(null)
+      setSittingStartedAt(null)
+      resetSessionEphemera()
+    }
+    if (match) void openTopic(match)
+    else void startCourseTopic(req)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [courseTopicRequest, topics])
+
   // ⌘N / the menu bar's "New Topic" bumps openNewTopicSignal — pop the modal
   // open on change only, never on mount (a fresh signal of 0 must not fire this).
   // Baseline 0, NOT the incoming prop: a cold ⌘N mounts this view with the
@@ -1716,6 +1742,29 @@ export function LearnSessionView({
     }
     if (loadLectureNotesOn()) message += `\n\n${LECTURE_NOTES_ON}`
     const { sessionId: sid } = await window.engram.startSession(message, 'learn')
+    sessionIdRef.current = sid
+    setSessionId(sid)
+    setSittingStartedAt(Date.now())
+  }
+
+  // A course topic the engine does not have yet. The kickoff names the topic,
+  // the course and the staged file, and asks for the learn skill's own
+  // course-seeded topic protocol (the D5-pinned overlay); the tutor registers
+  // the topic with the engine inside the sitting. Keyed by the course's topic
+  // id from the start, so Continue finds this sitting once the topic exists.
+  async function startCourseTopic(req: PreparedCourseTopic) {
+    setActiveTopic(null)
+    setStarted(true)
+    resetSessionEphemera()
+    setBusy(true)
+    fetchCommitment()
+    let message = req.graphPath
+      ? `Use the /engram:learn skill to start the course topic "${req.title}" (topic id: "${req.topicId}") from the ${req.courseTitle} course. Its concept map is prepared at ${req.graphPath}. I would like the course-seeded topic protocol described in the learn skill.`
+      : req.outlinePath
+        ? `Use the /engram:learn skill to start the course topic "${req.title}" (topic id: "${req.topicId}") from the ${req.courseTitle} course. Its outline for the curriculum is at ${req.outlinePath}. I would like the course-seeded topic protocol described in the learn skill.`
+        : `Use the /engram:learn skill to start the course topic "${req.title}" (topic id: "${req.topicId}") from the ${req.courseTitle} course. I would like the course-seeded topic protocol described in the learn skill.`
+    if (loadLectureNotesOn()) message += `\n\n${LECTURE_NOTES_ON}`
+    const { sessionId: sid } = await window.engram.startSession(message, 'learn', req.topicId)
     sessionIdRef.current = sid
     setSessionId(sid)
     setSittingStartedAt(Date.now())

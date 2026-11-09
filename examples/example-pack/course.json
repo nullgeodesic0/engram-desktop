@@ -1,0 +1,67 @@
+{
+  "id": "linear-models",
+  "title": "Linear models",
+  "summary": "A two-topic course that shows the format: a topic with a prepared concept map and a lab, a topic seeded from an outline, and one stage with a checkpoint and milestones.",
+  "threshold": 0.6,
+  "stages": [
+    {
+      "id": "foundations",
+      "title": "Foundations",
+      "goal": "Fit a line by least squares and read what its residuals say.",
+      "tracks": [
+        { "id": "fitting", "title": "Fitting", "topics": ["least-squares", "residuals"] }
+      ],
+      "checkpoint": {
+        "title": "Fit and judge a line",
+        "parts": [
+          {
+            "id": "fit-passes",
+            "label": "The fit milestone of the lab passes its tests",
+            "evidence": { "kind": "lab", "lab": "fit-a-line", "milestone": "m1" }
+          },
+          {
+            "id": "least-squares-held",
+            "label": "Least squares holds in review",
+            "evidence": { "kind": "topic", "topic": "least-squares", "consolidated": 0.8 }
+          }
+        ]
+      },
+      "milestones": [
+        {
+          "id": "real-data",
+          "label": "Fit a line to a dataset of your own and say whether a line was the right model",
+          "evidence": { "kind": "attested" }
+        },
+        {
+          "id": "share-notebook",
+          "label": "Share the notebook with someone",
+          "evidence": { "kind": "link" }
+        }
+      ]
+    }
+  ],
+  "topics": {
+    "least-squares": {
+      "title": "Least squares",
+      "summary": "Why the normal equations give the line with the smallest squared error.",
+      "requires": [],
+      "graph": "course/least-squares.graph.json",
+      "labs": ["fit-a-line"],
+      "readings": [
+        {
+          "title": "Least squares (Wikipedia)",
+          "url": "https://en.wikipedia.org/wiki/Least_squares",
+          "note": "The history and the general setting."
+        }
+      ]
+    },
+    "residuals": {
+      "title": "Reading residuals",
+      "summary": "What the leftover errors of a fit say about the model.",
+      "requires": ["least-squares"],
+      "outline": "course/residuals.outline.md",
+      "labs": [],
+      "readings": []
+    }
+  }
+}

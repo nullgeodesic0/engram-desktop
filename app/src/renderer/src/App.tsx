@@ -15,6 +15,7 @@ import { HelpSheet } from './components/HelpSheet'
 import { MisconceptionLedger } from './components/MisconceptionLedger'
 import { useCardPhysics } from './components/useCardPhysics'
 import type { Misconception, NewTopicPrefill } from '../../shared/types'
+import type { PreparedCourseTopic } from '../../shared/course'
 import { syncCalibrationMirror } from './shared/calibrationStore'
 
 // Code-split: both views unmount on tab switch already (they're not inside
@@ -25,11 +26,12 @@ import { syncCalibrationMirror } from './shared/calibrationStore'
 // actually needs (Home first, then whichever tab is clicked).
 const TopicMapView = lazy(() => import('./app/TopicMapView').then((m) => ({ default: m.TopicMapView })))
 const LabsView = lazy(() => import('./app/LabsView').then((m) => ({ default: m.LabsView })))
+const CourseView = lazy(() => import('./app/CourseView').then((m) => ({ default: m.CourseView })))
 const ArtifactGalleryView = lazy(() =>
   import('./app/ArtifactGalleryView').then((m) => ({ default: m.ArtifactGalleryView })),
 )
 
-type View = 'home' | 'topics' | 'dashboard' | 'artifacts' | 'review' | 'learn' | 'settings' | 'grades' | 'labs'
+type View = 'home' | 'topics' | 'dashboard' | 'artifacts' | 'review' | 'learn' | 'settings' | 'grades' | 'labs' | 'course'
 
 const NAV: { id: View; label: string; hint: string; icon: ReactElement }[] = [
   {
@@ -69,6 +71,13 @@ const NAV: { id: View; label: string; hint: string; icon: ReactElement }[] = [
     label: 'Coach',
     hint: '4',
     icon: <path d="M3 16V9m4.5 7V5m4.5 11v-8m4.5 8V7" />,
+  },
+  {
+    // A content pack's course: stages, tracks and topics (shared/course.ts).
+    id: 'course',
+    label: 'Course',
+    hint: '9',
+    icon: <path d="M3 5h4v10H3zM8 5h4v10H8zM13 5h4v10h-4zM3 9h14" />,
   },
   {
     // Python workbenches over the app-managed code runtime (docs/code-runtime.md).
@@ -189,6 +198,8 @@ export default function App() {
   const [deepLinkTopic, setDeepLinkTopic] = useState<string | null>(null)
   // A lab hand-in for the Learn composer, delivered with deepLinkTopic (see LabsView's onDiscuss).
   const [learnComposerPrefill, setLearnComposerPrefill] = useState<string | null>(null)
+  // The Course view's Start on a topic the engine does not have yet (see CourseView).
+  const [courseTopicRequest, setCourseTopicRequest] = useState<PreparedCourseTopic | null>(null)
   const [deepLinkNode, setDeepLinkNode] = useState<{ topicId: string; nodeId: string } | null>(null)
   // Learn's "Open in Topic Map": the map opens on this topic, no node selected.
   const [deepLinkMapTopic, setDeepLinkMapTopic] = useState<string | null>(null)
@@ -255,7 +266,8 @@ export default function App() {
       v === 'learn' ||
       v === 'settings' ||
       v === 'grades' ||
-      v === 'labs'
+      v === 'labs' ||
+      v === 'course'
     ) {
       goToView(v)
     }
@@ -487,6 +499,21 @@ export default function App() {
               </Suspense>
             </KeepMounted>
           )}
+          {view === 'course' && (
+            <div key="course" className="view-transition h-full">
+              <Suspense fallback={<div className="h-full p-6"><SkeletonBar height={220} /></div>}>
+                <CourseView
+                  onOpenTopic={goToTopic}
+                  onStartCourseTopic={(prepared) => {
+                    setCourseTopicRequest(prepared)
+                    setView('learn')
+                  }}
+                  onGoLabs={() => goToView('labs')}
+                  onOpenSettings={() => goToView('settings')}
+                />
+              </Suspense>
+            </div>
+          )}
           {view === 'grades' && (
             <div key="grades" className="view-transition h-full">
               <GradesView onGoSitting={goToSitting} onOpenLedger={() => setLedgerOpen(true)} />
@@ -515,6 +542,8 @@ export default function App() {
                 onDeepLinkConsumed={() => setDeepLinkTopic(null)}
                 composerPrefill={learnComposerPrefill}
                 onComposerPrefillConsumed={() => setLearnComposerPrefill(null)}
+                courseTopicRequest={courseTopicRequest}
+                onCourseTopicConsumed={() => setCourseTopicRequest(null)}
                 onActivity={(a) => setActivity((prev) => ({ ...prev, learn: a }))}
                 onSpotlight={(s) => setPendingSpotlight(s)}
                 onGoReview={() => setView('review')}
