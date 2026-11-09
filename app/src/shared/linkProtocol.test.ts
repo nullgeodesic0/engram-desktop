@@ -57,9 +57,10 @@ describe('parseOutboxItem', () => {
     expect(parseOutboxItem(validItem({ production: 'smuggled prose' }))).toBeNull()
   })
 
-  test('caps a production at the engine PRODUCTION_MAX of 800 characters', () => {
-    const item = validItem({ kind: 'recall', production: 'x'.repeat(801) })
+  test('caps a production at the engine PRODUCTION_MAX of 2400 characters', () => {
+    const item = validItem({ kind: 'recall', production: 'x'.repeat(2401) })
     expect(parseOutboxItem(item)).toBeNull()
+    expect(parseOutboxItem(validItem({ kind: 'recall', production: 'x'.repeat(2400) }))).not.toBeNull()
   })
 
   test('rejects a confidence outside the four bands', () => {

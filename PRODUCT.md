@@ -50,7 +50,7 @@ A static check (`check:doctrine`) pins all of it, including every byte the app i
 - Builds ship **unsigned** — `notarize: false`, and CI sets `CSC_IDENTITY_AUTO_DISCOVERY=false`. Users clear the quarantine flag by hand. This also rules out a silent auto-updater: Squirrel.Mac only applies updates to a signed app, so the app *notifies* and never pretends to install.
 - The app bundles **only open fallback typefaces**. The licensed display faces exist on the author's machine and are git-ignored, so **release assets must come from CI's clean clone** — never a local build.
 - The engram plugin is treated as **sacred**: never edited. Adjustments to tutor behaviour go through an additive plugin-overlay system so a plugin update cannot silently revert pedagogy.
-- Engine limits the app reports but cannot change: a stored production is capped at 800 characters (`PRODUCTION_MAX`) on both the stash and the receipt.
+- Engine limits the app reports but cannot change: a stored production is capped at 2400 characters (`PRODUCTION_MAX`) on both the stash and the receipt.
 - The repo is public. It carries no learner data, no credentials, and no account name.
 
 ## Brand Commitments

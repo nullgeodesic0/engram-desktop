@@ -262,6 +262,18 @@ const PINNED_SUBPROCESS_FILES: Record<string, string> = {
     'runs candidate interpreters with `-c "import sys; …"` to find one that really is Python 3 — a version probe, never engram.py. See its own docstring for why existence is not enough on Windows',
   'main/session/orphanSweep.ts':
     '`ps ax` (POSIX) / a PowerShell CIM query (Windows) to find tutor children orphaned by a crash, then SIGTERM / taskkill. Reads process tables; invokes nothing',
+  // 2026-11-09 — the code runtime (docs/code-runtime.md). Two doors, neither
+  // a route to the engine. envManager runs only the pinned, checksum-verified
+  // uv binary it downloads into app userData, `tar` to unpack that binary, and
+  // the managed env's own interpreter asked for package versions. kernel.ts
+  // runs only that same env's interpreter on the kernel file shipped in the
+  // app's resources, with the workbench folder as its working directory.
+  'main/runtime/envManager.ts':
+    'the pinned uv (python install / venv / pip sync --require-hashes against a shipped lockfile), tar to unpack uv, and the env interpreter for an import check. Never engram.py, never a system Python',
+  'main/runtime/kernel.ts':
+    'the managed env interpreter running resources/runtime/engram_kernel.py, one per open workbench. Never engram.py',
+  'main/runtime/kernel.test.ts':
+    'the test runner’s own Node binary on a stand-in kernel script in os tmpdir, through a mocked spawnCli. Never engram.py',
 }
 const SPAWN_CALL =
   /\b(execFile|execFileSync|execSync|exec|spawn|spawnSync|fork|execCli|spawnCli|spawnCliReadOnly|runEngram)\s*(?:Async)?\s*\(/g
@@ -328,6 +340,11 @@ const PINNED_WRITERS: Record<string, string> = {
   // Teaching text the learner reads, never learning state: no rating, stamp,
   // receipt or schedule reads them, and nothing here touches the home.
   'main/session/lectureNotesStore.ts': 'app userData — lecture-notes/<topic>/<node>.json and .pdf',
+  // 2026-11-09 — the code runtime and the learner's workbenches. Neither is
+  // learning state: no rating, receipt or schedule reads either.
+  'main/runtime/envManager.ts': 'app userData — runtime/ (the uv binary, uv-managed Python, the wheel cache, envs/<layer>-<lockhash>/, state.json)',
+  'main/runtime/kernel.test.ts': 'os tmpdir — a stand-in kernel script, removed in afterAll',
+  'main/runtime/workbenchStore.ts': 'app userData — labs/workbenches/<id>/lab.py, meta.json and results.json',
   'main/session/sessionScan.ts': 'app userData — transcript scan cache',
   'main/session/achievementsStore.ts': 'app userData',
   'main/session/sessionIndex.ts': 'app userData',

@@ -32,7 +32,7 @@ export type MobileInputKind = (typeof MOBILE_INPUT_KINDS)[number]
  * not invented — an over-long production is rejected at the door rather than
  * silently truncated, so the learner is never graded on a sentence the record
  * lost the end of. */
-export const PRODUCTION_MAX = 800
+export const PRODUCTION_MAX = 2400
 
 /**
  * Input kind → the `--source` value its rating carries forever.

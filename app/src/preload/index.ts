@@ -44,6 +44,17 @@ import type {
   DrainSummary,
 } from '../shared/types'
 import type { SessionEvent } from '../shared/sessionEvents'
+import type {
+  CellResult,
+  KernelEvent,
+  KernelState,
+  KernelVar,
+  RuntimeProgress,
+  RuntimeStatus,
+  WorkbenchCell,
+  WorkbenchDoc,
+  WorkbenchSummary,
+} from '../shared/runtime'
 import type { BridgeAskRequest, BridgeAskResponse, BridgeBeatRequest, BridgeUiRequest } from '../shared/bridgeProtocol'
 
 const engramApi = {
@@ -245,6 +256,46 @@ const engramApi = {
     return () => ipcRenderer.removeListener('engram:due-count', handler)
   },
   refreshDueCount: (): Promise<{ dueCount: number }> => ipcRenderer.invoke('engram:refresh-due-count'),
+
+  // The code runtime and the Workbench (see main/ipc/runtimeHandlers.ts and
+  // docs/code-runtime.md). An app-managed Python env in userData; none of it
+  // is learning state.
+  runtimeStatus: (): Promise<RuntimeStatus> => ipcRenderer.invoke('runtime:status'),
+  runtimeInstall: (): Promise<RuntimeStatus> => ipcRenderer.invoke('runtime:install'),
+  runtimeRemove: (): Promise<RuntimeStatus> => ipcRenderer.invoke('runtime:remove'),
+  runtimeCancel: (): Promise<void> => ipcRenderer.invoke('runtime:cancel'),
+  onRuntimeChanged: (cb: (s: RuntimeStatus) => void): (() => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, s: RuntimeStatus) => cb(s)
+    ipcRenderer.on('runtime:changed', handler)
+    return () => ipcRenderer.removeListener('runtime:changed', handler)
+  },
+  runtimeGetCellLimit: (): Promise<number> => ipcRenderer.invoke('runtime:getCellLimit'),
+  runtimeSetCellLimit: (seconds: number): Promise<number> => ipcRenderer.invoke('runtime:setCellLimit', seconds),
+  onRuntimeProgress: (cb: (p: RuntimeProgress) => void): (() => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, p: RuntimeProgress) => cb(p)
+    ipcRenderer.on('runtime:progress', handler)
+    return () => ipcRenderer.removeListener('runtime:progress', handler)
+  },
+  workbenchList: (): Promise<WorkbenchSummary[]> => ipcRenderer.invoke('workbench:list'),
+  workbenchOpen: (id: string): Promise<WorkbenchDoc> => ipcRenderer.invoke('workbench:open', id),
+  workbenchCreate: (title: string): Promise<WorkbenchDoc> => ipcRenderer.invoke('workbench:create', title),
+  workbenchSave: (
+    id: string,
+    doc: { title: string; cells: WorkbenchCell[]; results: Record<string, CellResult> },
+  ): Promise<string> => ipcRenderer.invoke('workbench:save', id, doc),
+  workbenchReveal: (id: string): Promise<string> => ipcRenderer.invoke('workbench:reveal', id),
+  kernelRun: (workbenchId: string, cellId: string, code: string): Promise<void> =>
+    ipcRenderer.invoke('kernel:run', workbenchId, cellId, code),
+  kernelInterrupt: (workbenchId: string): Promise<void> => ipcRenderer.invoke('kernel:interrupt', workbenchId),
+  kernelRestart: (workbenchId: string): Promise<void> => ipcRenderer.invoke('kernel:restart', workbenchId),
+  kernelShutdown: (workbenchId: string): Promise<void> => ipcRenderer.invoke('kernel:shutdown', workbenchId),
+  kernelState: (workbenchId: string): Promise<KernelState> => ipcRenderer.invoke('kernel:state', workbenchId),
+  kernelVars: (workbenchId: string): Promise<KernelVar[]> => ipcRenderer.invoke('kernel:vars', workbenchId),
+  onKernelEvent: (cb: (ev: KernelEvent) => void): (() => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, ev: KernelEvent) => cb(ev)
+    ipcRenderer.on('kernel:event', handler)
+    return () => ipcRenderer.removeListener('kernel:event', handler)
+  },
 
   /**
    * Which OS this is, for the handful of renderer decisions that genuinely

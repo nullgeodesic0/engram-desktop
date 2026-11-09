@@ -4,6 +4,7 @@ import { cp, mkdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { registerLinkHandlers, startLinkServer, stopLinkServer, autoSettle } from './link/linkService'
 import { registerReadHandlers } from './ipc/readHandlers'
+import { registerRuntimeHandlers, shutdownAllKernels } from './ipc/runtimeHandlers'
 import { registerSessionHandlers, rebindWindow, abortAllSessions, onIdle } from './ipc/sessionHandlers'
 import { resolveEngramPlugin } from './session/pluginResolver'
 import { resolveClaudeBinary } from './session/claudeResolver'
@@ -379,6 +380,7 @@ app.whenReady().then(() => {
   ipcMain.handle('engram:environmentCheck', () => checkEnvironment())
 
   registerReadHandlers()
+  registerRuntimeHandlers()
   registerLinkHandlers()
   // The phone-facing server comes up with the app so an already-paired device
   // reaches the Mac with no ceremony — that is the whole point of it being a
@@ -721,6 +723,7 @@ app.on('before-quit', (event) => {
   // Children FIRST, then the bridge: a tutor killed after its bridge is
   // gone can race one last doomed HTTP call into the void.
   void abortAllSessions()
+  shutdownAllKernels()
   bridgeServer.stop()
   void stopLinkServer()
 })
