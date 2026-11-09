@@ -1,7 +1,8 @@
 import type { ChildProcessWithoutNullStreams } from 'node:child_process'
 import { isWindows, spawnCli } from '../platform'
 import type { CellOutput, KernelEvent, KernelState, KernelVar } from '../../shared/runtime'
-import { getCellLimitS, kernelFilePath, mplConfigDir, readyInterpreter } from './envManager'
+import { getCellLimitS, kernelFilePath, mplConfigDir, readyInterpreter, watchedPackages } from './envManager'
+import { BASE_LAYER } from './runtimePaths'
 import { scrubbedEnv } from './runtimePaths'
 import { LineSplitter, parseKernelLine } from './kernelProtocol'
 
@@ -10,7 +11,7 @@ import { LineSplitter, parseKernelLine } from './kernelProtocol'
  * resources/runtime/engram_kernel.py, spoken to in JSON lines.
  *
  * Doctrine: a subprocess door (D1), pinned. The only program it launches is
- * the interpreter of the app-managed env (envManager.readyInterpreter), with
+ * the interpreter of an app-managed env (envManager.readyInterpreter), with
  * the kernel file that ships in the app's resources. The learner's code runs
  * inside that process with the workbench folder as its working directory; it
  * has no channel to the engine, the tutor or the learning home other than
@@ -54,6 +55,7 @@ class Kernel {
   constructor(
     readonly workbenchId: string,
     private readonly cwd: string,
+    private readonly layerFor: () => Promise<string>,
     private readonly emit: Emit,
   ) {}
 
@@ -63,7 +65,12 @@ class Kernel {
   }
 
   private output(cellId: string, output: CellOutput): void {
-    this.emit({ kind: 'output', workbenchId: this.workbenchId, cellId, output })
+    this.emit({
+      kind: 'output',
+      workbenchId: this.workbenchId,
+      cellId,
+      output,
+    })
   }
 
   private start(): Promise<void> {
@@ -75,10 +82,18 @@ class Kernel {
     const stale = () => gen !== this.generation
     this.ready = (async () => {
       this.setState('starting')
-      const interpreter = await readyInterpreter()
+      // A pack lab runs on its pack's layer; everything else on the base layer.
+      const layer = await this.layerFor().catch(() => BASE_LAYER)
+      const interpreter = await readyInterpreter(layer)
+      const watch = await watchedPackages(layer)
       if (stale()) throw new Error('superseded')
       if (!interpreter) {
-        this.setState('dead', 'The code runtime is not installed. Install it in Settings → Code runtime.')
+        this.setState(
+          'dead',
+          layer === BASE_LAYER
+            ? 'The code runtime is not installed. Install it in Settings → Code runtime.'
+            : `This lab needs the ${layer} layer. Install it in Settings → Code runtime.`,
+        )
         throw new Error('runtime not installed')
       }
       const env: NodeJS.ProcessEnv = {
@@ -89,7 +104,7 @@ class Kernel {
         PYTHONNOUSERSITE: '1',
       }
       // -E: ignore PYTHON* variables; -s: no user site-packages; -u: unbuffered.
-      const child = spawnCli(interpreter, ['-E', '-s', '-u', '-X', 'utf8', kernelFilePath()], {
+      const child = spawnCli(interpreter, ['-E', '-s', '-u', '-X', 'utf8', kernelFilePath(), ...watch], {
         cwd: this.cwd,
         env,
         stdio: ['pipe', 'pipe', 'pipe'],
@@ -126,7 +141,9 @@ class Kernel {
         child.on('exit', (code, signal) => {
           clearTimeout(timer)
           if (this.child === child) this.onExit(code, signal)
-          reject(new Error(`The kernel exited during startup. ${this.stderrTail.trim().split('\n').slice(-2).join(' ')}`))
+          reject(
+            new Error(`The kernel exited during startup. ${this.stderrTail.trim().split('\n').slice(-2).join(' ')}`),
+          )
         })
       }).finally(() => {
         this.abortStart = null
@@ -158,7 +175,14 @@ class Kernel {
       this.clearTimers()
       this.counter += 1
       this.current = null
-      this.emit({ kind: 'done', workbenchId: this.workbenchId, cellId: cur.cellId, ok: msg.ok, ms: msg.ms, count: this.counter })
+      this.emit({
+        kind: 'done',
+        workbenchId: this.workbenchId,
+        cellId: cur.cellId,
+        ok: msg.ok,
+        ms: msg.ms,
+        count: this.counter,
+      })
       this.setState('idle')
       this.pump()
     } else if (msg.type === 'vars') {
@@ -184,9 +208,28 @@ class Kernel {
     this.current = null
     this.queue = []
     jobs.forEach((job, i) => {
-      if (i === 0) this.output(job.cellId, { type: 'error', ename: 'KernelDied', evalue: message, traceback: [], line: null })
-      else this.output(job.cellId, { type: 'stream', name: 'stderr', text: 'Not run: the kernel stopped before this cell started.\n' })
-      this.emit({ kind: 'done', workbenchId: this.workbenchId, cellId: job.cellId, ok: false, ms: 0, count: 0 })
+      if (i === 0)
+        this.output(job.cellId, {
+          type: 'error',
+          ename: 'KernelDied',
+          evalue: message,
+          traceback: [],
+          line: null,
+        })
+      else
+        this.output(job.cellId, {
+          type: 'stream',
+          name: 'stderr',
+          text: 'Not run: the kernel stopped before this cell started.\n',
+        })
+      this.emit({
+        kind: 'done',
+        workbenchId: this.workbenchId,
+        cellId: job.cellId,
+        ok: false,
+        ms: 0,
+        count: 0,
+      })
     })
   }
 
@@ -212,7 +255,14 @@ class Kernel {
     if (!job) return
     this.current = job
     this.setState('busy')
-    this.child.stdin.write(JSON.stringify({ id: job.reqId, op: 'exec', cell: job.cellId, code: job.code }) + '\n')
+    this.child.stdin.write(
+      JSON.stringify({
+        id: job.reqId,
+        op: 'exec',
+        cell: job.cellId,
+        code: job.code,
+      }) + '\n',
+    )
     void getCellLimitS().then((limit) => {
       if (limit > 0 && this.current === job) {
         this.limitTimer = setTimeout(() => {
@@ -232,8 +282,19 @@ class Kernel {
   interrupt(): void {
     const job = this.current
     for (const queued of this.queue) {
-      this.output(queued.cellId, { type: 'stream', name: 'stderr', text: 'Not run: an earlier cell was interrupted.\n' })
-      this.emit({ kind: 'done', workbenchId: this.workbenchId, cellId: queued.cellId, ok: false, ms: 0, count: 0 })
+      this.output(queued.cellId, {
+        type: 'stream',
+        name: 'stderr',
+        text: 'Not run: an earlier cell was interrupted.\n',
+      })
+      this.emit({
+        kind: 'done',
+        workbenchId: this.workbenchId,
+        cellId: queued.cellId,
+        ok: false,
+        ms: 0,
+        count: 0,
+      })
     }
     this.queue = []
     if (!job || !this.child) return
@@ -278,7 +339,15 @@ class Kernel {
     const jobs = [...(this.current ? [this.current] : []), ...this.queue]
     this.current = null
     this.queue = []
-    for (const job of jobs) this.emit({ kind: 'done', workbenchId: this.workbenchId, cellId: job.cellId, ok: false, ms: 0, count: 0 })
+    for (const job of jobs)
+      this.emit({
+        kind: 'done',
+        workbenchId: this.workbenchId,
+        cellId: job.cellId,
+        ok: false,
+        ms: 0,
+        count: 0,
+      })
     for (const resolve of this.pendingVars.values()) resolve([])
     this.pendingVars.clear()
     if (child) {
@@ -307,12 +376,14 @@ export class KernelManager {
   constructor(
     private readonly cwdFor: (workbenchId: string) => string,
     private readonly emit: Emit,
+    /** The runtime layer a workbench's kernel runs on. */
+    private readonly layerFor: (workbenchId: string) => Promise<string> = async () => BASE_LAYER,
   ) {}
 
   private get(workbenchId: string): Kernel {
     let k = this.kernels.get(workbenchId)
     if (!k) {
-      k = new Kernel(workbenchId, this.cwdFor(workbenchId), this.emit)
+      k = new Kernel(workbenchId, this.cwdFor(workbenchId), () => this.layerFor(workbenchId), this.emit)
       this.kernels.set(workbenchId, k)
     }
     return k
@@ -324,12 +395,15 @@ export class KernelManager {
   }
 
   /** Keeps at most MAX_LIVE_KERNELS processes: the least recently used idle
-   * ones are shut down. Each holds NumPy, Stim and Matplotlib in memory. */
+   * ones are shut down. Each holds NumPy, Matplotlib and a pack's libraries in memory. */
   private evictIdle(keep: string): void {
     const live = [...this.kernels.values()].filter((k) => k.state !== 'dead')
     if (live.length <= MAX_LIVE_KERNELS) return
-    const idle = live.filter((k) => k.workbenchId !== keep && k.state === 'idle').sort((a, b) => a.lastUsed - b.lastUsed)
-    for (const k of idle.slice(0, live.length - MAX_LIVE_KERNELS)) k.kill('Shut down to save memory. Running a cell starts it again.')
+    const idle = live
+      .filter((k) => k.workbenchId !== keep && k.state === 'idle')
+      .sort((a, b) => a.lastUsed - b.lastUsed)
+    for (const k of idle.slice(0, live.length - MAX_LIVE_KERNELS))
+      k.kill('Shut down to save memory. Running a cell starts it again.')
   }
 
   interrupt(workbenchId: string): void {

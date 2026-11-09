@@ -20,7 +20,8 @@ import { join } from 'node:path'
 
 export const UV_VERSION = '0.11.32'
 export const PYTHON_VERSION = '3.12'
-export const CORE_LAYER = 'qec-core'
+/** The layer every workbench runs on; content packs add their own beside it. */
+export const BASE_LAYER = 'base'
 
 interface UvAsset {
   file: string
@@ -29,26 +30,43 @@ interface UvAsset {
 
 /** The release assets for UV_VERSION, with the SHA-256 sums astral-sh publishes beside them. */
 const UV_ASSETS: Record<string, UvAsset> = {
-  'darwin-arm64': { file: 'uv-aarch64-apple-darwin.tar.gz', sha256: 'ed336d0ba49db8ef89b2b41fffa372ce63bd032f22a56f001c265891aec32829' },
-  'darwin-x64': { file: 'uv-x86_64-apple-darwin.tar.gz', sha256: '77f5ca26c0de20e992a3677a174fe1121ee25c36f9b1434a863f75bf077a05eb' },
-  'linux-x64': { file: 'uv-x86_64-unknown-linux-gnu.tar.gz', sha256: 'aab924fd522efd06f1c5f3b93a243864fc453132c94b2dc49f1371b528a4b967' },
-  'win32-x64': { file: 'uv-x86_64-pc-windows-msvc.zip', sha256: 'acfde570451cfdb8689fa159a138ee805ba4e241c466432750302c86254b0984' },
+  'darwin-arm64': {
+    file: 'uv-aarch64-apple-darwin.tar.gz',
+    sha256: 'ed336d0ba49db8ef89b2b41fffa372ce63bd032f22a56f001c265891aec32829',
+  },
+  'darwin-x64': {
+    file: 'uv-x86_64-apple-darwin.tar.gz',
+    sha256: '77f5ca26c0de20e992a3677a174fe1121ee25c36f9b1434a863f75bf077a05eb',
+  },
+  'linux-x64': {
+    file: 'uv-x86_64-unknown-linux-gnu.tar.gz',
+    sha256: 'aab924fd522efd06f1c5f3b93a243864fc453132c94b2dc49f1371b528a4b967',
+  },
+  'win32-x64': {
+    file: 'uv-x86_64-pc-windows-msvc.zip',
+    sha256: 'acfde570451cfdb8689fa159a138ee805ba4e241c466432750302c86254b0984',
+  },
 }
 
 /**
  * Which uv build and which Python to use on this machine, or null where the
- * QEC stack cannot install. Stim and PyMatching publish wheels only for
- * macOS (arm64, x64), Linux x64 and Windows x64, so:
+ * runtime does not install. Scientific packages publish wheels most reliably
+ * for macOS (arm64, x64), Linux x64 and Windows x64, so:
  * - Windows on ARM runs the x64 uv and an x64 Python under the system's
- *   emulation, which picks up the win_amd64 wheels.
- * - Linux on ARM is refused up front rather than failing a C++ source build
+ *   emulation, which picks up the win_amd64 wheels every pack can count on.
+ * - Linux on ARM is refused up front rather than failing a source build
  *   after a large download.
  */
 export function runtimeTarget(platform: NodeJS.Platform, arch: string): { uvKey: string; python: string } | null {
-  if (platform === 'darwin' && (arch === 'arm64' || arch === 'x64')) return { uvKey: `darwin-${arch}`, python: PYTHON_VERSION }
+  if (platform === 'darwin' && (arch === 'arm64' || arch === 'x64'))
+    return { uvKey: `darwin-${arch}`, python: PYTHON_VERSION }
   if (platform === 'linux' && arch === 'x64') return { uvKey: 'linux-x64', python: PYTHON_VERSION }
   if (platform === 'win32' && arch === 'x64') return { uvKey: 'win32-x64', python: PYTHON_VERSION }
-  if (platform === 'win32' && arch === 'arm64') return { uvKey: 'win32-x64', python: `cpython-${PYTHON_VERSION}-windows-x86_64-none` }
+  if (platform === 'win32' && arch === 'arm64')
+    return {
+      uvKey: 'win32-x64',
+      python: `cpython-${PYTHON_VERSION}-windows-x86_64-none`,
+    }
   return null
 }
 
@@ -56,14 +74,41 @@ export function uvAssetFor(platform: NodeJS.Platform, arch: string): (UvAsset & 
   const target = runtimeTarget(platform, arch)
   const a = target ? UV_ASSETS[target.uvKey] : undefined
   if (!a) return null
-  return { ...a, url: `https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/${a.file}` }
+  return {
+    ...a,
+    url: `https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/${a.file}`,
+  }
 }
 
 /** Variables a kernel or build never inherits: AI credentials (so learner code
  * cannot call a model behind a mastery gate) and anything that would point
  * Python at a different install. */
-const SCRUBBED_PREFIXES = ['ANTHROPIC_', 'OPENAI_', 'CLAUDE_', 'CLAUDECODE', 'CODEX_', 'OPENCODE_', 'CURSOR_', 'GEMINI_', 'GOOGLE_API', 'MISTRAL_', 'COHERE_', 'GROQ_', 'OPENROUTER_', 'HF_TOKEN', 'HUGGING']
-const SCRUBBED_EXACT = new Set(['PYTHONPATH', 'PYTHONHOME', 'PYTHONSTARTUP', 'PYTHONUSERBASE', 'VIRTUAL_ENV', 'CONDA_PREFIX', 'CONDA_DEFAULT_ENV'])
+const SCRUBBED_PREFIXES = [
+  'ANTHROPIC_',
+  'OPENAI_',
+  'CLAUDE_',
+  'CLAUDECODE',
+  'CODEX_',
+  'OPENCODE_',
+  'CURSOR_',
+  'GEMINI_',
+  'GOOGLE_API',
+  'MISTRAL_',
+  'COHERE_',
+  'GROQ_',
+  'OPENROUTER_',
+  'HF_TOKEN',
+  'HUGGING',
+]
+const SCRUBBED_EXACT = new Set([
+  'PYTHONPATH',
+  'PYTHONHOME',
+  'PYTHONSTARTUP',
+  'PYTHONUSERBASE',
+  'VIRTUAL_ENV',
+  'CONDA_PREFIX',
+  'CONDA_DEFAULT_ENV',
+])
 
 export function scrubbedEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const out: NodeJS.ProcessEnv = {}

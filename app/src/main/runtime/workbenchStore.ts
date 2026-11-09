@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto'
 import { mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { CellResult, WorkbenchCell, WorkbenchDoc, WorkbenchSummary } from '../../shared/runtime'
-import { isValidWorkbenchId } from '../../shared/runtime'
+import { isValidWorkbenchId, parseLabWorkbenchId } from '../../shared/runtime'
 import { parseCells, serializeCells } from '../../shared/workbenchFile'
 
 /**
@@ -13,8 +13,9 @@ import { parseCells, serializeCells } from '../../shared/workbenchFile'
  *     labs/workbenches/<id>/meta.json     title and updatedAt
  *     labs/workbenches/<id>/results.json  each cell's last outputs, so a reopened workbench shows them
  *
- * Course labs will sit beside them as labs/<course>/<lab>/, so `workbenches`
- * is never a course id.
+ * A content pack's lab is a workbench too, with the id "<pack>/<lab>", kept
+ * in labs/packs/<pack>/<lab>/ with the same three files (main/labs/labStore.ts
+ * seeds it from the pack's starter and adds its submissions beside them).
  *
  * The folder is also the kernel's working directory, so a file the learner's
  * code saves lands beside lab.py. This is the learner's own work, not
@@ -31,7 +32,8 @@ export function workbenchRoot(): string {
 
 export function workbenchDir(id: string): string {
   if (!isValidWorkbenchId(id)) throw new Error(`Invalid workbench id: ${id}`)
-  return join(workbenchRoot(), id)
+  const lab = parseLabWorkbenchId(id)
+  return lab ? join(app.getPath('userData'), 'labs', 'packs', lab.packId, lab.labId) : join(workbenchRoot(), id)
 }
 
 export function newCellId(): string {
@@ -53,7 +55,10 @@ interface Meta {
 async function readMeta(id: string): Promise<Meta | null> {
   try {
     const m = JSON.parse(await readFile(join(workbenchDir(id), 'meta.json'), 'utf-8')) as Partial<Meta>
-    return { title: typeof m.title === 'string' ? m.title : id, updatedAt: typeof m.updatedAt === 'string' ? m.updatedAt : '' }
+    return {
+      title: typeof m.title === 'string' ? m.title : id,
+      updatedAt: typeof m.updatedAt === 'string' ? m.updatedAt : '',
+    }
   } catch {
     return null
   }
@@ -69,12 +74,11 @@ const SCRATCH_CELLS = (): WorkbenchCell[] => [
   {
     id: newCellId(),
     kind: 'code',
-    source:
-      'import stim\n\ncircuit = stim.Circuit.generated(\n    "surface_code:rotated_memory_x", distance=3, rounds=3,\n    after_clifford_depolarization=0.001,\n)\ncircuit.num_detectors',
+    source: 'import numpy as np\n\nrng = np.random.default_rng(7)\nflips = rng.random(10_000) < 0.1\nflips.mean()',
   },
 ]
 
-async function create(id: string, title: string, cells: WorkbenchCell[]): Promise<WorkbenchDoc> {
+export async function seedWorkbench(id: string, title: string, cells: WorkbenchCell[]): Promise<WorkbenchDoc> {
   const dir = workbenchDir(id)
   await mkdir(dir, { recursive: true })
   const updatedAt = new Date().toISOString()
@@ -92,7 +96,8 @@ export async function listWorkbenches(): Promise<WorkbenchSummary[]> {
   }
   const out: WorkbenchSummary[] = []
   for (const id of names) {
-    if (!isValidWorkbenchId(id)) continue
+    // Only free-standing workbenches live here; pack labs are listed with their pack.
+    if (!isValidWorkbenchId(id) || parseLabWorkbenchId(id)) continue
     const meta = await readMeta(id)
     if (!meta) continue
     let cellCount = 0
@@ -111,7 +116,7 @@ export async function openWorkbench(id: string): Promise<WorkbenchDoc> {
   const dir = workbenchDir(id)
   const meta = await readMeta(id)
   if (!meta) {
-    if (id === SCRATCH_ID) return create(SCRATCH_ID, 'Scratch', SCRATCH_CELLS())
+    if (id === SCRATCH_ID) return seedWorkbench(SCRATCH_ID, 'Scratch', SCRATCH_CELLS())
     throw new Error(`No workbench named ${id}`)
   }
   let cells: WorkbenchCell[] = []
@@ -135,7 +140,13 @@ export async function openWorkbench(id: string): Promise<WorkbenchDoc> {
     if (!live.has(cellId)) continue
     kept[cellId] = r.state === 'running' || r.state === 'queued' ? { ...r, state: 'idle' } : r
   }
-  return { id, title: meta.title, cells, results: kept, updatedAt: meta.updatedAt }
+  return {
+    id,
+    title: meta.title,
+    cells,
+    results: kept,
+    updatedAt: meta.updatedAt,
+  }
 }
 
 function slugify(title: string): string {
@@ -153,14 +164,17 @@ export async function createWorkbench(title: string): Promise<WorkbenchDoc> {
   const existing = new Set((await listWorkbenches()).map((w) => w.id))
   let id = base
   for (let n = 2; existing.has(id) || id === SCRATCH_ID; n++) id = `${base}-${n}`
-  return create(id, clean, [{ id: newCellId(), kind: 'code', source: '' }])
+  return seedWorkbench(id, clean, [{ id: newCellId(), kind: 'code', source: '' }])
 }
 
 function capResults(results: Record<string, CellResult>): Record<string, CellResult> {
   if (JSON.stringify(results).length <= MAX_RESULTS_BYTES) return results
   const out: Record<string, CellResult> = {}
   for (const [k, r] of Object.entries(results)) {
-    out[k] = { ...r, outputs: r.outputs.map((o) => (o.type === 'figure' ? { ...o, svg: '' } : o)) }
+    out[k] = {
+      ...r,
+      outputs: r.outputs.map((o) => (o.type === 'figure' ? { ...o, svg: '' } : o)),
+    }
   }
   return out
 }
@@ -183,7 +197,11 @@ function validCells(cells: unknown): WorkbenchCell[] {
 
 export async function saveWorkbench(
   id: string,
-  doc: { title: string; cells: WorkbenchCell[]; results: Record<string, CellResult> },
+  doc: {
+    title: string
+    cells: WorkbenchCell[]
+    results: Record<string, CellResult>
+  },
 ): Promise<string> {
   const dir = workbenchDir(id)
   const cells = validCells(doc.cells)

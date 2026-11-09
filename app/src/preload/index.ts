@@ -55,7 +55,10 @@ import type {
   WorkbenchDoc,
   WorkbenchSummary,
 } from '../shared/runtime'
+import type { Confidence, LabView, PackSummary, SmokeResult, Submission } from '../shared/labs'
 import type { BridgeAskRequest, BridgeAskResponse, BridgeBeatRequest, BridgeUiRequest } from '../shared/bridgeProtocol'
+
+type WorkbenchSaveDoc = { title: string; cells: WorkbenchCell[]; results: Record<string, CellResult> }
 
 const engramApi = {
   topics: (): Promise<TopicListEntry[]> => ipcRenderer.invoke('engram:topics'),
@@ -261,7 +264,8 @@ const engramApi = {
   // docs/code-runtime.md). An app-managed Python env in userData; none of it
   // is learning state.
   runtimeStatus: (): Promise<RuntimeStatus> => ipcRenderer.invoke('runtime:status'),
-  runtimeInstall: (): Promise<RuntimeStatus> => ipcRenderer.invoke('runtime:install'),
+  /** Builds one runtime layer: the base layer by default, or a content pack's. */
+  runtimeInstall: (layerId?: string): Promise<RuntimeStatus> => ipcRenderer.invoke('runtime:install', layerId),
   runtimeRemove: (): Promise<RuntimeStatus> => ipcRenderer.invoke('runtime:remove'),
   runtimeCancel: (): Promise<void> => ipcRenderer.invoke('runtime:cancel'),
   onRuntimeChanged: (cb: (s: RuntimeStatus) => void): (() => void) => {
@@ -296,6 +300,33 @@ const engramApi = {
     ipcRenderer.on('kernel:event', handler)
     return () => ipcRenderer.removeListener('kernel:event', handler)
   },
+
+  // Content packs and their labs (main/labs, docs/content-packs.md). A check's
+  // results come back only once the explain-back and a confidence are in.
+  packsList: (refresh?: boolean): Promise<PackSummary[]> => ipcRenderer.invoke('packs:list', refresh),
+  /** Asks for a folder and adds the pack in it; null when the dialog is cancelled. */
+  packsAdd: (): Promise<PackSummary[] | null> => ipcRenderer.invoke('packs:add'),
+  packsRemove: (folder: string): Promise<PackSummary[]> => ipcRenderer.invoke('packs:remove', folder),
+  packsReveal: (folder: string): Promise<string> => ipcRenderer.invoke('packs:reveal', folder),
+  onPacksChanged: (cb: (p: PackSummary[]) => void): (() => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, p: PackSummary[]) => cb(p)
+    ipcRenderer.on('packs:changed', handler)
+    return () => ipcRenderer.removeListener('packs:changed', handler)
+  },
+  labView: (packId: string, labId: string): Promise<LabView> => ipcRenderer.invoke('lab:view', packId, labId),
+  labSmoke: (packId: string, labId: string, milestoneId: string, doc: WorkbenchSaveDoc | null): Promise<SmokeResult> =>
+    ipcRenderer.invoke('lab:smoke', packId, labId, milestoneId, doc),
+  labCancelSmoke: (packId: string, labId: string): Promise<void> => ipcRenderer.invoke('lab:cancelSmoke', packId, labId),
+  labSubmit: (packId: string, labId: string, milestoneId: string, doc: WorkbenchSaveDoc | null): Promise<Submission> =>
+    ipcRenderer.invoke('lab:submit', packId, labId, milestoneId, doc),
+  labExplainBack: (packId: string, labId: string, submissionId: string, text: string): Promise<Submission> =>
+    ipcRenderer.invoke('lab:explainBack', packId, labId, submissionId, text),
+  labConfidence: (packId: string, labId: string, submissionId: string, confidence: Confidence): Promise<Submission> =>
+    ipcRenderer.invoke('lab:confidence', packId, labId, submissionId, confidence),
+  labProduction: (packId: string, labId: string, submissionId: string): Promise<string> =>
+    ipcRenderer.invoke('lab:production', packId, labId, submissionId),
+  labRevealSubmission: (packId: string, labId: string, submissionId: string): Promise<string> =>
+    ipcRenderer.invoke('lab:revealSubmission', packId, labId, submissionId),
 
   /**
    * Which OS this is, for the handful of renderer decisions that genuinely

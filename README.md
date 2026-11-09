@@ -67,7 +67,7 @@ The app's surfaces group the way its navigation does — study, track, explore �
 
 **Practice**
 
-- **Labs**: Python workbenches of notebook-style cells, with Stim, sinter, PyMatching, ldpc, QuTiP and Matplotlib in a private, lockfile-pinned environment the app installs once into its own data folder. Each workbench is a plain percent-format `lab.py` that also runs outside the app. [More in docs/code-runtime.md.](docs/code-runtime.md)
+- **Labs**: Python workbenches of notebook-style cells in a private, lockfile-pinned environment the app installs once into its own data folder, and graded labs from content packs you add: milestones with visible smoke checks, hidden tests that run only at Submit, a blind explain-back, and a signed report. Each workbench is a plain percent-format `lab.py` that also runs outside the app. [More in docs/code-runtime.md](docs/code-runtime.md) and [docs/content-packs.md](docs/content-packs.md).
 
 **Explore**
 
@@ -168,6 +168,7 @@ Electron 36 · React 19 · TypeScript · electron-vite · Tailwind CSS 4 · KaTe
 - [Architecture](docs/architecture.md) — how sessions, the bridge, and IPC fit together in depth
 - [Learning loop](docs/learning-loop.md) — the philosophy constraints, the beat grammar, and how the UI honors both
 - [Code runtime and Labs](docs/code-runtime.md) — the managed Python env, the kernel, and the workbench file format
+- [Content packs](docs/content-packs.md) — the pack format, smoke checks and hidden tests, and the Submit flow
 - [Design language](docs/design-language.md) — Night Atlas: palette, type roles, ink motifs, motion vocabulary
 - [Design tokens](docs/design-tokens.md) — the portable token sheet: every color, panel tier, tilt rule, and chip formula
 - [Development](docs/development.md) — building, packaging, repo layout, debugging locations

@@ -25,11 +25,11 @@ Design notes that are easy to get wrong:
 
 * The protocol channel is a private duplicate of the original stdout. File
   descriptors 1 and 2 are then pointed at pipes whose reader threads forward
-  everything as "stream" messages, so output from C extensions (Stim, BLAS,
-  a stray print in a compiled decoder) can never corrupt the protocol.
+  everything as "stream" messages, so output from C extensions (BLAS, a
+  stray print in a compiled library) can never corrupt the protocol.
 * Cells run in a fresh module installed as sys.modules['__main__'], with no
   __file__. multiprocessing's spawn start method (macOS and Windows default,
-  and what sinter uses) then treats the parent as interactive and does not
+  and what most parallel samplers use) then treats the parent as interactive and does not
   re-run this file in each worker, exactly as it behaves under Jupyter. The
   `if __name__ == "__main__"` guard at the bottom still matters for any
   worker that does import this file.
@@ -55,7 +55,9 @@ PROTOCOL_VERSION = 1
 MAX_STREAM_CHUNK = 8192
 MAX_REPR = 4000
 FIGURE_DPI = 110
-WATCHED_PACKAGES = ("stim", "sinter", "pymatching", "ldpc", "numpy", "scipy", "matplotlib", "qutip", "torch")
+# The app names the packages worth reporting on the command line (a content
+# pack's layer lists its own); these are the base layer's.
+WATCHED_PACKAGES = tuple(a for a in sys.argv[1:] if a) or ("numpy", "scipy", "matplotlib")
 
 _proto_lock = threading.Lock()
 _proto = None  # the protocol channel, set up in main()

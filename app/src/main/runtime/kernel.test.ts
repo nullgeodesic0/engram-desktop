@@ -12,6 +12,7 @@ const spawned: ChildProcess[] = []
 
 vi.mock('./envManager', () => ({
   readyInterpreter: async () => process.execPath,
+  watchedPackages: async () => [],
   getCellLimitS: async () => 0,
   kernelFilePath: () => fake,
   mplConfigDir: () => dir,
@@ -22,7 +23,10 @@ vi.mock('../platform', async () => {
     isWindows: false,
     // The real launcher passes interpreter flags; the stand-in only needs the file.
     spawnCli: (cmd: string, args: string[], opts: object) => {
-      const child = cp.spawn(cmd, [args[args.length - 1]], { ...opts, env: { ...process.env, ...(opts as { env?: object }).env } })
+      const child = cp.spawn(cmd, [args[args.length - 1]], {
+        ...opts,
+        env: { ...process.env, ...(opts as { env?: object }).env },
+      })
       spawned.push(child)
       return child
     },
@@ -60,7 +64,10 @@ describe('KernelManager', () => {
   it('a restart during startup leaves one healthy kernel and no orphan', async () => {
     const { KernelManager } = await import('./kernel')
     const events: KernelEvent[] = []
-    const km = new KernelManager(() => dir, (e) => events.push(e))
+    const km = new KernelManager(
+      () => dir,
+      (e) => events.push(e),
+    )
     process.env.FAKE_DELAY = '400'
     km.run('w', 'c1', 'x')
     await sleep(100)
@@ -81,7 +88,10 @@ describe('KernelManager', () => {
 
   it('keeps at most three kernels alive, stopping the least recently used idle one', async () => {
     const { KernelManager } = await import('./kernel')
-    const km = new KernelManager(() => dir, () => {})
+    const km = new KernelManager(
+      () => dir,
+      () => {},
+    )
     process.env.FAKE_DELAY = '0'
     for (const id of ['a', 'b', 'c', 'd']) {
       km.run(id, 'c', 'x')

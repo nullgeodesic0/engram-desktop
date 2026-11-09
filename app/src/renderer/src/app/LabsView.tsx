@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useState } from 'react'
+import type { PackSummary } from '../../../shared/labs'
 import type { WorkbenchSummary } from '../../../shared/runtime'
+import { parseLabWorkbenchId } from '../../../shared/runtime'
+import { LabPage } from '../components/labs/LabPage'
 import { Button } from '../components/ui/Button'
 import { Workbench } from '../components/workbench/Workbench'
 
 /**
- * Labs: the learner's workbenches, each a Python file of cells over its own
- * kernel. A scratch workbench always exists. Curated lab packs with hidden
- * tests arrive on this surface next; see docs/code-runtime.md.
+ * Labs: the labs of every content pack the learner has added (see
+ * docs/content-packs.md), and their own workbenches, each a Python file of
+ * cells over its own kernel. A scratch workbench always exists.
  */
 
 const SCRATCH_ID = 'scratch'
@@ -32,16 +35,34 @@ export function LabsView({ onOpenSettings }: { onOpenSettings: () => void }) {
   const [naming, setNaming] = useState(false)
   const [newTitle, setNewTitle] = useState('')
 
+  const [packs, setPacks] = useState<PackSummary[] | null>(null)
+
   const refresh = useCallback(() => {
     void window.engram.workbenchList().then(setList)
   }, [])
+  const refreshPacks = useCallback(() => {
+    void window.engram.packsList().then(setPacks)
+  }, [])
 
   useEffect(refresh, [refresh])
-
-  // A remembered workbench that no longer exists falls back to scratch.
   useEffect(() => {
-    if (list.length && current !== SCRATCH_ID && !list.some((w) => w.id === current)) setCurrent(SCRATCH_ID)
-  }, [list, current])
+    refreshPacks()
+    return window.engram.onPacksChanged(setPacks)
+  }, [refreshPacks])
+
+  const currentLab = parseLabWorkbenchId(current)
+
+  // A remembered workbench or lab that no longer exists falls back to scratch.
+  useEffect(() => {
+    if (currentLab) {
+      if (
+        packs &&
+        !packs.some((p) => p.labs.some((l) => l.packId === currentLab.packId && l.labId === currentLab.labId))
+      ) {
+        setCurrent(SCRATCH_ID)
+      }
+    } else if (list.length && current !== SCRATCH_ID && !list.some((w) => w.id === current)) setCurrent(SCRATCH_ID)
+  }, [list, packs, current, currentLab])
 
   function open(id: string) {
     setCurrent(id)
@@ -91,15 +112,48 @@ export function LabsView({ onOpenSettings }: { onOpenSettings: () => void }) {
           <h1 className="font-(family-name:--font-serif) text-[length:var(--text-display)] text-[var(--color-text-primary)] leading-none">
             Labs
           </h1>
-          <p className="text-xs text-[var(--color-text-dim)] mt-2">Python workbenches with Stim, PyMatching and QuTiP.</p>
+          <p className="text-xs text-[var(--color-text-dim)] mt-2">
+            Pack labs with milestones and hidden tests, and Python workbenches of your own.
+          </p>
         </div>
-        <div className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-faint)] px-4 pt-2 pb-1">
-          Workbenches
+        <div className="flex-1 min-h-0 overflow-y-auto flex flex-col">
+          {packs
+            ?.filter((p) => p.labs.length > 0)
+            .map((p) => (
+              <div key={p.folder} className="flex flex-col">
+                <div className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-faint)] px-4 pt-2 pb-1 truncate">
+                  {p.title}
+                </div>
+                {p.labs.map((l) =>
+                  row(
+                    `${l.packId}/${l.labId}`,
+                    l.title,
+                    l.milestones
+                      ? `${l.passed} of ${l.milestones} milestones${l.started ? '' : ' · not started'}`
+                      : 'briefs only',
+                  ),
+                )}
+              </div>
+            ))}
+          {packs && packs.every((p) => p.labs.length === 0) && (
+            <div className="px-4 pb-2 text-xs text-[var(--color-text-faint)]">
+              No pack labs yet.{' '}
+              <button className="focus-ring underline hover:text-[var(--color-text-primary)]" onClick={onOpenSettings}>
+                Add a content pack
+              </button>{' '}
+              in Settings.
+            </div>
+          )}
+          <div className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-faint)] px-4 pt-2 pb-1">
+            Workbenches
+          </div>
+          <nav className="flex flex-col" aria-label="Workbenches">
+            {row(SCRATCH_ID, scratch?.title ?? 'Scratch', scratch ? when(scratch.updatedAt) : '')}
+            {others.map((w) =>
+              row(w.id, w.title, `${w.cellCount} ${w.cellCount === 1 ? 'cell' : 'cells'} · ${when(w.updatedAt)}`),
+            )}
+          </nav>
         </div>
-        <nav className="flex flex-col overflow-y-auto min-h-0" aria-label="Workbenches">
-          {row(SCRATCH_ID, scratch?.title ?? 'Scratch', scratch ? when(scratch.updatedAt) : '')}
-          {others.map((w) => row(w.id, w.title, `${w.cellCount} ${w.cellCount === 1 ? "cell" : "cells"} · ${when(w.updatedAt)}`))}
-        </nav>
         <div className="px-4 py-3 mt-auto border-t border-[var(--color-hairline)]">
           {naming ? (
             <form
@@ -135,7 +189,22 @@ export function LabsView({ onOpenSettings }: { onOpenSettings: () => void }) {
         </div>
       </aside>
       <section className="flex-1 min-w-0 min-h-0">
-        <Workbench key={current} workbenchId={current} onOpenSettings={onOpenSettings} onTitleChange={onTitleChange} />
+        {currentLab ? (
+          <LabPage
+            key={current}
+            packId={currentLab.packId}
+            labId={currentLab.labId}
+            onOpenSettings={onOpenSettings}
+            onChanged={refreshPacks}
+          />
+        ) : (
+          <Workbench
+            key={current}
+            workbenchId={current}
+            onOpenSettings={onOpenSettings}
+            onTitleChange={onTitleChange}
+          />
+        )}
       </section>
     </div>
   )

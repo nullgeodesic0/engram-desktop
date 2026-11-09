@@ -1,0 +1,32 @@
+{
+  "id": "fit-a-line",
+  "title": "Fitting a line by least squares",
+  "kicker": "Example lab",
+  "summary": "Write least squares from the normal equations, then judge the fit.",
+  "starter": "starter.py",
+  "milestones": [
+    {
+      "id": "m1",
+      "title": "The fit",
+      "briefFile": "m1.md",
+      "smoke": "checks/smoke_m1.py",
+      "hidden": "checks/hidden_m1.py",
+      "explainBack": "Explain why the normal equations give the line with the smallest squared error.",
+      "timeLimitS": 120
+    },
+    {
+      "id": "m2",
+      "title": "Goodness of fit",
+      "brief": "Write `r_squared(x, y)`: the fraction of the variance in `y` that your line explains. A perfect fit gives 1; a flat line through the mean gives 0.",
+      "smoke": "checks/smoke_m2.py",
+      "hidden": "checks/hidden_m2.py",
+      "explainBack": "Explain what r² measures, and one way a fit can have a high r² and still be the wrong model.",
+      "timeLimitS": 120
+    },
+    {
+      "id": "m3",
+      "title": "Errors in both variables",
+      "brief": "Brief only, for now: when `x` is noisy too, ordinary least squares is biased toward a flatter slope. Look up total least squares and try it on the data from M1."
+    }
+  ]
+}

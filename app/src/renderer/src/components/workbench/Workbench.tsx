@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type {
   CellKind,
   CellResult,
@@ -22,6 +22,7 @@ import { CellOutputs } from './CellOutputs'
  */
 
 const SAVE_DELAY_MS = 700
+const BASE_PACKAGES = new Set(['numpy', 'scipy', 'matplotlib', 'pytest'])
 
 function newCellId(): string {
   const bytes = new Uint8Array(4)
@@ -29,23 +30,57 @@ function newCellId(): string {
   return 'c' + Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
 }
 
-const EMPTY_RESULT: CellResult = { state: 'idle', outputs: [], count: null, ms: null }
+const EMPTY_RESULT: CellResult = {
+  state: 'idle',
+  outputs: [],
+  count: null,
+  ms: null,
+}
 
 function kernelLabel(state: KernelState): string {
-  return { starting: 'Starting…', idle: 'Idle', busy: 'Running', dead: 'Not started' }[state]
+  return {
+    starting: 'Starting…',
+    idle: 'Idle',
+    busy: 'Running',
+    dead: 'Not started',
+  }[state]
 }
 
 function formatMs(ms: number): string {
   return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)} s`
 }
 
+export interface WorkbenchSnapshot {
+  title: string
+  cells: WorkbenchCell[]
+  results: Record<string, CellResult>
+}
+
 interface WorkbenchProps {
   workbenchId: string
   onOpenSettings: () => void
   onTitleChange?: (title: string) => void
+  /** The runtime layer this workbench's kernel runs on: "base", or a content pack's. */
+  layerId?: string
+  /** Read-only and not runnable, e.g. while a Submit's results are sealed. */
+  frozen?: boolean
+  /** Shown in the toolbar after the kernel controls (a lab puts Smoke and Submit here). */
+  toolbarExtra?: ReactNode
+  /** Every edit, so a lab can hand main exactly what is on screen at Submit. */
+  onDocChange?: (doc: WorkbenchSnapshot) => void
+  titleEditable?: boolean
 }
 
-export function Workbench({ workbenchId, onOpenSettings, onTitleChange }: WorkbenchProps) {
+export function Workbench({
+  workbenchId,
+  onOpenSettings,
+  onTitleChange,
+  layerId = 'base',
+  frozen = false,
+  toolbarExtra,
+  onDocChange,
+  titleEditable = true,
+}: WorkbenchProps) {
   const [doc, setDoc] = useState<WorkbenchDoc | null>(null)
   const [cells, setCells] = useState<WorkbenchCell[]>([])
   const [results, setResults] = useState<Record<string, CellResult>>({})
@@ -65,7 +100,12 @@ export function Workbench({ workbenchId, onOpenSettings, onTitleChange }: Workbe
   const stopAll = useRef(false)
   const focusedKey = useRef(0)
   // What an unmount or a switch to another workbench must not lose.
-  const unsaved = useRef<{ id: string; title: string; cells: WorkbenchCell[]; results: Record<string, CellResult> } | null>(null)
+  const unsaved = useRef<{
+    id: string
+    title: string
+    cells: WorkbenchCell[]
+    results: Record<string, CellResult>
+  } | null>(null)
 
   // Load the document and the runtime's state.
   useEffect(() => {
@@ -158,7 +198,16 @@ export function Workbench({ workbenchId, onOpenSettings, onTitleChange }: Workbe
     if (doc) onTitleChange?.(title)
   }, [title, doc, onTitleChange])
 
-  const runtimeReady = runtime?.state === 'ready'
+  useEffect(() => {
+    if (doc) onDocChange?.({ title, cells, results })
+  }, [doc, title, cells, results, onDocChange])
+
+  // A layer still serves cells while an update of it builds beside the old env.
+  const layer = runtime?.layers.find((l) => l.id === layerId) ?? null
+  const layerReady = !!layer && (layer.state === 'ready' || (layer.state === 'installing' && !!layer.envDir))
+  const runtimeReady = layerReady && !frozen
+  // The badge names the layer's first package beyond the base set, e.g. a pack's main library.
+  const badgePackage = layer?.watch.find((n) => !BASE_PACKAGES.has(n) && layer.packages[n]) ?? null
 
   const runCell = useCallback(
     (cell: WorkbenchCell): Promise<boolean> => {
@@ -269,31 +318,50 @@ export function Workbench({ workbenchId, onOpenSettings, onTitleChange }: Workbe
   return (
     <div className="flex flex-col min-h-0 h-full">
       <div className="flex items-center gap-3 px-6 py-3 border-b border-[var(--color-hairline)] flex-wrap">
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          aria-label="Workbench title"
-          className="focus-ring bg-transparent font-(family-name:--font-serif) text-xl text-[var(--color-text-primary)] min-w-0 flex-1"
-        />
+        {titleEditable ? (
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            aria-label="Workbench title"
+            className="focus-ring bg-transparent font-(family-name:--font-serif) text-xl text-[var(--color-text-primary)] min-w-0 flex-1"
+          />
+        ) : (
+          <div className="flex-1 min-w-0" />
+        )}
         <span className="label-data text-xs text-[var(--color-text-faint)]" aria-live="polite">
           {saved === 'saved' ? 'Saved' : saved === 'saving' ? 'Saving…' : 'Edited'}
         </span>
-        <span className="flex items-center gap-1.5 text-xs text-[var(--color-text-dim)]" title={kernelDetail ?? undefined}>
+        <span
+          className="flex items-center gap-1.5 text-xs text-[var(--color-text-dim)]"
+          title={kernelDetail ?? undefined}
+        >
           <span
             aria-hidden
             className={`h-2 w-2 rounded-full ${busy ? 'animate-pulse' : ''}`}
-            style={{ background: kernel === 'idle' ? 'var(--color-ink-cool)' : busy ? 'var(--color-ink-warm)' : 'var(--color-text-faint)' }}
+            style={{
+              background:
+                kernel === 'idle'
+                  ? 'var(--color-ink-cool)'
+                  : busy
+                    ? 'var(--color-ink-warm)'
+                    : 'var(--color-text-faint)',
+            }}
           />
           Kernel: {kernelLabel(kernel)}
         </span>
-        {runtimeReady && runtime && (
+        {layerReady && layer && (
           <button
             onClick={onOpenSettings}
-            title={runtime.updateAvailable ? 'A newer package set is ready to install in Settings' : `Python ${runtime.pythonVersion ?? ''}`}
+            title={
+              layer.updateAvailable
+                ? 'A newer package set is ready to install in Settings'
+                : `Python ${layer.pythonVersion ?? ''}`
+            }
             className="focus-ring label-data text-[11px] px-2 py-0.5 border border-[var(--color-hairline)] text-[var(--color-text-dim)] hover:text-[var(--color-text-primary)]"
           >
-            {runtime.layers[0]?.id ?? 'qec-core'} · stim {runtime.packages.stim ?? '?'}
-            {runtime.updateAvailable && <span className="text-[var(--color-ink-warm)]"> · update</span>}
+            {layer.id} · py {layer.pythonVersion ?? '?'}
+            {badgePackage && ` · ${badgePackage} ${layer.packages[badgePackage]}`}
+            {layer.updateAvailable && <span className="text-[var(--color-ink-warm)]"> · update</span>}
           </button>
         )}
         <Button size="sm" variant="primary" onClick={runAll} disabled={!runtimeReady || runningAll || codeCount === 0}>
@@ -302,34 +370,53 @@ export function Workbench({ workbenchId, onOpenSettings, onTitleChange }: Workbe
         <Button size="sm" onClick={interrupt} disabled={!busy}>
           Interrupt
         </Button>
-        <Button size="sm" onClick={restart} disabled={!runtimeReady}>
+        <Button size="sm" onClick={restart} disabled={!layerReady}>
           Restart
         </Button>
         <Button size="sm" onClick={showVars} disabled={kernel !== 'idle'} aria-pressed={!!vars}>
           Variables
         </Button>
-        <Button size="sm" onClick={() => void window.engram.workbenchReveal(workbenchId)} title="Open the folder holding lab.py">
+        <Button
+          size="sm"
+          onClick={() => void window.engram.workbenchReveal(workbenchId)}
+          title="Open the folder holding lab.py"
+        >
           Folder
         </Button>
+        {toolbarExtra}
       </div>
 
-      {!runtimeReady && runtime && (
+      {frozen && (
+        <div className="mx-6 mt-3 text-xs text-[var(--color-text-dim)]">
+          Cells are frozen while this submission is sealed. They open again once its results are in.
+        </div>
+      )}
+
+      {!layerReady && runtime && (
         <div className="mx-6 mt-4 panel px-4 py-3 flex items-center gap-3">
           <div className="flex-1 text-sm text-[var(--color-text-dim)]">
-            {runtime.state === 'installing'
-              ? 'The code runtime is installing. Cells can run as soon as it finishes.'
-              : runtime.supported
-                ? 'Code cells need the code runtime, a private Python with Stim, PyMatching and the rest. Install it once in Settings.'
-                : 'The code runtime cannot install on this machine yet: Stim and PyMatching publish no builds for it.'}
+            {!runtime.supported
+              ? 'The code runtime cannot install on this machine yet: the scientific packages it pins publish no builds for it.'
+              : !layer
+                ? `This lab runs on the ${layerId} layer, which no added content pack provides. Check Settings → Content packs.`
+                : layer.state === 'installing'
+                  ? `The ${layer.label} layer is installing. Cells can run as soon as it finishes.`
+                  : layerId === 'base'
+                    ? 'Code cells need the code runtime, a private Python with NumPy, SciPy and Matplotlib. Install it once in Settings.'
+                    : `This lab runs on the ${layer.label} layer from ${layer.sourceTitle}. Install it once in Settings.`}
           </div>
           <Button size="sm" variant="primary" onClick={onOpenSettings}>
             Open Settings
           </Button>
         </div>
       )}
-      {kernel === 'dead' && kernelDetail && runtimeReady && kernelDetail !== 'Shut down.' && kernelDetail !== 'Restarted.' && (
-        <div className="mx-6 mt-3 text-xs text-[var(--color-text-dim)]">{kernelDetail}</div>
-      )}
+      {kernel === 'dead' &&
+        kernelDetail &&
+        layerReady &&
+        kernelDetail !== 'Shut down.' &&
+        kernelDetail !== 'Restarted.' && (
+          <div className="mx-6 mt-3 text-xs text-[var(--color-text-dim)]">{kernelDetail}</div>
+        )}
       {error && <div className="mx-6 mt-3 text-xs text-[var(--color-text-dim)]">{error}</div>}
 
       {vars && (
@@ -367,7 +454,7 @@ export function Workbench({ workbenchId, onOpenSettings, onTitleChange }: Workbe
                 : r.state === 'running'
                   ? 'var(--color-text-primary)'
                   : 'var(--color-ink-cool)'
-          const editing = cell.kind === 'note' && editingNotes.has(cell.id)
+          const editing = cell.kind === 'note' && editingNotes.has(cell.id) && !frozen
           return (
             <div key={cell.id} className="group flex gap-3 min-w-0">
               <div
@@ -377,7 +464,9 @@ export function Workbench({ workbenchId, onOpenSettings, onTitleChange }: Workbe
               >
                 {gutter}
                 {cell.kind === 'given' && (
-                  <div className="text-[10px] uppercase tracking-[0.1em] mt-1 text-[var(--color-text-faint)]">given</div>
+                  <div className="text-[10px] uppercase tracking-[0.1em] mt-1 text-[var(--color-text-faint)]">
+                    given
+                  </div>
                 )}
               </div>
               <div
@@ -412,12 +501,12 @@ export function Workbench({ workbenchId, onOpenSettings, onTitleChange }: Workbe
                       role="button"
                       tabIndex={0}
                       title="Double-click to edit"
-                      onDoubleClick={() => setEditingNotes((s) => new Set(s).add(cell.id))}
+                      onDoubleClick={() => !frozen && setEditingNotes((s) => new Set(s).add(cell.id))}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' && e.shiftKey) {
                           e.preventDefault()
                           runAndAdvance(index, true)
-                        } else if (e.key === 'Enter') setEditingNotes((s) => new Set(s).add(cell.id))
+                        } else if (e.key === 'Enter' && !frozen) setEditingNotes((s) => new Set(s).add(cell.id))
                       }}
                       className="focus-ring px-3 py-1"
                     >
@@ -428,7 +517,7 @@ export function Workbench({ workbenchId, onOpenSettings, onTitleChange }: Workbe
                   <>
                     <CodeCellEditor
                       value={cell.source}
-                      readOnly={cell.kind === 'given'}
+                      readOnly={cell.kind === 'given' || frozen}
                       autoFocus={focus?.id === cell.id}
                       focusKey={focus?.id === cell.id ? focus.key : undefined}
                       errorLine={errorOut?.type === 'error' ? errorOut.line : null}
@@ -439,7 +528,9 @@ export function Workbench({ workbenchId, onOpenSettings, onTitleChange }: Workbe
                       <div className="border-t border-[var(--color-hairline)]">
                         <CellOutputs outputs={r.outputs} />
                         {r.ms != null && r.state !== 'running' && (
-                          <div className="px-3 pb-2 label-data text-[10px] text-[var(--color-text-faint)]">{formatMs(r.ms)}</div>
+                          <div className="px-3 pb-2 label-data text-[10px] text-[var(--color-text-faint)]">
+                            {formatMs(r.ms)}
+                          </div>
                         )}
                       </div>
                     )}
@@ -448,22 +539,42 @@ export function Workbench({ workbenchId, onOpenSettings, onTitleChange }: Workbe
               </div>
               <div className="w-20 shrink-0 flex flex-col items-start gap-0.5 pt-1.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity text-xs">
                 {cell.kind !== 'note' && (
-                  <button className="focus-ring text-[var(--color-text-dim)] hover:text-[var(--color-text-primary)]" disabled={!runtimeReady} onClick={() => void runCell(cell)}>
+                  <button
+                    className="focus-ring text-[var(--color-text-dim)] hover:text-[var(--color-text-primary)]"
+                    disabled={!runtimeReady}
+                    onClick={() => void runCell(cell)}
+                  >
                     Run
                   </button>
                 )}
-                {cell.kind !== 'given' && (
+                {cell.kind !== 'given' && !frozen && (
                   <>
-                    <button className="focus-ring text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]" onClick={() => setKind(cell.id, cell.kind === 'note' ? 'code' : 'note')}>
+                    <button
+                      className="focus-ring text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]"
+                      onClick={() => setKind(cell.id, cell.kind === 'note' ? 'code' : 'note')}
+                    >
                       {cell.kind === 'note' ? 'To code' : 'To note'}
                     </button>
-                    <button className="focus-ring text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]" onClick={() => moveCell(index, -1)} disabled={index === 0} aria-label="Move cell up">
+                    <button
+                      className="focus-ring text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]"
+                      onClick={() => moveCell(index, -1)}
+                      disabled={index === 0}
+                      aria-label="Move cell up"
+                    >
                       Up
                     </button>
-                    <button className="focus-ring text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]" onClick={() => moveCell(index, 1)} disabled={index === cells.length - 1} aria-label="Move cell down">
+                    <button
+                      className="focus-ring text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]"
+                      onClick={() => moveCell(index, 1)}
+                      disabled={index === cells.length - 1}
+                      aria-label="Move cell down"
+                    >
                       Down
                     </button>
-                    <button className="focus-ring text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]" onClick={() => deleteCell(cell.id)}>
+                    <button
+                      className="focus-ring text-[var(--color-text-faint)] hover:text-[var(--color-text-primary)]"
+                      onClick={() => deleteCell(cell.id)}
+                    >
                       Delete
                     </button>
                   </>
@@ -472,7 +583,7 @@ export function Workbench({ workbenchId, onOpenSettings, onTitleChange }: Workbe
             </div>
           )
         })}
-        <div className="flex gap-2 ml-[60px]">
+        <div className={`flex gap-2 ml-[60px] ${frozen ? 'hidden' : ''}`}>
           <Button size="sm" onClick={() => insertCell(cells.length - 1, 'code')}>
             + Code
           </Button>

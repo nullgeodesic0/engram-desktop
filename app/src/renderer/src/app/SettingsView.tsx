@@ -24,6 +24,7 @@ import { CopyButton } from '../components/ui/CopyButton'
 import { PageHeader } from '../components/ui/PageHeader'
 import { SectionBanner } from '../components/ui/SectionBanner'
 import { CodeRuntimeSection } from '../components/CodeRuntimeSection'
+import { ContentPacksSection } from '../components/ContentPacksSection'
 import { soundOn, setSoundOn } from '../shared/soundscape'
 import { friendlyErrorText } from '../shared/friendlyError'
 import { getStoredThemeChoice, setThemeChoice, type ThemeChoice } from '../shared/theme'
@@ -1628,6 +1629,7 @@ export function SettingsView() {
       </div>
 
       <CodeRuntimeSection />
+      <ContentPacksSection />
 
       <div className="panel px-5 py-5 flex flex-col gap-3">
         <div>
