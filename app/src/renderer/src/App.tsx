@@ -24,11 +24,12 @@ import { syncCalibrationMirror } from './shared/calibrationStore'
 // Artifacts keeps the initial bundle limited to the views a fresh session
 // actually needs (Home first, then whichever tab is clicked).
 const TopicMapView = lazy(() => import('./app/TopicMapView').then((m) => ({ default: m.TopicMapView })))
+const LabsView = lazy(() => import('./app/LabsView').then((m) => ({ default: m.LabsView })))
 const ArtifactGalleryView = lazy(() =>
   import('./app/ArtifactGalleryView').then((m) => ({ default: m.ArtifactGalleryView })),
 )
 
-type View = 'home' | 'topics' | 'dashboard' | 'artifacts' | 'review' | 'learn' | 'settings' | 'grades'
+type View = 'home' | 'topics' | 'dashboard' | 'artifacts' | 'review' | 'learn' | 'settings' | 'grades' | 'labs'
 
 const NAV: { id: View; label: string; hint: string; icon: ReactElement }[] = [
   {
@@ -68,6 +69,13 @@ const NAV: { id: View; label: string; hint: string; icon: ReactElement }[] = [
     label: 'Coach',
     hint: '4',
     icon: <path d="M3 16V9m4.5 7V5m4.5 11v-8m4.5 8V7" />,
+  },
+  {
+    // Python workbenches over the app-managed code runtime (docs/code-runtime.md).
+    id: 'labs',
+    label: 'Labs',
+    hint: '8',
+    icon: <path d="M8 3h4M8.5 3v4.5L4 15.2A1.2 1.2 0 0 0 5 17h10a1.2 1.2 0 0 0 1-1.8L11.5 7.5V3M6.2 12h7.6" />,
   },
   {
     id: 'grades',
@@ -136,9 +144,9 @@ export default function App() {
   }, [view])
   // Which stateful views have ever been opened — they mount lazily on first
   // visit, then stay mounted for session continuity (hidden, not unmounted).
-  const [visited, setVisited] = useState({ learn: false, review: false, dashboard: false })
+  const [visited, setVisited] = useState({ learn: false, review: false, dashboard: false, labs: false })
   useEffect(() => {
-    if (view === 'learn' || view === 'review' || view === 'dashboard') {
+    if (view === 'learn' || view === 'review' || view === 'dashboard' || view === 'labs') {
       setVisited((v) => (v[view] ? v : { ...v, [view]: true }))
     }
   }, [view])
@@ -244,7 +252,8 @@ export default function App() {
       v === 'review' ||
       v === 'learn' ||
       v === 'settings' ||
-      v === 'grades'
+      v === 'grades' ||
+      v === 'labs'
     ) {
       goToView(v)
     }
@@ -463,6 +472,13 @@ export default function App() {
             a live session's UI state. Cheap/stateless views (and the Map, whose
             WebGL scene must not run hidden) still unmount on switch. */}
         <div className="flex-1 min-h-0 relative">
+          {(visited.labs || view === 'labs') && (
+            <KeepMounted active={view === 'labs'}>
+              <Suspense fallback={<div className="h-full p-6"><SkeletonBar height={220} /></div>}>
+                <LabsView onOpenSettings={() => goToView('settings')} />
+              </Suspense>
+            </KeepMounted>
+          )}
           {view === 'grades' && (
             <div key="grades" className="view-transition h-full">
               <GradesView onGoSitting={goToSitting} onOpenLedger={() => setLedgerOpen(true)} />

@@ -2376,3 +2376,20 @@
     display: none;
   }
 }
+
+/* Workbench cell outputs (components/workbench). Monospace on purpose: stdout
+   and reprs are column-aligned text, and the data face is proportional. */
+.cell-output-pre {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 28rem;
+  overflow: auto;
+  margin: 0;
+}
+.cell-figure {
+  background: #fff;
+  padding: 4px;
+}

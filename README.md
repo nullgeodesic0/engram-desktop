@@ -65,6 +65,10 @@ The app's surfaces group the way its navigation does — study, track, explore �
 - **Misconception ledger**: misconceptions the tutor files mid-dialogue are pinned into the transcript as specimen labels, tracked in a ledger, surfaced as a digest when a review session opens, and cleared two ways — earned (demonstrate the correction and the tutor resolves it) or manual, with provenance shown either way. A per-row **Re-test** launcher spins up a targeted probe on demand.
 - **Session history**: a global, searchable record of every sitting, hydrated from transcripts on disk.
 
+**Practice**
+
+- **Labs**: Python workbenches of notebook-style cells, with Stim, sinter, PyMatching, ldpc, QuTiP and Matplotlib in a private, lockfile-pinned environment the app installs once into its own data folder. Each workbench is a plain percent-format `lab.py` that also runs outside the app. [More in docs/code-runtime.md.](docs/code-runtime.md)
+
 **Explore**
 
 - **The topic atlas**: cluster-first layout that keeps subtopic regions geometrically disjoint (no overlapping discs, no crossed spines, even on 100+-node maps), a focus lens for reading dense neighborhoods, tutor spotlights mid-dialogue, and one-click export of the whole map as a PDF.
@@ -157,12 +161,13 @@ The build is unsigned — on first launch, right-click the app → Open, or clea
 
 ## Tech stack
 
-Electron 36 · React 19 · TypeScript · electron-vite · Tailwind CSS 4 · KaTeX · marked · zod · esbuild · `@modelcontextprotocol/sdk`
+Electron 36 · React 19 · TypeScript · electron-vite · Tailwind CSS 4 · KaTeX · CodeMirror 6 · marked · zod · esbuild · `@modelcontextprotocol/sdk`
 
 ## Documentation
 
 - [Architecture](docs/architecture.md) — how sessions, the bridge, and IPC fit together in depth
 - [Learning loop](docs/learning-loop.md) — the philosophy constraints, the beat grammar, and how the UI honors both
+- [Code runtime and Labs](docs/code-runtime.md) — the managed Python env, the kernel, and the workbench file format
 - [Design language](docs/design-language.md) — Night Atlas: palette, type roles, ink motifs, motion vocabulary
 - [Design tokens](docs/design-tokens.md) — the portable token sheet: every color, panel tier, tilt rule, and chip formula
 - [Development](docs/development.md) — building, packaging, repo layout, debugging locations
