@@ -1,0 +1,11 @@
+{
+  "answers": {
+    "line-at-5": { "value": 6.42, "tolerance": 0.05, "relative": true, "tier": "core" },
+    "slope": { "value": 1.49, "tolerance": 0.1, "relative": true, "tier": "core" },
+    "residual-at-0": { "value": 2.59, "tolerance": 0.4, "relative": false, "tier": "slip" }
+  },
+  "judgement": [
+    "No: the residuals are positive at both ends and negative in the middle, a curve the line cannot follow.",
+    "A parabola (or another curved model) would fit; the line's slope here is an average, not a rate."
+  ]
+}

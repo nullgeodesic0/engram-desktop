@@ -40,6 +40,15 @@ import {
 } from '../labs/labStore'
 import { addPackFolder, layerForWorkbench, packLayerDefs, removePackFolder } from '../labs/packStore'
 import { attestPart, clearAttestation, listCourses, prepareCourseTopic, recordStartAnyway } from '../labs/courseStore'
+import {
+  listProblems,
+  openProblemHint,
+  pickProblemConfidence,
+  problemProduction,
+  problemView,
+  saveProblemDraft,
+  submitProblem,
+} from '../labs/problemStore'
 
 /**
  * IPC for the code runtime and the Workbench (see docs/code-runtime.md).
@@ -128,6 +137,23 @@ export function registerRuntimeHandlers(): void {
     await announce()
   }
   ipcMain.handle('packs:list', (_e, refresh?: boolean) => listPacks(refresh === true))
+  // Pack problems (shared/problems.ts). The key never crosses: results arrive only after the confidence pick.
+  ipcMain.handle('problem:list', () => listProblems())
+  ipcMain.handle('problem:view', (_e, packId: string, problemId: string) => problemView(packId, problemId))
+  ipcMain.handle('problem:saveDraft', (_e, packId: string, problemId: string, answer: unknown, explainBack: string) =>
+    saveProblemDraft(packId, problemId, answer, explainBack),
+  )
+  ipcMain.handle('problem:hint', (_e, packId: string, problemId: string) => openProblemHint(packId, problemId))
+  ipcMain.handle('problem:submit', (_e, packId: string, problemId: string, answer: unknown, explainBack: string) =>
+    submitProblem(packId, problemId, answer, explainBack),
+  )
+  ipcMain.handle('problem:confidence', (_e, packId: string, problemId: string, attemptId: string, c: Confidence) =>
+    pickProblemConfidence(packId, problemId, attemptId, c),
+  )
+  ipcMain.handle('problem:production', (_e, packId: string, problemId: string, attemptId: string) =>
+    problemProduction(packId, problemId, attemptId),
+  )
+
   // Courses (shared/course.ts). The records are the learner's own; no grade or node state is written.
   ipcMain.handle('course:list', () => listCourses())
   ipcMain.handle('course:prepareTopic', (_e, packId: string, topicId: string) =>

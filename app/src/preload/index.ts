@@ -45,6 +45,7 @@ import type {
 } from '../shared/types'
 import type { SessionEvent } from '../shared/sessionEvents'
 import type { CourseList, CourseRecords, PreparedCourseTopic } from '../shared/course'
+import type { ProblemAnswer, ProblemAttempt, ProblemList, ProblemView } from '../shared/problems'
 import type {
   CellResult,
   KernelEvent,
@@ -314,6 +315,20 @@ const engramApi = {
   // Content packs and their labs (main/labs, docs/content-packs.md). A check's
   // results come back only once the explain-back and a confidence are in.
   packsList: (refresh?: boolean): Promise<PackSummary[]> => ipcRenderer.invoke('packs:list', refresh),
+  // Problems in the added packs (shared/problems.ts).
+  problemList: (): Promise<ProblemList> => ipcRenderer.invoke('problem:list'),
+  problemView: (packId: string, problemId: string): Promise<ProblemView> =>
+    ipcRenderer.invoke('problem:view', packId, problemId),
+  problemSaveDraft: (packId: string, problemId: string, answer: ProblemAnswer | null, explainBack: string): Promise<void> =>
+    ipcRenderer.invoke('problem:saveDraft', packId, problemId, answer, explainBack),
+  problemHint: (packId: string, problemId: string): Promise<ProblemView> =>
+    ipcRenderer.invoke('problem:hint', packId, problemId),
+  problemSubmit: (packId: string, problemId: string, answer: ProblemAnswer, explainBack: string): Promise<ProblemAttempt> =>
+    ipcRenderer.invoke('problem:submit', packId, problemId, answer, explainBack),
+  problemConfidence: (packId: string, problemId: string, attemptId: string, c: Confidence): Promise<ProblemAttempt> =>
+    ipcRenderer.invoke('problem:confidence', packId, problemId, attemptId, c),
+  problemProduction: (packId: string, problemId: string, attemptId: string): Promise<string> =>
+    ipcRenderer.invoke('problem:production', packId, problemId, attemptId),
   // Courses in the added packs (shared/course.ts).
   courseList: (): Promise<CourseList> => ipcRenderer.invoke('course:list'),
   coursePrepareTopic: (packId: string, topicId: string): Promise<PreparedCourseTopic> =>

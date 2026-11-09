@@ -1,0 +1,15 @@
+{
+  "id": "normal-equations-proof",
+  "type": "proof",
+  "title": "The normal equations",
+  "summary": "Prove that the least-squares coefficients solve the normal equations, and when they are unique.",
+  "topic": "least-squares",
+  "node": "normal-equations",
+  "prompt": "Let $A$ be an $n \\times k$ matrix and $y \\in \\mathbb{R}^n$. Prove that every $\\beta$ minimising $\\lVert A\\beta - y \\rVert^2$ satisfies $A^\\top A\\,\\beta = A^\\top y$, and that the minimiser is unique when the columns of $A$ are linearly independent.\n\nWrite one step per box: what follows, and why.",
+  "hints": [
+    "Expand $\\lVert A\\beta - y \\rVert^2 = \\beta^\\top A^\\top A \\beta - 2 y^\\top A \\beta + y^\\top y$ and take its gradient.",
+    "For uniqueness: if $A^\\top A v = 0$, then $v^\\top A^\\top A v = \\lVert A v \\rVert^2 = 0$."
+  ],
+  "steps": 5,
+  "key": "key.json"
+}

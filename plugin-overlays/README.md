@@ -122,6 +122,17 @@ mobile-walk and step-sized protocols followed under the same terms.
 - **`engram/dialogue-grammar.checked-production-exception.md`** — the
   one-sentence companion for the checked-production protocol, on how the
   confidence is collected.
+- **`engram/learn-skill.checked-problem-protocol.md`** — the checked
+  production protocol's sibling for a pack problem (a proof, an audit of a
+  flawed text, a figure reading) the learner hands in: verify the report, stash
+  the recorded answer verbatim with the problem's key as the rubric and the
+  confidence the app collected, and cap the blind assessor's rating by the
+  key's verdict and the help (`hard` at best on a core verdict, `good` at best
+  after a slip, a hint or a second try), stamped `"source": "problem-check"`.
+  Inserted into `skills/learn/SKILL.md` ahead of the assessor. The sixth
+  pedagogy overlay; read its constitutional-exception header first.
+- **`engram/dialogue-grammar.checked-problem-exception.md`** — its
+  one-sentence companion, on how the confidence is collected.
 - **`engram/learn-skill.course-seeded-topic.md`** — how the tutor starts a
   topic the learner chose in a pack's course: with a prepared concept map,
   register it with the engine's own `add-topic`, byte for byte, in place of

@@ -1,0 +1,35 @@
+{
+  "errors": [
+    {
+      "id": "joint-paper",
+      "quote": "introduced jointly by Gauss and Legendre in their 1805 paper",
+      "class": "hallucinated-citation",
+      "central": false,
+      "why": "Legendre published least squares in 1805; Gauss claimed it later, in 1809. There was no joint paper."
+    },
+    {
+      "id": "gradient-sign",
+      "quote": "its gradient is $-2A^\\top(A\\beta - y)$",
+      "class": "wrong-prefactor",
+      "central": false,
+      "why": "The gradient is $+2A^\\top(A\\beta - y)$. The sign does not change where it vanishes, so the normal equations survive."
+    },
+    {
+      "id": "always-invertible",
+      "quote": "Because $A^\\top A$ is always invertible",
+      "class": "dropped-assumption",
+      "central": true,
+      "why": "$A^\\top A$ is invertible only when the columns of $A$ are independent: here, when the $x_i$ are not all equal."
+    },
+    {
+      "id": "refit-check",
+      "quote": "we refit the same points with the same code and check that the slope comes out the same",
+      "class": "check-that-passes",
+      "central": false,
+      "why": "Running deterministic code twice on the same input always agrees; it checks nothing. Compare with a case whose answer is known, or with another method."
+    }
+  ],
+  "judgement": [
+    "Not as written: the uniqueness claim needs the columns of $A$ independent, which is the error that changes a conclusion."
+  ]
+}

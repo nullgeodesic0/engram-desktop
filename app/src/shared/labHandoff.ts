@@ -20,3 +20,15 @@ export function labHandoffMessage(production: string): string {
     production.trim()
   )
 }
+
+/** The hand-in sentence for a pack problem, which the checked-problem overlay keys on. */
+export const PROBLEM_HANDOFF_OPENING = "I'm handing in a checked problem."
+
+/** The composer text for a problem hand-in: the sentence, the request, then the signed report and answer. */
+export function problemHandoffMessage(production: string): string {
+  return (
+    `${PROBLEM_HANDOFF_OPENING} Please follow the learn skill's "Checked problems" protocol: ` +
+    'verify the report with check_report and grade my answer as recorded.\n\n' +
+    production.trim()
+  )
+}
