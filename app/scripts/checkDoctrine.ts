@@ -1352,6 +1352,20 @@ const PINNED_OVERLAY_HASHES: Record<string, string> = {
   // through the architect unchanged except that the payload keeps the
   // course's topic id.
   'learn-skill.course-seeded-topic.md': '4e14bfaa4343a555',
+  // 2026-11-09 — explanation style, two PRESENTATION overlays under the
+  // default charter (no exception header, no opt-in needed: they change how
+  // the dialogue reads, never which beat may say what or how anything is
+  // graded). The grammar section sets message length, one step per message,
+  // per-prerequisite density, one name per term, symbol definitions, plan-
+  // first derivations, no "does that make sense?", and caps each mentor line
+  // at once per sitting; it states outright that it licenses no earlier
+  // explanation and no extra hint. The assessor section words feedback_line
+  // on multi-step work as "first failed step, why, next move" and touches no
+  // other field. Evidence: the tutor-wording findings doc (Nückles et al.
+  // 2006, Chi et al. 2001, Kalyuga & Renkl 2010, Kestin et al. 2025,
+  // Graesser et al. 1995, Van der Kleij et al. 2015).
+  'dialogue-grammar.explanation-style.md': '39926fef56ed5e23',
+  'assessor.feedback-line-style.md': '8e327e606806e938',
 }
 const overlayFiles = readdirSync(OVERLAY_DIR).filter((f) => f.endsWith('.md'))
 for (const f of overlayFiles) {
@@ -1534,6 +1548,16 @@ const LOAD_BEARING: Record<string, string[]> = {
     'that is the full-solve floor, and the floor is the deal',
     '--source step-probe',
     'the assessor grades what was asked, never the whole chain',
+  ],
+  // Presentation overlays, but their limits are what keep them presentation:
+  // if a style rule ever stops saying it licenses no earlier content, no
+  // extra hint and no grade change, it has become pedagogy without a licence.
+  'dialogue-grammar.explanation-style.md': [
+    'It never licenses an explanation earlier than the beats do, never adds a hint the ladder has not reached, and never touches a grade.',
+    '"just show me" is the autonomy override, honoured as written',
+  ],
+  'assessor.feedback-line-style.md': [
+    'This changes only how `feedback_line` is worded, never a grade, a rating or any other field.',
   ],
 }
 for (const [file, needles] of Object.entries(LOAD_BEARING)) {
