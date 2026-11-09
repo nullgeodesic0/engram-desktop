@@ -15,6 +15,9 @@ export const PACK_FORMAT = 1
 export const EXPLAIN_BACK_MAX = 2000
 export const DEFAULT_CHECK_LIMIT_S = 600
 export const MAX_CHECK_LIMIT_S = 3600
+/** "I'm stuck" steps a milestone may hold, and the length of each. */
+export const MAX_STEPS = 12
+export const MAX_STEP_CHARS = 4000
 
 export interface PackRuntimeLayer {
   /** Names the env directory; unique across the loaded packs, never "base". */
@@ -53,6 +56,18 @@ export interface MilestoneManifest {
   explainBack: string
   /** Wall-clock limit for one check run, in seconds. */
   timeLimitS: number
+  /**
+   * The ladder, every rung optional and the learner's choice:
+   * - worked: a fully worked example of a sibling problem, to study first
+   * - completion: a percent-format file of cells with parts of this
+   *   milestone filled in, which the learner can add and finish
+   * - steps: worked steps of this milestone itself, shown one at a time on
+   *   "I'm stuck"
+   * Using completion or steps is recorded on the next Submit and in its report.
+   */
+  worked: string
+  completion: string | null
+  steps: string[]
 }
 
 export interface LabManifest {
@@ -205,6 +220,22 @@ export function parseLabManifest(raw: unknown, readBriefFile?: (p: string) => st
           `${where}: "timeLimitS" must be a whole number of seconds from 5 to ${MAX_CHECK_LIMIT_S}`,
         )
       }
+      let worked = str(mo, 'worked', where, { optional: true, max: 20_000 })
+      const workedFile = path(mo, 'workedFile', where, true)
+      if (workedFile) {
+        if (!readBriefFile) throw new ManifestError(`${where}: "workedFile" cannot be read here`)
+        worked = readBriefFile(workedFile)
+      }
+      const rawSteps = mo.steps === undefined ? [] : mo.steps
+      if (
+        !Array.isArray(rawSteps) ||
+        rawSteps.length > MAX_STEPS ||
+        rawSteps.some((x) => typeof x !== 'string' || !x.trim() || x.length > MAX_STEP_CHARS)
+      ) {
+        throw new ManifestError(
+          `${where}: "steps" must be a list of up to ${MAX_STEPS} Markdown steps, each under ${MAX_STEP_CHARS} characters`,
+        )
+      }
       const hidden = path(mo, 'hidden', where, true)
       const explainBack = str(mo, 'explainBack', where, {
         optional: true,
@@ -220,6 +251,9 @@ export function parseLabManifest(raw: unknown, readBriefFile?: (p: string) => st
         hidden,
         explainBack,
         timeLimitS: limit,
+        worked,
+        completion: path(mo, 'completion', where, true),
+        steps: rawSteps as string[],
       }
     })
     return {

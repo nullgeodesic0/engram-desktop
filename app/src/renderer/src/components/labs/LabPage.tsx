@@ -101,6 +101,17 @@ function Receipt({
           <span className="px-1.5 py-0.5 text-[var(--color-text-dim)]">you said {sub.confidence}</span>
         )}
       </div>
+      <div className="label-data text-[11px] text-[var(--color-text-faint)]">
+        try {sub.seq} ·{' '}
+        {sub.rung === 'full' && sub.help === 0
+          ? 'unaided'
+          : [
+              sub.rung === 'completion' ? 'from the partial solution' : null,
+              sub.help ? `${sub.help} worked step${sub.help === 1 ? '' : 's'} open` : null,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+      </div>
       <div className="text-sm text-[var(--color-text-primary)]">{VERDICT_LINE[sub.verdict ?? 'broken']}</div>
       {run.error && <div className="text-xs text-[var(--color-text-dim)] break-words">{run.error}</div>}
       {run.tests.length > 0 && <TestList tests={run.tests} />}
@@ -151,6 +162,105 @@ function Receipt({
   )
 }
 
+/**
+ * The milestone's ladder, every rung the learner's choice: a worked example of
+ * a sibling problem to study, the pack's partial solution to finish, and
+ * worked steps of this milestone opened one at a time. The last two are
+ * noted on every Submit after them, so a first unaided pass stays legible.
+ */
+function Ladder({
+  milestone,
+  sealed,
+  onStep,
+  onCompletion,
+}: {
+  milestone: MilestoneView
+  sealed: boolean
+  onStep: () => Promise<void>
+  onCompletion: () => Promise<void>
+}) {
+  const [busy, setBusy] = useState(false)
+  const [confirmCompletion, setConfirmCompletion] = useState(false)
+  if (!milestone.worked && !milestone.hasCompletion && milestone.stepsTotal === 0) return null
+  const act = async (fn: () => Promise<void>) => {
+    setBusy(true)
+    try {
+      await fn()
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-faint)]">
+        If you need a way in
+      </div>
+      {milestone.worked && (
+        <details className="panel px-3 py-2">
+          <summary className="focus-ring cursor-pointer text-sm text-[var(--color-text-primary)]">
+            Worked example · a sibling problem
+          </summary>
+          <div className="text-sm pt-2">
+            <ProseMarkdown text={milestone.worked} untrusted />
+          </div>
+        </details>
+      )}
+      {milestone.hasCompletion &&
+        (milestone.completionUsed ? (
+          <div className="text-xs text-[var(--color-text-dim)]">
+            The partial solution is in your cells. Submits from here say you started from it.
+          </div>
+        ) : confirmCompletion ? (
+          <div className="panel px-3 py-2 flex flex-col gap-2">
+            <div className="text-xs text-[var(--color-text-dim)]">
+              This adds cells with parts of this milestone done, for you to finish. Every Submit from here says you
+              started from them.
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" variant="primary" disabled={busy || sealed} onClick={() => void act(onCompletion)}>
+                Add the partial solution
+              </Button>
+              <Button size="sm" onClick={() => setConfirmCompletion(false)}>
+                Not yet
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <Button size="sm" className="self-start" disabled={sealed} onClick={() => setConfirmCompletion(true)}>
+            Start from a partial solution
+          </Button>
+        ))}
+      {milestone.stepsTotal > 0 && (
+        <div className="flex flex-col gap-2">
+          {milestone.steps.map((step, i) => (
+            <div key={i} className="panel px-3 py-2">
+              <div className="label-data text-[11px] text-[var(--color-ink-warm)]">
+                Step {i + 1} of {milestone.stepsTotal}
+              </div>
+              <div className="text-sm">
+                <ProseMarkdown text={step} untrusted />
+              </div>
+            </div>
+          ))}
+          {milestone.steps.length < milestone.stepsTotal && (
+            <>
+              <Button size="sm" className="self-start" disabled={busy || sealed} onClick={() => void act(onStep)}>
+                {milestone.steps.length === 0 ? "I'm stuck: show a worked step" : 'Show the next step'}
+              </Button>
+              {milestone.steps.length === 0 && (
+                <div className="text-xs text-[var(--color-text-faint)]">
+                  Struggle with it a while first; that effort is where most of the learning happens. Each step you open
+                  is noted on your next Submit.
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 interface Props {
   packId: string
   labId: string
@@ -168,6 +278,8 @@ export function LabPage({ packId, labId, onOpenSettings, onChanged }: Props) {
   const [draft, setDraft] = useState('')
   const [unsealing, setUnsealing] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [wbKey, setWbKey] = useState(0)
+  const [reloading, setReloading] = useState(false)
   const snapshot = useRef<WorkbenchSnapshot | null>(null)
   const draftKey = (subId: string) => `engram.lab.explainBack.${packId}/${labId}/${subId}`
 
@@ -291,6 +403,34 @@ export function LabPage({ packId, labId, onOpenSettings, onChanged }: Props) {
     }
   }
 
+  async function openStep() {
+    if (!milestone) return
+    setError(null)
+    try {
+      setView(await window.engram.labRevealStep(packId, labId, milestone.id))
+    } catch (e) {
+      setError(cleanError(e))
+    }
+  }
+
+  async function addCompletion() {
+    if (!milestone) return
+    setError(null)
+    const doc = snapshot.current
+    // Unmount the workbench first, so its own last save cannot land on top of the added cells.
+    setReloading(true)
+    try {
+      await new Promise((r) => setTimeout(r, 0))
+      await window.engram.labAddCompletion(packId, labId, milestone.id, doc)
+      await refresh()
+    } catch (e) {
+      setError(cleanError(e))
+    } finally {
+      setWbKey((k) => k + 1)
+      setReloading(false)
+    }
+  }
+
   async function reflect(sub: Submission, text: string) {
     setError(null)
     try {
@@ -399,23 +539,27 @@ export function LabPage({ packId, labId, onOpenSettings, onChanged }: Props) {
               const subs = view.submissions.filter((s) => s.milestoneId === m.id && !s.sealed && s.run)
               const last = subs[subs.length - 1]
               const sub =
-                m.status === 'passed' && last?.run
-                  ? `passed · core ${count(last.run, 'core')}`
-                  : m.status === 'submitted'
-                    ? 'sealed'
-                    : m.status === 'locked'
-                      ? `opens after ${
-                          view.milestones
-                            .slice(0, i)
-                            .reverse()
-                            .find((x) => x.hasHidden)
-                            ?.id.toUpperCase() ?? 'the last'
-                        }`
-                      : m.status === 'brief'
-                        ? 'brief only'
-                        : smoke[m.id]
-                          ? `open · smoke ${count(smoke[m.id].run, 'smoke')}`
-                          : 'open'
+                m.status === 'passed' && m.passedOn
+                  ? m.passedOn.seq === 1 && m.passedOn.unaided
+                    ? 'passed first try'
+                    : `passed on try ${m.passedOn.seq}${m.passedOn.unaided ? '' : ' · with help'}`
+                  : m.status === 'passed' && last?.run
+                    ? `passed · core ${count(last.run, 'core')}`
+                    : m.status === 'submitted'
+                      ? 'sealed'
+                      : m.status === 'locked'
+                        ? `opens after ${
+                            view.milestones
+                              .slice(0, i)
+                              .reverse()
+                              .find((x) => x.hasHidden)
+                              ?.id.toUpperCase() ?? 'the last'
+                          }`
+                        : m.status === 'brief'
+                          ? 'brief only'
+                          : smoke[m.id]
+                            ? `open · smoke ${count(smoke[m.id].run, 'smoke')}`
+                            : 'open'
               return (
                 <button
                   key={m.id}
@@ -462,16 +606,20 @@ export function LabPage({ packId, labId, onOpenSettings, onChanged }: Props) {
         </aside>
 
         <section className="flex-1 min-w-0 min-h-0">
-          <Workbench
-            key={view.workbenchId}
-            workbenchId={view.workbenchId}
-            layerId={view.layer}
-            frozen={!!sealed}
-            titleEditable={false}
-            toolbarExtra={toolbarExtra}
-            onDocChange={onDocChange}
-            onOpenSettings={onOpenSettings}
-          />
+          {reloading ? (
+            <div className="p-8 text-sm text-[var(--color-text-faint)]">Adding the partial solution…</div>
+          ) : (
+            <Workbench
+              key={`${view.workbenchId}-${wbKey}`}
+              workbenchId={view.workbenchId}
+              layerId={view.layer}
+              frozen={!!sealed}
+              titleEditable={false}
+              toolbarExtra={toolbarExtra}
+              onDocChange={onDocChange}
+              onOpenSettings={onOpenSettings}
+            />
+          )}
         </section>
 
         <aside className="w-80 shrink-0 border-l border-[var(--color-hairline)] overflow-y-auto px-4 py-4 flex flex-col gap-4">
@@ -569,6 +717,10 @@ export function LabPage({ packId, labId, onOpenSettings, onChanged }: Props) {
                 </div>
               )}
             </div>
+          )}
+
+          {milestone && (
+            <Ladder milestone={milestone} sealed={!!sealed} onStep={openStep} onCompletion={addCompletion} />
           )}
 
           {smokeHere && (

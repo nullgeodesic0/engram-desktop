@@ -71,4 +71,23 @@ describe('content pack manifests', () => {
     )
     expect(l.ok && l.value.milestones[0].brief).toBe('from m1.md')
   })
+
+  it('reads a ladder and bounds its steps', () => {
+    const one = (extra: object) =>
+      parseLabManifest({ id: 'one', title: 'One', milestones: [{ ...milestone, ...extra }] })
+    const l = one({ worked: 'A sibling.', completion: 'partial.py', steps: ['First.', 'Second.'] })
+    expect(l.ok && l.value.milestones[0]).toMatchObject({
+      worked: 'A sibling.',
+      completion: 'partial.py',
+      steps: ['First.', 'Second.'],
+    })
+    expect(
+      one({}).ok &&
+        one({}).ok &&
+        (one({}) as { value: { milestones: { steps: string[] }[] } }).value.milestones[0].steps,
+    ).toEqual([])
+    expect(one({ steps: ['ok', ''] }).ok).toBe(false)
+    expect(one({ steps: Array(13).fill('x') }).ok).toBe(false)
+    expect(one({ completion: '../escape.py' }).ok).toBe(false)
+  })
 })

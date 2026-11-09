@@ -85,16 +85,16 @@ async function loadLab(root: string, rel: string): Promise<LoadedLab> {
   } catch (e) {
     throw new Error(`${rel}/lab.json could not be read: ${e instanceof Error ? e.message : String(e)}`)
   }
-  // Brief files are small Markdown, read synchronously inside the validator.
+  // Brief and worked-example files are small Markdown, read synchronously inside the validator.
   // Each is resolved and checked to stay inside the pack before it is read.
   const parsed = parseLabManifest(raw, (p) => {
     let real: string
     try {
       real = realpathSync(resolve(dir, ...p.split('/')))
     } catch {
-      throw new Error(`${rel}: brief file ${p} is missing`)
+      throw new Error(`${rel}: ${p} is missing`)
     }
-    if (!isInside(root, real)) throw new Error(`${rel}: brief file ${p} points outside the pack`)
+    if (!isInside(root, real)) throw new Error(`${rel}: ${p} points outside the pack`)
     return readFileSync(real, 'utf-8').slice(0, 20_000)
   })
   if (!parsed.ok) throw new Error(parsed.error)
@@ -103,6 +103,7 @@ async function loadLab(root: string, rel: string): Promise<LoadedLab> {
   for (const ms of m.milestones) {
     if (ms.smoke) await resolveInside(root, dir, ms.smoke)
     if (ms.hidden) await resolveInside(root, dir, ms.hidden)
+    if (ms.completion) await resolveInside(root, dir, ms.completion)
   }
   return { manifest: m, dir }
 }

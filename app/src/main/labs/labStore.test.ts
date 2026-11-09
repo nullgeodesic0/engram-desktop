@@ -238,6 +238,35 @@ describe('content packs and lab submissions', () => {
     expect((await labs.listPacks(true)).map((x) => x.id)).toEqual(['example-pack'])
   })
 
+  it('opens worked steps one at a time, adds the partial solution once, and says so on the next Submit', async () => {
+    let v = await labs.labView('example-pack', 'fit-a-line')
+    const m1 = v.milestones[0]
+    expect(m1).toMatchObject({ stepsTotal: 3, steps: [], hasCompletion: true, completionUsed: false })
+    expect(m1.passedOn).toEqual({ seq: 2, unaided: true })
+    expect(m1.worked).toContain('through the origin')
+    expect(v.milestones[1].worked).toContain('constant')
+    for (let i = 1; i <= 3; i++) {
+      v = await labs.revealStep('example-pack', 'fit-a-line', 'm1')
+      expect(v.milestones[0].steps).toHaveLength(i)
+    }
+    await expect(labs.revealStep('example-pack', 'fit-a-line', 'm1')).rejects.toThrow(/already open/)
+
+    const before = (await labs.openLab('example-pack', 'fit-a-line')).cells.length
+    const doc = await labs.addCompletion('example-pack', 'fit-a-line', 'm1')
+    expect(doc.cells.length).toBe(before + 2)
+    expect(doc.cells.at(-1)).toMatchObject({ id: 'm1-partial', kind: 'code' })
+    expect((await labs.addCompletion('example-pack', 'fit-a-line', 'm1')).cells.length).toBe(before + 2)
+
+    const sub = await labs.submitMilestone('example-pack', 'fit-a-line', 'm1')
+    expect(sub).toMatchObject({ rung: 'completion', help: 3 })
+    await expect(labs.revealStep('example-pack', 'fit-a-line', 'm1')).rejects.toThrow(/under way/)
+    release(passing)
+    await settle()
+    await labs.submitExplainBack('example-pack', 'fit-a-line', sub.id, 'Finished the solve.')
+    const open = await labs.pickConfidence('example-pack', 'fit-a-line', sub.id, 'Certain')
+    expect(verifyReport(open.report!, await labs.checkKey())).toMatchObject({ rung: 'completion', help: 3 })
+  })
+
   it('brings a given cell the starter gained into a lab under way', () => {
     const cell = (id: string, kind: 'given' | 'code' = 'code', source = id) => ({ id, kind, source })
     const merged = labs.mergeGiven(

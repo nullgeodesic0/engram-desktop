@@ -100,7 +100,10 @@ keeps serving cells until then.
       "smoke": "checks/smoke_m1.py",
       "hidden": "checks/hidden_m1.py",
       "explainBack": "Explain why the normal equations give the best line.",
-      "timeLimitS": 600
+      "timeLimitS": 600,
+      "workedFile": "worked_m1.md",
+      "completion": "completion_m1.py",
+      "steps": ["Build the design matrix…", "Set the gradient to zero…"]
     },
     { "id": "m2", "title": "Further reading", "brief": "Brief only, no tests." }
   ]
@@ -115,6 +118,47 @@ keeps serving cells until then.
 - Milestones open in order: one with hidden tests is locked until every
   earlier milestone with hidden tests has passed its core tests.
 - `timeLimitS` (5 to 3600, default 600) bounds one check run.
+- The ladder, every rung optional and every rung the learner's choice:
+  - `worked` (or `workedFile`): a fully worked example of a sibling problem,
+    in Markdown, to study before or while attempting the milestone.
+  - `completion`: a percent-format file of cells with parts of the milestone
+    done, which **Start from a partial solution** appends to the learner's
+    lab for them to finish. Give its cells ids of their own.
+  - `steps`: up to 12 worked steps of the milestone itself, opened one at a
+    time with **I'm stuck**. Opening is for good.
+
+  Every Submit records the help it had: `rung=completion` once the partial
+  solution was added, and `help=N` for the steps open. The milestone rail says
+  "passed first try" only for a first, unaided pass.
+
+## Learning design
+
+The flow follows what the research on learning to program, and on worked
+problems generally, finds works:
+
+- **Worked examples, then completion problems, then problems from scratch.**
+  Novices learn more from studying a worked solution than from solving the
+  same problem cold, and that advantage reverses as they gain expertise. So
+  the worked example and the partial solution are offered, never forced, and
+  their use is recorded so the tutor can see where on the ladder the learner
+  is and push them up it.
+- **Productive struggle before help.** Steps open one at a time, with a nudge
+  to try first, and the first attempt is the one that counts: `sub=1` with
+  `rung=full help=0` is the cleanest evidence of mastery the report can give.
+- **Feedback that points rather than tells.** A failed core test names the
+  behaviour that broke (its docstring) and holds back the assertion text until
+  the milestone passes, so the next try comes from working out why rather than
+  copying an expected value. Smoke and slip feedback are immediate and
+  specific, because they are about form, not method.
+- **Self-explanation and prediction.** The explain-back comes before any
+  result, and the confidence is a prediction about the core tests. A
+  resubmission asks what changed and why, rather than the same question again.
+- **Hypercorrection.** When a confident prediction meets a failure, the
+  receipt asks which assumption broke. Errors held with high confidence are
+  corrected best when confronted at once.
+
+Still to come with the tutor handoff: predict-the-output items, variants of a
+milestone for retrieval practice, and interleaving across labs.
 
 ### starter.py
 
@@ -248,6 +292,8 @@ The learner's work and the pack's runtime layer stay on disk; **Remove
 runtime** clears every layer.
 
 ## Not yet built
+
+- Predict-the-output items, milestone variants and interleaved review.
 
 - Handing the production to a tutor session, the `read_workbench` bridge
   tool, and the checked-production grading overlay.

@@ -15,6 +15,7 @@ import { KernelManager } from '../runtime/kernel'
 import { BASE_LAYER } from '../runtime/runtimePaths'
 import { createWorkbench, listWorkbenches, openWorkbench, saveWorkbench, workbenchDir } from '../runtime/workbenchStore'
 import {
+  addCompletion,
   cancelAllChecks,
   cancelPackChecks,
   cancelSmoke,
@@ -23,6 +24,7 @@ import {
   listPacks,
   openLab,
   pickConfidence,
+  revealStep,
   runSmoke,
   submissionDir,
   submissionProduction,
@@ -168,6 +170,16 @@ export function registerRuntimeHandlers(): void {
   )
   ipcMain.handle('lab:production', (_e, packId: string, labId: string, submissionId: string) =>
     submissionProduction(String(packId), String(labId), String(submissionId)),
+  )
+  ipcMain.handle('lab:revealStep', (_e, packId: string, labId: string, milestoneId: string) =>
+    revealStep(String(packId), String(labId), String(milestoneId)),
+  )
+  ipcMain.handle(
+    'lab:addCompletion',
+    async (_e, packId: string, labId: string, milestoneId: string, doc: DocIn | null) => {
+      await saveFirst(packId, labId, doc)
+      return addCompletion(String(packId), String(labId), String(milestoneId))
+    },
   )
   ipcMain.handle('lab:reflect', (_e, packId: string, labId: string, submissionId: string, text: string) =>
     submitReflection(String(packId), String(labId), String(submissionId), String(text ?? '')),

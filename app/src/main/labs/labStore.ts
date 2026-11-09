@@ -19,7 +19,7 @@ import { REFLECT_QUESTION, RESUBMIT_QUESTION, isConfidence, verdictOf, wantsRefl
 import { labWorkbenchId, parseLabWorkbenchId, type WorkbenchCell, type WorkbenchDoc } from '../../shared/runtime'
 import { parseCells } from '../../shared/workbenchFile'
 import { getRuntimeStatus } from '../runtime/envManager'
-import { newCellId, openWorkbench, seedWorkbench, workbenchDir } from '../runtime/workbenchStore'
+import { newCellId, openWorkbench, saveWorkbench, seedWorkbench, workbenchDir } from '../runtime/workbenchStore'
 import { startCheck, type RunningCheck } from './checkRunner'
 import { reportFields, signReport } from './checkReport'
 import {
@@ -186,6 +186,8 @@ function normalise(s: StoredSubmission): StoredSubmission {
     explainBackPrompt: s.explainBackPrompt ?? '',
     reflectionPrompt: s.reflectionPrompt ?? null,
     reflection: s.reflection ?? null,
+    rung: s.rung === 'completion' ? 'completion' : 'full',
+    help: typeof s.help === 'number' ? s.help : 0,
   }
 }
 
@@ -193,11 +195,62 @@ function normalise(s: StoredSubmission): StoredSubmission {
 // Views
 // ---------------------------------------------------------------------------
 
-function milestoneViews(lab: LoadedLab, subs: StoredSubmission[]): MilestoneView[] {
+// ---------------------------------------------------------------------------
+// The ladder: help the learner chose, per milestone
+// ---------------------------------------------------------------------------
+
+interface MilestoneProgress {
+  /** Worked steps opened, and when each was. */
+  steps: string[]
+  /** When the partial solution was added, or null. */
+  completion: string | null
+}
+
+type Progress = Record<string, MilestoneProgress>
+
+function progressPath(dir: string): string {
+  return join(dir, 'progress.json')
+}
+
+async function readProgress(dir: string): Promise<Progress> {
+  try {
+    const raw = JSON.parse(await readFile(progressPath(dir), 'utf-8')) as { milestones?: Progress }
+    const out: Progress = {}
+    for (const [k, v] of Object.entries(raw.milestones ?? {})) {
+      out[k] = {
+        steps: Array.isArray(v?.steps) ? v.steps.filter((x) => typeof x === 'string') : [],
+        completion: typeof v?.completion === 'string' ? v.completion : null,
+      }
+    }
+    return out
+  } catch {
+    return {}
+  }
+}
+
+function progressOf(p: Progress, id: string): MilestoneProgress {
+  return p[id] ?? { steps: [], completion: null }
+}
+
+async function updateProgress(dir: string, fn: (p: Progress) => void): Promise<Progress> {
+  return withLock(dir, async () => {
+    const p = await readProgress(dir)
+    fn(p)
+    await mkdir(dir, { recursive: true })
+    await writeAtomic(progressPath(dir), JSON.stringify({ milestones: p }, null, 2))
+    return p
+  })
+}
+
+function milestoneViews(lab: LoadedLab, subs: StoredSubmission[], progress: Progress): MilestoneView[] {
   let gateOpen = true
   return lab.manifest.milestones.map((m) => {
     const mine = subs.filter((s) => s.milestoneId === m.id)
     const passed = milestonePassed(subs, m.id)
+    const pr = progressOf(progress, m.id)
+    const firstPass = mine
+      .filter((s) => !s.sealed && s.run && ['passed', 'slip'].includes(verdictOf(s.run)))
+      .sort((a, b) => a.seq - b.seq)[0]
     let status: MilestoneStatus
     if (!m.hidden) status = 'brief'
     else if (!gateOpen) status = 'locked'
@@ -214,6 +267,12 @@ function milestoneViews(lab: LoadedLab, subs: StoredSubmission[]): MilestoneView
       explainBack: m.explainBack,
       timeLimitS: m.timeLimitS,
       status,
+      worked: m.worked,
+      hasCompletion: !!m.completion,
+      completionUsed: pr.completion !== null,
+      stepsTotal: m.steps.length,
+      steps: m.steps.slice(0, pr.steps.length),
+      passedOn: firstPass ? { seq: firstPass.seq, unaided: firstPass.rung === 'full' && firstPass.help === 0 } : null,
     }
   })
 }
@@ -221,8 +280,9 @@ function milestoneViews(lab: LoadedLab, subs: StoredSubmission[]): MilestoneView
 async function labSummary(pack: LoadedPack, lab: LoadedLab): Promise<LabSummary> {
   const packId = pack.manifest!.id
   const dir = workbenchDir(labWorkbenchId(packId, lab.manifest.id))
-  const subs = await readSubs(recordsDir(packId, lab.manifest.id))
-  const views = milestoneViews(lab, subs)
+  const records = recordsDir(packId, lab.manifest.id)
+  const subs = await readSubs(records)
+  const views = milestoneViews(lab, subs, await readProgress(records))
   let started = false
   try {
     await readFile(join(dir, 'meta.json'))
@@ -275,7 +335,7 @@ export async function labView(packId: string, labId: string): Promise<LabView> {
     kicker: lab.manifest.kicker,
     summary: lab.manifest.summary,
     layer: packLayerId(pack),
-    milestones: milestoneViews(lab, subs),
+    milestones: milestoneViews(lab, subs, await readProgress(recordsDir(packId, labId))),
     submissions: subs.map((x) => redact(x, subs)),
   }
 }
@@ -409,6 +469,55 @@ export function cancelSmoke(packId: string, labId: string): void {
   smokeRuns.get(recordsDir(packId, labId))?.cancel()
 }
 
+async function openMilestone(packId: string, labId: string, milestoneId: string) {
+  const { pack, lab } = await findLab(packId, labId)
+  const m = lab.manifest.milestones.find((x) => x.id === milestoneId)
+  if (!m) throw new Error('No such milestone.')
+  const dir = recordsDir(packId, labId)
+  if ((await readSubs(dir)).some((s) => s.sealed))
+    throw new Error('Finish the submission under way first: help opens again once its results are in.')
+  return { pack, lab, m, dir }
+}
+
+/**
+ * "I'm stuck": opens the milestone's next worked step. Opening is for good,
+ * and every Submit after it says how many steps were open.
+ */
+export async function revealStep(packId: string, labId: string, milestoneId: string): Promise<LabView> {
+  const { m, dir } = await openMilestone(packId, labId, milestoneId)
+  await updateProgress(dir, (p) => {
+    const pr = progressOf(p, milestoneId)
+    if (pr.steps.length >= m.steps.length) throw new Error('Every worked step is already open.')
+    p[milestoneId] = { ...pr, steps: [...pr.steps, new Date().toISOString()] }
+  })
+  return labView(packId, labId)
+}
+
+/**
+ * Adds the pack's partial solution for a milestone to the end of the
+ * learner's lab.py, as ordinary cells to finish. Cells whose id the lab
+ * already holds are skipped, so adding twice changes nothing. Every Submit
+ * after it is marked rung=completion.
+ */
+export async function addCompletion(packId: string, labId: string, milestoneId: string): Promise<WorkbenchDoc> {
+  const { pack, lab, m, dir } = await openMilestone(packId, labId, milestoneId)
+  if (!m.completion) throw new Error('This milestone has no partial solution.')
+  const path = await resolveInside(pack.root!, lab.dir, m.completion)
+  const add = parseCells(await readFile(path, 'utf-8'), newCellId).map((c) =>
+    // The pack's cells to finish: never given, so the learner can edit them.
+    c.kind === 'given' ? { ...c, kind: 'code' as const } : c,
+  )
+  const doc = await openLab(packId, labId)
+  const have = new Set(doc.cells.map((c) => c.id))
+  const fresh = add.filter((c) => !have.has(c.id))
+  if (fresh.length) await saveWorkbench(doc.id, { ...doc, cells: [...doc.cells, ...fresh] })
+  await updateProgress(dir, (p) => {
+    const pr = progressOf(p, milestoneId)
+    p[milestoneId] = { ...pr, completion: pr.completion ?? new Date().toISOString() }
+  })
+  return openLab(packId, labId)
+}
+
 // ---------------------------------------------------------------------------
 // Submit → explain-back → confidence → unseal
 // ---------------------------------------------------------------------------
@@ -451,11 +560,13 @@ export async function submitMilestone(packId: string, labId: string, milestoneId
   const labPy = await readFile(join(labDir, 'lab.py'))
   const codeHash = createHash('sha256').update(labPy).digest('hex').slice(0, 12)
 
+  const progress = await readProgress(dir)
+  const help = progressOf(progress, milestoneId)
   // One locked step from "is anything sealed?" to the record on disk and the
   // run registered, so a second Submit cannot slip in between.
   let sub: StoredSubmission | undefined
   const subs = await updateSubs(dir, async (all) => {
-    const status = milestoneViews(lab, all).find((v) => v.id === milestoneId)?.status
+    const status = milestoneViews(lab, all, progress).find((v) => v.id === milestoneId)?.status
     if (status === 'locked') throw new Error('An earlier milestone has to pass first.')
     if (all.some((s) => s.sealed)) throw new Error('Finish the submission already under way first.')
     const prior = all.filter((s) => s.milestoneId === milestoneId)
@@ -478,6 +589,8 @@ export async function submitMilestone(packId: string, labId: string, milestoneId
       confidence: null,
       reflectionPrompt: null,
       reflection: null,
+      rung: help.completion !== null ? 'completion' : 'full',
+      help: help.steps.length,
       sealed: true,
       finished: false,
       run: null,
@@ -558,6 +671,8 @@ async function unseal(packId: string, labId: string, submissionId: string): Prom
         at: new Date(s.submittedAt),
         confidence: s.confidence,
         explainBack: s.explainBack,
+        rung: s.rung,
+        help: s.help,
       }),
       key,
     )

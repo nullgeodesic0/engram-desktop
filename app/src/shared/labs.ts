@@ -118,6 +118,9 @@ export interface Submission {
   /** Set once unsealed when a confident pick met a core failure (see REFLECT_QUESTION). */
   reflectionPrompt: string | null
   reflection: string | null
+  /** The help this attempt had, frozen at Submit: whether the partial solution was added, and how many worked steps were open. */
+  rung: Rung
+  help: number
   sealed: boolean
   /** Hidden tests have finished (known in main even while sealed). */
   finished: boolean
@@ -126,6 +129,9 @@ export interface Submission {
   report: string | null
   verdict: CheckVerdict | null
 }
+
+/** full: written from scratch. completion: started from the pack's partial solution. */
+export type Rung = 'full' | 'completion'
 
 /** locked: an earlier milestone with tests has not passed. brief: no hidden tests, nothing to submit. */
 export type MilestoneStatus = 'locked' | 'open' | 'submitted' | 'passed' | 'brief'
@@ -139,6 +145,15 @@ export interface MilestoneView {
   explainBack: string
   timeLimitS: number
   status: MilestoneStatus
+  /** A worked example of a sibling problem, Markdown; empty when the pack has none. */
+  worked: string
+  hasCompletion: boolean
+  completionUsed: boolean
+  stepsTotal: number
+  /** The worked steps opened so far, in order. */
+  steps: string[]
+  /** The try that first passed its core tests, and whether it had help; null until then. */
+  passedOn: { seq: number; unaided: boolean } | null
 }
 
 export interface LabSummary {

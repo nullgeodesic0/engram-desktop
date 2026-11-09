@@ -25,6 +25,8 @@ function make(over: Partial<Parameters<typeof reportFields>[0]> = {}) {
     at: new Date('2026-11-09T14:52:03.123Z'),
     confidence: 'Pretty sure',
     explainBack: 'The normal equations set the gradient of the squared error to zero.',
+    rung: 'full',
+    help: 0,
     ...over,
   })
 }
@@ -33,7 +35,7 @@ describe('check reports', () => {
   it('signs a report that verifies, and reads back its fields', () => {
     const line = signReport(make(), key)
     expect(line).toMatch(/^\[engram-check v1 lab=example-pack\/fit-a-line m=m1 sub=2 verdict=slip core=2\/2 slip=0\/1 /)
-    expect(line).toMatch(/ t=41s at=2026-11-09T14:52:03Z conf=pretty-sure eb=[0-9a-f]{12} sig=/)
+    expect(line).toMatch(/ t=41s at=2026-11-09T14:52:03Z conf=pretty-sure eb=[0-9a-f]{12} rung=full help=0 sig=/)
     expect(line.length).toBeLessThanOrEqual(REPORT_MAX)
     expect(verifyReport(line, key)).toEqual(make())
   })
@@ -68,6 +70,8 @@ describe('check reports', () => {
         milestone: long,
         env: `${long}-0123456789ab`,
         confidence: 'Just guessing',
+        rung: 'completion',
+        help: 12,
         run: {
           ...run,
           seconds: 3600,

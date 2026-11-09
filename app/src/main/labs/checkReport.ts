@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { createHash } from 'node:crypto'
-import type { CheckRun, CheckVerdict, Confidence } from '../../shared/labs'
+import type { CheckRun, CheckVerdict, Confidence, Rung } from '../../shared/labs'
 import { confidenceToken, tally, verdictOf } from '../../shared/labs'
 
 /**
@@ -8,7 +8,7 @@ import { confidenceToken, tally, verdictOf } from '../../shared/labs'
  *
  *     [engram-check v1 lab=pack/lab m=m3 sub=2 verdict=slip core=6/6 slip=2/3
  *      env=base-4b09c790529a code=9c1e04aa31f2 t=41s at=2026-11-09T14:52:03Z
- *      conf=pretty-sure eb=5d1c0e9a77b2 sig=…]
+ *      conf=pretty-sure eb=5d1c0e9a77b2 rung=full help=0 sig=…]
  *
  * (one line in practice). It is what the learner's turn to the tutor opens
  * with, ahead of the explain-back, and it stays under 400 characters so the
@@ -18,7 +18,10 @@ import { confidenceToken, tally, verdictOf } from '../../shared/labs'
  * the learner's code beyond its hash: the grader never sees the code. `conf`
  * is the confidence picked before the results were shown, and `eb` the hash
  * of the explain-back written before them, so neither can be swapped after
- * the learner has seen how the tests went.
+ * the learner has seen how the tests went. `sub` is the try (1 is the first
+ * attempt), `rung` says whether the code started from the pack's partial
+ * solution, and `help` how many worked steps were open at Submit, so the
+ * tutor can tell a first, unaided pass from one that was helped along.
  *
  * What the signature attests: that this app ran the pack's tests on code
  * with that hash and reported this. It does not attest that the code left
@@ -45,6 +48,8 @@ export interface ReportFields {
   at: string
   conf: string
   eb: string
+  rung: string
+  help: number
 }
 
 /** First 12 hex of the SHA-256 of the explain-back as stored. */
@@ -62,6 +67,8 @@ export function reportFields(input: {
   at: Date
   confidence: Confidence
   explainBack: string
+  rung: Rung
+  help: number
 }): ReportFields {
   const core = tally(input.run.tests, 'core')
   const slip = tally(input.run.tests, 'slip')
@@ -79,13 +86,15 @@ export function reportFields(input: {
     at: input.at.toISOString().replace(/\.\d{3}Z$/, 'Z'),
     conf: confidenceToken(input.confidence),
     eb: explainBackHash(input.explainBack),
+    rung: input.rung,
+    help: input.help,
   }
 }
 
 function body(f: ReportFields): string {
   return (
     `${REPORT_PREFIX}lab=${f.lab} m=${f.milestone} sub=${f.seq} verdict=${f.verdict} core=${f.core} slip=${f.slip}` +
-    ` env=${f.env} code=${f.code} t=${f.seconds}s at=${f.at} conf=${f.conf} eb=${f.eb}`
+    ` env=${f.env} code=${f.code} t=${f.seconds}s at=${f.at} conf=${f.conf} eb=${f.eb} rung=${f.rung} help=${f.help}`
   )
 }
 
@@ -137,6 +146,8 @@ export function verifyReport(line: string, key: Buffer): ReportFields | null {
     at: kv.get('at') ?? '',
     conf: kv.get('conf') ?? '',
     eb: kv.get('eb') ?? '',
+    rung: kv.get('rung') ?? '',
+    help: Number(kv.get('help')),
   }
   // The signature covers the text, so this only guards against a report from a different format.
   return body(fields) === b ? fields : null
