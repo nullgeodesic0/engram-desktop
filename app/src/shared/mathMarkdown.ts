@@ -1,4 +1,4 @@
-import { marked } from 'marked'
+import { Marked, marked } from 'marked'
 import katex from 'katex'
 
 /**
@@ -22,7 +22,43 @@ export function renderMath(tex: string, displayMode: boolean): string {
   }
 }
 
-export function renderMarkdownWithMathCore(source: string, postProcess?: (bodyHtml: string) => string): string {
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+
+/** Links a pack may carry: the web, mail, or a place on the same page. */
+function safeHref(href: string): boolean {
+  return /^(https?:|mailto:|#)/i.test(href.trim())
+}
+
+/**
+ * A `marked` for text the app did not write and the user did not type: a
+ * content pack's briefs. Raw HTML is shown as text, links go only to the web
+ * or mail, and images are left as their alt text (a pack's brief has no
+ * business loading remote content).
+ */
+const untrustedMarked = new Marked({
+  renderer: {
+    html({ text }) {
+      return escapeHtml(text)
+    },
+    link({ href, title, tokens }) {
+      const inner = this.parser.parseInline(tokens)
+      if (!safeHref(href)) return inner
+      const t = title ? ` title="${escapeHtml(title)}"` : ''
+      return `<a href="${escapeHtml(href)}"${t}>${inner}</a>`
+    },
+    image({ text }) {
+      return escapeHtml(text)
+    },
+  },
+})
+
+export function renderMarkdownWithMathCore(
+  source: string,
+  postProcess?: (bodyHtml: string) => string,
+  opts: { untrusted?: boolean } = {},
+): string {
   const mathHtml: string[] = []
   const stash = (html: string): string => {
     mathHtml.push(html)
@@ -46,7 +82,7 @@ export function renderMarkdownWithMathCore(source: string, postProcess?: (bodyHt
 
   // Synchronous parse (no async extensions configured) — `marked.parse` with default
   // options returns a string, not a Promise, in that case.
-  let bodyHtml = marked.parse(withoutMath, { async: false }) as string
+  let bodyHtml = (opts.untrusted ? untrustedMarked : marked).parse(withoutMath, { async: false }) as string
   if (postProcess) bodyHtml = postProcess(bodyHtml)
 
   return bodyHtml.replace(/@@MATH(\d+)@@/g, (_m, i: string) => mathHtml[Number(i)] ?? '')

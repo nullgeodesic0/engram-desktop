@@ -16,7 +16,9 @@ import { BASE_LAYER } from '../runtime/runtimePaths'
 import { createWorkbench, listWorkbenches, openWorkbench, saveWorkbench, workbenchDir } from '../runtime/workbenchStore'
 import {
   cancelAllChecks,
+  cancelPackChecks,
   cancelSmoke,
+  labIsSealed,
   labView,
   listPacks,
   openLab,
@@ -26,6 +28,7 @@ import {
   submissionProduction,
   submitExplainBack,
   submitMilestone,
+  submitReflection,
 } from '../labs/labStore'
 import { addPackFolder, layerForWorkbench, packLayerDefs, removePackFolder } from '../labs/packStore'
 
@@ -73,6 +76,7 @@ export function registerRuntimeHandlers(): void {
   ipcMain.handle('runtime:cancel', () => cancelRuntimeInstall())
   ipcMain.handle('runtime:remove', async () => {
     kernels.shutdownAll()
+    cancelAllChecks()
     await removeRuntime()
     await announce()
     return getRuntimeStatus()
@@ -90,8 +94,12 @@ export function registerRuntimeHandlers(): void {
   ipcMain.handle('workbench:save', (_e, id: string, doc: DocIn) => saveWorkbench(id, doc))
   ipcMain.handle('workbench:reveal', (_e, id: string) => shell.openPath(workbenchDir(id)))
 
-  ipcMain.handle('kernel:run', (_e, workbenchId: string, cellId: string, code: string) => {
+  ipcMain.handle('kernel:run', async (_e, workbenchId: string, cellId: string, code: string) => {
     workbenchDir(workbenchId) // validates the id before anything is spawned
+    // A lab with a sealed submission is frozen until its explain-back and
+    // confidence are in; its code does not run meanwhile.
+    if (await labIsSealed(String(workbenchId)))
+      throw new Error('This lab is frozen until the submission under way is unsealed.')
     kernels.run(workbenchId, String(cellId), String(code))
   })
   ipcMain.handle('kernel:interrupt', (_e, workbenchId: string) => kernels.interrupt(workbenchId))
@@ -128,11 +136,16 @@ export function registerRuntimeHandlers(): void {
     const pack = before.find((p) => p.folder === folder)
     // A removed pack's labs must not keep a kernel on its layer.
     for (const lab of pack?.labs ?? []) kernels.shutdown(labWorkbenchId(lab.packId, lab.labId))
+    if (pack?.id) cancelPackChecks(pack.id)
     await removePackFolder(String(folder))
     await packsChanged()
     return listPacks()
   })
-  ipcMain.handle('packs:reveal', (_e, folder: string) => shell.openPath(String(folder)))
+  // Only a folder the learner added: the renderer cannot open arbitrary paths.
+  ipcMain.handle('packs:reveal', async (_e, folder: string) => {
+    if (!(await listPacks()).some((p) => p.folder === folder)) throw new Error('That folder is not an added pack.')
+    return shell.openPath(folder)
+  })
 
   const saveFirst = async (packId: string, labId: string, doc: DocIn | null) => {
     if (doc) await saveWorkbench(labWorkbenchId(String(packId), String(labId)), doc)
@@ -156,7 +169,10 @@ export function registerRuntimeHandlers(): void {
   ipcMain.handle('lab:production', (_e, packId: string, labId: string, submissionId: string) =>
     submissionProduction(String(packId), String(labId), String(submissionId)),
   )
-  ipcMain.handle('lab:revealSubmission', (_e, packId: string, labId: string, submissionId: string) =>
-    shell.openPath(submissionDir(String(packId), String(labId), String(submissionId))),
+  ipcMain.handle('lab:reflect', (_e, packId: string, labId: string, submissionId: string, text: string) =>
+    submitReflection(String(packId), String(labId), String(submissionId), String(text ?? '')),
+  )
+  ipcMain.handle('lab:revealSubmission', async (_e, packId: string, labId: string, submissionId: string) =>
+    shell.openPath(await submissionDir(String(packId), String(labId), String(submissionId))),
   )
 }

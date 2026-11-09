@@ -285,10 +285,11 @@ conveniences only:
 - `labs/workbenches/<id>/` — the learner's workbenches
   (`app/src/main/runtime/workbenchStore.ts`): `lab.py` in the percent cell format,
   `meta.json`, and `results.json` with each cell's last outputs.
-- `labs/packs.json`, `labs/.check-key` and `labs/packs/<pack>/<lab>/` — the
-  content packs the learner added (`app/src/main/labs/packStore.ts`), the key
-  that signs check reports, and each pack lab's workbench plus its submissions
-  (`app/src/main/labs/labStore.ts`). The packs themselves are read where they
+- `labs/packs.json`, `labs/.check-key`, `labs/packs/<pack>/<lab>/` and
+  `labs/records/<pack>/<lab>/` — the content packs the learner added
+  (`app/src/main/labs/packStore.ts`), the key that signs check reports, each
+  pack lab's workbench, and its submissions and check runs, kept outside the
+  workbench folder (`app/src/main/labs/labStore.ts`). The packs themselves are read where they
   sit and never written. See [content-packs.md](content-packs.md).
 - `achievements.json`, `notifier-state.json`, and Electron's own window-state file
   — further UI-only conveniences (unlocked-achievement tracking, review-notifier

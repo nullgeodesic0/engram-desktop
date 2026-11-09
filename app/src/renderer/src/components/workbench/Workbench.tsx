@@ -239,13 +239,15 @@ export function Workbench({
     (index: number, advance: boolean) => {
       const cell = cells[index]
       if (!cell) return
+      // Frozen cells neither run nor grow: a sealed submission is being judged.
+      if (frozen) return
       void runCell(cell)
       if (!advance) return
       const next = cells[index + 1]
       if (next) setFocus({ id: next.id, key: Date.now() })
       else insertCell(index, 'code')
     },
-    [cells, runCell, insertCell],
+    [cells, runCell, insertCell, frozen],
   )
 
   async function runAll() {
@@ -379,7 +381,8 @@ export function Workbench({
         <Button
           size="sm"
           onClick={() => void window.engram.workbenchReveal(workbenchId)}
-          title="Open the folder holding lab.py"
+          disabled={frozen}
+          title={frozen ? 'Closed while the submission is sealed' : 'Open the folder holding lab.py'}
         >
           Folder
         </Button>

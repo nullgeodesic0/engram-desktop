@@ -55,8 +55,8 @@ function chipifyNodeCodespans(html: string, nodeIds: Set<string>, topicId: strin
  *
  * `marked`'s HTML passthrough is left unsanitized: every caller renders only
  * first-party text — the user's own typed draft, or the assistant's reply from
- * the user's own Claude session — never remote or third-party content. Introducing
- * a sanitizer would be the right move if that trust boundary ever widens.
+ * the user's own Claude session. The one third-party source, a content pack's
+ * briefs, passes `untrusted`, which escapes raw HTML and keeps only web and mail links.
  */
 export function renderMarkdownWithMath(
   source: string,
@@ -66,12 +66,17 @@ export function renderMarkdownWithMath(
    * comment on why it holds none) renders byte-identically to before this
    * wave: `chipifyNodeCodespans` fast-paths out on an empty/absent set. */
   nodeChips?: { nodeIds: Set<string>; topicId: string },
+  /** Text from a content pack: raw HTML is escaped and only web or mail links survive. */
+  untrusted = false,
 ): string {
   // The extraction/parse/splice core lives in shared/mathMarkdown.ts so the
   // main process (lecture-notes PDFs) renders math exactly as this does.
-  return renderMarkdownWithMathCore(source, (bodyHtml) =>
-    nodeChips && nodeChips.nodeIds.size > 0
-      ? chipifyNodeCodespans(bodyHtml, nodeChips.nodeIds, nodeChips.topicId)
-      : bodyHtml,
+  return renderMarkdownWithMathCore(
+    source,
+    (bodyHtml) =>
+      nodeChips && nodeChips.nodeIds.size > 0
+        ? chipifyNodeCodespans(bodyHtml, nodeChips.nodeIds, nodeChips.topicId)
+        : bodyHtml,
+    { untrusted },
   )
 }

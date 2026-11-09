@@ -325,6 +325,8 @@ const engramApi = {
     ipcRenderer.invoke('lab:confidence', packId, labId, submissionId, confidence),
   labProduction: (packId: string, labId: string, submissionId: string): Promise<string> =>
     ipcRenderer.invoke('lab:production', packId, labId, submissionId),
+  labReflect: (packId: string, labId: string, submissionId: string, text: string): Promise<Submission> =>
+    ipcRenderer.invoke('lab:reflect', packId, labId, submissionId, text),
   labRevealSubmission: (packId: string, labId: string, submissionId: string): Promise<string> =>
     ipcRenderer.invoke('lab:revealSubmission', packId, labId, submissionId),
 

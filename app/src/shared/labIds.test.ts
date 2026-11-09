@@ -14,7 +14,9 @@ describe('workbench ids', () => {
 
 describe('verdicts', () => {
   const t = (tier: 'core' | 'slip', outcome: 'passed' | 'failed') => ({
+    id: `t::${tier}${outcome}`,
     name: `${tier}${outcome}`,
+    about: '',
     tier,
     outcome,
     message: '',

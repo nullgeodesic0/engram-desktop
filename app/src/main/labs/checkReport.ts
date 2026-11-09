@@ -1,19 +1,29 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
-import type { CheckRun, CheckVerdict } from '../../shared/labs'
-import { tally, verdictOf } from '../../shared/labs'
+import { createHash } from 'node:crypto'
+import type { CheckRun, CheckVerdict, Confidence } from '../../shared/labs'
+import { confidenceToken, tally, verdictOf } from '../../shared/labs'
 
 /**
  * The signed one-line report a Submit produces, e.g.
  *
  *     [engram-check v1 lab=pack/lab m=m3 sub=2 verdict=slip core=6/6 slip=2/3
- *      env=base-4b09c790529a code=9c1e04aa31f2 t=41s at=2026-11-09T14:52:03Z sig=…]
+ *      env=base-4b09c790529a code=9c1e04aa31f2 t=41s at=2026-11-09T14:52:03Z
+ *      conf=pretty-sure eb=5d1c0e9a77b2 sig=…]
  *
  * (one line in practice). It is what the learner's turn to the tutor opens
  * with, ahead of the explain-back, and it stays under 400 characters so the
  * two fit one engine production. `sig` is an HMAC-SHA256 over everything
  * before it, keyed by a secret that never leaves this install, so a report
  * the app produced can be told from one typed by hand. It says nothing about
- * the learner's code beyond its hash: the grader never sees the code.
+ * the learner's code beyond its hash: the grader never sees the code. `conf`
+ * is the confidence picked before the results were shown, and `eb` the hash
+ * of the explain-back written before them, so neither can be swapped after
+ * the learner has seen how the tests went.
+ *
+ * What the signature attests: that this app ran the pack's tests on code
+ * with that hash and reported this. It does not attest that the code left
+ * the test run alone: the learner's cells run in the same process as the
+ * tests (see engram_check.py).
  *
  * Pure: the key is passed in (see labStore.checkKey), so this is tested directly.
  */
@@ -33,6 +43,13 @@ export interface ReportFields {
   code: string
   seconds: number
   at: string
+  conf: string
+  eb: string
+}
+
+/** First 12 hex of the SHA-256 of the explain-back as stored. */
+export function explainBackHash(text: string): string {
+  return createHash('sha256').update(text, 'utf-8').digest('hex').slice(0, 12)
 }
 
 export function reportFields(input: {
@@ -43,6 +60,8 @@ export function reportFields(input: {
   env: string
   codeHash: string
   at: Date
+  confidence: Confidence
+  explainBack: string
 }): ReportFields {
   const core = tally(input.run.tests, 'core')
   const slip = tally(input.run.tests, 'slip')
@@ -58,13 +77,15 @@ export function reportFields(input: {
     seconds: Math.round(input.run.seconds),
     // Whole seconds: the report is for people, and shorter is better.
     at: input.at.toISOString().replace(/\.\d{3}Z$/, 'Z'),
+    conf: confidenceToken(input.confidence),
+    eb: explainBackHash(input.explainBack),
   }
 }
 
 function body(f: ReportFields): string {
   return (
     `${REPORT_PREFIX}lab=${f.lab} m=${f.milestone} sub=${f.seq} verdict=${f.verdict} core=${f.core} slip=${f.slip}` +
-    ` env=${f.env} code=${f.code} t=${f.seconds}s at=${f.at}`
+    ` env=${f.env} code=${f.code} t=${f.seconds}s at=${f.at} conf=${f.conf} eb=${f.eb}`
   )
 }
 
@@ -114,6 +135,8 @@ export function verifyReport(line: string, key: Buffer): ReportFields | null {
     code: kv.get('code') ?? '',
     seconds: Number(seconds[1]),
     at: kv.get('at') ?? '',
+    conf: kv.get('conf') ?? '',
+    eb: kv.get('eb') ?? '',
   }
   // The signature covers the text, so this only guards against a report from a different format.
   return body(fields) === b ? fields : null

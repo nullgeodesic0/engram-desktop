@@ -1,28 +1,46 @@
 """Engram Desktop's check runner: loads a frozen lab and runs a pack's pytest
-file against it. Started by main/labs/checkRunner.ts, once per check, in a
-fresh process on the lab's runtime layer, so a check always runs from a clean
-interpreter rather than from whatever the learner's kernel holds.
+file against it. Started by main/labs/checkRunner.ts, in a fresh process on
+the lab's runtime layer, so a check always runs from a clean interpreter
+rather than from whatever the learner's kernel holds.
 
-    python -I -B engram_check.py <cells.json> <tests.py> <smoke|hidden> <out.json>
+    python -I -B engram_check.py          (the job arrives as one JSON line on stdin)
+
+The job: {"mode": "smoke" | "hidden" | "collect", "cells": "<cells.json>",
+"tests": "<tests.py>", "out": "<out.json>", "nonce": "<hex>"}
 
 cells.json  the lab's runnable cells in order, [{"id": "c1", "source": "..."}]
 tests.py    the pack's test file; each test takes the `lab` fixture
-out.json    written at the end: {"completed": bool, "error": str|null,
-            "tests": [{"name", "tier", "outcome", "message"}], "seconds": float}
+out.json    written at the end: {"nonce", "completed": bool, "error": str|null,
+            "tests": [{"id", "name", "about", "tier", "outcome", "message"}],
+            "seconds": float}
+
+"collect" loads no learner code at all: it only lists the file's tests, so
+main can check that a real run reported exactly those tests.
 
 The cells run top to bottom in a fresh module installed as __main__ with no
 __file__, exactly as the kernel runs them, so multiprocessing behaves the
-same way in a check as in the workbench. A cell that raises ends the run:
+same way in a check as in the workbench (spawn-based pools cannot pickle
+functions defined in cells there either). A cell that raises ends the run:
 nothing after it was defined, so no test could say anything useful.
 
 Test tiers: in a smoke run every test is smoke. In a hidden run a test marked
 @pytest.mark.slip is a slip test (an execution detail) and every other test
-is core (the method is right).
+is core (the method is right). A test's docstring, first line, is the
+description the learner sees while the milestone is still open.
+
+What this does not do: make the result tamper-proof. The learner's code runs
+in this process with the learner's permissions, so a determined learner can
+interfere with pytest. The job's path and nonce come over stdin and the
+writer is captured before any cell runs, which stops the casual forgeries
+(writing out.json, patching json.dump); main also cross-checks the test list
+against a run that loaded no learner code. The signed report attests that
+the app ran the check, not that nobody tampered with it.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 import traceback
@@ -31,9 +49,19 @@ import types
 MAX_MESSAGE = 400
 
 
+# Captured before any learner code runs, so a cell that rebinds them cannot
+# change what the runner writes.
+_dumps = json.dumps
+_os_open, _os_write, _os_close = os.open, os.write, os.close
+_O_FLAGS = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_BINARY", 0)
+
+
 def _write(path: str, payload: dict) -> None:
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(payload, f)
+    fd = _os_open(path, _O_FLAGS, 0o600)
+    try:
+        _os_write(fd, _dumps(payload).encode("utf-8"))
+    finally:
+        _os_close(fd)
 
 
 def _load_cells(cells: list) -> tuple[types.ModuleType | None, str | None]:
@@ -86,8 +114,11 @@ class _Collector:
 
     def pytest_collection_modifyitems(self, items) -> None:
         for item in items:
+            doc = (getattr(getattr(item, "function", None), "__doc__", None) or "").strip()
             self.tests[item.nodeid] = {
+                "id": item.nodeid,
                 "name": item.name,
+                "about": doc.splitlines()[0][:200] if doc else "",
                 "tier": self._tier(item),
                 "outcome": "error",
                 "message": "did not run",
@@ -114,32 +145,57 @@ class _Collector:
 
 
 def main() -> int:
-    cells_path, tests_path, mode, out_path = sys.argv[1:5]
+    job = json.loads(sys.stdin.readline())
+    mode, out_path, nonce, tests_path = job["mode"], job["out"], job["nonce"], job["tests"]
+    cells_path = job.get("cells")
+    del job
     started = time.monotonic()
 
     def finish(completed: bool, error: str | None, tests: list) -> int:
-        _write(out_path, {"completed": completed, "error": error, "tests": tests, "seconds": round(time.monotonic() - started, 2)})
+        _write(
+            out_path,
+            {
+                "nonce": nonce,
+                "completed": completed,
+                "error": error,
+                "tests": tests,
+                "seconds": round(time.monotonic() - started, 2),
+            },
+        )
         return 0
 
-    with open(cells_path, encoding="utf-8") as f:
-        cells = json.load(f)
-    lab, error = _load_cells(cells)
-    if lab is None:
-        return finish(False, error, [])
+    # Like the kernel: files saved beside lab.py import by name.
+    if os.getcwd() not in sys.path:
+        sys.path.insert(0, os.getcwd())
 
     import pytest
 
-    collector = _Collector(lab, mode)
+    lab = None
+    if mode != "collect":
+        with open(cells_path, encoding="utf-8") as f:
+            cells = json.load(f)
+        lab, error = _load_cells(cells)
+        if lab is None:
+            return finish(False, error, [])
 
-    @pytest.fixture(scope="session")
-    def lab():
-        return collector.lab
-
+    collector = _Collector(lab, "hidden" if mode == "collect" else mode)
     # pytest reads fixtures from a plugin module's attributes.
     fixtures = types.ModuleType("engram_lab_fixture")
-    fixtures.lab = lab
+    fixtures.lab = pytest.fixture(scope="session", name="lab")(lambda: collector.lab)
 
-    args = [tests_path, "-q", "-p", "no:cacheprovider", "--no-header", "-o", "addopts=", "-W", "ignore::pytest.PytestAssertRewriteWarning"]
+    args = [
+        tests_path,
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "--no-header",
+        "-o",
+        "addopts=",
+        "-W",
+        "ignore::pytest.PytestAssertRewriteWarning",
+    ]
+    if mode == "collect":
+        args.append("--collect-only")
     try:
         pytest.main(args, plugins=[collector, fixtures])
     except BaseException as e:  # noqa: BLE001

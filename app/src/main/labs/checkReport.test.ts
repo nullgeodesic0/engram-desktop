@@ -8,9 +8,9 @@ const run: CheckRun = {
   error: null,
   seconds: 41.4,
   tests: [
-    { name: 'a', tier: 'core', outcome: 'passed', message: '' },
-    { name: 'b', tier: 'core', outcome: 'passed', message: '' },
-    { name: 'c', tier: 'slip', outcome: 'failed', message: 'off by one' },
+    { id: 't::a', name: 'a', about: '', tier: 'core', outcome: 'passed', message: '' },
+    { id: 't::b', name: 'b', about: '', tier: 'core', outcome: 'passed', message: '' },
+    { id: 't::c', name: 'c', about: '', tier: 'slip', outcome: 'failed', message: 'off by one' },
   ],
 }
 
@@ -23,6 +23,8 @@ function make(over: Partial<Parameters<typeof reportFields>[0]> = {}) {
     env: 'base-4b09c790529a',
     codeHash: '9c1e04aa31f2',
     at: new Date('2026-11-09T14:52:03.123Z'),
+    confidence: 'Pretty sure',
+    explainBack: 'The normal equations set the gradient of the squared error to zero.',
     ...over,
   })
 }
@@ -31,7 +33,7 @@ describe('check reports', () => {
   it('signs a report that verifies, and reads back its fields', () => {
     const line = signReport(make(), key)
     expect(line).toMatch(/^\[engram-check v1 lab=example-pack\/fit-a-line m=m1 sub=2 verdict=slip core=2\/2 slip=0\/1 /)
-    expect(line).toContain('t=41s at=2026-11-09T14:52:03Z sig=')
+    expect(line).toMatch(/ t=41s at=2026-11-09T14:52:03Z conf=pretty-sure eb=[0-9a-f]{12} sig=/)
     expect(line.length).toBeLessThanOrEqual(REPORT_MAX)
     expect(verifyReport(line, key)).toEqual(make())
   })
@@ -39,6 +41,7 @@ describe('check reports', () => {
   it('rejects an edited report, a different key and a hand-typed one', () => {
     const line = signReport(make(), key)
     expect(verifyReport(line.replace('verdict=slip', 'verdict=passed'), key)).toBeNull()
+    expect(verifyReport(line.replace('conf=pretty-sure', 'conf=guessing'), key)).toBeNull()
     expect(verifyReport(line, Buffer.alloc(32, 8))).toBeNull()
     expect(verifyReport('[engram-check v1 lab=x m=m1 verdict=passed sig=00]', key)).toBeNull()
     expect(verifyReport('not a report', key)).toBeNull()
@@ -64,6 +67,12 @@ describe('check reports', () => {
         lab: `${long}/${long}`,
         milestone: long,
         env: `${long}-0123456789ab`,
+        confidence: 'Just guessing',
+        run: {
+          ...run,
+          seconds: 3600,
+          tests: Array.from({ length: 999 }, (_, i) => ({ ...run.tests[i % 3], id: `t${i}` })),
+        },
       }),
       key,
     )

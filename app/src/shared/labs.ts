@@ -11,11 +11,19 @@
 export type CheckTier = 'smoke' | 'core' | 'slip'
 
 export interface CheckOutcome {
+  /** pytest's node id, e.g. "hidden_m1.py::test_crossing_in_band". */
+  id: string
   /** The test function's name, e.g. "test_crossing_in_band". */
   name: string
+  /** The first line of the test's docstring: what it checks, in the pack's words. */
+  about: string
   tier: CheckTier
   outcome: 'passed' | 'failed' | 'error' | 'skipped'
-  /** The first lines of the failure, empty when it passed. */
+  /**
+   * The first lines of the failure, empty when it passed. For a core test it
+   * is blank on the wire until the milestone has passed: the learner sees
+   * which behaviour failed (`about`), not the expected value.
+   */
   message: string
 }
 
@@ -66,6 +74,30 @@ export function isConfidence(v: unknown): v is Confidence {
   return typeof v === 'string' && (CONFIDENCE_LEVELS as readonly string[]).includes(v)
 }
 
+/** The confidence as one report token. */
+export function confidenceToken(c: Confidence): string {
+  return {
+    Certain: 'certain',
+    'Pretty sure': 'pretty-sure',
+    'Half unsure': 'half-unsure',
+    'Just guessing': 'guessing',
+  }[c]
+}
+
+/** What the confidence picker asks: a prediction about the hidden tests, not a feeling. */
+export const CONFIDENCE_QUESTION = 'How sure are you that the core tests pass?'
+
+/** Asked after a resubmission instead of the milestone's own question. */
+export const RESUBMIT_QUESTION = 'What failed last time, what did you change, and why should that fix it?'
+
+/** Asked when a confident prediction turned out wrong: the moment errors are best corrected. */
+export const REFLECT_QUESTION = 'You were sure, and a core test failed. Which assumption do you think broke?'
+
+/** A high-confidence pick that a core failure contradicted. */
+export function wantsReflection(confidence: Confidence | null, verdict: CheckVerdict | null): boolean {
+  return (confidence === 'Certain' || confidence === 'Pretty sure') && (verdict === 'core' || verdict === 'broken')
+}
+
 /**
  * One Submit. Results stay sealed in main until the explain-back is written
  * and a confidence is picked, in that order; until then `run` and `report`
@@ -79,13 +111,18 @@ export interface Submission {
   submittedAt: string
   /** First 12 hex of the SHA-256 of the frozen lab.py. */
   codeHash: string
+  /** The explain-back question this Submit asked: the milestone's, or the resubmission one. */
+  explainBackPrompt: string
   explainBack: string | null
   confidence: Confidence | null
+  /** Set once unsealed when a confident pick met a core failure (see REFLECT_QUESTION). */
+  reflectionPrompt: string | null
+  reflection: string | null
   sealed: boolean
   /** Hidden tests have finished (known in main even while sealed). */
   finished: boolean
   run: CheckRun | null
-  /** The signed one-line report, once unsealed. */
+  /** The signed one-line report, made at unseal so it carries the confidence and the explain-back's hash. */
   report: string | null
   verdict: CheckVerdict | null
 }

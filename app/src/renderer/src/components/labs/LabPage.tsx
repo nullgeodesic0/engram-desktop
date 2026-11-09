@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CheckOutcome, CheckRun, LabView, MilestoneView, SmokeResult, Submission } from '../../../../shared/labs'
-import { CONFIDENCE_LEVELS, tally, type Confidence } from '../../../../shared/labs'
+import { CONFIDENCE_LEVELS, CONFIDENCE_QUESTION, tally, type Confidence } from '../../../../shared/labs'
 import { EXPLAIN_BACK_MAX } from '../../../../shared/contentPack'
 import { Button } from '../ui/Button'
 import { ProseMarkdown } from '../ProseMarkdown'
@@ -34,8 +34,8 @@ function count(run: CheckRun, tier: 'smoke' | 'core' | 'slip'): string {
 function TestList({ tests }: { tests: CheckOutcome[] }) {
   return (
     <ul className="flex flex-col gap-1">
-      {tests.map((t) => (
-        <li key={t.name} className="text-xs">
+      {tests.map((t, i) => (
+        <li key={t.id || `${t.name}-${i}`} className="text-xs">
           <span
             className="label-data"
             style={{
@@ -52,7 +52,10 @@ function TestList({ tests }: { tests: CheckOutcome[] }) {
           {t.tier !== 'smoke' && t.tier !== 'core' && (
             <span className="label-data text-[var(--color-ink-warm)]">{t.tier} · </span>
           )}
-          <span className="label-data text-[var(--color-text-primary)]">{t.name.replace(/^test_/, '')}</span>
+          <span className="label-data text-[var(--color-text-primary)]">
+            {t.name.replace(/^test_/, '').replace(/_/g, ' ')}
+          </span>
+          {t.about && <div className="ml-4 text-[var(--color-text-dim)]">{t.about}</div>}
           {t.message && (
             <pre className="cell-output-pre text-[11px] text-[var(--color-text-dim)] mt-0.5 ml-4 whitespace-pre-wrap">
               {t.message}
@@ -71,14 +74,24 @@ const VERDICT_LINE: Record<string, string> = {
   broken: 'The run did not complete.',
 }
 
-function Receipt({ sub, onCopy }: { sub: Submission; onCopy: () => void }) {
+function Receipt({
+  sub,
+  onCopy,
+  onReflect,
+}: {
+  sub: Submission
+  onCopy: () => void
+  onReflect: (text: string) => Promise<void>
+}) {
+  const [reflection, setReflection] = useState('')
   const run = sub.run
   if (!run) return null
+  const coreHidden = run.tests.some((t) => t.tier === 'core' && t.outcome !== 'passed' && !t.message)
   return (
     <div className="panel px-3 py-3 flex flex-col gap-2">
       <div className="flex items-center gap-2 label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-faint)]">
         <span>Submission {sub.seq}</span>
-        <span className="ml-auto normal-case tracking-normal">signed report</span>
+        <span className="ml-auto normal-case tracking-normal">tests only · explain-back not yet graded</span>
       </div>
       <div className="flex flex-wrap gap-1.5 label-data text-[11px]">
         <span className="px-1.5 py-0.5 border border-[var(--color-hairline)]">core {count(run, 'core')}</span>
@@ -91,8 +104,46 @@ function Receipt({ sub, onCopy }: { sub: Submission; onCopy: () => void }) {
       <div className="text-sm text-[var(--color-text-primary)]">{VERDICT_LINE[sub.verdict ?? 'broken']}</div>
       {run.error && <div className="text-xs text-[var(--color-text-dim)] break-words">{run.error}</div>}
       {run.tests.length > 0 && <TestList tests={run.tests} />}
+      {coreHidden && (
+        <div className="text-xs text-[var(--color-text-faint)]">
+          A failed core test says which behaviour broke, not what it expected. Work out why; the details open once this
+          milestone passes.
+        </div>
+      )}
+      {sub.reflectionPrompt && (
+        <div className="flex flex-col gap-1.5 pt-1">
+          <div className="font-(family-name:--font-serif) text-base text-[var(--color-text-primary)] leading-snug">
+            {sub.reflectionPrompt}
+          </div>
+          {sub.reflection !== null ? (
+            <div className="text-xs text-[var(--color-text-dim)] whitespace-pre-wrap">{sub.reflection}</div>
+          ) : (
+            <>
+              <textarea
+                value={reflection}
+                onChange={(e) => setReflection(e.target.value.slice(0, EXPLAIN_BACK_MAX))}
+                rows={3}
+                aria-label="Which assumption broke"
+                className="focus-ring w-full bg-transparent border border-[var(--color-hairline)] px-3 py-2 text-sm text-[var(--color-text-primary)] resize-y"
+              />
+              <Button
+                size="sm"
+                className="self-end"
+                disabled={!reflection.trim()}
+                onClick={() => void onReflect(reflection)}
+              >
+                Save
+              </Button>
+            </>
+          )}
+        </div>
+      )}
       <div className="flex gap-2 pt-1">
-        <Button size="sm" onClick={onCopy} title="The signed report and your explain-back, ready for the tutor">
+        <Button
+          size="sm"
+          onClick={onCopy}
+          title="The signed report and your written answers, ready for the tutor to grade"
+        >
           Copy for the tutor
         </Button>
       </div>
@@ -118,6 +169,7 @@ export function LabPage({ packId, labId, onOpenSettings, onChanged }: Props) {
   const [unsealing, setUnsealing] = useState(false)
   const [copied, setCopied] = useState(false)
   const snapshot = useRef<WorkbenchSnapshot | null>(null)
+  const draftKey = (subId: string) => `engram.lab.explainBack.${packId}/${labId}/${subId}`
 
   const refresh = useCallback(async () => {
     try {
@@ -142,6 +194,27 @@ export function LabPage({ packId, labId, onOpenSettings, onChanged }: Props) {
     setDraft('')
     void refresh()
   }, [refresh])
+
+  const sealedId = view?.submissions.find((s) => s.sealed)?.id ?? null
+  // An explain-back in progress survives leaving the lab or closing the app.
+  useEffect(() => {
+    if (!sealedId) return
+    try {
+      setDraft(localStorage.getItem(draftKey(sealedId)) ?? '')
+    } catch {
+      // Storage unavailable: start empty.
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sealedId])
+  const editDraft = (text: string) => {
+    setDraft(text)
+    if (!sealedId) return
+    try {
+      localStorage.setItem(draftKey(sealedId), text)
+    } catch {
+      // Storage unavailable: the draft lives only in memory.
+    }
+  }
 
   const onDocChange = useCallback((d: WorkbenchSnapshot) => {
     snapshot.current = d
@@ -192,6 +265,11 @@ export function LabPage({ packId, labId, onOpenSettings, onChanged }: Props) {
     setError(null)
     try {
       await window.engram.labExplainBack(packId, labId, sealed.id, draft)
+      try {
+        localStorage.removeItem(draftKey(sealed.id))
+      } catch {
+        // Nothing to clear.
+      }
       await refresh()
     } catch (e) {
       setError(cleanError(e))
@@ -213,6 +291,34 @@ export function LabPage({ packId, labId, onOpenSettings, onChanged }: Props) {
     }
   }
 
+  async function reflect(sub: Submission, text: string) {
+    setError(null)
+    try {
+      await window.engram.labReflect(packId, labId, sub.id, text)
+      await refresh()
+    } catch (e) {
+      setError(cleanError(e))
+    }
+  }
+
+  // 1 to 4 pick a confidence, once the explain-back is in.
+  useEffect(() => {
+    if (!sealed || sealed.explainBack === null || unsealing) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      const i = Number(e.key) - 1
+      if (i >= 0 && i < CONFIDENCE_LEVELS.length) {
+        e.preventDefault()
+        void pick(CONFIDENCE_LEVELS[i])
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sealed?.id, sealed?.explainBack, unsealing])
+
   async function copyProduction(sub: Submission) {
     const text = await window.engram.labProduction(packId, labId, sub.id)
     await navigator.clipboard.writeText(text)
@@ -228,16 +334,21 @@ export function LabPage({ packId, labId, onOpenSettings, onChanged }: Props) {
 
   const toolbarExtra = milestone && (
     <>
-      {milestone.hasSmoke && (
-        <Button
-          size="sm"
-          onClick={() => void runSmoke()}
-          disabled={smoking || !!sealed}
-          title="Visible checks: shape and type, never the physics"
-        >
-          {smoking ? 'Checking…' : smokeHere ? `Smoke ${count(smokeHere.run, 'smoke')}` : 'Smoke checks'}
-        </Button>
-      )}
+      {milestone.hasSmoke &&
+        (smoking ? (
+          <Button size="sm" onClick={() => void window.engram.labCancelSmoke(packId, labId)} title="Stop the smoke run">
+            Checking… Stop
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            onClick={() => void runSmoke()}
+            disabled={!!sealed}
+            title="Visible checks: shape and type, never whether the method is right"
+          >
+            {smokeHere ? `Smoke ${count(smokeHere.run, 'smoke')}` : 'Smoke checks'}
+          </Button>
+        ))}
       {milestone.hasHidden && (
         <Button size="sm" variant="primary" onClick={() => void submit()} disabled={!canSubmit}>
           {submitting ? 'Freezing…' : `Submit ${milestone.id.toUpperCase()}`}
@@ -373,8 +484,7 @@ export function LabPage({ packId, labId, onOpenSettings, onChanged }: Props) {
                 {new Date(sealed.submittedAt).toLocaleTimeString(undefined, {
                   hour: '2-digit',
                   minute: '2-digit',
-                })}{' '}
-                · {sealed.finished ? 'hidden tests done' : 'hidden tests running'}
+                })}
               </div>
               <div className="text-xs text-[var(--color-text-dim)]">
                 Results stay sealed until you have explained your work and said how sure you are.
@@ -382,11 +492,11 @@ export function LabPage({ packId, labId, onOpenSettings, onChanged }: Props) {
               {sealed.explainBack === null ? (
                 <>
                   <div className="font-(family-name:--font-serif) text-lg text-[var(--color-text-primary)] leading-snug">
-                    {view.milestones.find((m) => m.id === sealed.milestoneId)?.explainBack}
+                    {sealed.explainBackPrompt || view.milestones.find((m) => m.id === sealed.milestoneId)?.explainBack}
                   </div>
                   <textarea
                     value={draft}
-                    onChange={(e) => setDraft(e.target.value.slice(0, EXPLAIN_BACK_MAX))}
+                    onChange={(e) => editDraft(e.target.value.slice(0, EXPLAIN_BACK_MAX))}
                     rows={9}
                     aria-label="Explain-back"
                     placeholder="In your own words, without looking anything up."
@@ -410,7 +520,7 @@ export function LabPage({ packId, labId, onOpenSettings, onChanged }: Props) {
               ) : (
                 <>
                   <div className="font-(family-name:--font-serif) text-lg text-[var(--color-text-primary)] leading-snug">
-                    Before anything else: how sure are you that this milestone is right?
+                    {CONFIDENCE_QUESTION}
                   </div>
                   <div className="flex flex-col gap-1.5">
                     {CONFIDENCE_LEVELS.map((c, i) => (
@@ -427,7 +537,7 @@ export function LabPage({ packId, labId, onOpenSettings, onChanged }: Props) {
                   </div>
                   {unsealing && (
                     <div className="text-xs text-[var(--color-text-dim)]" aria-live="polite">
-                      {sealed.finished ? 'Unsealing…' : 'Waiting for the hidden tests to finish…'}
+                      Unsealing…
                     </div>
                   )}
                 </>
@@ -442,7 +552,7 @@ export function LabPage({ packId, labId, onOpenSettings, onChanged }: Props) {
               </div>
               {milestone.brief ? (
                 <div className="text-sm">
-                  <ProseMarkdown text={milestone.brief} />
+                  <ProseMarkdown text={milestone.brief} untrusted />
                 </div>
               ) : (
                 <div className="text-xs text-[var(--color-text-faint)]">This milestone has no brief.</div>
@@ -476,15 +586,25 @@ export function LabPage({ packId, labId, onOpenSettings, onChanged }: Props) {
             </div>
           )}
 
-          {latest && <Receipt sub={latest} onCopy={() => void copyProduction(latest)} />}
+          {latest && (
+            <Receipt
+              key={latest.id}
+              sub={latest}
+              onCopy={() => void copyProduction(latest)}
+              onReflect={(t) => reflect(latest, t)}
+            />
+          )}
           {copied && (
-            <div className="text-xs text-[var(--color-text-dim)]">Copied the signed report and your explain-back.</div>
+            <div className="text-xs text-[var(--color-text-dim)]">Copied the signed report and your answers.</div>
           )}
           {latest?.explainBack && (
             <div className="flex flex-col gap-1">
               <div className="label-data text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-faint)]">
                 Your explain-back
               </div>
+              {latest.explainBackPrompt && (
+                <div className="text-xs text-[var(--color-text-faint)] italic">{latest.explainBackPrompt}</div>
+              )}
               <div className="text-xs text-[var(--color-text-dim)] whitespace-pre-wrap">{latest.explainBack}</div>
             </div>
           )}

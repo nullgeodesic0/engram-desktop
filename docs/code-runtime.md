@@ -44,7 +44,10 @@ Settings → Code runtime, the app builds everything under its own data folder:
   lockfile's hash. When an app or pack update ships a new lock, the old env
   keeps serving cells and Settings offers **Update**, which builds the new env
   beside it. The old env of that layer is removed at its next install, never
-  while a kernel may still be using it.
+  while a kernel may still be using it. An env whose layer no longer exists
+  (the `qec-core-…` env an earlier build made, or a removed pack's) is left
+  alone: a pack that names its layer the same and ships the same lock reuses
+  it as is, and **Remove runtime** clears it.
   An env is complete only once
   `verify_env.py` has imported the core packages and the `.engram-complete`
   marker is written, so an interrupted install is rebuilt rather than trusted.

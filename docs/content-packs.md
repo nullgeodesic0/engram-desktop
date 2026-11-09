@@ -32,6 +32,11 @@ Every path a manifest names is relative to the file that names it, uses
 forward slashes, and must stay inside the pack. The loader resolves each one,
 symlinks included, and refuses a pack whose files point anywhere else.
 
+**A pack is trusted code.** Its tests and given cells run as Python with the
+learner's permissions, like anything else they install. Add packs you would
+run from a terminal. Its briefs are treated as text: raw HTML in them is shown
+as written, links go only to the web or mail, and images are not loaded.
+
 ### pack.json
 
 ```json
@@ -118,7 +123,9 @@ opens, in the percent format the workbench uses (`# %% [given] id=…`,
 `# %% id=…`, `# %% [markdown] id=…`; see `shared/workbenchFile.ts`). Given
 cells are the pack's: read-only in the workbench, and refreshed from the
 starter by id each time the lab opens, so a fixed given cell reaches a lab
-already under way. Give every cell a stable `id`.
+already under way, and a given cell the starter has gained since is inserted
+in place. Every cell needs a stable `id`; a starter cell without one is an
+error.
 
 ## Checks
 
@@ -135,16 +142,34 @@ def test_matches_least_squares(lab):
 
 @pytest.mark.slip
 def test_returns_plain_floats(lab):
+    """The slope comes back as a Python float."""
     slope, _ = lab.fit_line([0.0, 1.0], [0.0, 2.0])
     assert type(slope) is float
 ```
 
-Each run starts a fresh interpreter on the lab's layer
-(`resources/runtime/engram_check.py`), runs the lab's code and given cells top
-to bottom exactly as the kernel would, then runs the test file. A cell that
-raises ends the run, reported as the cell and line it raised at. The run has
-the kernel's scrubbed environment (no AI provider variables or API keys) and
-Matplotlib's Agg backend.
+Name each test for the behaviour it checks and give it a one-line docstring.
+That line is what the learner sees when a core test fails while the milestone
+is still open; the assertion message appears only once the milestone has
+passed. So a core message may name the expected value, and the docstring
+should not: the learner should learn which behaviour broke and work out why,
+rather than read off the answer and copy it into the next try. Smoke and slip
+messages are always shown, so make them say what to fix.
+
+Each check is two runs of a fresh interpreter on the lab's layer
+(`resources/runtime/engram_check.py`), in the learner's lab folder like the
+kernel. The first loads no learner code and only lists the test file's tests
+and tiers. The second runs the lab's code and given cells top to bottom
+exactly as the kernel would, then runs the tests. A cell that raises ends the
+run, reported as the cell and line it raised at. The second run must report
+exactly the tests the first listed, with the same tiers, and echo a nonce it
+was handed on stdin, or the check counts as broken. Both runs have the
+kernel's scrubbed environment (no AI provider variables, API keys or
+`PYTEST_*` settings) and Matplotlib's Agg backend.
+
+That stops the casual ways a cell could fake a result. It is not a sandbox:
+the learner's cells and the tests share one process, so a determined learner
+can still interfere with pytest. The signed report attests that the app ran
+the pack's tests on code with that hash, not that the code left them alone.
 
 - **Smoke** checks are visible and run whenever the learner asks. They should
   catch shape and type mistakes ("your circuit has 0 detectors") and never
@@ -165,28 +190,42 @@ Submit runs in the engine's order, and main enforces it:
 1. The cells freeze. The saved `lab.py` is copied to
    `submissions/<milestone>-<n>/` and its hash taken, and the hidden tests
    start on that copy in the background.
+   The lab's kernel and smoke checks are refused until the seal breaks.
 2. The learner writes the explain-back with no result in view (up to 2,000
-   characters).
-3. The learner picks a confidence: Certain, Pretty sure, Half unsure or Just
-   guessing.
-4. Only then does main hand over the results and the signed report. Until
-   the pick, a submission goes to the renderer with its results blanked,
-   whatever main already knows.
+   characters). The first Submit of a milestone asks the pack's question;
+   a later one asks "What failed last time, what did you change, and why
+   should that fix it?"
+3. The learner answers "How sure are you that the core tests pass?":
+   Certain, Pretty sure, Half unsure or Just guessing (keys 1 to 4).
+4. Only then does main sign the report and hand over the results. Until the
+   pick, a submission goes to the renderer with its results blanked and not
+   even marked finished, whatever main already knows. If the app quits
+   between the pick and the results, the submission unseals the next time
+   the lab opens (as broken, if its run was lost too).
+5. When a Certain or Pretty sure pick meets a core failure, the receipt asks
+   one more question, "Which assumption do you think broke?", and the answer
+   goes to the tutor with the rest. Confident errors are the ones most worth
+   correcting at once.
 
 The report is one line under 400 characters:
 
 ```
-[engram-check v1 lab=my-pack/lab-one m=m1 sub=1 verdict=slip core=2/2 slip=0/1 env=base-4b09c790529a code=9c1e04aa31f2 t=4s at=2026-11-10T09:12:03Z sig=…]
+[engram-check v1 lab=my-pack/lab-one m=m1 sub=1 verdict=slip core=2/2 slip=0/1 env=base-4b09c790529a code=9c1e04aa31f2 t=4s at=2026-11-10T09:12:03Z conf=pretty-sure eb=5d1c0e9a77b2 sig=…]
 ```
 
 `verdict` reads the grading table: `passed` (every core and slip test
 passed), `slip` (core passed, a slip test failed), `core` (a core test
-failed) or `broken` (the run did not complete). `sig` is an HMAC-SHA256 over
+failed) or `broken` (the run did not complete). `conf` is the confidence
+picked before the results were shown and `eb` the hash of the explain-back,
+so neither can be swapped once the learner has seen the results. `sig` is an
+HMAC-SHA256 over
 the rest of the line, keyed by a secret in `labs/.check-key` that never
 leaves the install, so a report the app produced can be told from one typed
 by hand. The report names the code only by its hash: the grader never sees
-the code. **Copy for the tutor** puts the report and the explain-back on the
-clipboard as one turn. Handing that turn to a tutor session, and the overlay
+the code. **Copy for the tutor** puts the report, the explain-back and any
+reflection on the clipboard as one turn. The receipt reads "tests only ·
+explain-back not yet graded": the tests grade the code, and the explanation
+is the tutor's to grade. Handing that turn to a tutor session, and the overlay
 that teaches the tutor to grade it, come next.
 
 A milestone passes once a submission's core tests all pass. That receipt is
@@ -198,10 +237,10 @@ app-side, like the workbench itself: no rating, schedule or stamp reads it.
 <userData>/labs/
   packs.json                                  the pack folders the learner added
   .check-key                                  the report-signing key
-  packs/<pack>/<lab>/lab.py, meta.json, results.json
-  packs/<pack>/<lab>/submissions.json         every Submit, sealed or not
-  packs/<pack>/<lab>/submissions/<m>-<n>/     the frozen lab.py, the cells and the raw results
-  packs/<pack>/<lab>/.checks/smoke/           the last smoke run
+  packs/<pack>/<lab>/lab.py, meta.json, results.json   the workbench; the kernel's and the checks' folder
+  records/<pack>/<lab>/submissions.json       every Submit, sealed or not
+  records/<pack>/<lab>/submissions/<m>-<n>/   the frozen lab.py, the cells and the raw results
+  records/<pack>/<lab>/smoke/                 the last smoke run
 ```
 
 Removing a pack in Settings forgets its folder and stops its labs' kernels.

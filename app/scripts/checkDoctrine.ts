@@ -280,7 +280,7 @@ const PINNED_SUBPROCESS_FILES: Record<string, string> = {
   // environment is the kernel's scrubbed one, so a check can no more reach a
   // model than a cell can.
   'main/labs/checkRunner.ts':
-    'the managed env interpreter running resources/runtime/engram_check.py on a frozen lab and a pack’s test file. Never engram.py',
+    'the managed env interpreter running resources/runtime/engram_check.py on a frozen lab and a pack’s test file (a collect-only listing, then the run), and taskkill on Windows to stop that interpreter’s process tree. Never engram.py',
 }
 const SPAWN_CALL =
   /\b(execFile|execFileSync|execSync|exec|spawn|spawnSync|fork|execCli|spawnCli|spawnCliReadOnly|runEngram)\s*(?:Async)?\s*\(/g
