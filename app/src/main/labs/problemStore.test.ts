@@ -38,6 +38,7 @@ describe('problems', () => {
       'normal-equations-proof:proof',
       'flawed-fit-writeup:audit',
       'read-the-fit:figure',
+      'least-squares-oral:oral',
     ])
   })
 

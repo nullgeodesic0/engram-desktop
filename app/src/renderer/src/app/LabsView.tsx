@@ -5,6 +5,7 @@ import { parseLabWorkbenchId } from '../../../shared/runtime'
 import { LabPage } from '../components/labs/LabPage'
 import { PracticePage } from '../components/labs/PracticePage'
 import { ProblemPage } from '../components/labs/ProblemPage'
+import { OralPage } from '../components/labs/OralPage'
 import type { ProblemList } from '../../../shared/problems'
 import { Button } from '../components/ui/Button'
 import { Workbench } from '../components/workbench/Workbench'
@@ -202,7 +203,7 @@ export function LabsView({
                   row(
                     `${PROBLEM}${x.packId}/${x.problemId}`,
                     x.title,
-                    `${x.type === 'figure' ? 'figure reading' : x.type}${x.last ? ` · ${VERDICT_WORD[x.last]}` : x.attempts ? ' · in progress' : ''}`,
+                    `${x.type === 'figure' ? 'figure reading' : x.type === 'oral' ? 'oral exam' : x.type}${x.last ? ` · ${VERDICT_WORD[x.last]}` : x.attempts ? ' · in progress' : ''}`,
                   ),
                 )}
               </div>
@@ -282,6 +283,16 @@ export function LabsView({
             layerOf={(packId) => packs?.find((p) => p.id === packId)?.layer ?? 'base'}
             onOpenSettings={onOpenSettings}
             onChanged={refreshPacks}
+          />
+        ) : currentProblem &&
+          problems?.problems.find((x) => x.packId === currentProblem.packId && x.problemId === currentProblem.problemId)
+            ?.type === 'oral' ? (
+          <OralPage
+            key={current}
+            packId={currentProblem.packId}
+            problemId={currentProblem.problemId}
+            onOpenSettings={onOpenSettings}
+            onDiscuss={onDiscuss}
           />
         ) : currentProblem ? (
           <ProblemPage

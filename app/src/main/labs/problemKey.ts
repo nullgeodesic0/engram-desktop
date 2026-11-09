@@ -37,7 +37,19 @@ export interface FigureKey {
   judgement: string[]
 }
 
-export type ProblemKey = ProofKey | AuditKey | FigureKey
+export interface OralFollowUp {
+  id: string
+  prompt: string
+  /** The criterion (by index) a gap in which this follow-up probes; null: a general probe. */
+  probes: number | null
+}
+
+export interface OralKey {
+  type: 'oral'
+  questions: Record<string, { criteria: string[]; followUps: OralFollowUp[] }>
+}
+
+export type ProblemKey = ProofKey | AuditKey | FigureKey | OralKey
 
 function text(v: unknown, where: string, max = 2000): string {
   if (typeof v !== 'string' || !v.trim() || v.length > max) throw new Error(`${where} must be text`)
@@ -85,10 +97,42 @@ export function parseKey(p: ProblemManifest, raw: unknown): ProblemKey {
     })
     return { type: 'audit', errors, judgement: textList(o.judgement, 'judgement') }
   }
+  if (p.type === 'oral') {
+    const qs = (o.questions && typeof o.questions === 'object' ? o.questions : null) as Record<string, unknown> | null
+    if (!qs) throw new Error('the key needs "questions"')
+    const questions: OralKey['questions'] = {}
+    for (const q of p.questions) {
+      const r = (qs[q.id] && typeof qs[q.id] === 'object' ? qs[q.id] : null) as Record<string, unknown> | null
+      if (!r) throw new Error(`the key has nothing for ${q.id}`)
+      const criteria = textList(r.criteria, `questions.${q.id}.criteria`)
+      if (criteria.length === 0) throw new Error(`questions.${q.id} needs at least one criterion`)
+      const fu = r.followUps === undefined ? [] : r.followUps
+      if (!Array.isArray(fu) || fu.length > 8) throw new Error(`questions.${q.id}.followUps must be a list of up to 8`)
+      const ids = new Set<string>()
+      const followUps = fu.map((f, i) => {
+        const fo = (f && typeof f === 'object' ? f : {}) as Record<string, unknown>
+        const where = `questions.${q.id}.followUps[${i}]`
+        const id = text(fo.id, `${where}.id`, 40)
+        if (!/^[a-z0-9][a-z0-9-]*$/.test(id))
+          throw new Error(`${where}.id must be lowercase letters, digits and dashes`)
+        if (ids.has(id)) throw new Error(`${where}: the id ${id} is used twice`)
+        ids.add(id)
+        const probes = fo.probes === undefined || fo.probes === null ? null : fo.probes
+        if (
+          probes !== null &&
+          !(Number.isInteger(probes) && (probes as number) >= 0 && (probes as number) < criteria.length)
+        )
+          throw new Error(`${where}.probes must be the index of one of the question's criteria`)
+        return { id, prompt: text(fo.prompt, `${where}.prompt`, 600), probes: probes as number | null }
+      })
+      questions[q.id] = { criteria, followUps }
+    }
+    return { type: 'oral', questions }
+  }
   const a = (o.answers && typeof o.answers === 'object' ? o.answers : null) as Record<string, unknown> | null
   if (!a) throw new Error('the key needs "answers"')
   const answers: FigureKey['answers'] = {}
-  for (const q of p.questions) {
+  for (const q of p.type === 'figure' ? p.questions : []) {
     const r = (a[q.id] && typeof a[q.id] === 'object' ? a[q.id] : null) as Record<string, unknown> | null
     if (!r) throw new Error(`the key has no answer for ${q.id}`)
     const value = r.value
@@ -209,6 +253,7 @@ export function grade(
   key: ProblemKey,
   answer: ProblemAnswer,
 ): { verdict: ProblemVerdict; score: string; falseFlags: number; result: ProblemResult } {
+  if (key.type === 'oral' || p.type === 'oral') throw new Error('An oral exam is graded by the tutor, in the sitting.')
   if (key.type === 'proof' || answer.type === 'proof') {
     const steps = key.type === 'proof' ? key.steps : []
     return {
@@ -298,6 +343,7 @@ export function keyCriteria(p: ProblemManifest, key: ProblemKey): string[] {
       ...key.errors.map((e) => `Flags "${e.quote}" as ${label(e.cls)}${e.central ? ' (central)' : ''}: ${e.why}`),
       ...key.judgement.map((j) => `The overall judgement: ${j}`),
     ]
+  if (key.type === 'oral') return []
   const qs = p.type === 'figure' ? p.questions : []
   return [
     ...qs.map((q) => {

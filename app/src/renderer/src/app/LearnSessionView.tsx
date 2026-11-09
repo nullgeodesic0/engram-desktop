@@ -118,6 +118,7 @@ import { FlowChain } from '../components/ritual/FlowChain'
 import { trailingRecalled } from '../../../shared/gradeResult'
 import { paperSlide, warmTone } from '../shared/soundscape'
 import { LectureNotesPanel } from '../components/LectureNotesPanel'
+import { OralExamCard } from '../components/labs/OralExamCard'
 import { loadLectureNotesOn } from '../shared/lectureNotesPref'
 import {
   onLectureNotesRead,
@@ -724,7 +725,9 @@ export function LearnSessionView({
   // Closed for the cold VERIFY probe (the learner chose this): the beat
   // stepper's own `verify` state, set from the tutor's VERIFY label, is the
   // signal. It lifts as soon as the walk moves on to any other beat or node.
-  const notesLocked = started && currentBeat === 'verify'
+  // An oral exam in this sitting locks the notes too, for its whole length.
+  const [examActive, setExamActive] = useState(false)
+  const notesLocked = (started && currentBeat === 'verify') || examActive
   useEffect(() => {
     setLectureNotesLocked(notesLocked)
     if (notesLocked) setNotesOpen(null)
@@ -2857,6 +2860,7 @@ export function LearnSessionView({
               nodeChipTopic={activeTopic?.topic}
             />
           )}
+          <OralExamCard sessionId={sessionId} onActive={setExamActive} />
           {(!busy || tutorActivity.activity.kind === 'awaiting-ask') && (
             <MessageComposer
               production={production}
@@ -2871,7 +2875,9 @@ export function LearnSessionView({
               chamber={chamber}
               onChamberChange={setChamber}
               inviteChamber={currentBeat === 'verify'}
-              disabledReason={composerDisabledReason(tutorActivity.activity)}
+              disabledReason={
+                examActive ? 'the oral exam is on: answer on the exam card' : composerDisabledReason(tutorActivity.activity)
+              }
             />
           )}
         </div>

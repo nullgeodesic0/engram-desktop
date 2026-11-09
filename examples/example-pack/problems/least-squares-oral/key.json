@@ -1,0 +1,26 @@
+{
+  "questions": {
+    "normal-equations": {
+      "criteria": [
+        "Sets the gradient of $\\lVert A\\beta - y \\rVert^2$ to zero, or argues by projection, and arrives at $A^\\top A\\,\\beta = A^\\top y$.",
+        "Says the residual $y - A\\beta$ is orthogonal to every column of $A$, so $A\\beta$ is the orthogonal projection of $y$ onto the column space.",
+        "Says why a stationary point is the minimum: the objective is convex, or the projection is the closest point."
+      ],
+      "followUps": [
+        { "id": "geometry", "prompt": "What is the residual orthogonal to, and why does that make $A\\beta$ the best fit?", "probes": 1 },
+        { "id": "minimum", "prompt": "You found a stationary point. Why is it a minimum and not a maximum or a saddle?", "probes": 2 }
+      ]
+    },
+    "uniqueness": {
+      "criteria": [
+        "Unique exactly when the columns of $A$ are linearly independent, so $A^\\top A$ is invertible.",
+        "Gives the argument: $A^\\top A v = 0$ implies $\\lVert A v \\rVert^2 = 0$, so $A v = 0$.",
+        "Says that otherwise the minimisers form an affine family $\\beta_0 + \\ker A$, all with the same fitted values."
+      ],
+      "followUps": [
+        { "id": "why-invertible", "prompt": "Why does independence of the columns make $A^\\top A$ invertible?", "probes": 1 },
+        { "id": "many-minimisers", "prompt": "If the columns are dependent, what does the set of minimisers look like?", "probes": 2 }
+      ]
+    }
+  }
+}

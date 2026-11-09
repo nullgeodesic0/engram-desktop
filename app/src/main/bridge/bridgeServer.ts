@@ -71,6 +71,36 @@ export class BridgeServer {
     const notesMatch = url.match(/^\/bridge\/([^/]+)\/lecture-notes$/)
     const reportMatch = url.match(/^\/bridge\/([^/]+)\/check-report$/)
     const labMatch = url.match(/^\/bridge\/([^/]+)\/lab-cells$/)
+    const oralMatch = url.match(/^\/bridge\/([^/]+)\/oral-exam$/)
+
+    if (oralMatch) {
+      // The oral exam's three steps. `ask` and `finish` hold the response open
+      // until the learner answers on the exam card, as /ask does; every
+      // refusal goes back to the model so it can correct the call.
+      const sessionId = decodeURIComponent(oralMatch[1])
+      let settled = false
+      const onClose: Array<() => void> = []
+      res.on('close', () => {
+        if (!settled) for (const fn of onClose) fn()
+      })
+      let reply: unknown
+      try {
+        const oral = await import('../labs/oralExam')
+        reply = await oral.handleOralTool(
+          sessionId,
+          JSON.parse(body) as Record<string, unknown>,
+          (channel, payload) => this.window?.webContents.send(channel, payload),
+          (fn) => onClose.push(fn),
+        )
+      } catch (error) {
+        reply = { ok: false, reason: error instanceof Error ? error.message : String(error) }
+      }
+      settled = true
+      if (res.writableEnded || res.destroyed) return
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify(reply))
+      return
+    }
 
     if (reportMatch || labMatch) {
       // The two lab reads. Both answer the model directly, refusals included:
@@ -253,6 +283,8 @@ export class BridgeServer {
     for (const [requestId, pending] of this.pendingAsks) {
       if (pending.sessionId === sessionId) this.pendingAsks.delete(requestId)
     }
+    // An oral exam running in that sitting cannot go on; its record is kept as abandoned.
+    void import('../labs/oralExam').then((m) => m.dropOralSession(sessionId)).catch(() => {})
   }
 
   get portNumber(): number {

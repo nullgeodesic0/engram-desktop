@@ -46,6 +46,7 @@ import type {
 import type { SessionEvent } from '../shared/sessionEvents'
 import type { CourseList, CourseRecords, PreparedCourseTopic } from '../shared/course'
 import type { ProblemAnswer, ProblemAttempt, ProblemList, ProblemView } from '../shared/problems'
+import type { OralAskRequest, OralExamsView, OralFinishRequest, OralState } from '../shared/oral'
 import type {
   CellResult,
   KernelEvent,
@@ -329,6 +330,39 @@ const engramApi = {
     ipcRenderer.invoke('problem:confidence', packId, problemId, attemptId, c),
   problemProduction: (packId: string, problemId: string, attemptId: string): Promise<string> =>
     ipcRenderer.invoke('problem:production', packId, problemId, attemptId),
+  // Oral exams (shared/oral.ts).
+  oralRequest: (packId: string, problemId: string): Promise<{ title: string }> =>
+    ipcRenderer.invoke('oral:request', packId, problemId),
+  oralView: (packId: string, problemId: string): Promise<OralExamsView> =>
+    ipcRenderer.invoke('oral:view', packId, problemId),
+  oralTranscribe: (requestId: string, audio: Uint8Array): Promise<{ text: string }> =>
+    ipcRenderer.invoke('oral:transcribe', requestId, audio),
+  oralAnswer: (requestId: string, confirmed: string, seconds: number, timedOut: boolean): Promise<void> =>
+    ipcRenderer.invoke('oral:answer', requestId, confirmed, seconds, timedOut),
+  oralConfidence: (requestId: string, picks: Record<string, Confidence>): Promise<void> =>
+    ipcRenderer.invoke('oral:confidence', requestId, picks),
+  oralAbandon: (exam: string): Promise<void> => ipcRenderer.invoke('oral:abandon', exam),
+  oralMicAccess: (): Promise<boolean> => ipcRenderer.invoke('oral:micAccess'),
+  onOralAsk: (cb: (req: OralAskRequest) => void): (() => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, req: OralAskRequest) => cb(req)
+    ipcRenderer.on('oral:ask', handler)
+    return () => ipcRenderer.removeListener('oral:ask', handler)
+  },
+  onOralFinish: (cb: (req: OralFinishRequest) => void): (() => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, req: OralFinishRequest) => cb(req)
+    ipcRenderer.on('oral:finish', handler)
+    return () => ipcRenderer.removeListener('oral:finish', handler)
+  },
+  onOralState: (cb: (s: OralState) => void): (() => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, s: OralState) => cb(s)
+    ipcRenderer.on('oral:state', handler)
+    return () => ipcRenderer.removeListener('oral:state', handler)
+  },
+  onOralDropped: (cb: (r: { sessionId: string; requestId: string }) => void): (() => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, r: { sessionId: string; requestId: string }) => cb(r)
+    ipcRenderer.on('oral:ask-dropped', handler)
+    return () => ipcRenderer.removeListener('oral:ask-dropped', handler)
+  },
   // Courses in the added packs (shared/course.ts).
   courseList: (): Promise<CourseList> => ipcRenderer.invoke('course:list'),
   coursePrepareTopic: (packId: string, topicId: string): Promise<PreparedCourseTopic> =>

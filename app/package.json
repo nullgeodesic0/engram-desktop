@@ -113,6 +113,9 @@
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
       "notarize": false,
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Engram records your spoken answers in an oral exam and transcribes them on this Mac. The audio never leaves the machine."
+      },
       "target": [
         "dmg",
         "zip"

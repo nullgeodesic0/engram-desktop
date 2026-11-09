@@ -47,7 +47,7 @@ interface AttemptsFile {
   attempts: StoredAttempt[]
 }
 
-interface LoadedProblem {
+export interface LoadedProblem {
   pack: LoadedPack
   dir: string
   manifest: ProblemManifest
@@ -141,7 +141,7 @@ async function loadProblem(pack: LoadedPack, rel: string): Promise<LoadedProblem
   return { pack, dir, manifest: parsed.value }
 }
 
-async function readKey(p: LoadedProblem): Promise<ProblemKey> {
+export async function readKey(p: LoadedProblem): Promise<ProblemKey> {
   const file = await resolveInside(p.pack.root!, p.dir, p.manifest.key)
   let raw: unknown
   try {
@@ -156,7 +156,7 @@ async function readKey(p: LoadedProblem): Promise<ProblemKey> {
   }
 }
 
-async function findProblem(packId: string, problemId: string): Promise<LoadedProblem> {
+export async function findProblem(packId: string, problemId: string): Promise<LoadedProblem> {
   const pack = (await loadedPacks()).find((p) => p.manifest?.id === packId && p.root)
   if (!pack) throw new Error(`No added content pack has the id ${packId}.`)
   for (const rel of pack.manifest!.problems) {

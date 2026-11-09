@@ -154,6 +154,38 @@ export function registerRuntimeHandlers(): void {
     problemProduction(packId, problemId, attemptId),
   )
 
+  // Oral exams (shared/oral.ts): the Start, the exam card's answers, and the record.
+  ipcMain.handle('oral:request', async (_e, packId: string, problemId: string) =>
+    (await import('../labs/oralExam')).requestOralExam(String(packId), String(problemId)),
+  )
+  ipcMain.handle('oral:view', async (_e, packId: string, problemId: string) =>
+    (await import('../labs/oralExam')).oralExamsView(String(packId), String(problemId)),
+  )
+  ipcMain.handle('oral:transcribe', async (_e, requestId: string, audio: Uint8Array) =>
+    (await import('../labs/oralExam')).transcribeOralAnswer(String(requestId), new Uint8Array(audio)),
+  )
+  ipcMain.handle('oral:answer', async (_e, requestId: string, confirmed: string, seconds: number, timedOut: boolean) =>
+    (await import('../labs/oralExam')).answerOral(
+      String(requestId),
+      String(confirmed ?? ''),
+      Number(seconds),
+      timedOut === true,
+    ),
+  )
+  ipcMain.handle('oral:confidence', async (_e, requestId: string, picks: Record<string, unknown>) =>
+    (await import('../labs/oralExam')).pickOralConfidences(String(requestId), picks ?? {}),
+  )
+  ipcMain.handle('oral:abandon', async (_e, exam: string) =>
+    (await import('../labs/oralExam')).abandonOralExam(String(exam)),
+  )
+  ipcMain.handle('oral:micAccess', async () => {
+    // macOS asks once and remembers; elsewhere the OS has no per-app prompt.
+    const { systemPreferences } = await import('electron')
+    if (process.platform !== 'darwin') return true
+    if (systemPreferences.getMediaAccessStatus('microphone') === 'granted') return true
+    return systemPreferences.askForMediaAccess('microphone')
+  })
+
   // Courses (shared/course.ts). The records are the learner's own; no grade or node state is written.
   ipcMain.handle('course:list', () => listCourses())
   ipcMain.handle('course:prepareTopic', (_e, packId: string, topicId: string) =>

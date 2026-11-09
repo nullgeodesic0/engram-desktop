@@ -1,0 +1,7 @@
+# The speech layer: on-device transcription for oral exams (faster-whisper,
+# a CTranslate2 port of Whisper). Installed only when the learner asks for it
+# in Settings → Code runtime; the model itself (small.en, about 480 MB) is
+# fetched on the first transcription into the runtime's models folder.
+# Regenerate the lock with:
+#   uv pip compile resources/runtime/speech.in --universal --python-version 3.12 --generate-hashes -o resources/runtime/speech.lock
+faster-whisper>=1.1

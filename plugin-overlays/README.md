@@ -133,6 +133,18 @@ mobile-walk and step-sized protocols followed under the same terms.
   pedagogy overlay; read its constitutional-exception header first.
 - **`engram/dialogue-grammar.checked-problem-exception.md`** — its
   one-sentence companion, on how the confidence is collected.
+- **`engram/learn-skill.oral-exam-protocol.md`** — a pack's oral exam, sat
+  in the dialogue with the tutor as examiner: open it with `oral_exam` only
+  on the learner's own start, ask the pack's questions in order and at most
+  two of its follow-ups each, give no feedback until the end, then stash each
+  question's confirmed answer verbatim with its criteria as the rubric and
+  the confidence the app collected. The blind assessor's rating is capped at
+  `good` after a follow-up, a rewritten or typed transcript, or a second exam,
+  stamped `"source": "oral-check"`. Inserted into `skills/learn/SKILL.md`
+  ahead of the assessor. The seventh pedagogy overlay; read its
+  constitutional-exception header first.
+- **`engram/dialogue-grammar.oral-exam-exception.md`** — its one-sentence
+  companion, on how the confidence is collected and when feedback comes.
 - **`engram/learn-skill.course-seeded-topic.md`** — how the tutor starts a
   topic the learner chose in a pack's course: with a prepared concept map,
   register it with the engine's own `add-topic`, byte for byte, in place of

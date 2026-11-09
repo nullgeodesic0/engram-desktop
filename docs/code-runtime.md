@@ -10,8 +10,8 @@ signed report) build on it; see [content-packs.md](content-packs.md).
 
 ## What gets installed, and where
 
-Nothing ships inside the app bundle except three small Python files and the
-base layer's lockfile. The first time the learner presses **Install** in
+Nothing ships inside the app bundle except four small Python files and the
+base and speech layers' lockfiles. The first time the learner presses **Install** in
 Settings → Code runtime, the app builds everything under its own data folder:
 
 ```
@@ -21,6 +21,7 @@ Settings → Code runtime, the app builds everything under its own data folder:
   cache/                     uv's wheel cache
   locks/<layer>-<hash>.lock  the lockfile each env was built from, copied in first
   envs/<layer>-<hash>/       one venv per layer and lockfile
+  models/                    the speech layer's Whisper model, once downloaded
   state.json                 what is installed, and the cell time limit
 ```
 
@@ -40,6 +41,14 @@ Settings → Code runtime, the app builds everything under its own data folder:
   free-standing workbench. A content pack can bring a layer of its own for its
   labs, with whatever libraries its subject needs; Settings lists it beside
   the base layer with its own **Install** button. One install runs at a time.
+- The optional **speech** layer (`app/resources/runtime/speech.lock`:
+  faster-whisper and its decoder) transcribes the learner's spoken answers in
+  an oral exam. It is not needed for anything else, so it installs only when
+  the learner asks. Its Whisper model downloads into `<userData>/runtime/models/`
+  on the first transcription; the transcriber
+  (`app/resources/runtime/engram_transcribe.py`) runs on the CPU with the
+  same scrubbed environment as a kernel. A pack layer cannot be named `base`
+  or `speech`.
 - The env directory is named by the layer and the first 12 hex of the
   lockfile's hash. When an app or pack update ships a new lock, the old env
   keeps serving cells and Settings offers **Update**, which builds the new env
@@ -164,14 +173,16 @@ workbench's collapsed cells are remembered.
 None of this is learning state. No rating, receipt, schedule or stamp reads a
 workbench or the runtime, and nothing here names the learning home.
 
-- `main/runtime/envManager.ts`, `main/runtime/kernel.ts` and
-  `main/labs/checkRunner.ts` are pinned subprocess doors (D1). The first runs
-  only the pinned uv, `tar` to unpack it, and an env interpreter on
-  `verify_env.py`; the second runs only an env interpreter on the kernel file;
-  the third runs only an env interpreter on `engram_check.py`. None runs
-  `engram.py`.
+- `main/runtime/envManager.ts`, `main/runtime/kernel.ts`,
+  `main/labs/checkRunner.ts` and `main/labs/speech.ts` are pinned subprocess
+  doors (D1). The first runs only the pinned uv, `tar` to unpack it, and an
+  env interpreter on `verify_env.py`; the second runs only an env interpreter
+  on the kernel file; the third runs only an env interpreter on
+  `engram_check.py`; the fourth runs only the speech layer's interpreter on
+  `engram_transcribe.py`. None runs `engram.py`.
 - `main/runtime/envManager.ts`, `main/runtime/workbenchStore.ts`,
-  `main/labs/packStore.ts` and `main/labs/labStore.ts` are pinned writers
+  `main/labs/packStore.ts`, `main/labs/labStore.ts`, `main/labs/oralExam.ts`
+  and `main/labs/speech.ts` are pinned writers
   (D2), all to app userData. A content pack's own folder is only ever read.
 
 The learner's own code runs with the learner's permissions, as any script

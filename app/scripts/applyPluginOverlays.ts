@@ -141,6 +141,14 @@ const OVERLAYS: Overlay[] = [
         beforeLine: '## 4 · Verify via the assessor (separation of powers)',
       },
       {
+        // The oral-exam protocol — the SEVENTH pedagogy overlay, a sibling of
+        // the checked problem section for a pack's oral exam the learner
+        // starts from Labs and sits here, with the tutor as examiner.
+        id: 'oral-exam-protocol',
+        contentFile: 'engram/learn-skill.oral-exam-protocol.md',
+        beforeLine: '## 4 · Verify via the assessor (separation of powers)',
+      },
+      {
         // The course-seeded topic protocol — the FIFTH pedagogy overlay, for a
         // topic the learner starts from a course in a content pack. It changes
         // where a new topic's map comes from (§1), so it sits right before
@@ -189,6 +197,12 @@ const OVERLAYS: Overlay[] = [
         // The checked-problem companion sentence, read fifth in the same spot.
         id: 'checked-problem-exception',
         contentFile: 'engram/dialogue-grammar.checked-problem-exception.md',
+        beforeLine: '## ⚠ The session does not end on a failed retrieval (v1.5 — retrieval to criterion)',
+      },
+      {
+        // The oral-exam companion sentence, read sixth in the same spot.
+        id: 'oral-exam-exception',
+        contentFile: 'engram/dialogue-grammar.oral-exam-exception.md',
         beforeLine: '## ⚠ The session does not end on a failed retrieval (v1.5 — retrieval to criterion)',
       },
     ],
