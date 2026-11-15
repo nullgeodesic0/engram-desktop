@@ -20,3 +20,11 @@ app/build/*
 spike/
 *.tsbuildinfo
 .superpowers/
+
+# This repo is meant to stay general for anyone's own use, not carry any
+# one learner's actual content — session transcript dumps and backup
+# archives are personal/learning-specific by construction, never generic
+# project material, so they're excluded by pattern rather than relying on
+# everyone remembering not to `git add` them.
+session-ses_*.md
+*.tar.gz
