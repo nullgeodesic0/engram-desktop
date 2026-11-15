@@ -425,6 +425,8 @@ const PINNED_WRITERS: Record<string, string> = {
   'main/session/exportSitting.ts': 'user-chosen export path (dialog) + os tmpdir',
   'main/session/exportMap.ts': 'user-chosen export path (dialog) + os tmpdir — the map-as-PDF sibling of exportSitting.ts, reusing its renderPrintHtmlToPdf pipeline',
   'main/session/backup.ts': 'THE blessed exception: backup archives, and restore into the learning home (see D2.backupGate)',
+  'main/session/backup.test.ts':
+    'os tmpdir — ephemeral mkdtemp fixtures for the backup/restore round-trip tests (fabricated learning home, userData and pack folders), removed in afterEach',
   'main/session/topicTrash.ts':
     'the second gated learning-home writer: topic deletion as a custody transfer — rename() out of the learning home into app userData topic-trash, never an erase (see D2.trashGate)',
   'main/session/crashLog.ts': 'app userData — local crash-log.jsonl, capped at 200 entries',

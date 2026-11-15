@@ -252,8 +252,11 @@ function RestoreModal({ sessionActive, onClose }: { sessionActive: boolean; onCl
               </div>
               <div className="text-[var(--color-text-dim)]">
                 {step.describe.topics} topic{step.describe.topics === 1 ? '' : 's'} ·{' '}
-                {step.describe.receipts} receipt{step.describe.receipts === 1 ? '' : 's'} · archived{' '}
-                {formatWhen(step.describe.archivedAt)}
+                {step.describe.receipts} receipt{step.describe.receipts === 1 ? '' : 's'}
+                {step.describe.packs > 0 && (
+                  <> · {step.describe.packs} content pack{step.describe.packs === 1 ? '' : 's'}</>
+                )}{' '}
+                · archived {formatWhen(step.describe.archivedAt)}
               </div>
             </div>
 
@@ -1651,9 +1654,10 @@ export function SettingsView() {
         <div>
           <SectionBanner label="Backup" className="border-t-0" />
           <div className="text-xs text-[var(--color-text-faint)] mt-1.5">
-            A single archive of everything — your learning data plus this app’s own settings — for moving to a new
-            machine or recovering from a mistake. Restore replaces what’s currently here; a safety snapshot is
-            always taken first.
+            A single archive of everything — every topic, receipt and artifact, your courses, labs and their
+            grades, the content packs you’ve added, and this app’s own settings — for moving to a new machine or
+            recovering from a mistake. Restore replaces what’s currently here; a safety snapshot is always taken
+            first.
           </div>
         </div>
         <div className="flex items-center gap-3">

@@ -29,6 +29,38 @@ export const USERDATA_BACKUP_FILES = [
   'notifier-state.json',
 ] as const
 
+/** Added 2026-11-15 — the learner's own records and work under app userData
+ * that the original five-file list above predates: course records and
+ * staged topic maps (courseStore.ts), every lab's workbench, submissions,
+ * problems and oral-exam records (labStore.ts/problemStore.ts/oralExam.ts),
+ * card-pack explorables (cardPackStore.ts), lecture notes
+ * (lectureNotesStore.ts), normalized Codex transcript history
+ * (codexTranscript.ts), and topics moved to trash rather than erased
+ * (topicTrash.ts). Each is a whole directory, copied recursively; a fresh
+ * install missing one is normal, exactly like the five files above. */
+export const USERDATA_BACKUP_DIRS = [
+  'courses',
+  'labs',
+  'card-packs',
+  'lecture-notes',
+  'codex-transcripts',
+  'topic-trash',
+] as const
+
+/** Archive-relative folder holding full copies of the content packs the
+ * learner added (packStore.ts's labs/packs.json), keyed by pack id rather
+ * than by the original folder path — the whole point, since that absolute
+ * path almost certainly doesn't exist on a different machine. Without this,
+ * the `labs` directory above would carry packs.json's folder list to the
+ * new machine, but every one of those folders would be missing. See
+ * createBackupArchive's staging below and restorePackContent further down. */
+const PACK_CONTENT_DIR = 'packs-content'
+const PACK_CONTENT_MANIFEST = `${PACK_CONTENT_DIR}/manifest.json`
+/** Pack ids are validated this way throughout the app (see contentPack.ts's
+ * `slug`); re-checked here too since a pack id becomes a path segment both
+ * inside the archive and, on restore, under app userData. */
+const PACK_ID = /^[a-z0-9][a-z0-9-]{0,31}$/
+
 const LEARNING_ENTRY_PREFIX = '.claude/learning/'
 
 function localStamp(now: Date): string {
@@ -46,7 +78,47 @@ function randomSuffix(): string {
  * special case rather than an error. */
 function hasAnythingToBackUp(learningHome: string, userDataDir: string): boolean {
   if (existsSync(learningHome)) return true
-  return USERDATA_BACKUP_FILES.some((name) => existsSync(join(userDataDir, name)))
+  if (USERDATA_BACKUP_FILES.some((name) => existsSync(join(userDataDir, name)))) return true
+  return USERDATA_BACKUP_DIRS.some((name) => existsSync(join(userDataDir, name)))
+}
+
+/** Reads labs/packs.json (if present) and returns, for each added pack
+ * folder that still resolves to a readable pack.json with a usable id, its
+ * folder, id and title — best effort, same tolerance as everything else
+ * here: a folder that's been moved or broken since it was added is simply
+ * left out, not an error. Two added folders can't share an id in the first
+ * place (packStore.ts's addPackFolder refuses that), so the first match
+ * wins if packs.json were ever hand-edited into that state. */
+async function readAddedPackFolders(
+  userDataDir: string,
+): Promise<{ folder: string; id: string; title: string }[]> {
+  let raw: unknown
+  try {
+    raw = JSON.parse(await readFile(join(userDataDir, 'labs', 'packs.json'), 'utf-8'))
+  } catch {
+    return []
+  }
+  const folders = Array.isArray((raw as { folders?: unknown })?.folders)
+    ? (raw as { folders: unknown[] }).folders.filter((f): f is string => typeof f === 'string')
+    : []
+  const out: { folder: string; id: string; title: string }[] = []
+  const seen = new Set<string>()
+  for (const folder of folders) {
+    try {
+      const manifest = JSON.parse(await readFile(join(folder, 'pack.json'), 'utf-8')) as {
+        id?: unknown
+        title?: unknown
+      }
+      if (typeof manifest.id !== 'string' || !PACK_ID.test(manifest.id) || seen.has(manifest.id)) continue
+      seen.add(manifest.id)
+      out.push({ folder, id: manifest.id, title: typeof manifest.title === 'string' ? manifest.title : manifest.id })
+    } catch {
+      // Moved, deleted, or not a pack folder any more — nothing to capture;
+      // packs.json itself still comes along via the `labs` directory above,
+      // so Settings shows the same "folder is missing" it already would.
+    }
+  }
+  return out
 }
 
 // ---------------------------------------------------------------------------
@@ -98,23 +170,48 @@ export async function createBackupArchive(opts: {
   }
 
   const presentUserDataFiles = USERDATA_BACKUP_FILES.filter((name) => existsSync(join(userDataDir, name)))
-  if (presentUserDataFiles.length > 0) {
-    args.push('-C', userDataDir, ...presentUserDataFiles)
+  const presentUserDataDirs = USERDATA_BACKUP_DIRS.filter((name) => existsSync(join(userDataDir, name)))
+  if (presentUserDataFiles.length > 0 || presentUserDataDirs.length > 0) {
+    args.push('-C', userDataDir, ...presentUserDataFiles, ...presentUserDataDirs)
   }
 
-  if (args.length === 0) {
-    throw new Error('Nothing to back up — no learning data or app settings found.')
-  }
+  // Full copies of the added content packs themselves, staged under a temp
+  // dir so the archive can hold them at `packs-content/<id>/` regardless of
+  // where each pack actually lives on disk — tar's own -C only lets one
+  // base directory map straight onto the archive root, so getting a nested
+  // prefix for several unrelated source folders needs this staging copy.
+  const addedPacks = await readAddedPackFolders(userDataDir)
+  let packStagingDir: string | null = null
+  try {
+    if (addedPacks.length > 0) {
+      packStagingDir = await mkdtemp(join(tmpdir(), 'engram-backup-packs-'))
+      const packsRoot = join(packStagingDir, PACK_CONTENT_DIR)
+      await mkdir(packsRoot, { recursive: true })
+      const captured: { id: string; title: string }[] = []
+      for (const p of addedPacks) {
+        await cp(p.folder, join(packsRoot, p.id), { recursive: true })
+        captured.push({ id: p.id, title: p.title })
+      }
+      await writeFile(join(packsRoot, 'manifest.json'), JSON.stringify(captured, null, 2), 'utf-8')
+      args.push('-C', packStagingDir, PACK_CONTENT_DIR)
+    }
 
-  await mkdir(destDir, { recursive: true })
-  const destPath = join(destDir, opts.fileName ?? `engram-backup-${localStamp(now)}.tar.gz`)
-  // `tar` is a real executable on all three platforms (bsdtar.exe has shipped
-  // in System32 since Windows 10 1803), so this needs no CLI resolution the
-  // way `claude`/`opencode`/`python3` do — execCli is used only for the
-  // uniform error shape, not to get around a batch-shim problem.
-  await execCli('tar', ['-czf', destPath, ...args])
-  const { size } = await stat(destPath)
-  return { path: destPath, bytes: size }
+    if (args.length === 0) {
+      throw new Error('Nothing to back up — no learning data or app settings found.')
+    }
+
+    await mkdir(destDir, { recursive: true })
+    const destPath = join(destDir, opts.fileName ?? `engram-backup-${localStamp(now)}.tar.gz`)
+    // `tar` is a real executable on all three platforms (bsdtar.exe has shipped
+    // in System32 since Windows 10 1803), so this needs no CLI resolution the
+    // way `claude`/`opencode`/`python3` do — execCli is used only for the
+    // uniform error shape, not to get around a batch-shim problem.
+    await execCli('tar', ['-czf', destPath, ...args])
+    const { size } = await stat(destPath)
+    return { path: destPath, bytes: size }
+  } finally {
+    if (packStagingDir) await rm(packStagingDir, { recursive: true, force: true }).catch(() => {})
+  }
 }
 
 /**
@@ -229,6 +326,12 @@ export async function describeArchive(archivePath: string): Promise<DescribeArch
 
   const topics = entries.filter((e) => /\.claude\/learning\/graphs\/[^/]+\.json$/.test(e)).length
   const receipts = entries.filter((e) => /\.claude\/learning\/receipts\/[^/]+\.jsonl$/.test(e)).length
+  const packs = new Set(
+    entries
+      .filter((e) => e.startsWith(`${PACK_CONTENT_DIR}/`) && e !== PACK_CONTENT_MANIFEST)
+      .map((e) => e.split('/')[1])
+      .filter((id) => id && id !== 'manifest.json'),
+  ).size
 
   const stampMatch = basename(archivePath).match(/^engram-backup-(\d{4})-(\d{2})-(\d{2})-(\d{2})(\d{2})\.tar\.gz$/)
   let archivedAt: string
@@ -239,25 +342,170 @@ export async function describeArchive(archivePath: string): Promise<DescribeArch
     archivedAt = (await stat(archivePath)).mtime.toISOString()
   }
 
-  return { ok: true, topics, receipts, archivedAt }
+  return { ok: true, topics, receipts, packs, archivedAt }
+}
+
+/**
+ * Atomically swaps `stagedDir` into `liveDir`: same-volume staging beside
+ * `liveDir` (so the final move is a guaranteed-atomic rename, never a
+ * partial cross-device copy), the current occupant (if any) renamed aside
+ * first, deleted only once the swap into place has succeeded. Any failure
+ * rolls `liveDir` back to whatever was there before — this one directory
+ * only. A failure that reaches further than that is backstopped by the
+ * pre-restore safety snapshot (see restoreFromArchive), not by composing
+ * rollbacks across directories here.
+ *
+ * A `stagedDir` that doesn't exist is a no-op: every caller below is
+ * restoring one of several optional directories a backup may or may not
+ * have captured, same tolerance as everything else in this file.
+ */
+async function swapDirectoryIn(
+  stagedDir: string,
+  liveDir: string,
+  /** Test-only fault injection: called right after the live directory has
+   * been renamed aside (if it existed) and right before the staged
+   * replacement is moved into place — throwing there exercises the
+   * rollback path deterministically. Production callers never pass this. */
+  beforeFinalMove?: () => Promise<void> | void,
+): Promise<void> {
+  if (!existsSync(stagedDir)) return
+
+  const unique = `${Date.now()}-${randomSuffix()}`
+  const onVolumeStaging = `${liveDir}.incoming-${unique}`
+  const asideDir = `${liveDir}.restore-aside-${unique}`
+  let renamedAside = false
+
+  try {
+    await mkdir(dirname(liveDir), { recursive: true })
+    // Temp-dir to sibling-of-liveDir may itself cross devices, but nothing
+    // live has been touched yet at this point, so a failure here is a clean
+    // no-op.
+    await cp(stagedDir, onVolumeStaging, { recursive: true })
+
+    const hadExisting = existsSync(liveDir)
+    if (hadExisting) {
+      await rename(liveDir, asideDir)
+      renamedAside = true
+    }
+
+    if (beforeFinalMove) await beforeFinalMove()
+
+    // Guaranteed same volume (onVolumeStaging is a sibling of liveDir) —
+    // this rename is atomic, never a partial cross-device copy.
+    await rename(onVolumeStaging, liveDir)
+
+    if (renamedAside) {
+      await rm(asideDir, { recursive: true, force: true })
+      renamedAside = false
+    }
+  } catch (err) {
+    if (renamedAside) {
+      // liveDir is missing or (in principle) partially written — clear it
+      // before restoring the original, so the two copies never coexist
+      // under the same path.
+      await rm(liveDir, { recursive: true, force: true }).catch(() => {})
+      try {
+        await rename(asideDir, liveDir)
+      } catch (rollbackErr) {
+        throw new Error(
+          `Restore failed AND automatic rollback failed for ${liveDir} — the original was NOT restored to its ` +
+            `usual location; it is preserved at ${asideDir}. ` +
+            `Original error: ${err instanceof Error ? err.message : String(err)}. ` +
+            `Rollback error: ${rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr)}.`,
+        )
+      }
+    }
+    throw err
+  } finally {
+    if (existsSync(onVolumeStaging)) {
+      await rm(onVolumeStaging, { recursive: true, force: true }).catch(() => {
+        // Best-effort cleanup — only reachable if the final rename never ran.
+      })
+    }
+  }
+}
+
+/**
+ * Restores copies of the content packs the backed-up machine had added (see
+ * createBackupArchive's packs-content capture) into this machine's own app
+ * userData, then points labs/packs.json (already restored verbatim via the
+ * `labs` directory in USERDATA_BACKUP_DIRS) at the restored copies instead
+ * of whatever absolute folder paths the old machine used, which almost
+ * certainly don't exist here. A pack whose folder wasn't captured at backup
+ * time (broken or moved even on the old machine) is left exactly as the
+ * restored packs.json already has it — unresolved, same as any pack whose
+ * folder later moves; Settings already shows that as "the folder is
+ * missing" rather than erroring.
+ */
+async function restorePackContent(tmpStagingDir: string, userDataDir: string): Promise<void> {
+  const manifestPath = join(tmpStagingDir, PACK_CONTENT_MANIFEST)
+  if (!existsSync(manifestPath)) return
+
+  let captured: unknown
+  try {
+    captured = JSON.parse(await readFile(manifestPath, 'utf-8'))
+  } catch {
+    return
+  }
+  if (!Array.isArray(captured)) return
+
+  const packsRoot = join(userDataDir, 'packs')
+  const restoredFolders = new Map<string, string>()
+  for (const entry of captured) {
+    const id = (entry as { id?: unknown } | null)?.id
+    if (typeof id !== 'string' || !PACK_ID.test(id)) continue
+    const staged = join(tmpStagingDir, PACK_CONTENT_DIR, id)
+    if (!existsSync(staged)) continue
+    const dest = join(packsRoot, id)
+    await swapDirectoryIn(staged, dest)
+    restoredFolders.set(id, dest)
+  }
+  if (restoredFolders.size === 0) return
+
+  const registryPath = join(userDataDir, 'labs', 'packs.json')
+  let folders: string[] = []
+  try {
+    const raw = JSON.parse(await readFile(registryPath, 'utf-8')) as { folders?: unknown }
+    folders = Array.isArray(raw.folders) ? raw.folders.filter((f): f is string => typeof f === 'string') : []
+  } catch {
+    // labs/ wasn't in the archive, or packs.json is missing/unreadable — the
+    // restored pack copies still exist on disk; without a registry entry
+    // they just aren't added yet, same as any pack folder the learner
+    // hasn't pointed Settings at.
+  }
+
+  // Keep every folder except one superseded by a pack id we just restored a
+  // fresh copy for — an unresolvable folder is left exactly as it was,
+  // never guessed away.
+  const kept: string[] = []
+  for (const folder of folders) {
+    try {
+      const raw = await readFile(join(folder, 'pack.json'), 'utf-8')
+      const id = (JSON.parse(raw) as { id?: unknown }).id
+      if (typeof id === 'string' && restoredFolders.has(id)) continue
+    } catch {
+      // Can't resolve it from here — leave it exactly as restored.
+    }
+    kept.push(folder)
+  }
+
+  const next = [...kept, ...restoredFolders.values()]
+  await mkdir(dirname(registryPath), { recursive: true })
+  const tmp = `${registryPath}.${process.pid}.tmp`
+  await writeFile(tmp, JSON.stringify({ folders: next }, null, 2), 'utf-8')
+  await rename(tmp, registryPath)
 }
 
 /**
  * Extracts an archive to a temp staging dir, validates entry names (I-3),
- * verifies it actually contains a learning dir, then swaps it into place.
- *
- * The staged learning dir is first copied onto the SAME volume as
- * `learningHome` (a `.incoming-*` sibling under its own parent dir) — so the
- * actual live swap is a guaranteed-atomic `rename()`, never a cross-device
- * copy that could leave `learningHome` half-populated mid-swap (I-2). The
- * current learning dir (if any) is renamed aside first; the aside copy is
- * deleted only after the swap into place succeeds. If anything fails after
- * the aside-rename, rollback clears whatever (if anything) landed at
- * `learningHome` and renames the aside copy back — so the live dir is never
- * left removed with nothing valid in its place. If rollback itself fails,
- * the thrown error names the aside dir explicitly so nothing is silently
- * lost. userData JSON files are copied over individually (no directory-level
- * swap needed for five flat files).
+ * verifies it actually contains a learning dir, then swaps everything in:
+ * the learning home, every directory in USERDATA_BACKUP_DIRS, the five flat
+ * userData JSON files (copied individually, no swap needed), and finally
+ * any captured content-pack copies (restorePackContent, which also points
+ * labs/packs.json's folder list at them). Each directory swap
+ * (swapDirectoryIn) rolls back on its own if it fails; a failure that
+ * reaches further than one directory is backstopped by the pre-restore
+ * safety snapshot in restoreFromArchive below, not by anything in here.
  *
  * Pure filesystem operation — no Electron dependency, which is what lets the
  * round-trip test exercise it directly against fabricated temp dirs instead
@@ -281,10 +529,6 @@ export async function restoreArchiveInto(opts: {
   validateEntryNames(entries)
 
   const tmpStagingDir = await mkdtemp(join(tmpdir(), 'engram-restore-'))
-  const unique = `${Date.now()}-${randomSuffix()}`
-  const onVolumeStaging = `${learningHome}.incoming-${unique}`
-  const asideDir = `${learningHome}.restore-aside-${unique}`
-  let renamedAside = false
 
   try {
     await execCli('tar', ['-xzf', archivePath, '-C', tmpStagingDir])
@@ -294,63 +538,24 @@ export async function restoreArchiveInto(opts: {
       throw new Error('Archive did not contain a .claude/learning directory — refusing to restore.')
     }
 
-    await mkdir(dirname(learningHome), { recursive: true })
-    // Same-volume staging (see doc comment above) — this cp is temp-dir to
-    // sibling-of-learningHome and may itself cross devices, but nothing live
-    // has been touched yet at this point, so a failure here is a clean no-op.
-    await cp(stagedLearning, onVolumeStaging, { recursive: true })
-
-    const hadExisting = existsSync(learningHome)
-    if (hadExisting) {
-      await rename(learningHome, asideDir)
-      renamedAside = true
-    }
-
-    if (opts.__beforeFinalMove) await opts.__beforeFinalMove()
-
-    // Guaranteed same volume (onVolumeStaging is a sibling of learningHome) —
-    // this rename is atomic, never a partial cross-device copy.
-    await rename(onVolumeStaging, learningHome)
-
-    if (renamedAside) {
-      await rm(asideDir, { recursive: true, force: true })
-      renamedAside = false
-    }
+    await swapDirectoryIn(stagedLearning, learningHome, opts.__beforeFinalMove)
 
     await mkdir(userDataDir, { recursive: true })
+    for (const name of USERDATA_BACKUP_DIRS) {
+      await swapDirectoryIn(join(tmpStagingDir, name), join(userDataDir, name))
+    }
     for (const name of USERDATA_BACKUP_FILES) {
       const stagedFile = join(tmpStagingDir, name)
       if (existsSync(stagedFile)) {
         await copyFile(stagedFile, join(userDataDir, name))
       }
     }
-  } catch (err) {
-    if (renamedAside) {
-      // learningHome is missing or (in principle) partially written — clear
-      // it before restoring the original, so the two copies never coexist
-      // under the same path.
-      await rm(learningHome, { recursive: true, force: true }).catch(() => {})
-      try {
-        await rename(asideDir, learningHome)
-      } catch (rollbackErr) {
-        throw new Error(
-          `Restore failed AND automatic rollback failed — your original learning dir was NOT restored to its ` +
-            `usual location; it is preserved at ${asideDir}. ` +
-            `Original error: ${err instanceof Error ? err.message : String(err)}. ` +
-            `Rollback error: ${rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr)}.`,
-        )
-      }
-    }
-    throw err
+
+    await restorePackContent(tmpStagingDir, userDataDir)
   } finally {
     await rm(tmpStagingDir, { recursive: true, force: true }).catch(() => {
       // Best-effort cleanup — a leftover temp dir is harmless.
     })
-    if (existsSync(onVolumeStaging)) {
-      await rm(onVolumeStaging, { recursive: true, force: true }).catch(() => {
-        // Best-effort cleanup — only reachable if the final rename never ran.
-      })
-    }
   }
 }
 

@@ -777,7 +777,7 @@ export interface ExportMapRequest {
 export type BackupNowResult = { ok: true; path: string; bytes: number } | { ok: false; reason: string }
 
 export type DescribeArchiveResult =
-  | { ok: true; topics: number; receipts: number; archivedAt: string }
+  | { ok: true; topics: number; receipts: number; packs: number; archivedAt: string }
   | { ok: false; reason: string }
 
 /** Result of the pre-restore safety snapshot. `path` is `null` only for the
