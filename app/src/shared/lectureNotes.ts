@@ -10,6 +10,7 @@
  * of notes is.
  */
 import { renderMarkdownWithMathCore } from './mathMarkdown'
+import { readabilityFindings } from './readability'
 
 /** engram's own kebab-case id charset — identical to mapAnnotations.ts's. */
 const ID_RE = /^[a-z0-9-]+$/
@@ -66,6 +67,24 @@ export function validateLectureNotes(
     reasons.push(`markdown is ${markdown.length} characters; keep the notes under ${MAX_NOTES_CHARS} (aim for 400–900 words)`)
   if (reasons.length > 0) return { ok: false, reasons }
   return { ok: true, notes: { topic: r.topic as string, node: r.node as string, title, markdown } }
+}
+
+/**
+ * The readability pass on notes that already passed validation: a short list
+ * of sentences for the tutor to reread before the notes are saved, or [] to
+ * save them now. It holds the notes back at most once per set: the tutor
+ * fixes what needs fixing (or nothing) and calls again with
+ * `readability_reviewed: true`, which always goes through. The app never
+ * rewrites the notes itself, so equations, code and terms are untouched.
+ */
+export function lectureNotesReadabilityHold(raw: unknown, markdown: string): string[] {
+  if (raw && typeof raw === 'object' && (raw as Record<string, unknown>).readability_reviewed === true) return []
+  const findings = readabilityFindings(markdown)
+  if (findings.length === 0) return []
+  return [
+    'Not saved yet: a quick readability check flagged the sentences below. Reread each against the "Readable sentences" section of the dialogue grammar and fix only those that need it, without changing equations, code, defined terms, numbers or the strength of a hedge. Then call publish_lecture_notes again with the same topic, node and title, the revised markdown, and readability_reviewed: true. That call is saved as sent, so leave any flagged sentence that already reads well.',
+    ...findings.map((f) => `"${f.excerpt}" — ${f.advice}`),
+  ]
 }
 
 /** Counts pages in a PDF Chromium printed, given its bytes as a latin1

@@ -1365,7 +1365,22 @@ const PINNED_OVERLAY_HASHES: Record<string, string> = {
   // 2006, Chi et al. 2001, Kalyuga & Renkl 2010, Kestin et al. 2025,
   // Graesser et al. 1995, Van der Kleij et al. 2015).
   'dialogue-grammar.explanation-style.md': '39926fef56ed5e23',
-  'assessor.feedback-line-style.md': '8e327e606806e938',
+  // 2026-11-21 — the assessor's feedback line also gains sentence-level
+  // readability (re-pinned; still wording only, same load-bearing limit).
+  'assessor.feedback-line-style.md': '26910da7fe287f3a',
+  // 2026-11-21 — readable sentences, two PRESENTATION overlays under the
+  // default charter. The grammar section works below explanation-style, on
+  // the sentence: the six constructions Clark, Martin & Mahowald (arXiv
+  // 2610.29162) found most frontier models overuse (things doing what people
+  // do, rare word pairs, a missing "that", nouns used as verbs, long subject-
+  // verb gaps, three-plus noun stacks), what never changes (equations, code,
+  // terms, numbers, hedge strength), an over-correction check, a tic list
+  // marked as NOT from the paper, and a silent reread before lecture notes go
+  // out. The paper measures and gives no editing advice; the section says so.
+  // The coach copy is a short version for check-ins, which never read the
+  // grammar. Neither licenses earlier content, a hint, or a grade change.
+  'dialogue-grammar.readable-sentences.md': '1fa1e80779a58869',
+  'coach.readable-sentences.md': '6175a5e859fa5de7',
 }
 const overlayFiles = readdirSync(OVERLAY_DIR).filter((f) => f.endsWith('.md'))
 for (const f of overlayFiles) {
@@ -1558,6 +1573,15 @@ const LOAD_BEARING: Record<string, string[]> = {
   ],
   'assessor.feedback-line-style.md': [
     'This changes only how `feedback_line` is worded, never a grade, a rating or any other field.',
+  ],
+  'dialogue-grammar.readable-sentences.md': [
+    'It never licenses an explanation earlier than the beats do, never adds a hint the ladder has not reached, and never touches a grade.',
+    'Never edit inside equations',
+    'The paper measures and explains; it gives no editing advice and did not test human readers.',
+  ],
+  'coach.readable-sentences.md': [
+    'This changes only how you word what you tell the learner, never which number you report, what you offer or what you change.',
+    'Never change a number,',
   ],
 }
 for (const [file, needles] of Object.entries(LOAD_BEARING)) {

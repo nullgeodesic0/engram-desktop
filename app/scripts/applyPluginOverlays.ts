@@ -214,6 +214,15 @@ const OVERLAYS: Overlay[] = [
         contentFile: 'engram/dialogue-grammar.explanation-style.md',
         beforeLine: '## Session display formats (keep the terminal calm and consistent)',
       },
+      {
+        // Sentence-level readability — a PRESENTATION overlay under the
+        // default charter, applied after explanation-style so it lands right
+        // below it (both go before the display formats). Covers the dialogue
+        // and lecture notes; changes wording only, never a beat, hint or grade.
+        id: 'readable-sentences',
+        contentFile: 'engram/dialogue-grammar.readable-sentences.md',
+        beforeLine: '## Session display formats (keep the terminal calm and consistent)',
+      },
     ],
   },
   {
@@ -227,6 +236,20 @@ const OVERLAYS: Overlay[] = [
         id: 'feedback-line-style',
         contentFile: 'engram/assessor.feedback-line-style.md',
         beforeLine: '## `probe_gap` — the one field that indicts the CURRICULUM instead of the learner (v1.10, issue #13)',
+      },
+    ],
+  },
+  {
+    plugin: 'engram',
+    targetRelativePath: 'skills/coach/SKILL.md',
+    insertions: [
+      {
+        // How the coach's check-in reads — a PRESENTATION overlay: the coach
+        // does not read the dialogue grammar, so it gets its own short copy
+        // of the sentence rules. Changes no number, offer or adaptation.
+        id: 'readable-sentences',
+        contentFile: 'engram/coach.readable-sentences.md',
+        beforeLine: '## Always',
       },
     ],
   },

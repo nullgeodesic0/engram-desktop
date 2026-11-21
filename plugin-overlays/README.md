@@ -155,3 +155,22 @@ mobile-walk and step-sized protocols followed under the same terms.
   fifth pedagogy overlay: it narrows §1's "the map comes from the architect"
   for one learner-started kind of topic, so read its constitutional-exception
   header first. It grants no state: a course topic earns every receipt.
+- **`engram/dialogue-grammar.explanation-style.md`** — how the tutor's
+  explanations read in the dialogue: one step per message, about 150 words,
+  per-prerequisite density, one name per term, symbols defined on first use,
+  plan-first derivations, no "does that make sense?". Presentation only,
+  inserted before the grammar's display formats.
+- **`engram/assessor.feedback-line-style.md`** — how the assessor words its
+  one `feedback_line`: the first failed step, why, and the next move, in a
+  sentence a learner can follow on the first read. Wording only.
+- **`engram/dialogue-grammar.readable-sentences.md`** — sentence-level
+  readability for everything the tutor writes for the learner (dialogue and
+  lecture notes): the six constructions that Clark, Martin & Mahowald (arXiv
+  2610.29162) found most frontier models overuse, what never changes
+  (equations, code, terms, numbers, hedges), an over-correction check, and a
+  silent reread before lecture notes go out. The paper measures and gives no
+  editing advice, and the section says so. Presentation only, inserted right
+  after explanation-style. See `docs/explanation-readability.md`.
+- **`engram/coach.readable-sentences.md`** — a short copy of the same
+  sentence rules for the coach's check-ins, which never read the dialogue
+  grammar. Inserted into `skills/coach/SKILL.md` before `## Always`.
