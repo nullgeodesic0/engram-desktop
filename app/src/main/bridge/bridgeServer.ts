@@ -4,7 +4,7 @@ import type { BrowserWindow } from 'electron'
 import type { BridgeAskRequest, BridgeAskResponse, BridgeBeatRequest, BridgeUiRequest } from '../../shared/bridgeProtocol'
 import { sanitizeAnnotatePayload, setNodeAnnotation } from '../session/mapAnnotations'
 import { parseCardPack } from '../../shared/cardPack'
-import { validateLectureNotes } from '../../shared/lectureNotes'
+import { validateLectureNotes, lectureNotesReadabilityHold } from '../../shared/lectureNotes'
 import { saveLectureNotes } from '../session/lectureNotesStore'
 import { createCardPackStore, type CardPackStore } from '../link/cardPackStore'
 import { app } from 'electron'
@@ -203,9 +203,15 @@ export class BridgeServer {
       const sessionId = decodeURIComponent(notesMatch[1])
       let reply: { accepted: boolean; reasons: string[]; pages?: number | null }
       try {
-        const checked = validateLectureNotes(JSON.parse(body))
+        const raw = JSON.parse(body)
+        const checked = validateLectureNotes(raw)
+        const held = checked.ok ? lectureNotesReadabilityHold(raw, checked.notes.markdown) : []
         if (!checked.ok) {
           reply = { accepted: false, reasons: checked.reasons }
+        } else if (held.length > 0) {
+          // The readability pass: hand a few sentences back for one reread.
+          // Nothing is saved and no card is drawn until the tutor calls again.
+          reply = { accepted: false, reasons: held }
         } else {
           const record = await saveLectureNotes(checked.notes, sessionId)
           reply = { accepted: true, reasons: [], pages: record.pages }

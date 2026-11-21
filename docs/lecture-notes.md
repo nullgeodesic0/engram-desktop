@@ -25,6 +25,11 @@ that makes the loop work: the attempt, the struggle, and a cold final check.
    bridge tool. The app checks them, saves them to
    `userData/lecture-notes/<topic>/<node>.json`, renders a PDF beside them, and
    returns refusal reasons if something is wrong so the tutor can fix it.
+   Notes that pass also get one quick readability check
+   (`app/src/shared/readability.ts`): if it flags sentences, the notes are
+   handed back unsaved once, and the tutor's next call with
+   `readability_reviewed: true` is saved as sent. See
+   [explanation-readability.md](explanation-readability.md).
 3. The session shows a notes card and opens the reader beside the transcript.
    The card's "I've read them, start the concept" button sends that sentence as
    the learner's turn.
