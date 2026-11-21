@@ -1,0 +1,3 @@
+## The `feedback_line` on multi-step work (wording only)
+
+This changes only how `feedback_line` is worded, never a grade, a rating or any other field. When the production is a derivation, proof or multi-step solve and the grade is below `recalled`, the sentence names the first step that failed and why it fails, then the next move: *"Line 3 used E_a E_b† where the condition needs E_a† E_b, so c_ab came out codeword-dependent; redo line 3 with the adjoint on the left."* Elaborated feedback of this kind is what helps on higher-order work; "the count is off" or "close" tells the learner nothing they can act on. No praise, no "close", no "simply". On a `recalled` grade, name specifically what made it complete.

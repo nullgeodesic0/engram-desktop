@@ -205,6 +205,29 @@ const OVERLAYS: Overlay[] = [
         contentFile: 'engram/dialogue-grammar.oral-exam-exception.md',
         beforeLine: '## ⚠ The session does not end on a failed retrieval (v1.5 — retrieval to criterion)',
       },
+      {
+        // The explanation-style house style — a PRESENTATION overlay (the
+        // default charter: additive, changes how the dialogue reads, never
+        // which move is allowed or how anything is graded). Sits right before
+        // the display formats, the grammar's other "how it reads" section.
+        id: 'explanation-style',
+        contentFile: 'engram/dialogue-grammar.explanation-style.md',
+        beforeLine: '## Session display formats (keep the terminal calm and consistent)',
+      },
+    ],
+  },
+  {
+    plugin: 'engram',
+    targetRelativePath: 'agents/engram-assessor.md',
+    insertions: [
+      {
+        // Wording of the assessor's one feedback sentence on multi-step work —
+        // a PRESENTATION overlay: no grade, rating or field changes. Sits
+        // after the output schema that defines feedback_line.
+        id: 'feedback-line-style',
+        contentFile: 'engram/assessor.feedback-line-style.md',
+        beforeLine: '## `probe_gap` — the one field that indicts the CURRICULUM instead of the learner (v1.10, issue #13)',
+      },
     ],
   },
 ]
